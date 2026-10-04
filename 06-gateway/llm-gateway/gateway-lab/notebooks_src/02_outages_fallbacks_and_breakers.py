@@ -1,30 +1,34 @@
 # %% [markdown]
 # # 02 · Outages, fallbacks and breakers: what falls through, and what a chain buys
 #
-# **Tier:** T0 — fake providers with scripted faults (503, 429, a stall before the first byte, an error or a
-# reset mid-stream) behind the real gateway over localhost HTTP; timings are **simulated**. T1: with vLLM as the
-# first target (`GWLAB_VLLM_URL`), stop it mid-run and watch the chain move to the fallback.
+# **Tier:** T0. Fake providers with scripted faults run behind the real gateway over localhost HTTP. The faults are a
+# 503, a 429, a stall before the first byte, and an error or a reset in the middle of the stream. The timings are
+# **simulated**. T1: with vLLM as the first target (`GWLAB_VLLM_URL`), stop vLLM during the run and watch the chain move
+# to the fallback.
 #
 # ## The one-minute version
 #
-# A client names an alias; the gateway tries an ordered chain of targets (PRIMER §2). Three rules keep a chain
-# from making outages worse:
+# A client gives an alias. The gateway tries an ordered chain of targets (PRIMER §2). Three rules make sure that a chain
+# does not make outages worse:
 #
 # 1. **Only some failures fall through**: 429, 5xx (and Anthropic's 529), timeouts, connection errors and
-#    context-length errors. A 400, a provider auth failure (our credential, not the caller's) or a content-policy
-#    refusal fails the request: the next provider would refuse it too, or the fault is ours to fix.
-# 2. **Fall back only before the first byte.** The gateway holds the first chunk until it knows the upstream is
-#    producing; once a token has reached the client, a failure is surfaced *in the stream* — splicing another
-#    model's continuation onto a half-answer is wrong.
-# 3. **A breaker per target** turns repeated failures into instant skips for a cooling period. This lab follows
-#    07.2's `CircuitBreaker` (gcp-agent-platform-lab notebook 10, the canonical home): open after 3 *consecutive*
-#    failures, half-open after the recovery timeout, one probe decides. Retries with jitter are the scaling
-#    primer's §5.2; here the retry is the next target.
+#    context-length errors. A 400, a provider auth failure or a content-policy refusal fails the request. A provider
+#    auth failure is a failure of our credential, not of the credential of the caller. In these cases, the next
+#    provider also refuses the request, or the fault is ours and we must repair it.
+# 2. **Fall back only before the first byte.** The gateway holds the first chunk until it knows that the upstream
+#    produces tokens. After a token reaches the client, the gateway reports a failure *in the stream*. To join the
+#    continuation of another model to half an answer is incorrect.
+# 3. **A breaker per target** changes repeated failures into instant skips for a cool-down period. This lab uses the
+#    same rules as 07.2's `CircuitBreaker` (gcp-agent-platform-lab notebook 10, the canonical home). The breaker opens
+#    after 3 *consecutive* failures. It goes half-open after the recovery timeout, and then one probe decides. Retries
+#    with jitter are in §5.2 of the scaling primer. Here, the retry is the next target.
 #
-# Chain arithmetic: with independent failures $A = 1 - \prod_i (1 - a_i)$; a common-mode event (the gateway's own
-# region, a shared upstream) multiplies it by $(1 - c)$ — a fallback in the same failure domain buys little. The
-# fallback also costs: latency (the failed attempt, plus a possibly slower target) and money (a pricier model at full
-# traffic until its own quota runs out).
+# Chain arithmetic: with independent failures, $A = 1 - \prod_i (1 - a_i)$. A common-mode event multiplies it by
+# $(1 - c)$. Examples of a common-mode event are the region of the gateway itself and a shared upstream. Thus a
+# fallback in the same failure domain adds only a small gain.
+#
+# The fallback also has costs. One cost is latency: the failed attempt, plus a target that is possibly slower. The other
+# cost is money: a model with a higher price at full traffic, until that model reaches the end of its own quota.
 
 # %%
 import os, statistics, time
@@ -53,18 +57,28 @@ print("chain for alias chat:", stack.cfg.aliases["chat"].targets, "| bolt is slo
 # %% [markdown]
 # ## Exercise 2.1 — what the client sees
 #
-# The core classified statuses (gateway-core notebook 02, exercise 2.1). Over HTTP the question a client owner asks is
-# different: *what do I get back?* For each fault below, switched on at `acme` (the first target of `chat`) for one
-# streamed request, write `client_sees(fault)` returning `(status, served_by, error_in_stream)`: the HTTP status the
-# client receives, the `x-gwlab-target` that served it (`None` if nothing did) and whether the stream carries an
-# `error` event.
+# The core classified statuses (gateway-core notebook 02, exercise 2.1). Over HTTP, the owner of a client asks a
+# different question: *what do I get back?* The check switches on each fault below at `acme` (the first target of
+# `chat`) for one streamed request. Write `client_sees(fault)`. It returns `(status, served_by, error_in_stream)`:
 #
-# The faults: `"503"`; `"429"`; `"timeout"` (acme stalls past its 0.4 s first-byte timeout); `"context"` (a prompt the
-# gateway's chars/4 estimate says fits acme's 8,192-token window, which acme's own tokenizer counts as 9,000 tokens);
-# `"midstream"` (an error chunk after 5 content chunks); `"reset"` (the connection drops after 5 chunks); `"bad_key"`
-# (acme rejects the *gateway's* provider key with a 401). Predict before you run anything: the check provokes each
-# fault, one at a time (breakers reset between them, since three in a row would open acme's — the subject of the
-# second half), and prints what the gateway did.
+# - the HTTP status that the client receives,
+# - the `x-gwlab-target` that served the request (`None` if no target did),
+# - if the stream has an `error` event or not.
+#
+# The faults:
+#
+# - `"503"`.
+# - `"429"`.
+# - `"timeout"`: acme stalls for longer than its 0.4 s first-byte timeout.
+# - `"context"`: a prompt that fits the 8,192-token window of acme by the chars/4 estimate of the gateway. The
+#   tokenizer of acme itself counts this prompt as 9,000 tokens.
+# - `"midstream"`: an error chunk after 5 content chunks.
+# - `"reset"`: the connection stops after 5 chunks.
+# - `"bad_key"`: acme rejects the *gateway's* provider key with a 401.
+#
+# Predict the results before you run anything. The check causes each fault, one at a time, and prints what the gateway
+# did. The breakers reset between the faults, because three faults in sequence are sufficient to open the breaker of acme. That breaker
+# is the subject of the second half.
 
 # %% exercise
 def client_sees(fault: str) -> tuple:
@@ -106,12 +120,16 @@ print("✅ before the first byte a fault is invisible (another target answers); 
 # %% [markdown]
 # ## Exercise 2.2 — availability, read from the decision log
 #
-# The chain formula is the core's (`routing.chain_availability`, given). What the lab adds is where its inputs come
-# from in production: the gateway's own decisions. `acme` fails 25 % of requests and `bolt` 20 % (seeded, before the
-# first byte); breakers are set so high they never open, so every request walks the whole chain; 240 requests go
-# through. Write `failure_rate(decisions, target)`: of the attempts at `target` (an attempt skipped by an open breaker
-# is not one), the share that failed (`outcome` `"fallthrough"` or `"fail"`). Then set `predicted` from the two
-# measured rates with `routing.chain_availability`, and `measured` to the share of requests that got a 200.
+# The chain formula comes from the core (`routing.chain_availability`, given). The lab adds the source of its inputs in
+# production: the decisions of the gateway itself.
+#
+# In this run, `acme` fails 25 % of the requests and `bolt` fails 20 %. The failures are seeded and occur before the
+# first byte. The breaker settings are so high that the breakers never open. Thus every request goes through the whole
+# chain. 240 requests go through.
+#
+# Write `failure_rate(decisions, target)`. Return the share of the attempts at `target` that failed (`outcome`
+# `"fallthrough"` or `"fail"`). An attempt that an open breaker skipped is not an attempt. Then set `predicted` from the
+# two measured rates with `routing.chain_availability`. Set `measured` to the share of requests that got a 200.
 
 # %%
 lossy = {"acme": FakeSpec(name="acme", fail_rate=0.25, seed=3, **FAST),
@@ -146,11 +164,13 @@ print("✅ two lossy targets in independent failure domains; put both behind one
 # %% [markdown]
 # ## Exercise 2.3 — what a fallback costs in latency
 #
-# On the same run, a request either got `acme` at once (TTFT ≈ acme's), or paid a failed attempt and then got
-# `bolt`. Write `expected_ttft(p_fail, fail_s, ttft_primary, ttft_fallback, p_fail_fallback)`: the mean TTFT of
-# the requests that succeeded — $(1 - p)\,t_1 + p\,(1 - p_2)\,(f + t_2)$, divided by the probability of success.
-# The check fills in the components *measured* on the run (each target's TTFT from the requests it served, the
-# failed attempt's duration from the gateway's decision log) and compares with the measured mean.
+# In the same run, a request got `acme` immediately (TTFT ≈ acme's). Or it paid for a failed attempt and then got
+# `bolt`. Write `expected_ttft(p_fail, fail_s, ttft_primary, ttft_fallback, p_fail_fallback)`. Return the mean TTFT of
+# the requests that succeeded: $(1 - p)\,t_1 + p\,(1 - p_2)\,(f + t_2)$, divided by the probability of success.
+#
+# The check uses the components *measured* in the run. The TTFT of each target comes from the requests that this target
+# served. The duration of the failed attempt comes from the decision log of the gateway. Then the check compares the
+# result with the measured mean.
 
 # %% exercise
 def expected_ttft(p_fail, fail_s, ttft_primary, ttft_fallback, p_fail_fallback=0.0) -> float:
@@ -179,11 +199,13 @@ print("✅ the chain's mean TTFT is a mixture: most requests at the primary's sp
 # %% [markdown]
 # ## Worked example: a breaker through an outage
 #
-# `acme` goes down for 4 s while one tenant sends 10 requests a second for about 8 s. For the first three
-# requests the chain pays a failed attempt (fast here: a 503); then the breaker opens and requests skip `acme`
-# without touching it; every recovery timeout (1 s) one probe is let through, fails, and re-opens it — until the
-# outage is over, a probe succeeds, and traffic returns to `acme`. With a *stall* instead of a 503, every one of those attempts would cost the 0.4 s first-byte
-# timeout: that is the breaker's real value.
+# `acme` has an outage for 4 s while one tenant sends 10 requests a second for approximately 8 s. For the first three
+# requests, the chain pays for a failed attempt. Here this attempt is fast: a 503. Then the breaker opens, and the
+# requests skip `acme` and do not touch it.
+#
+# At each recovery timeout (1 s), the breaker lets one probe through. The probe fails and opens the breaker again. This
+# continues until the outage ends. Then a probe succeeds, and the traffic goes back to `acme`. With a *stall* instead of
+# a 503, each of those attempts costs the 0.4 s first-byte timeout. That is the real value of the breaker.
 
 # %%
 reset_breakers()
@@ -202,12 +224,17 @@ print(f"requests that reached acme while it was down: {dead}; skipped by the ope
 # %% [markdown]
 # ## Exercise 2.4 — how many requests hit a dead target
 #
-# Predict it: requests arrive at `rate` per second; the target is dead for `outage_s`; the breaker opens after
-# `threshold` consecutive failures and lets one probe through every `recovery_s` while open. Write
-# `requests_reaching_dead_target(outage_s, rate, threshold, recovery_s)`: the `threshold` failures that open it (they
-# take $\text{threshold} / \text{rate}$ seconds), plus one failed probe per full `recovery_s` in the rest of the
-# outage. The check compares with the run above (a small tolerance: arrivals are Poisson and the fault window is not
-# aligned with them).
+# Predict the count. These are the conditions:
+#
+# - Requests arrive at `rate` per second.
+# - The target is dead for `outage_s`.
+# - The breaker opens after `threshold` consecutive failures. While it is open, it lets one probe through every
+#   `recovery_s`.
+#
+# Write `requests_reaching_dead_target(outage_s, rate, threshold, recovery_s)`. Return the `threshold` failures that
+# open the breaker, plus one failed probe for each full `recovery_s` in the rest of the outage. The `threshold`
+# failures take $\text{threshold} / \text{rate}$ seconds. The check compares the result with the run in the previous
+# worked example. It uses a small tolerance, because arrivals are Poisson and the fault window does not align with them.
 
 # %% exercise
 def requests_reaching_dead_target(outage_s, rate, threshold, recovery_s) -> int:
@@ -228,13 +255,15 @@ print("✅ without the breaker all ~40 would have paid a failed attempt; with it
 # %% [markdown]
 # ## T1: stop vLLM mid-run
 #
-# With `GWLAB_VLLM_URL` set, a second gateway puts the real vLLM first in `chat` (config `vllm`) and a fake
-# second. The next cell sends two requests a second for 20 s and — because Colab and Kaggle give you no second
-# terminal — stops vLLM itself 8 s in (`gwlab.t1.stop_vllm`: `pkill -f "vllm serve"`, else
-# `docker compose ... stop vllm`), behind an explicit opt-in (`GWLAB_T1_STOP=1`) so re-running the notebook never
-# kills your engine by surprise. The served-by line switches from `v` to `a` after a few connection errors, and the
-# breaker then skips vLLM. It prints how to restart vLLM: notebooks 03 and 04 need it again (if you forget, their
-# T1 cells find no vLLM on `/health` and skip).
+# When you set `GWLAB_VLLM_URL`, a second gateway puts the real vLLM first in `chat` (config `vllm`) and a fake second.
+# The next cell sends two requests a second for 20 s. After 8 s, the cell itself stops vLLM, because Colab and Kaggle
+# give you no second terminal. It uses `gwlab.t1.stop_vllm`: `pkill -f "vllm serve"`, else `docker compose ... stop
+# vllm`. This step needs an explicit opt-in (`GWLAB_T1_STOP=1`). Thus, if you run the notebook again, it never stops
+# your engine by surprise.
+#
+# The served-by line changes from `v` to `a` after a few connection errors. Then the breaker skips vLLM. The cell
+# prints how to start vLLM again, because notebooks 03 and 04 need it again. If you forget, their T1 cells find no vLLM
+# on `/health` and skip.
 
 # %%
 if tiers["vllm_url"] and os.environ.get("GWLAB_T1_STOP") == "1":
@@ -258,25 +287,32 @@ stack.stop()
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes:** "Each alias is an ordered chain of targets in independent failure domains — another
-# provider, another region, or our own pool. A request falls through on 429, 5xx, timeouts and context-length
-# errors, never on a 400, an auth failure or a content-policy refusal. The gateway holds the first chunk until
-# the upstream is producing, so it can fall back before the first byte; after it, the error goes into the stream
-# and the client decides. Every target has a breaker — three consecutive failures open it, one probe per
-# recovery window — so an outage costs a handful of failed attempts, not one per request. Two independent 99 %
-# targets give 99.99 %; a common-mode failure caps that, so the fallback lives in another region or provider,
-# and its capacity and price are planned before the day we need it."
+# **Two minutes:** "Each alias is an ordered chain of targets in independent failure domains: another provider,
+# another region, or our own pool. A request falls through on 429, 5xx, timeouts and context-length errors. It never
+# falls through on a 400, an auth failure or a content-policy refusal. The gateway holds the first chunk until the
+# upstream produces tokens. Thus it can fall back before the first byte. After the first byte, the error goes into the
+# stream, and the client decides.
 #
-# **Drill 1.** *A provider outage lasted five minutes; our incident lasted forty and the bill doubled. Why?* —
-# Retries without a budget outlived the outage; streams that failed midway were re-run from the start and paid
-# twice; the chain fell through to a pricier model at full traffic until its quota ran out. Retry budgets with
-# jitter, a breaker per target, fallback only before the first byte, fallback capacity sized and priced ahead,
-# and a cost alert per tenant (CURRICULUM cross-layer drill 18).
+# "Every target has a breaker. Three consecutive failures open it, and it lets one probe through in each recovery
+# window. Thus an outage costs a small number of failed attempts, not one for each request. Two independent 99 %
+# targets give 99.99 %. A common-mode failure puts a limit on that. Thus the fallback is in another region or provider,
+# and we plan its capacity and price before the day that we need it."
 #
-# **Drill 2.** *Why not retry a stream on another model after it failed at token 300?* — The client has already
-# shown 300 tokens from model A; B's continuation of A's text is not A's answer, and B re-generates (and bills)
-# from the start. Surface the error; let the client retry the whole request if it wants.
+# **Drill 1.** *A provider outage lasted five minutes; our incident lasted forty and the bill doubled. Why?* Retries
+# without a budget continued after the outage ended. Streams that failed in the middle ran again from the start and
+# paid two times. The chain fell through to a model with a higher price at full traffic, until that model reached the
+# end of its quota.
 #
-# **Drill 3.** *Our fallback is the same model in another zone of the same region. What does the chain buy?* —
-# Protection from zonal failures only; a regional outage, a provider-wide incident or a bad deploy is
-# common-mode, so $(1 - c)$ bounds availability no matter how many zonal replicas are in the chain.
+# Use retry budgets with jitter and a breaker per target. Fall back only before the first byte. Set
+# the size and the price of the fallback capacity in advance, and put a cost alert on each tenant (CURRICULUM
+# cross-layer drill 18).
+#
+# **Drill 2.** *Why not retry a stream on another model after it failed at token 300?* The client already showed 300
+# tokens from model A. The continuation of A's text by B is not the answer of A. Also, B generates again from the start,
+# and bills again from the start.
+#
+# Report the error. Let the client retry the whole request if it wants.
+#
+# **Drill 3.** *Our fallback is the same model in another zone of the same region. What does the chain buy?* The chain
+# gives protection from zonal failures only. A regional outage, a provider-wide incident or an incorrect deploy is
+# common-mode. Thus $(1 - c)$ is the limit on availability, for any number of zonal replicas in the chain.

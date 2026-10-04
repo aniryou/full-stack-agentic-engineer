@@ -49,9 +49,9 @@ pool, the 05 router selects the replica and the engine batches the requests, not
 The design has five mechanisms.
 
 - **Fallback chains** fall through only on a failure where another target can succeed. These failures are a 429, a
-  5xx, a timeout, or a context that is too long. They never fall through on a bad request or on a content-policy refusal. They **never**
-  fall through **after the first byte** has reached the client. A breaker per target makes the gateway skip a
-  provider that is down, with no wait.
+  5xx, a timeout, or a context that is too long. They never fall through on a bad request or on a content-policy
+  refusal. They **never** fall through **after the first byte** has reached the client. A breaker per target makes
+  the gateway skip a provider that is down, with no wait.
 - **Caches** save a whole call or a part of one. An exact or semantic cache saves the whole call. It has a namespace
   per tenant and a guard on numbers and entities, and you measure its false hits. Provider prompt caching and the
   engine's prefix cache save a part of the call.
@@ -126,8 +126,8 @@ error (`api.error_body()`):
 ### 1.4 Chat completions and SSE as the lingua franca
 
 The OpenAI chat-completions request (`model`, `messages`, `tools`, `max_completion_tokens`, `stream`, …) is the API
-that every gateway, engine and SDK speaks. The API server of vLLM also speaks it (serving-engine PRIMER §1), and the 04
-lab's [`fakeserver.py`](../../04-inference-engine/serving-engine/vllm-serving-lab/servelab/fakeserver.py) emulates it.
+that every gateway, engine and SDK speaks. The API server of vLLM also speaks it (serving-engine PRIMER §1), and the
+04 lab's [`fakeserver.py`](../../04-inference-engine/serving-engine/vllm-serving-lab/servelab/fakeserver.py) emulates it.
 A streamed answer is a sequence of `chat.completion.chunk` objects. Each object is an SSE frame `data: {…}` and a
 blank line, and `data: [DONE]` ends the sequence (`api.sse()`, `api.parse_sse()`). Three details decide if a gateway
 does its metering correctly:
@@ -144,9 +144,9 @@ does its metering correctly:
   cut stream leaves half a JSON object: report it, and never guess the rest (`tool_calls()` returns
   `valid_json: False`).
 - **Errors can arrive inside a 200.** In vLLM v0.30.0, the server reports a failure in the middle of a stream as a
-  `data:` chunk that holds an `error` object. Then it sends `[DONE]`, and all of this is under HTTP 200. Also, its error `code` is the
-  HTTP status as an integer, but OpenAI's code is a string (`api.normalize_error()`). A relay that examines only the
-  status counts a failure as a success in its metering.
+  `data:` chunk that holds an `error` object. Then it sends `[DONE]`, and all of this is under HTTP 200. Also, its
+  error `code` is the HTTP status as an integer, but OpenAI's code is a string (`api.normalize_error()`). A relay that
+  examines only the status counts a failure as a success in its metering.
 
 The gateway's token stream is not the agent's own API. The 07.2 lab's
 [notebook 07](../../07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks/07_agent_api_streaming_tasks.ipynb)
@@ -185,8 +185,7 @@ The stream does not normalise cleanly. Anthropic sends named events: `message_st
 cumulative output usage, and `message_stop`. It sends no `[DONE]`. The Gemini API sends whole function calls, not
 argument fragments (`partial_args` is Vertex-only), and it marks thought parts with `thought: true`. In vLLM, the
 reasoning text has the name `reasoning` (vLLM renames a `reasoning_content` that it receives), and OpenAI's schema has
-neither.
-`providers.normalize_stream()` changes the first two into canonical chunks.
+neither. `providers.normalize_stream()` changes the first two into canonical chunks.
 
 The counts do normalise, but only at the end. Anthropic's usage is cumulative, and the final `message_delta` carries
 all of it. This includes `output_tokens_details.thinking_tokens` when the API sends it (the field is optional in the
@@ -249,8 +248,8 @@ Then the router **orders** the targets that pass by a policy:
 | effort | the reasoning filter of §2.2 | only thinking models take high `reasoning_effort` |
 
 Routing by effort puts the RL primer's point into practice ([00.5 PRIMER §7](../../00-foundations/rl-and-thinking-models/PRIMER.md#7-what-thinking-does-to-serving)).
-The bill counts a thinking token as output. Thus, to send only the hard requests to a thinking model is the
-lowest-cost way to buy accuracy. This needs a classifier, or a low-cost first pass, that knows which requests are
+The bill counts a thinking token as output. Thus the lowest-cost way to buy accuracy is to send only the hard
+requests to a thinking model. This needs a classifier, or a low-cost first pass, that knows which requests are
 hard.
 
 ### 2.3 What falls through, and what must not
@@ -270,8 +269,9 @@ Sometimes a design falls through on a content-policy refusal on purpose (LiteLLM
 you select it, make it a named policy per route with an owner, not a default.
 
 **Fall back only before the first byte.** When a chunk has reached the client, the gateway cannot join the output of
-a second model to the first. Otherwise, the client reads two answers as one. After the first byte, the gateway shows
-the failure to the client as an error chunk and `[DONE]`. It records the usage of the tokens that it relayed (§5.2).
+a second model to the first. Such a join makes the client read two answers as one. After the first byte, the gateway
+shows the failure to the client as an error chunk and `[DONE]`. It records the usage of the tokens that it relayed
+(§5.2).
 
 Before the first byte, the gateway has sent nothing, and it tries the next target. This applies to a 5xx, a timeout,
 or an error chunk that arrives *first* inside a 200 (`Gateway.handle()`, stage 6, with a test in
@@ -332,7 +332,7 @@ Each call has the §5.3 shape, and `metering.price_call()` gives its price:
 | no fallback at all | 0.577 s, but 5 % of requests fail | 5 % | — |
 
 The timeout adds 0.05 × (10 − 0.15) = 0.49 s to the *mean*. It also puts the p95 of every failed request at ten
-seconds. The breaker (§2.4) and a first-byte deadline bring it back down. The fallbacks here have a lower cost per
+seconds. The breaker (§2.4) and a first-byte deadline bring it back. The fallbacks here have a lower cost per
 call than the primary, so the mean cost almost does not change. But a fallback to a *higher-cost* model at full
 traffic is how an outage doubles a bill (drill 1).
 
@@ -501,8 +501,8 @@ Charge tokens, not requests. Charge them in three moves (`ratelimit.ReserveLimit
 3. **reconcile**: at the end, debit the rest of the usage. Release the reserved tokens that the request did not use
    (`finish()`).
 
-Suppose that every reservation is a true upper bound, because the gateway enforces the output cap that it reserved
-as the hard cap. Then $\text{used} + \text{reserved}$ never goes above the limit. When the model processes tokens,
+Suppose that every reservation is a true upper bound: the gateway enforces the output cap that it reserved, and that
+cap is the hard cap. Then $\text{used} + \text{reserved}$ never goes above the limit. When the model processes tokens,
 they move from one term to the other, and expiry and release only decrease the sum. Thus a provider that counts the
 same tokens in the same window never sees more than the limit. `tests/test_ratelimit.py` examines this invariant on
 random traffic. A stream cut before its usage chunk reconciles on the tokens counted from its deltas, and the gateway
@@ -545,12 +545,12 @@ the peak. The provider's window stays over the limit from the moment it binds (t
 there until the admitted thinking streams have drained (t = 648 s). With the correct size for the mean, the bucket
 still stays over the limit for 116 of 600 seconds. The reason is that the tail is not the mean.
 
-A reservation of the full cap is exact but wasteful. A 16K reservation held for a minute-long stream leaves most of
+A reservation of the full cap is exact and wasteful. A 16K reservation held for a minute-long stream leaves most of
 the budget unused (26.5 % served).
 
-A reservation of an estimate, with a reconcile at the end, serves 70.4 % with no second over the limit here. In this run,
-910,498 tokens overran their reservations, and the gateway debited them as they arrived, so admission saw them. But
-that result comes from a measurement, not a guarantee. Exercise 4.3 of [core notebook
+A reservation of an estimate, with a reconcile at the end, serves 70.4 % with no second over the limit here. In this
+run, 910,498 tokens overran their reservations, and the gateway debited them as they arrived, so admission saw them.
+But that result comes from a measurement, not a guarantee. Exercise 4.3 of [core notebook
 04](gateway-core/notebooks/04_token_limits_metering_and_chargeback.ipynb) does a sweep of the reservation. 1,024
 serves 98.9 % of the limit but spends 56 seconds over it, 2,048 serves 89.3 % with 2 seconds over, and 4,096 is the
 smallest with none.
@@ -590,9 +590,9 @@ prompt / completion / cached / reasoning tokens, the cost, an `estimated` flag a
 has the TTFT, the duration and the trace id.
 
 The row agrees with the audit event of the identity primer (§9) and with the identity lab's
-[`AuditEvent`](../identity-security/agentic-identity-gcp-lab/src/agentsec/audit/log.py). Both record who (tenant,
-key), what (model, tokens), under which decision, and which trace to open. The ledger is billing-grade: you keep
-every row, as you keep financial records. That is the difference between the ledger and traces (§5.6).
+[`AuditEvent`](../identity-security/agentic-identity-gcp-lab/src/agentsec/audit/log.py). Like them, the row records
+who (tenant, key), what (model, tokens), under which decision, and which trace to open. The ledger is billing-grade:
+you keep every row, as you keep financial records. That is the difference between the ledger and traces (§5.6).
 
 ### 5.2 Usage is authoritative
 
@@ -614,7 +614,8 @@ The price table in `providers.CATALOGUE` has the date 2026-09-26 (verify). The G
 have three different prices. On claude-haiku-4-5, 10,000 tokens written to the prompt cache cost $0.0125 at the 1.25
 write rate, not the $0.0100 of an input-rate ledger (`price_call(..., cache_write_tokens=)`).
 
-The table shows the scaling primer's anchor call: 5,000 input tokens (2,700 of them cached) and 350 output tokens. The blended price is over its 5,350 tokens (`metering.cost_per_million()`):
+The table shows the scaling primer's anchor call: 5,000 input tokens (2,700 of them cached) and 350 output tokens.
+The blended price is over its 5,350 tokens (`metering.cost_per_million()`):
 
 | Model | $ per call | Blended $ per 1M tokens |
 |---|---|---|
@@ -680,8 +681,8 @@ per request (`POST /v1/chat/completions`). It also emits one **CLIENT** span per
 span of that target (`gwcore.otel.Tracer`).
 
 Attribute names obey the OpenTelemetry GenAI conventions. These conventions are still at *development* stability,
-and they change. The v1.41.0 release (April 2026) is the last semantic-conventions release that defines them. They now live in
-`semantic-conventions-genai`. That repository renamed `gen_ai.usage.cache_creation.input_tokens` to `…cache_write…`
+and they change. The v1.41.0 release (April 2026) is the last semantic-conventions release that defines them. They
+now live in `semantic-conventions-genai`. That repository renamed `gen_ai.usage.cache_creation.input_tokens` to `…cache_write…`
 and replaced the `gen_ai.client.token.usage` histogram with counters. Neither change has a release yet.
 
 `otel.py` pins the names that the two agree on. These are the same constants as in the 07.2 lab's
@@ -757,9 +758,8 @@ removes the route metadata before it forwards the request. It sets the per-tenan
 
 vLLM v0.30.0 validates `cache_salt`. The value must be non-empty and at most 128 characters, with none of `@ / \` or
 NUL (`keys.valid_cache_salt()`). In vLLM, only the first block gets the salt, and the chained hashes carry the salt
-forward.
-Derive the salt from the verified tenant with a gateway secret. Then nobody can guess it, and nobody can join the cache
-of another tenant with that tenant's salt.
+forward. Derive the salt from the verified tenant with a gateway secret. Then nobody can guess it, and nobody can join
+the cache of another tenant with that tenant's salt.
 
 ### 6.5 In brief: the gateway's own identity
 
@@ -933,9 +933,10 @@ the `scopes_supported` of the metadata: least privilege first, and a step-up whe
 
 ### 8.5 DPoP nonces
 
-A sender-constrained token ([identity primer §3.5](../identity-security/agentic-identity-gcp-lab/docs/primer.md#35-delegation-mechanics-standards-you-should-be-able-to-draw)) has a binding to a key. The client sends
-`Authorization: DPoP <token>` and a `DPoP` proof that the client signs with that key. The proof is a JWT with `jti`,
-`htm`, `htu`, `iat`, and `ath` = base64url(SHA-256(token)).
+A sender-constrained token
+([identity primer §3.5](../identity-security/agentic-identity-gcp-lab/docs/primer.md#35-delegation-mechanics-standards-you-should-be-able-to-draw))
+has a binding to a key. The client sends `Authorization: DPoP <token>` and a `DPoP` proof that the client signs with
+that key. The proof is a JWT with `jti`, `htm`, `htu`, `iat`, and `ath` = base64url(SHA-256(token)).
 
 RFC 9449 lets servers demand a fresh **nonce** in the proof. An authorization server answers
 `400 {"error":"use_dpop_nonce"}` with a `DPoP-Nonce` header (§8 of the RFC). A resource server answers `401` with
@@ -1117,8 +1118,8 @@ principal and resource, never in the agent."
   (`model/gen-ai/*.yaml`, `changelog.d/`). OTLP/JSON encoding (`opentelemetry-proto` `docs/specification.md`).
 - Model Context Protocol specification, revision 2026-07-28, `basic/authorization/` (index, authorization server
   discovery, client registration, security considerations). The MCP Python SDK `src/mcp/client/auth/`.
-- OAuth 2.1 (draft-ietf-oauth-v2-1, editor's copy) §4.1.1, §4.3.1, §7.5, and draft-ietf-oauth-client-id-metadata-document.
-  RFC 7636 (PKCE, Appendix B), RFC 8414, RFC 8707, RFC 9207 and RFC 9728. RFC 9449 (DPoP, `danielfett/draft-dpop`).
+- OAuth 2.1 (draft-ietf-oauth-v2-1, editor's copy) §4.1.1, §4.3.1, §7.5, and
+  draft-ietf-oauth-client-id-metadata-document. RFC 7636 (PKCE, Appendix B), RFC 8414, RFC 8707, RFC 9207 and RFC 9728. RFC 9449 (DPoP, `danielfett/draft-dpop`).
 - SPIFFE `standards/SPIFFE_Workload_API.md`, `SPIFFE_Workload_Endpoint.md`. SPIRE `doc/spire_server.md`,
   `doc/spire_agent.md`, `pkg/common/rotationutil/rotationutil.go`.
 - LiteLLM 1.104.0 (`litellm/router.py`, `litellm/proxy/`, `litellm/caching/`, `model_prices_and_context_window.json`
@@ -1153,4 +1154,4 @@ This list has the date 26 September 2026. Do the check again before you rely on 
 | Redis + Lua atomic check-and-commit, one hash slot per script on a cluster | not read from a Redis source here |
 | How hosted providers count tokens against TPM/OTPM. OpenAI: the larger of `max_tokens` and an estimate at admission. Anthropic: output tokens estimated from `max_tokens` and corrected at the end | from memory. The providers' rate-limit pages were not available here. |
 | LiteLLM v3 limiter: prompt + `max_tokens`, else max(input estimate, 1,024 = 4,096 ÷ 4, capped at a quarter of the smallest TPM limit). An implicit `max_tokens` when capped, and a reconcile after the call | `parallel_request_limiter_v3.py` @`849f303` |
-| SPIRE agent checks rotation on its sync loop (default 5 s, with a back-off on errors) | `pkg/agent/manager/manager.go`. The fake's 5 s check is a model of it. |
+| SPIRE agent does a rotation check on its sync loop (default 5 s, with a back-off on errors) | `pkg/agent/manager/manager.go`. The fake's 5 s check is a model of it. |

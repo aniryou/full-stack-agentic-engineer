@@ -8,7 +8,7 @@
 
 Attention is the core operation in a transformer. The textbook implementation is correct, but it wastes resources. It makes a large intermediate matrix, puts it in the slow main memory of the GPU, and then reads it back two times. FlashAttention calculates the *exact same result*, but it never makes that matrix. It does the work on small tiles of the input that fit in the fast on-chip memory of the GPU. The difficult part is that softmax must see a full row before it can normalize the row.
 
-FlashAttention solves this problem with a trick that keeps statistics and updates them block by block. The name of this trick is **online softmax**. The result is a wall-clock speedup of 2–4×. Also, the memory increases linearly with sequence length, not quadratically. This is a large part of the reason that long-context models are practical at all.
+FlashAttention solves this full-row problem with a trick that keeps statistics and updates them block by block. The name of this trick is **online softmax**. The result is a wall-clock speedup of 2–4×. Also, the memory increases linearly with sequence length, not quadratically. These two results are a large part of the reason that long-context models are practical at all.
 
 The key point to remember: **this is not an approximation.** It is a different schedule for the same arithmetic.
 
@@ -32,7 +32,7 @@ O &= PV && N \times d && \text{each output is a weighted average of value vector
 \end{aligned}
 $$
 
-That is all. (Real implementations scale $S$ by $1/\sqrt{d}$. They often also apply a causal mask, so that a token cannot attend to the future. But the shape of the problem does not change.)
+That is all. Real implementations scale $S$ by $1/\sqrt{d}$. They often also apply a causal mask, so that a token cannot attend to the future. But the shape of the problem does not change.
 
 Look at the shapes: $Q$, $K$, $V$, and $O$ are all $N \times d$. The value of $d$ is small, usually 64 or 128 per attention head. But $S$ and $P$ are $N \times N$. At $N$ = 8192, `S` in fp16 is 128 MB **per head, per sequence in the batch**. With 32 heads and a batch of 8, that's 32 GB of intermediates for one layer. This is the full problem in one sentence.
 
@@ -87,7 +87,7 @@ There is a second failure, and it is more difficult: **it is possible that the m
 
 The solution is the standard solution for memory-bound problems: *fusion* and *tiling*. Do not run softmax as a separate pass over a matrix in HBM. Divide the problem into blocks that are sufficiently small to fit in SRAM. Then do the full chain of score, softmax and weighted sum on each block while the block is still on-chip. $S$ and $P$ exist only as small tiles in fast memory. The kernel removes each tile immediately after it uses the tile.
 
-In practice: divide $Q$ into row blocks of size $B_r \times d$, and divide $K$, $V$ into blocks of size $B_c \times d$. Select the sizes so that some of these blocks fit in the ~200 KB of shared memory of one SM. For each $Q$ block, loop over all $K$/$V$ blocks, and accumulate the results into an output block.
+In detail: divide $Q$ into row blocks of size $B_r \times d$, and divide $K$, $V$ into blocks of size $B_c \times d$. Select the sizes so that some of these blocks fit in the ~200 KB of shared memory of one SM. For each $Q$ block, loop over all $K$/$V$ blocks, and accumulate the results into an output block.
 
 This is easy for the matmuls, because a matmul divides into blocks naturally. **The obstacle is softmax.**
 
@@ -99,13 +99,13 @@ $$
 
 The denominator is a sum over the full row, that is, all $N$ entries. If you hold only a block of 128 columns, you cannot calculate it. It seems that you must do a full pass over the row before you can give any output for that row. That pass is exactly the thing that you tried to prevent.
 
-(There is also a numerical problem. The $\exp$ of a large score overflows fp16 immediately. Thus, every real implementation subtracts the row max first: $\exp(s_i - \max)$. The result is mathematically identical, and the step is numerically necessary. Now you also need the row *max* at the start, and that is a second global reduction.)
+There is also a numerical problem. The $\exp$ of a large score overflows fp16 immediately. Thus, every real implementation subtracts the row max first: $\exp(s_i - \max)$. The result is mathematically identical, and the step is numerically necessary. Now you also need the row *max* at the start, and that is a second global reduction.
 
 ---
 
 ## 5. Online softmax: the actual trick
 
-The solution is to calculate softmax **incrementally**. The kernel keeps statistics and updates them as new blocks arrive, and it corrects the earlier work retroactively. (The technique is older than FlashAttention: Milakov and Gimelshein, 2018. But FlashAttention made it important.)
+The solution is to calculate softmax **incrementally**. The kernel keeps statistics and updates them as new blocks arrive, and it corrects the earlier work retroactively. The technique is older than FlashAttention (Milakov and Gimelshein, 2018). But FlashAttention made it important.
 
 For each row of the output, keep three values that change as the blocks arrive:
 
@@ -132,11 +132,11 @@ The correction factor $\alpha$ is the full idea. If a later block contains a lar
 
 Use one row with four scores. The scores arrive in two blocks of two: `[1, 3]` then `[5, 2]`.
 
-**The answer we're aiming for.** The global max is 5. The exponentials are `exp([1,3,5,2] − 5) = [0.0183, 0.1353, 1.0, 0.0498]`, summing to `1.2034`. So the true weights are `[0.0152, 0.1125, 0.8310, 0.0414]`.
+**The target answer.** The global max is 5. The exponentials are `exp([1,3,5,2] − 5) = [0.0183, 0.1353, 1.0, 0.0498]`, summing to `1.2034`. So the true weights are `[0.0152, 0.1125, 0.8310, 0.0414]`.
 
 **Block 1.** `m = 3`, `ℓ = exp(1−3) + exp(3−3) = 0.1353 + 1 = 1.1353`, and `O = 0.1353·v₁ + 1.0·v₂`. If the kernel stops here, the result is the softmax of only the first two elements. That result is correct for the elements so far, but it is incorrect for the full row.
 
-**Block 2.** The new max is 5. Thus `m_new = 5` and `α = exp(3−5) = 0.1353`.
+**Block 2.** The new max is 5. Thus, `m_new = 5` and `α = exp(3−5) = 0.1353`.
 
 ```
 ℓ_new = 0.1353 × 1.1353 + (exp(5−5) + exp(2−5))
@@ -159,7 +159,7 @@ Training needs gradients. The textbook backward pass for attention needs $P$, an
 
 FlashAttention **recomputes** $P$ instead. During the forward pass, it keeps only $O$ ($N \times d$) and the final softmax statistics for each row. It packs the statistics as the log-sum-exp $L = m + \log(\ell)$, that is, $N$ numbers, not $N^2$. In the backward pass, it loads the $Q$, $K$, $V$ tiles into SRAM again. Then it calculates each $S$ and $P$ tile again when it needs the tile. It uses the saved $L$ to normalize correctly without a second reduction pass.
 
-This method costs *more* FLOPs than a stored $P$. But it is still faster, because the kernel was never compute-bound. The kernel has extra arithmetic, but bandwidth is scarce. Thus, you use the extra arithmetic to get back bandwidth. It is the same logic as gradient checkpointing. But here, the logic applies precisely at the level of one fused kernel, not at the level of full layers.
+This method costs *more* FLOPs than a stored $P$. But it is still faster, because the kernel was never compute-bound. The GPU has unused arithmetic capacity, but bandwidth is scarce. Thus, you use the unused arithmetic capacity to get back bandwidth. It is the same logic as gradient checkpointing. But here, the logic applies precisely at the level of one fused kernel, not at the level of full layers.
 
 ---
 
@@ -168,7 +168,7 @@ This method costs *more* FLOPs than a stored $P$. But it is still faster, becaus
 - **Memory:** ${O(N)}$ extra storage per head, not $O(N^2)$. This is the change that makes long context possible.
 - **HBM traffic:** approximately $\Theta(N^2 d^2/M)$ accesses ($M$ = SRAM size), against $\Theta(N^2 + Nd)$. The original paper measured up to 9× fewer accesses on GPT-2 shapes.
 - **Wall clock:** usually 2–4× on the attention layer, and more at long sequence lengths.
-- **Exactness:** The mathematics is bit-for-bit-equivalent. Floating-point arithmetic is not associative. Thus, the results will not be *bitwise* identical to a simple implementation (or between different tile configurations). But there is no approximation error in the algorithmic sense.
+- **Exactness:** The mathematics is bit-for-bit-equivalent. Floating-point arithmetic is not associative. Thus, the results are not *bitwise* identical to a simple implementation (or between different tile configurations). But there is no approximation error in the algorithmic sense.
 
 The last point is important. Around 2020–2021, there was a wave of "efficient attention" work: Linformer, Performer, and sparse and low-rank schemes. These methods decreased the $O(N^2)$ cost because they *changed the computation*, and they accepted some loss of quality. Often they did not give real wall-clock gains, because they replaced matmuls with memory-bound gather operations. FlashAttention won because it kept the math and repaired the memory schedule instead. The lesson was general, and it applied far beyond attention.
 
@@ -192,7 +192,7 @@ The last change is less obvious than it seems. On an A100, tensor-core matmul ru
 - Warp specialization into producer roles (they load the data) and consumer roles (they calculate).
 - A ping-pong schedule that overlaps the softmax of one block with the matmul of another block. Thus, the slow exponential units hide behind the tensor cores.
 
-It also adds FP8 with incoherent processing (a Hadamard rotation that spreads outliers before quantization). It reached approximately 740 TFLOP/s at 75% utilization on H100 (paper figure, verify).
+FlashAttention-3 also adds FP8 with incoherent processing (a Hadamard rotation that spreads outliers before quantization). It reached approximately 740 TFLOP/s at 75% utilization on H100 (paper figure, verify).
 
 **FlashAttention-4** (paper published March 2026): Blackwell. The authors call the main idea **asymmetric hardware scaling**. The tensor core throughput doubles, but other functional units scale more slowly or not at all. Examples are the shared memory bandwidth and the exponential units. Dense BF16 tensor core throughput went from approximately 1 PFLOPS to 2.25 PFLOPS (datasheet, verify). The hardware also added these items:
 
@@ -206,11 +206,11 @@ The responses are important to know, because they are specific:
 
 - A software emulation of the exponential, with polynomial approximation on the FMA units. This decreases the load on the dedicated exponential hardware.
 - A conditional rescale in the online softmax.
-- On the backward pass, the kernel stores intermediates in tensor memory to decrease shared-memory traffic. It uses this together with the 2-CTA MMA mode of Blackwell.
+- On the backward pass, the kernel stores intermediates in tensor memory to decrease shared-memory traffic. The kernel uses this storage together with the 2-CTA MMA mode of Blackwell.
 
 Each CTA calculates two query tiles of 128 tokens each, and it alternates them in a ping-pong schedule.
 
-The authors also wrote it fully in CuTe-DSL, embedded in Python. Its compile times are 20–30× faster than the compile times of approaches based on C++ templates (paper figure, verify). If you waited for a `flash-attn` build before, you will like this change. Performance, as the paper reports it (verify): up to 1605 TFLOP/s on B200 with BF16, at 71% utilization. That is 1.3× faster than cuDNN 9.13 and 2.7× faster than Triton.
+The authors also wrote FlashAttention-4 fully in CuTe-DSL, embedded in Python. Its compile times are 20–30× faster than the compile times of approaches based on C++ templates (paper figure, verify). If you waited for a `flash-attn` build before, you will like this change. Performance, as the paper reports it (verify): up to 1605 TFLOP/s on B200 with BF16, at 71% utilization. That is 1.3× faster than cuDNN 9.13 and 2.7× faster than Triton.
 
 One useful note from the FA4 rollout (verify): for *inference decode*, FlashAttention-4 was at first slower than FlashAttention-2 on B200s, until split-KV came to FA4. The generation of one token at a time is a different case. A single query row against a long KV cache leaves most SMs idle, unless you split along the key dimension and reduce after that. Remember that "the fastest attention kernel" always depends on the shape.
 
@@ -277,6 +277,6 @@ This table lists the product and paper facts that this primer states. Every othe
 | FA2 (§8) | ~2× over FA1, ~70% of A100 peak | FA2 paper. The deep dive gives the 50–73% range. |
 | FA3 (§8) | ~740 TFLOP/s bf16, 75% of H100 | FA3 paper |
 | B200 tensor throughput (§8) | dense bf16 ~2.25 PFLOP/s, up from ~1 | datasheet |
-| FA4 (§8) | paper March 2026, up to 1605 TFLOP/s bf16 on B200 (71%), 1.3× cuDNN 9.13, 2.7× Triton, 20–30× faster compiles with CuTe-DSL | FA4 paper. The primer did not fetch it on this date. |
+| FA4 (§8) | paper March 2026, up to 1605 TFLOP/s bf16 on B200 (71%), 1.3× cuDNN 9.13, 2.7× Triton, 20–30× faster compiles with CuTe-DSL | FA4 paper. The paper was not fetched on this date. |
 | FA4 decode (§8) | initially slower than FA2 on B200, until split-KV came to FA4 | Project history. Examine the current release notes. |
 | FlexAttention (§9) | backed by FA4 on Blackwell | PyTorch release in use |

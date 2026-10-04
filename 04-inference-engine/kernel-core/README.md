@@ -23,14 +23,14 @@ the three primers, this core is module 04.0 of the repo curriculum (about 5 hour
 
 | Path | You will be able to… | Time | Tier |
 |---|---|---|---|
-| [`kerncore/kv.py`](kerncore/kv.py) | Size a KV cache per token, per layer and per request for MHA, GQA and MQA in fp16 or fp8 (binary units, GB in brackets). Say how many sessions fit next to the weights. Run a small decoder. Its cached decode gives the same tokens and logits as the path that recomputes the prefix. Count what each step costs. | 30 min to read | T0 |
+| [`kerncore/kv.py`](kerncore/kv.py) | Calculate the size of a KV cache per token, per layer and per request, in fp16 or fp8 (binary units, GB in brackets). Do this for MHA, GQA and MQA. Say how many sessions fit next to the weights. Run a small decoder. Its cached decode gives the same tokens and logits as the path that recomputes the prefix. Count what each step costs. | 30 min to read | T0 |
 | [`kerncore/paged.py`](kerncore/paged.py) | Allocate KV in blocks on demand. Share the blocks with refcounts and copy them on write. Compute attention through a block table, with the blocks gathered, or one block at a time with the online softmax. Set a switch and see the two classic bugs fail: no running max, and a copy-on-write that never releases. | 30 min | T0 |
 | [`kerncore/flash.py`](kerncore/flash.py) | Run the FlashAttention-2 forward schedule tile by tile, with the online softmax and log-sum-exp. Skip the tiles above the causal diagonal. See why a forward key loop needs no `-inf` guard, but a backward key loop needs one. Compare the tiles and bytes with the deep dive's `fa_calculators.py`. | 45 min | T0 |
 | [`../kv-cache/`](../kv-cache/kv-cache-primer.md) notebooks | The worked notebook: the cache in numpy, `IDENTICAL: True`, the cost curves, the sizes. The practice notebook: four blanks, each with a check that fails the usual incorrect answers. | ~1.5 h | T0 |
 
 The paged-attention and flash-attention practice notebooks in [`../paged-attention/notebooks/`](../paged-attention/notebooks/paged_attention_practice.ipynb)
 and [`../flash-attention/notebooks/`](../flash-attention/notebooks/flash_attention_practice.ipynb) already use numpy. `kerncore.paged` and
-`kerncore.flash` are versions of their answer keys, with tests.
+`kerncore.flash` are versions of the answer keys of these notebooks, with tests.
 
 ## Run it
 
@@ -42,7 +42,7 @@ make check                            # the tests, then 01 runs clean and 02's b
 python3 -m jupyterlab ../kv-cache     # do the notebooks
 ```
 
-Install it editable (`-e`). `kerncore` imports [`fa_calculators.py`](../flash-attention/fa_calculators.py) and
+Install it editable (`-e`), because `kerncore` imports [`fa_calculators.py`](../flash-attention/fa_calculators.py) and
 [`paged_attention_minimal.py`](../paged-attention/paged_attention_minimal.py) from the checkout, and does not copy
 them. The library itself needs only numpy:
 
@@ -98,7 +98,7 @@ pieces run inside an engine:
   The two paths multiply matrices of different shapes, thus the last bits can be different. Tiled and paged
   attention match the exact result to 1e-12.
 - The core counts the costs. It does not measure them. It counts the multiply-adds in the small decoder. It also
-  counts the bytes that a 16-bit kernel with the FA2 schedule moves in the no-L2 model of `fa_calculators`. The
+  counts the bytes that the no-L2 model of `fa_calculators` gives for a 16-bit kernel with the FA2 schedule. The
   wall-clock line in the worked notebook comes from the CPU that ran it, whatever that CPU is.
 - `kv.sessions_per_gpu` gives an upper bound. It does not count activations, the allocator reserve or
   fragmentation. The model shapes and GPU figures come from the verify lists of the primers, dated 2026-09-26
