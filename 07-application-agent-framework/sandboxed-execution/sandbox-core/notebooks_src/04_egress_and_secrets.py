@@ -145,12 +145,12 @@ print("dnsPolicy:", pod["dnsPolicy"], "| hostAliases:", pod["hostAliases"])
 
 # %% [markdown]
 # ## Worked example 5 — what a process sandbox does with a socket (the undeclared exfiltration)
-# The policy check of the agent reads the hosts that the model *declares* it needs. A hijacked model declares
-# `attacker.example`, and the agent refuses it before the run. But this occurs only because the model said so. The
+# The policy check of the agent reads the hosts that the model *declares* it needs. If a hijacked model declares
+# `attacker.example`, the agent refuses the request before the run. But this occurs only because the model said so. The
 # same model can declare nothing and open a socket.
 #
-# The process sandbox has no network control, so this **leaks**, and the audit log records an ordinary `allow`. That
-# is the full case for the network layer.
+# The process sandbox has no network control, so that socket **leaks**, and the audit log records an ordinary `allow`.
+# That is the full case for the network layer.
 
 # %%
 from sandboxcore import SCENARIO_OUTCOMES, LoopbackTrap, SandboxAgent, injection_scenarios
@@ -172,7 +172,8 @@ print("            ", SCENARIO_OUTCOMES["exfiltrate_undeclared"])
 # ## Exercise 4.1 — the allowlist check
 # Implement `proxy_allows(policy, url)`. It returns True only for a plain `http://` URL whose host is on the
 # allowlist. The proxy calls this function before it does anything else. Deny-by-default means that an unknown host
-# never gets a request. Look out for look-alike hosts and for schemes that the proxy cannot broker.
+# never gets a request. Make sure that your function returns False for look-alike hosts and for schemes that the proxy
+# cannot broker.
 
 # %%
 import urllib.parse

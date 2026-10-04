@@ -63,8 +63,8 @@ print("clamped budgets: cpu_s", clamped.budgets.cpu_s, "memory_mb", clamped.budg
 #
 # - The deadline of the Job is the **startup allowance plus the wall budget**. A Kubernetes deadline also counts the
 #   time to schedule the pod and the image pull. `timeout` enforces the wall budget itself inside the pod.
-# - Every resource **request is at most its limit**. If not, the API server rejects the pod, and a schema check does
-#   not see the problem.
+# - Every resource **request is at most its limit**. If a request is more than its limit, the API server rejects the
+#   pod, and a schema check does not see the problem.
 # - The pod has **no DNS**. It finds the proxy through `hostAliases` and the pinned ClusterIP of the proxy Service.
 
 # %%
@@ -90,7 +90,8 @@ print("  container securityContext:", pod["containers"][0]["securityContext"])
 #
 # Its docstring states its limits:
 #
-# - It is one process, in memory. A crash forgets it, and a real store writes the claim durably.
+# - The store works in one process and keeps the claims in memory. A crash loses the claims, but a real store
+#   writes the claim durably.
 # - The side effects of the code itself need the key sent downstream too.
 
 # %%
@@ -135,7 +136,7 @@ print("✅ same arguments -> same key (safe replay); different arguments -> diff
 # Write `egress_decision(allowlist, needs_confirm, hosts)` **without a call to the library**. Return:
 #
 # - `Effect.DENY` if a requested host is not *exactly* on the allowlist,
-# - `Effect.CONFIRM` if the request lists hosts, all of them are on the allowlist, and the policy wants a human to
+# - `Effect.CONFIRM` if the request lists hosts, all of them are on the allowlist, and the policy wants a person to
 #   confirm egress,
 # - else `Effect.ALLOW`. This is also the result for a request with no hosts.
 #
@@ -229,7 +230,7 @@ print("✅ the linter catches retries, a deadline shorter than a cold start, clu
 # the model. The network policy enforces egress.
 #
 # "Delivery is at-least-once. Thus every execution carries an idempotency key of turn, step, call index and an
-# argument hash. The executor claims the key before the run. Thus a redelivered step returns the stored result and
+# argument hash. The result store claims the key before the run. Thus a redelivered step returns the stored result and
 # does not run a second time."
 #
 # **Drill questions**

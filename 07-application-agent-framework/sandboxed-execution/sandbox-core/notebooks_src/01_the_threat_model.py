@@ -7,9 +7,9 @@
 #
 # ## The one-minute version
 # An agent is *a workload that turns untrusted text into privileged actions* (the one line of the identity primer).
-# A `run_code` tool is the sharpest form of that. The model cannot tell instructions from data. It emits a program,
-# and something runs that program. If the program runs with the environment, the home directory and the network of
-# the agent, a prompt injection is a shell on your infrastructure.
+# A `run_code` tool is the sharpest form of that. The model cannot see the difference between instructions and
+# data. It emits a program, and something runs that program. If the program runs with the environment, the home
+# directory and the network of the agent, a prompt injection is a shell on your infrastructure.
 #
 # This notebook makes that concrete. A small set of **probes** stands in for the programs that a hijacked model can
 # emit:
@@ -74,7 +74,7 @@ print("unsandboxed:", v.detail, "| leaked:", v.leaked)
 # Three probes depend on **a different UID for the code**. The sandbox can do this only when it runs as root
 # (Colab, most CI):
 #
-# - The key read. A different UID cannot open your 0700 home. When you point `HOME` at the workspace, that hides
+# - The key read. A different UID cannot open your 0700 home. A `HOME` that points at the workspace hides
 #   nothing from an absolute path.
 # - The fork bomb, when the sandbox runs as root. `RLIMIT_NPROC` counts tasks per UID and ignores root. When the
 #   sandbox runs as a user, the parent counts the process tree of the run instead.
@@ -97,12 +97,12 @@ for p in PROBES:
 
 # %% [markdown]
 # Read the table. With a per-execution UID, the sandbox contains every probe but `egress_connect`. Without one (not
-# root, or `drop_to_uid=None`), the key read and the escape also get through. As root, the fork bomb also gets
-# through.
+# root, or `drop_to_uid=None`), the key read and the escape also get through. Without one, the fork bomb also
+# gets through when the sandbox runs as root.
 #
 # Here, the sandbox never contains egress, because resource limits do not touch sockets. That is not a bug in the
-# sandbox. It is the boundary between the *process* layer and the *network* layer. Keep that thought for
-# notebook 04.
+# sandbox. It is the boundary between the *process* layer and the *network* layer. Notebook 04 is about
+# this boundary.
 #
 # ## Exercise 1.1 — classify the blast radius
 # For each probe, say which control bounds it. Fill `control` with one of `"clean_env"`, `"separate_uid"`,
@@ -198,7 +198,7 @@ print("✅ the isolation report predicts the verdicts: HOME redirection hides no
 #
 # "The question I ask is 'if the model is fully hijacked, what can this code reach?' The answer must be as follows.
 # There are no ambient credentials, because the process starts from a clean environment. There are no private
-# files, because the code runs as its own UID. (A HOME that points to a different directory is not a boundary.)
+# files, because the code runs as its own UID. A HOME that points to a different directory is not a boundary.
 #
 # "Nothing stays behind, because the sandbox discards the workspace and sweeps the leftovers of that UID. There is no
 # network, because the policy denies egress by default and only a proxy with an allowlist can reach out. There is no

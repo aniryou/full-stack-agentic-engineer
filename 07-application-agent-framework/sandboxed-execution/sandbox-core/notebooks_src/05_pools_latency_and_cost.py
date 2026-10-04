@@ -77,7 +77,7 @@ for name, cold, src in levels:
 # ## Worked example 2 — Little's law gives the mean, not the pool (FACTS §12)
 # Let $\lambda = 5$ executions/s, with a run of 2 s each and a cold start of 3 s. On average, 10 sandboxes are busy
 # and 15 are replacements in warm-up. That gives **25 slots occupied on average**. That is the offered load $a$ in
-# Erlangs. But a pool of exactly 25 slots has nothing spare for the moments when arrivals come close together.
+# Erlangs. But a pool of exactly 25 slots has nothing spare for the moments when many arrivals come at the same time.
 
 # %%
 lam, t_exec, t_cold = 5, 2, 3
@@ -225,7 +225,7 @@ print("   a 45 s GKE cold start needs a warm pool or exec-into-a-running-pod, no
 #
 # "Erlang C on that load says that 31 slots keep the fraction that waits under 20%, and a simulation agrees. The
 # arrival rate comes from the workload. The scaling primer has 27 tool calls a second at peak. A fifth of them
-# are code, which is about 5.4 a second, and that needs 34 slots.
+# are code. That code rate is about 5.4 a second, and it needs 34 slots.
 #
 # "Cost per action is sandbox-seconds times the node price. A warm pool hides the cold start from latency, but it
 # still pays for it. That is five sandbox-seconds per execution plus the idle headroom, slightly more than six with

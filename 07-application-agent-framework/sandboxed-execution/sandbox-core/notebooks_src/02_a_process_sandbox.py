@@ -103,8 +103,8 @@ for label, code, b in cases:
 #
 # But the group is advisory: code can call `setsid()` itself and leave it. Only
 # its **UID** finds that escapee. With a per-execution UID, the sandbox kills every process of that UID after the
-# run and removes all the files that it left in `/tmp`. Without that UID, the sandbox cannot tell the escapee from
-# your own processes.
+# run and removes all the files that it left in `/tmp`. Without that UID, the sandbox cannot find the
+# difference between the escapee and your own processes.
 
 # %%
 grandchild = ("import subprocess, sys, time; "
@@ -128,8 +128,8 @@ for note in r.notes:
 # %% [markdown]
 # ## Worked example 4 — how the limits are applied (and why not `preexec_fn`)
 # The `preexec_fn` of `subprocess` runs Python code in the child between `fork` and `exec`. In a parent with other
-# threads (a proxy server, a listener, a thread pool), that can deadlock the child, and the docs say so. Thus the
-# sandbox asks `Popen` to do the privileged part in C: `user=`, `group=`, `extra_groups=[]`,
+# threads (a proxy server, a listener, a thread pool), this code can deadlock the child, and the docs say so. Thus
+# the sandbox asks `Popen` to do the privileged part in C: `user=`, `group=`, `extra_groups=[]`,
 # `start_new_session=True`. Then the interpreter of the child itself lowers the limits (`executor._LAUNCHER`)
 # before it executes the code. A process needs no privilege to lower a limit, and an unprivileged process cannot
 # raise its hard limit again.
@@ -174,8 +174,9 @@ print("✅ your limits match the sandbox's; CPU is a warning at", mine["RLIMIT_C
 
 # %% [markdown]
 # ## Exercise 2.2 — map a real child's return code to an exit reason
-# When a signal stops a child, `subprocess` returns `-signum`. When the child exits, it returns the status. Write
-# `reason_for_returncode(rc)` in the vocabulary of the contract (`contract.EXIT_REASONS`). Answer these questions:
+# When a signal stops a child, `subprocess` returns `-signum`. When the child exits, `subprocess` returns the exit
+# status. Write `reason_for_returncode(rc)` in the vocabulary of the contract (`contract.EXIT_REASONS`). Answer these
+# questions:
 #
 # - What does the *soft* signal of the CPU limit mean?
 # - What does the file-size signal mean, and what is any other signal?
@@ -255,15 +256,14 @@ print("✅ the process group is advisory; only the UID (or a cgroup / PID namesp
 # clean environment in a throwaway 0700 workspace, so no credentials come with it. Before the code runs, the child
 # lowers its own POSIX limits: CPU seconds, address space, open files, file size and the process count.
 #
-# "I hold a
-# wall-clock deadline and read its output as it streams. I keep a budget's worth and kill the run if it floods. Thus
-# neither a sleeper nor a print loop can hurt the caller.
+# "I hold a wall-clock deadline and read the output of the child as it streams. I keep a budget's worth of output
+# and kill the run if the output floods. Thus neither a sleeper nor a print loop can hurt the caller.
 #
-# "On a host where I can, each execution also gets its own unprivileged UID. That UID makes the process limit bite.
+# "On a host where I can, each execution also gets its own unprivileged UID. That UID makes the process limit operate.
 # It keeps my files unreadable, and a HOME that points to a different directory does not. It also lets me kill a
 # process that left the group with setsid().
 #
-# "I say clearly what this does not do. It does not block the network, and it shares the kernel. Without the UID, my
+# "I say directly what this does not do. It does not block the network, and it shares the kernel. Without the UID, my
 # files and escapees have no protection. For a stronger boundary I move up the ladder: a container, then gVisor, then a
 # microVM. But the contract and the limits have the same shape."
 #
