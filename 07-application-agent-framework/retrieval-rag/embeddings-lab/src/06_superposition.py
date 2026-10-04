@@ -1,11 +1,13 @@
 # %% [markdown]
 # # 06 · Superposition: more features than dimensions (advanced)
-# A minimal replication of Anthropic's *Toy Models of Superposition* (Elhage et
-# al., 2022). A tiny autoencoder must squeeze $n$ sparse features through $d < n$
-# dimensions. When features are **dense** it keeps only the most important ones;
-# when they are **sparse** it stores all of them as nearly-orthogonal directions
-# and accepts interference — superposition. This is the mechanism behind
-# "concepts are directions" and sparse autoencoders. *Primer §9.*
+# This notebook is a minimal replication of Anthropic's *Toy Models of Superposition*
+# (Elhage et al., 2022). A small autoencoder must put $n$ sparse features into only
+# $d < n$ dimensions.
+#
+# When the features are **dense**, it keeps only the most important features. When
+# they are **sparse**, it stores all of them as nearly-orthogonal directions and
+# accepts interference. This is superposition. It is the mechanism behind "concepts
+# are directions" and sparse autoencoders. *Primer §9.*
 
 # %%
 import numpy as np, matplotlib.pyplot as plt
@@ -59,8 +61,9 @@ gradcheck()
 
 # %% [markdown]
 # ## Train across sparsity levels
-# $n = 5$ features, $d = 2$ dimensions, equal importance. Each feature is active
-# with probability $p$ (uniform magnitude when active).
+# We use $n = 5$ features and $d = 2$ dimensions, with equal importance. Each feature
+# is active with probability $p$. When a feature is active, its magnitude comes from a
+# uniform distribution.
 
 # %%
 def sample(Bn, n, p):
@@ -99,9 +102,9 @@ plt.suptitle("columns of W: what each feature's direction looks like in the 2-d 
 plt.tight_layout(); plt.show()
 
 # %% [markdown]
-# Dense regime ($p = 1$): only ~2 features get directions — the rest are dropped
-# (PCA-like behaviour). Sparse regime: all 5 survive at equal norm, packed as
-# the famous pentagon. The model represents **5 things in 2 dimensions**
+# In the dense regime ($p = 1$), only ~2 features get directions. The model drops the
+# other features (PCA-like behaviour). In the sparse regime, all 5 features stay with
+# equal norm, packed as the famous pentagon. The model represents **5 things in 2 dimensions**
 # because they rarely co-occur.
 
 # %%
@@ -128,9 +131,14 @@ plt.xlabel("feature"); plt.ylabel("‖W_i‖"); plt.legend()
 plt.title("capacity follows importance"); plt.tight_layout(); plt.show()
 
 # %% [markdown]
-# **Takeaways.** (1) With sparse features, a $d$-dim space holds far more than
-# $d$ concepts as *directions* — exactly the linear-representation picture from
-# §9, and why analogies and steering work. (2) Interference is the tax; sparse
-# autoencoders are the attempt to un-mix it. (3) Nearly-orthogonal packings are
-# a JL-lemma story (notebook 03): exponentially many almost-orthogonal
-# directions exist. → `ex06.ipynb`.
+# **Takeaways.**
+#
+# 1. With sparse features, a $d$-dim space holds far more than $d$ concepts as
+#    *directions*. This is the same linear-representation picture as in §9. It is
+#    also the reason that analogies and steering work.
+# 2. Interference is the cost. Sparse autoencoders are the attempt to separate the
+#    mixed features again.
+# 3. Nearly-orthogonal packings are a JL-lemma result (notebook 03): exponentially
+#    many almost-orthogonal directions exist.
+#
+# Next, do the exercises in `ex06.ipynb`.

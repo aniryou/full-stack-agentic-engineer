@@ -1,29 +1,36 @@
 # %% [markdown]
 # # 04 · Egress and secrets: the proxy the sandbox talks to, so it never holds a key
 #
-# **Tier:** T0 — laptop / Colab CPU / CI, free, seconds. Everything runs over loopback servers this notebook
-# starts. The proxy runs as a real container behind a NetworkPolicy in the lab (`../sandbox-lab`, notebook
-# 03); the logic is all here.
+# **Tier:** T0: a laptop, a Colab CPU or CI, free, seconds. Everything runs over loopback servers that this notebook
+# starts. In the lab, the proxy runs as a real container behind a NetworkPolicy (`../sandbox-lab`, notebook 03). The
+# logic is all here.
 #
 # ## The one-minute version
-# The sandbox has no network of its own and no secrets. When code legitimately needs an outside host, it talks
-# to an **egress proxy** inside the trust boundary; the proxy checks the host against an **allowlist** and,
-# for allowed hosts, **injects the credential** on the way out. The secret lives only in the proxy — the same
-# "gateway path" the identity primer describes (the agent never sees the raw credential), one layer down, and
-# the header-injection pattern managed services like E2B use host-side.
+# The sandbox has no network of its own and no secrets. When code legitimately needs an outside host, it talks to an
+# **egress proxy** inside the trust boundary. The proxy checks the host against an **allowlist**. For the hosts on the
+# allowlist, it **injects the credential** on the way out.
 #
-# To keep it there the proxy must also **not follow redirects** (a 302 would replay the injected header to a
-# host nobody allowed), **drop the caller's own credential headers**, and **redact** an upstream that echoes
-# the credential back.
+# The secret lives only in the proxy. This is the same "gateway path" that the identity primer describes (the agent
+# never sees the raw credential), one layer down. It is also the header-injection pattern that managed services like
+# E2B use on the host side.
 #
-# Two honest edges: a default-deny egress policy also blocks **DNS**, and the safe shape keeps it blocked —
-# the sandbox reaches only the proxy (by `hostAliases`), and the proxy resolves names; and HTTPS through a
-# `CONNECT` tunnel can't have headers injected without terminating TLS, so the teaching proxy brokers plain
-# HTTP and refuses `CONNECT`.
+# To keep the secret there, the proxy must also do these things:
 #
-# Enforcement is the **network**, not an env var: `HTTP_PROXY` is advisory, and code that opens its own socket
-# ignores it — which worked example 5 shows. Primer: `../PRIMER.md` §4 (network and secrets). Reuses the
-# identity primer's token-exchange/gateway pattern (§3.5, §5).
+# - **not follow redirects**. If the proxy follows a 302, it replays the injected header to a host that nobody put on
+#   the allowlist.
+# - **drop the caller's own credential headers**.
+# - **redact** an upstream that echoes the credential back.
+#
+# Two honest edges:
+#
+# - A default-deny egress policy also blocks **DNS**, and the safe shape keeps it blocked. The sandbox reaches only
+#   the proxy (by `hostAliases`), and the proxy resolves names.
+# - The proxy cannot inject headers into HTTPS through a `CONNECT` tunnel unless it terminates TLS. Thus the proxy in
+#   this notebook brokers plain HTTP and refuses `CONNECT`.
+#
+# The **network** is the enforcement, not an env var. `HTTP_PROXY` is advisory, and code that opens its own socket
+# ignores it. Worked example 5 shows this. Primer: `../PRIMER.md` §4 (network and secrets). This notebook uses the
+# token-exchange and gateway pattern of the identity primer again (§3.5, §5).
 
 # %%
 import threading
@@ -69,9 +76,9 @@ print("allowlisted API on 127.0.0.1:%d, attacker on localhost:%d" % (api.port, a
 
 # %% [markdown]
 # ## Worked example 1 — allowlist and credential injection
-# The sandbox sends no credential; the proxy attaches one for the allowed host. The upstream here *echoes*
-# the header back, as a misbehaving API might — the proxy redacts the value before the body reaches the
-# sandbox. An off-allowlist host is refused with 403 before any request goes out.
+# The sandbox sends no credential. The proxy attaches one for the host on the allowlist. The upstream here *echoes*
+# the header back, as an API that behaves badly can do. The proxy redacts the value before the body reaches the
+# sandbox. The proxy refuses a host that is not on the allowlist with 403, before any request goes out.
 
 # %%
 proxy = EgressProxy(policy)
@@ -82,13 +89,15 @@ for e in proxy.events:
     print(f"  log: host={e.host:10} decision={e.decision:5} status={e.status} injected={e.injected} {e.note}")
 
 # %% [markdown]
-# The log records the header **name** it injected, never the value — so the audit trail is safe to keep.
+# The log records the **name** of the header that the proxy injected, never the value. Thus the audit trail is safe
+# to keep.
 #
 # ## Worked example 2 — a redirect is not followed
-# The allowed API answers `302 Location: http://localhost:<attacker>/steal`. Python's default `urlopen`
-# would follow it *and copy the injected `Authorization` header onto the new request* — handing the
-# credential to a host nobody allowed, while the log shows only the allowed one. The proxy returns the 302
-# to the caller instead; asking for the new URL is a new request, checked against the allowlist again.
+# The API on the allowlist answers `302 Location: http://localhost:<attacker>/steal`. The default `urlopen` of Python
+# follows it *and copies the injected `Authorization` header onto the new request*. That gives the credential to a
+# host that nobody put on the allowlist, while the log shows only the permitted host. Instead, the proxy returns the
+# 302 to the caller. A request for the new URL is a new request, and the proxy examines it against the allowlist
+# again.
 
 # %%
 print("redirect ->", proxy.fetch("GET", f"http://127.0.0.1:{api.port}/redirect")[:1], proxy.events[-1].note)
@@ -96,9 +105,9 @@ print("the attacker received:", attacker.seen or "nothing")
 
 # %% [markdown]
 # ## Worked example 3 — the proxy refuses CONNECT (a real request)
-# The teaching proxy brokers plain HTTP so it can read and rewrite headers. An HTTPS `CONNECT` tunnel is
-# opaque — you cannot inject a header without terminating TLS with a certificate the sandbox trusts. Start the
-# proxy as a server and send it both kinds of request the way a sandboxed client would.
+# The proxy in this notebook brokers plain HTTP, so it can read and rewrite headers. An HTTPS `CONNECT` tunnel is
+# opaque. You cannot inject a header unless you terminate TLS with a certificate that the sandbox trusts. Start the
+# proxy as a server. Then send it the two kinds of request, as a sandboxed client does.
 
 # %%
 import http.client
@@ -118,10 +127,10 @@ print("TLS client and the sandbox speaks plain HTTP to it over loopback / a pinn
 
 # %% [markdown]
 # ## Worked example 4 — the network is the enforcement, not the env var
-# `HTTP_PROXY` only asks a well-behaved client to use the proxy. What *forces* traffic through the proxy is
-# the network layer: a default-deny egress NetworkPolicy that opens only the proxy — and **not DNS**. The
-# rendered pod finds the proxy through `hostAliases` pointing at the proxy Service's pinned ClusterIP, so it
-# needs no resolver, and the proxy resolves the allowlisted names itself.
+# `HTTP_PROXY` only asks a well-behaved client to use the proxy. The network layer *forces* traffic through the proxy.
+# That layer is a default-deny egress NetworkPolicy that opens only the proxy, and **not DNS**. The rendered pod finds
+# the proxy through `hostAliases`, which point at the pinned ClusterIP of the proxy Service. Thus the pod needs no
+# resolver, and the proxy itself resolves the names on the allowlist.
 
 # %%
 from sandboxcore import SandboxPolicy
@@ -136,10 +145,12 @@ print("dnsPolicy:", pod["dnsPolicy"], "| hostAliases:", pod["hostAliases"])
 
 # %% [markdown]
 # ## Worked example 5 — what a process sandbox does with a socket (the undeclared exfiltration)
-# The agent's policy check reads the hosts the model *declares* it needs. A hijacked model that declares
-# `attacker.example` is refused before running — but only because it said so. The same model can just not
-# declare anything and open a socket. The process sandbox has no network control, so this **leaks**, and
-# the audit log records an ordinary `allow`. That is the whole case for the network layer.
+# The policy check of the agent reads the hosts that the model *declares* it needs. If a hijacked model declares
+# `attacker.example`, the agent refuses the request before the run. But this occurs only because the model said so. The
+# same model can declare nothing and open a socket.
+#
+# The process sandbox has no network control, so that socket **leaks**, and the audit log records an ordinary `allow`.
+# That is the full case for the network layer.
 
 # %%
 from sandboxcore import SCENARIO_OUTCOMES, LoopbackTrap, SandboxAgent, injection_scenarios
@@ -159,9 +170,10 @@ print("            ", SCENARIO_OUTCOMES["exfiltrate_undeclared"])
 
 # %% [markdown]
 # ## Exercise 4.1 — the allowlist check
-# Implement `proxy_allows(policy, url)` returning True only for a plain `http://` URL whose host is on the
-# allowlist. (The proxy calls this before doing anything; deny-by-default means an unknown host never gets a
-# request.) Watch for look-alike hosts and for schemes the proxy cannot broker.
+# Implement `proxy_allows(policy, url)`. It returns True only for a plain `http://` URL whose host is on the
+# allowlist. The proxy calls this function before it does anything else. Deny-by-default means that an unknown host
+# never gets a request. Make sure that your function returns False for look-alike hosts and for schemes that the proxy
+# cannot broker.
 
 # %%
 import urllib.parse
@@ -184,10 +196,10 @@ print("✅ exact-host allowlist, http only; look-alikes and userinfo tricks do n
 
 # %% [markdown]
 # ## Exercise 4.2 — the headers that leave the proxy
-# Implement `outbound_headers(policy, host, caller_headers)`: drop every caller header whose lower-cased name
-# is in `sandboxcore.proxy.DROP_HEADERS` (hop-by-hop headers and anything carrying a credential), then add
-# the injected headers for `host` from `policy.inject`. Return `(headers, injected_names)`. The check compares
-# with the proxy's own implementation on hostile input.
+# Implement `outbound_headers(policy, host, caller_headers)`. First, drop every caller header whose lower-case name
+# is in `sandboxcore.proxy.DROP_HEADERS`. These are the hop-by-hop headers and all headers that carry a credential.
+# Then add the injected headers for `host` from `policy.inject`. Return `(headers, injected_names)`. The check
+# compares your function with the implementation of the proxy itself on hostile input.
 
 # %% exercise
 from sandboxcore.proxy import DROP_HEADERS
@@ -214,11 +226,11 @@ print("✅ the proxy owns the credential; the sandbox can neither set one nor fo
 
 # %% [markdown]
 # ## Exercise 4.3 — predict the undeclared exfiltration under each rung
-# For each isolation level, predict whether worked example 5's raw socket reaches the attacker: `True`
-# (leaks) or `False`. Levels: `"process_sandbox"`, `"process_plus_empty_netns"` (an `unshare -n` network
-# namespace with only loopback-to-itself), `"container_network_none"`, and
-# `"pod_default_deny_to_proxy_only"`. The check verifies the first against a live run here and the others
-# against the documented behaviour (primer §2, §4–§5).
+# For each isolation level, predict if the raw socket of worked example 5 reaches the attacker: `True` (leaks) or
+# `False`. The levels are `"process_sandbox"`, `"process_plus_empty_netns"` (an `unshare -n` network namespace with
+# only loopback-to-itself), `"container_network_none"` and `"pod_default_deny_to_proxy_only"`. The check compares
+# the first level with a live run here. It compares the other levels with the documented behaviour (primer §2,
+# §4–§5).
 
 # %% exercise
 leaks = {"process_sandbox": None, "process_plus_empty_netns": None,
@@ -237,26 +249,27 @@ print("✅ the process sandbox leaks a raw socket; every rung that owns the netw
 
 # %% [markdown]
 # ## In a design review
-# **The two-minute version.** "The sandbox holds no secrets and has no network. When code needs an allowed
-# host, it goes through an egress proxy inside the boundary: the proxy checks the host against an allowlist
-# and injects the credential outbound, so the secret lives in one hardened place and the sandboxed code never
-# sees it — the identity primer's gateway path, one layer down. The proxy doesn't follow redirects, strips any
-# credential the caller sends, and redacts an upstream that echoes the key.
+# **The two-minute version.** "The sandbox holds no secrets and has no network. When code needs a host on the
+# allowlist, it goes through an egress proxy inside the boundary. The proxy checks the host against an allowlist and
+# injects the credential outbound. Thus the secret lives in one hardened place, and the sandboxed code never sees it.
 #
-# "Enforcement is the network, not an environment variable or the tool call: a default-deny egress
-# NetworkPolicy opens only the proxy, because `HTTP_PROXY` is advisory and the hosts a model declares are its
-# own claim — a process sandbox lets a raw socket straight out. I keep DNS closed too: the pod finds the proxy
-# through hostAliases, and the proxy resolves names.
+# "This is the gateway path of the identity primer, one layer down. The proxy does not follow redirects, removes each
+# credential that the caller sends, and redacts an upstream that echoes the key.
 #
-# "And I broker plain HTTP so I can inject headers — HTTPS needs TLS termination at the proxy with a trusted
-# CA. The audit log records which header was injected, never its value."
+# "The network is the enforcement, not an environment variable or the tool call. A default-deny egress NetworkPolicy
+# opens only the proxy. The reason is that `HTTP_PROXY` is advisory, and the hosts that a model declares are its own
+# claim. A process sandbox lets a raw socket go straight out. I also keep DNS closed: the pod finds the proxy through
+# hostAliases, and the proxy resolves names.
+#
+# "Also, I broker plain HTTP, so I can inject headers. HTTPS needs TLS termination at the proxy with a trusted CA.
+# The audit log records which header the proxy injected, never its value."
 #
 # **Drill questions**
-# 1. *Where does the API key live, and who can read it?* — Only in the proxy. The sandboxed code cannot read
-#    or set it; the proxy attaches it on the way out to allowed hosts and redacts it from responses.
-# 2. *Is `HTTP_PROXY=...` enough to force traffic through the proxy?* — No. It is advisory; code can open a
-#    raw socket. The NetworkPolicy (deny-all egress except the proxy) is what enforces it.
-# 3. *Why not just allow DNS everywhere?* — Broad DNS is an exfiltration channel (data in query names). Let
-#    the proxy resolve names; the sandbox reaches only the proxy, by hostAliases.
-# 4. *The allowed API returns a 302 to another host. What must the proxy do?* — Hand the 3xx back, not
-#    follow it: following replays the injected credential to an unchecked host.
+# 1. *Where does the API key live, and who can read it?* Only in the proxy. The sandboxed code cannot read or set
+#    it. The proxy attaches it on the way out to hosts on the allowlist, and it redacts the key from responses.
+# 2. *Is `HTTP_PROXY=...` sufficient to force traffic through the proxy?* No. It is advisory, and code can open a
+#    raw socket. The NetworkPolicy (deny-all egress except the proxy) enforces it.
+# 3. *Why not just permit DNS everywhere?* Broad DNS is an exfiltration channel (data in query names). Let the
+#    proxy resolve names. The sandbox reaches only the proxy, by hostAliases.
+# 4. *The API on the allowlist returns a 302 to a different host. What must the proxy do?* Give the 3xx back, and
+#    do not follow it. If the proxy follows it, it replays the injected credential to an unchecked host.

@@ -1,17 +1,17 @@
 # %% [markdown]
 # # 02 · Workflows and multi-agent systems
 #
-# Once you have one reliable loop, the question is how to compose several. The rule: **use code where the
-# control flow is known, use the model where judgement is needed.** Workflow agents (`Sequential`, `Parallel`, `Loop`) are
-# code; delegation (`AgentTool`) is a model deciding to call another agent. Both compound cost and failure, so this
-# notebook also makes you *measure* what an extra agent costs before you add one.
+# When you have one reliable loop, the next question is how to compose several loops. The rule is: **use code where the
+# control flow is known, and use the model where judgement is necessary.** Workflow agents (`Sequential`, `Parallel`, `Loop`) are
+# code. In a delegation (`AgentTool`), a model decides to call another agent. Both multiply cost and failure.
+# Thus this notebook also makes you *measure* the cost of one more agent before you add it.
 #
-# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md); deeper in this repo: the [scaling primer](../../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §1.7 (multi-agent multiplies everything).
+# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md). For more depth in this repo, see the [scaling primer](../../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §1.7 (multi-agent multiplies everything).
 #
-# In this notebook you will:
-# 1. wire agents together through session state (`output_key` + `{placeholder}` instructions) in sequence, in parallel and in a loop;
-# 2. delegate through `AgentTool`, read the `delegation` events, and measure what delegation costs in model calls and tokens;
-# 3. quantify compounded reliability and decide — with numbers — when a second agent earns its keep.
+# In this notebook, you will:
+# 1. Connect agents through session state (`output_key` and `{placeholder}` instructions): in sequence, in parallel and in a loop.
+# 2. Delegate through `AgentTool`, read the `delegation` events, and measure the cost of a delegation in model calls and tokens.
+# 3. Calculate the compounded reliability. Then use numbers to decide when a second agent is worth its cost.
 
 # %%
 import json
@@ -31,9 +31,10 @@ def new_session(message: str, session_id: str = "s1") -> Session:
 # ## 1. Sequential: a pipeline that talks through state
 #
 # A `SequentialAgent` runs its children in order **on the same session**. Each child writes its final text to
-# `session.state[output_key]`; the next child's instruction reads it through `{placeholders}` — the `ContextBuilder`
-# formats the instruction with `session.state` on every model call. The transcript is shared too, so later stages also
-# *see* earlier answers; the state key is the explicit, typed hand-off you can assert on.
+# `session.state[output_key]`. The instruction of the next child reads it through `{placeholders}`.
+# The `ContextBuilder` formats the instruction with `session.state` on every model call.
+# The children also share the transcript, thus later stages also *see* earlier answers.
+# The state key is the explicit, typed hand-off that you can assert on.
 
 # %%
 classify = LlmAgent("classify", scripted("shipping_delay"), "Classify the user's issue into one snake_case label.", output_key="issue_type")
@@ -49,10 +50,10 @@ print("draft's system prompt was:", repr(draft.llm.calls[0]["messages"][0]["cont
 # %% [markdown]
 # ## 2. Parallel: fan out on branch copies, merge through state
 #
-# A `ParallelAgent` gives each child a **branch copy** of the session (`session.branch(name)`), runs them concurrently, then
-# copies changed state keys back to the parent and records a `note` with `merged_state_keys`. Children never touch the same
-# session object — no lost updates — and because all branches share one `InvocationContext`, they share **one budget**:
-# three branches cannot spend three budgets.
+# A `ParallelAgent` gives each child a **branch copy** of the session (`session.branch(name)`). It runs the children at the same time.
+# Then it copies the changed state keys back to the parent and records a `note` with `merged_state_keys`.
+# The children never touch the same session object, thus the agent loses no update.
+# Because all branches share one `InvocationContext`, they share **one budget**. Three branches cannot spend three budgets.
 
 # %%
 checks = ParallelAgent("kyc_checks", [
@@ -70,10 +71,10 @@ print("one budget across all three branches:", par_ctx.budget.summary())
 # %% [markdown]
 # ## 3. Loop: iterate until code says stop
 #
-# A `LoopAgent` repeats its children until `until(session)` is true or `max_iterations` is reached. **The exit criterion is
-# code, not prompt** — a critic model may say "approved" a dozen ways, the predicate decides what counts — and
-# `max_iterations` guarantees termination whatever the models do. Each iteration also stamps `temp:loop_iteration` into
-# state, which the Runner clears at the end of the turn.
+# A `LoopAgent` repeats its children until `until(session)` is true or until the loop gets to `max_iterations`.
+# **The exit criterion is code, not prompt.** A critic model can say "approved" in a dozen ways, and the predicate decides what counts.
+# `max_iterations` guarantees that the loop ends, whatever the models do.
+# Each iteration also writes `temp:loop_iteration` into the state. The Runner clears it at the end of the turn.
 
 # %%
 calls_seen = {"writer": 0, "critic": 0}
@@ -102,11 +103,12 @@ print("exit:", [e.payload for e in loop_session.events if e.kind == "note"][-1])
 # %% [markdown]
 # ## 4. Delegation: an agent as a tool
 #
-# `sub_agents=[...]` wraps each child in an `AgentTool`: the coordinator sees a tool named after the child whose only
-# argument is `request`, and whose description is the child's `description`. The child runs in **its own child session**
-# (`"<parent id>/<child name>"`), so its transcript never enters the parent's context — only the final answer comes back,
-# as a tool result — and the parent log gets a `delegation` event with the request, the answer and how many model steps the
-# child took.
+# `sub_agents=[...]` wraps each child in an `AgentTool`. The coordinator sees a tool with the name of the child.
+# The only argument of the tool is `request`, and its description is the `description` of the child.
+# The child runs in **its own child session** (`"<parent id>/<child name>"`). Thus its transcript never enters the context of the parent.
+#
+# Only the final answer comes back, as a tool result. The parent log gets a `delegation` event.
+# The event has the request, the answer and the number of model steps that the child took.
 
 # %%
 billing = LlmAgent("billing", scripted("The September invoice is SGD 42.10, due on the 15th."), "You answer billing questions.",
@@ -131,10 +133,12 @@ print("final:", del_session.last_final_text())
 # %% [markdown]
 # ### What delegation costs
 #
-# Every hop is at least one extra model call, and the child re-reads its own system prompt plus the request. Compare the
-# same task done by one agent with one tool against a coordinator with one specialist. Two counters matter:
-# `session.usage()` sums only the events **in that session** — the specialist's calls live in its child session — while
-# the shared `Budget` counts every model call in the invocation, so it is the honest number.
+# Every hop is at least one more model call. Also, the child reads its own system prompt and the request again.
+# Compare two designs for the same task: one agent with one tool, and a coordinator with one specialist.
+#
+# Two counters are important. `session.usage()` adds only the events **in that session**.
+# The calls of the specialist are in its child session. But the shared `Budget` counts every model call in the invocation.
+# Thus the `Budget` gives the honest number.
 
 # %%
 blocked: list[str] = []
@@ -175,8 +179,8 @@ for label, ctx in (("single agent", await run_single_agent()), ("coordinator + 1
 # %% [markdown]
 # ## 5. Compounded reliability
 #
-# A chain of agents is a chain of probabilities. If each hop does the right thing with probability $p$, the chain succeeds
-# with $p^N$ — 95% per hop looks fine until five hops make it 77%. Simulate it before you believe it.
+# A chain of agents is a chain of probabilities. If each hop does the correct thing with probability $p$, the chain succeeds
+# with $p^N$. A rate of 95% per hop looks good, but five hops make it 77%. Simulate it before you believe it.
 
 # %%
 def simulate_chain(p: float, hops: int, trials: int = 20_000, seed: int = 7) -> float:
@@ -193,25 +197,28 @@ for n in (1, 2, 3, 5, 8):
 # %% [markdown]
 # ### When *not* to go multi-agent
 #
-# Before adding a second LLM agent, check the list. If none applies, the extra agent is cost and failure surface with no
+# Before you add a second LLM agent, examine the list. If no item applies, the extra agent is cost and failure surface with no
 # return:
 #
-# - [ ] **The control flow is already known.** Then it is a workflow (`Sequential`/`Parallel`/`Loop`), not a second agent.
-# - [ ] **It is really a tool.** A deterministic function with a schema is cheaper, testable and cannot hallucinate.
-# - [ ] **The sub-task fits in the parent's context.** Splitting context only pays when the parent's window is the constraint.
-# - [ ] **Same tools, same permissions.** A specialist that shares the parent's tool set and identity isolates nothing.
-# - [ ] **Latency budget is tight.** Each hop adds a model call; hand-offs serialise unless the work is truly parallel.
-# - [ ] **You cannot evaluate the parts separately.** If there is no per-agent golden set, you cannot tell which agent broke.
+# - [ ] **The control flow is already known.** Then it is a workflow (`Sequential`, `Parallel` or `Loop`), not a second agent.
+# - [ ] **It is really a tool.** A deterministic function with a schema costs less and you can test it. It cannot hallucinate.
+# - [ ] **The sub-task fits in the parent's context.** A split of the context is worth its cost only when the window of the parent is the constraint.
+# - [ ] **Same tools, same permissions.** A specialist that shares the tool set and the identity of the parent isolates nothing.
+# - [ ] **Latency budget is tight.** Each hop adds a model call. Hand-offs occur one after the other, unless the work is truly parallel.
+# - [ ] **You cannot evaluate the parts separately.** If there is no golden set for each agent, you cannot tell which agent broke.
 #
-# What *does* justify an agent: a genuinely different context (long documents, noisy tool output), a different tool or
-# permission boundary, independent work that can run in parallel, or a different model/owner with its own evals.
+# These things *do* justify an agent:
+# - A really different context (long documents, noisy tool output).
+# - A different tool or permission boundary.
+# - Independent work that can run in parallel.
+# - A different model or owner with its own evals.
 
 # %% [markdown]
 # ## 6. Exercises
 #
 # ### Exercise 6.1 — a three-stage pipeline wired through state
 #
-# Build `build_pipeline(extract_llm, enrich_llm, respond_llm)` returning a `SequentialAgent` of three `LlmAgent`s:
+# Write `build_pipeline(extract_llm, enrich_llm, respond_llm)`. It returns a `SequentialAgent` of three `LlmAgent`s:
 #
 # | stage name | `output_key` | its instruction must contain |
 # |---|---|---|
@@ -219,8 +226,9 @@ for n in (1, 2, 3, 5, 8):
 # | `enrich`  | `order_facts` | `{order_id}` |
 # | `respond` | `reply` | `{order_id}` **and** `{order_facts}` |
 #
-# The check runs it with scripted models, then inspects `respond_llm.calls[0]` to prove that stage 3's system prompt really
-# contained what stages 1 and 2 produced — the state hand-off is the contract, not the shared transcript.
+# The check runs it with scripted models. Then it examines `respond_llm.calls[0]`
+# to prove that the system prompt of stage 3 really contained the outputs of stages 1 and 2.
+# The state hand-off is the contract, not the shared transcript.
 
 # %% exercise
 def build_pipeline(extract_llm, enrich_llm, respond_llm) -> SequentialAgent:
@@ -256,10 +264,12 @@ print("✅ stage 3's system prompt:", repr(respond_prompt[:95]))
 # %% [markdown]
 # ### Exercise 6.2 — the exit criterion lives in code
 #
-# Write `approved(session) -> bool` — true when the critic's `output_key` (`verdict`) equals `"APPROVED"` — and
-# `build_review_loop(writer_llm, critic_llm, max_iterations=5)` returning a `LoopAgent` over a `writer` (output_key `draft`)
-# and a `critic` (output_key `verdict`) that exits on your predicate. The check runs two critics: one that approves on the
-# third pass, one that never approves.
+# Write `approved(session) -> bool`. It is true when the `output_key` of the critic (`verdict`) equals `"APPROVED"`.
+#
+# Then write `build_review_loop(writer_llm, critic_llm, max_iterations=5)`.
+# It returns a `LoopAgent` over a `writer` (output_key `draft`) and a `critic` (output_key `verdict`).
+# The loop exits on your predicate.
+# The check runs two critics. One critic approves on the third pass. The other critic never approves.
 
 # %% exercise
 def approved(session: Session) -> bool:
@@ -307,10 +317,12 @@ print("✅ exits: condition met after 3 iterations; max_iterations after 4 when 
 # %% [markdown]
 # ### Exercise 6.3 — a coordinator and its child sessions
 #
-# Write `build_coordinator(coordinator_llm, billing_llm, cards_llm) -> LlmAgent` whose specialists are named exactly
-# `billing` and `cards`; give each a one-line `description` — that text becomes the tool description the coordinator reads
-# when deciding whom to call. The check scripts the coordinator to delegate to both in one turn and asserts two `delegation`
-# events whose `child_session` ids are `"<session id>/billing"` and `"<session id>/cards"`.
+# Write `build_coordinator(coordinator_llm, billing_llm, cards_llm) -> LlmAgent`.
+# The names of its specialists must be exactly `billing` and `cards`. Give each specialist a one-line `description`.
+# That text becomes the tool description. The coordinator reads it when it decides which specialist to call.
+#
+# The check gives the coordinator a script that delegates to both specialists in one turn.
+# Then the check asserts two `delegation` events. Their `child_session` ids are `"<session id>/billing"` and `"<session id>/cards"`.
 
 # %% exercise
 def build_coordinator(coordinator_llm, billing_llm, cards_llm) -> LlmAgent:
@@ -340,10 +352,13 @@ print("✅ delegations:", [(e.payload["child_session"], e.payload["answer"]) for
 # %% [markdown]
 # ### Exercise 6.4 — reliability arithmetic
 #
-# Implement `compounded_reliability(p, hops)` (the probability that every one of `hops` steps succeeds) and
-# `hops_allowed(p, target, max_hops=100)` — the largest number of hops for which the end-to-end success rate is still
-# **at least** `target` (0 if even one hop falls short; capped at `max_hops`). Prefer a loop over `log` division: the
-# floating-point boundary cases bite.
+# Write `compounded_reliability(p, hops)`. It gives the probability that all of the `hops` steps succeed.
+#
+# Then write `hops_allowed(p, target, max_hops=100)`.
+# It gives the largest number of hops for which the end-to-end success rate is still **at least** `target`.
+# If one hop alone is less than `target`, it gives 0. Its maximum is `max_hops`.
+#
+# Use a loop, not a `log` division, because the floating-point boundary cases cause errors.
 
 # %% exercise
 def compounded_reliability(p: float, hops: int) -> float:
@@ -376,10 +391,13 @@ print(f"✅ for a 95% end-to-end target you can afford {hops_allowed(0.99, 0.95)
 # %% [markdown]
 # ### Exercise 6.5 — simplicity as a decision
 #
-# `run_claims_multi()` below answers a claims question with a coordinator and two specialists (`policy` owns `get_policy`,
-# `payout` owns `estimate_payout`). Rewrite it as **one** agent with both tools: implement `build_claims_single()` returning
-# an `LlmAgent` whose scripted model calls both tools in one turn and then answers with `CLAIM_ANSWER`. The check runs both
-# designs on the same task and asserts the single agent calls the same tools with fewer model calls **and** fewer tokens.
+# `run_claims_multi()` in the next cell answers a claims question with a coordinator and two specialists.
+# `policy` owns `get_policy`, and `payout` owns `estimate_payout`.
+# Write it again as **one** agent with both tools. Write `build_claims_single()`, which returns an `LlmAgent`.
+# Its scripted model calls both tools in one turn. Then the model answers with `CLAIM_ANSWER`.
+#
+# The check runs both designs on the same task.
+# It asserts that the single agent calls the same tools with fewer model calls **and** fewer tokens.
 
 # %% exercise
 @tool
@@ -438,9 +456,10 @@ print(f"✅ single agent: {single.budget.steps_used} model calls / {single.budge
 # %% [markdown]
 # ### Exercise 6.6 — when does another agent earn its keep?
 #
-# Fill `conditions_for_another_agent` with **three** one-sentence conditions under which adding an agent is the right call
-# (think: context isolation, a different tool or permission boundary, genuinely parallel work, a different model or owner).
-# The check looks for three real sentences that touch at least two of those ideas.
+# Fill `conditions_for_another_agent` with **three** one-sentence conditions.
+# Under each condition, one more agent is the correct decision.
+# Think about context isolation, a different tool or permission boundary, really parallel work, and a different model or owner.
+# The check looks for three real sentences that mention at least two of those ideas.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -466,13 +485,16 @@ print("✅ conditions cover:", ", ".join(hits))
 # %% [markdown]
 # ## The one-minute version
 #
-# Start from the single agent and justify every addition. *"I begin with one agent and a small tool set. The moment the
-# control flow is known — classify then draft, run three checks at once, revise until a checker passes — I move it into a
-# workflow agent so the sequence is code, not prompt.*
+# Start from the single agent and justify every addition. *"I start with one agent and a small tool set.
+# As soon as the control flow is known, I move that control flow into a workflow agent, so that the sequence is code, not prompt.
+# Examples of a known control flow are: classify then draft, run three checks at once, or revise until a checker passes.*
 #
-# *"I add a second LLM agent only when a sub-task needs its own context, its own permissions, or genuinely parallel work —
-# and I budget for it: each hop is another model call, the child cannot see the parent's context, and reliability
-# compounds as $p^N$ (95% per hop is 77% after five). The budget is shared across the tree so delegation can't escape it,
-# and the coordinator's session records delegation events so I can trace who decided what."*
+# *"I add a second LLM agent only when a sub-task needs its own context, its own permissions, or really parallel work.
+# I also include its cost in the budget. Each hop is one more model call. The child cannot see the context of the parent.
+# Reliability compounds as $p^N$ (95% per hop is 77% after five).*
 #
-# That framing — simplicity as a decision, backed by numbers — is what separates an architect from a framework user.
+# *"All of the tree shares the budget, thus a delegation cannot escape it.
+# The session of the coordinator records delegation events, thus I can trace who decided what."*
+#
+# This presentation makes simplicity a decision, with numbers to support it.
+# It is the difference between an architect and a framework user.
