@@ -10,16 +10,16 @@ whole system on a planted-facts benchmark, send a forget to every copy and exami
 
 1. Read [`../PRIMER.md`](../PRIMER.md) §1–§2 (30 min). They are about what an agent remembers and about the write path.
 2. Run `python3 -m pip install -e ".[dev]" && python3 -m memlab demo`. It takes less than a minute. It writes two
-   memories to a SQLite file and recalls one. Then it forgets the address and counts its bytes on disk (0 after
-   the purge).
+   memories to a SQLite file and recalls one. Then it forgets the address and counts the bytes of the address on
+   disk (0 after the purge).
 3. Open [`notebooks/01_a_memory_store_on_sqlite.ipynb`](notebooks/01_a_memory_store_on_sqlite.ipynb) (T0). It
    shows the store, hybrid search and `bm25()` by hand. It also shows why `DELETE` is not a forget.
 
 ## What you get
 
 *Tiers: T0 is a laptop or a Colab CPU, and it is free. T0 + Docker is the local compose stack. T1 is one small GPU
-(a Colab/Kaggle T4 or a rented card). T3 is the Google Cloud deployment. It is optional, and this README gives it
-in printed form.*
+(a Colab/Kaggle T4 or a rented card). T3 is the Google Cloud deployment. It is optional, and the lab prints its
+commands.*
 
 Each notebook starts with *the one-minute version*. Then it shows worked examples that use the library. Then it
 gives 4–5 exercises (implement the key function, predict a number, select a setting), and a check that prints ✅
@@ -36,7 +36,8 @@ comes after each exercise. The notebook ends with *in a design review*. The answ
 
 Everything runs on a laptop first. The model is **scripted**: a template extractor and answerer. Thus every
 accuracy number is reproducible, and you can attribute it to the memory system. The embedder is the **hashing
-embedder** of 07.4's `ragkit`. It is lexical, not semantic, and the paraphrase subset measures what that costs.
+embedder** of 07.4's `ragkit`. It is lexical, not semantic. The paraphrase subset measures what this lexical match
+costs.
 
 The inference server in notebook 03 is a **fake**. Its prefix-cache hits obey the block rules of vLLM, its TTFTs come
 from a roofline model, and its numbers have the label *simulated*.
@@ -44,8 +45,8 @@ from a roofline model, and its numbers have the label *simulated*.
 You can put a real model, embedder or vLLM behind `MEMLAB_LLM_URL` / `MEMLAB_EMBED_URL`. Then the answers, the
 embeddings and the cached-token counts become measurements. The prefill times stay a roofline estimate, and the
 dollars stay a price table. Every table says which column is which. If Docker, Postgres or GCP is not available, the lab
-prints the exact commands. For a step where a container gives the answer, it also shows sample output in the
-documented format (illustrative).
+prints the exact commands. For a step that a container answers when it is available, the lab also shows sample
+output in the documented format (illustrative).
 
 | Tier | Where | What runs | In this lab |
 |---|---|---|---|
@@ -69,10 +70,11 @@ python3 -m jupyterlab notebooks                    # the exercises; answers in s
 ```
 
 For T1, start vLLM with the flags in [`deploy/any-gpu/`](deploy/any-gpu/). Then run
-`export MEMLAB_LLM_URL=http://127.0.0.1:8000 MEMLAB_EMBED_URL=http://127.0.0.1:8001`. Then run notebooks 02, 03 and
-05 again (or `python3 -m memlab cachebench --url $MEMLAB_LLM_URL`). For T0 + Docker, run
-`deploy/local/up.sh --pgvector` and `pip install "psycopg[binary]"`. Then set `MEMLAB_PG_DSN` as the script prints
-it.
+`export MEMLAB_LLM_URL=http://127.0.0.1:8000 MEMLAB_EMBED_URL=http://127.0.0.1:8001`. After that, run notebooks 02, 03
+and 05 again (or `python3 -m memlab cachebench --url $MEMLAB_LLM_URL`).
+
+For T0 + Docker, run `deploy/local/up.sh --pgvector`. Then run `pip install "psycopg[binary]"`. Then set
+`MEMLAB_PG_DSN` as the script prints it.
 
 ## How it fits
 
@@ -100,7 +102,7 @@ describe them. The durable job is as the
 
 | Module | Lines | The idea |
 |---|---:|---|
-| `store/sqlite.py` | ~580 | One file. Typed rows, float32 BLOB vectors that numpy scores, FTS5 (`porter unicode61`) that `bm25()` ranks, RRF k = 60. The `(tenant, user)` partition in every query, and as-of reads. A forget that goes along the provenance and purges FTS5, the WAL and the freed pages. The lease and checkpoint tables of the job. |
+| `store/sqlite.py` | ~580 | The store is one file. It has typed rows, float32 BLOB vectors that numpy scores, FTS5 (`porter unicode61`) that `bm25()` ranks, and RRF k = 60. The `(tenant, user)` partition in every query, and as-of reads. A forget that goes along the provenance and purges FTS5, the WAL and the freed pages. The lease and checkpoint tables of the job. |
 | `store/pgvector.py` | ~370 | The same store on Postgres + pgvector: DDL, hybrid search as RRF in SQL, a recursive forget and the job tables. The import of psycopg is lazy. In the tests, `pglast` parses every statement offline. |
 | `records.py`, `deletion.py` | ~180 | The typed record (kind, scope, source, trust, provenance, validity, TTL, deletion key). The deletion report and the byte-level residue check. |
 | `memory.py` | ~215 | The write path: `WritePolicy` (kinds per source, confidence floor, screening, quarantine). Resolution ADD / NOOP / UPDATE / ADD_HISTORY / FLAG. Idempotency keys that are unique in each partition, and the refusal of a different write under a known key. The pinned profile, and audit. |
@@ -150,7 +152,7 @@ make check                                              # all of the above + tes
 
   The harness has other users, other questions and a 128-token budget. Thus its mode ranking is not the ranking of
   PRIMER §6. Also, its knee is relative: the smallest budget that gets 95% of the best recall
-  (`harness.knee(frac=0.95)`). The knee of memory-core is absolute: within 2 points of the best. Neither harness is
+  (`harness.knee(frac=0.95)`). But the knee of memory-core is absolute: within 2 points of the best. Neither harness is
   evidence about a real model, because both use a scripted answerer.
 - **The token is a stand-in.** It is HMAC-signed. It has the claims and the failure modes of a real verifier, but
   not its cryptography. In production, the service verifies RS256/ES256 tokens against your IdP (identity primer
@@ -163,7 +165,7 @@ make check                                              # all of the above + tes
 - **The memory service is SQLite-only.** The consolidation job runs on Postgres + pgvector. `memlab serve` does
   not, because its idempotency table is in SQLite SQL. Thus, if you want a Postgres deployment of the service, you
   must write that port yourself.
-- **SQLite features vary.** FTS5 `secure-delete` needs SQLite 3.42 or newer (verify, the SQLite of Colab can be
+- **SQLite features vary.** FTS5 `secure-delete` needs SQLite 3.42 or newer (verify: the SQLite of Colab can be
   older). The store detects if the feature is available. If it is not available, the store uses `optimize`. The
   lab examines the deploy paths with `bash -n`, `DRY_RUN=1`, YAML checks and the parser of Postgres. It does not
   run them against real infrastructure here.
@@ -179,7 +181,7 @@ make check                                              # all of the above + tes
   `ef_construction = 64`, `hnsw.ef_search = 40`. `hnsw.iterative_scan` since 0.8.0. Filters apply after the index
   scan.
 - SQLite: FTS5 `secure-delete` since 3.42.0. `bm25()` k1 = 1.2, b = 0.75, with the IDF floor at 1e-6. `PRAGMA
-  secure_delete` is off by default, unless the SQLite build compiles it in.
+  secure_delete` is off by default, unless a compile-time option of the SQLite build sets it on.
 - Cloud Run jobs and Cloud Scheduler: the v2 `jobs/<job>:run` URI with OAuth. `--task-timeout`, `--set-secrets`,
   `--set-cloudsql-instances`, `--service-account` and `--command/--args` on `gcloud run jobs create`. The
   `host=/cloudsql/<connection name>` DSN. Is `roles/run.invoker` sufficient to run a job? `CLOUD_RUN_TASK_INDEX` /

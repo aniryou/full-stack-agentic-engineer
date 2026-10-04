@@ -1,7 +1,7 @@
 # %% [markdown]
 # # 02 · Workflows and multi-agent systems
 #
-# When you have one reliable loop, the next question is how to compose several loops. The general rule is: **use code where the
+# When you have one reliable loop, the next question is how to compose several loops. The rule is: **use code where the
 # control flow is known, and use the model where judgement is necessary.** Workflow agents (`Sequential`, `Parallel`, `Loop`) are
 # code. In a delegation (`AgentTool`), a model decides to call another agent. Both multiply cost and failure.
 # Thus this notebook also makes you *measure* the cost of one more agent before you add it.
@@ -226,8 +226,8 @@ for n in (1, 2, 3, 5, 8):
 # | `enrich`  | `order_facts` | `{order_id}` |
 # | `respond` | `reply` | `{order_id}` **and** `{order_facts}` |
 #
-# The check runs it with scripted models. Then it examines `respond_llm.calls[0]`.
-# This proves that the system prompt of stage 3 really contained the outputs of stages 1 and 2.
+# The check runs it with scripted models. Then it examines `respond_llm.calls[0]`
+# to prove that the system prompt of stage 3 really contained the outputs of stages 1 and 2.
 # The state hand-off is the contract, not the shared transcript.
 
 # %% exercise
@@ -358,7 +358,7 @@ print("✅ delegations:", [(e.payload["child_session"], e.payload["answer"]) for
 # It gives the largest number of hops for which the end-to-end success rate is still **at least** `target`.
 # If one hop alone is less than `target`, it gives 0. Its maximum is `max_hops`.
 #
-# It is better to use a loop than a `log` division. The floating-point boundary cases cause errors.
+# Use a loop, not a `log` division, because the floating-point boundary cases cause errors.
 
 # %% exercise
 def compounded_reliability(p: float, hops: int) -> float:
@@ -486,8 +486,8 @@ print("✅ conditions cover:", ", ".join(hits))
 # ## The one-minute version
 #
 # Start from the single agent and justify every addition. *"I start with one agent and a small tool set.
-# Sometimes the control flow is known: classify then draft, run three checks at once, or revise until a checker passes.
-# At that moment, I move it into a workflow agent. Then the sequence is code, not prompt.*
+# As soon as the control flow is known, I move that control flow into a workflow agent, so that the sequence is code, not prompt.
+# Examples of a known control flow are: classify then draft, run three checks at once, or revise until a checker passes.*
 #
 # *"I add a second LLM agent only when a sub-task needs its own context, its own permissions, or really parallel work.
 # I also include its cost in the budget. Each hop is one more model call. The child cannot see the context of the parent.

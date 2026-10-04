@@ -28,13 +28,13 @@ simulations run 50× faster than real time.* The times are approximate. The lab 
 | `notebooks/01_scaling_math` | Go from conversations/day to tokens/min, in-flight turns, Provisioned Throughput units and dollars. | 60 min | T0 |
 | `notebooks/02_turn_loop_and_durability` | Make a crash in the middle of a turn produce one ticket, not two. Know what to ack and what to nack. | 60 min | T0 |
 | `notebooks/03_rate_limits_and_admission` | Explain a 429. Smooth the traffic, add jitter to retries, break circuits, and degrade before you shed load. | 60 min | T0 |
-| `notebooks/04_load_to_settings` | Show the overload feedback loop. Calculate the Cloud Run concurrency, the instances and the in-flight cap from a load test. | 60 min | T0 |
+| `notebooks/04_load_to_settings` | Show the overload feedback loop. Calculate the Cloud Run concurrency, the number of instances and the in-flight cap from a load test. | 60 min | T0 |
 | `notebooks/05_hosted_or_own_gpus` | Calculate the size of one vLLM replica and of a fleet. Find the break-even GPU price. See overload on a fleet: no 429s, but every user gets slower answers. Write the spill-over rule. Calculate the vLLM and Kubernetes settings. | 2 h | T0 |
 | [`docs/01-scaling-primer.md`](docs/01-scaling-primer.md) | This is the primer. It covers the dimensions of scale, the arithmetic, the mechanisms, the failure catalogue, the growth path, and how to walk the design in a review. | 1–2 h | — |
 | [`docs/mistral/01-scaling-primer.md`](docs/mistral/01-scaling-primer.md) | This is the same method on Mistral's API and on your own GPUs. It covers the two ways to pay for tokens, the replica, the fleet, the break-even and sovereignty. | 1–2 h | — |
 | [`docs/02-reference-architecture.md`](docs/02-reference-architecture.md) | This is the Cloud Run + Gemini reference architecture. Its §11 is the self-hosted model layer on Kubernetes. | 45 min | — |
 | [`docs/03-capacity-plan.md`](docs/03-capacity-plan.md) | These are the numbers for both providers. The code generates them. | 10 min | — |
-| [`docs/04-gcp-mapping.md`](docs/04-gcp-mapping.md) | This document connects each concept to its Google Cloud service, and each service to the setting that matters. Then it gives the vLLM and Kubernetes settings and notes for each cloud, for a fleet. | 20 min | — |
+| [`docs/04-gcp-mapping.md`](docs/04-gcp-mapping.md) | This document connects each concept to its Google Cloud service, and each service to the setting that matters. Then it gives the vLLM and Kubernetes settings for a fleet, and notes for each cloud. | 20 min | — |
 | [`docs/scaling-agentic-solutions-on-google-cloud.md`](docs/scaling-agentic-solutions-on-google-cloud.md) | This is the long-form companion, worked on a fictional insurer. Its Part 3 is `scalelab.capacity`, and a test pins it. | 2 h | — |
 
 **The provider path.** Everything runs on the Google Cloud anchor (a hosted Gemini pool) if you do not switch it. The
@@ -58,7 +58,7 @@ jupyter lab notebooks/                      # start with 01_scaling_math.ipynb
 SCALELAB_BACKEND=local jupyter lab notebooks/   # notebook 04's load test and exercise (d) on a vLLM fleet
 ```
 
-The code generates `docs/03-capacity-plan.md`, and a test checks it. This command generates the file:
+This command generates `docs/03-capacity-plan.md`, and a test compares the file with the output of the command:
 `{ python -m scalelab.capacity; echo; python -m scalelab.mistral --section; } > docs/03-capacity-plan.md`.
 
 ## The code (`scalelab/`, about 1,800 lines with docstrings)
@@ -88,7 +88,7 @@ incident. These calls send 4.6 / 13.75 / 45.8 M input tokens per minute, against
 tier. The same load gives 42 / 125 / 417 turns in flight. The cost is $0.068 per conversation with routing and caching ($0.14 without). The
 base load needs 69 GSUs of Provisioned Throughput, with the break-even at 75 % utilisation on a 1-year term.
 
-The first thing that breaks is the token budget. The billing mainframe is next. Cloud Run is about 0.1 % of the bill.
+In the Gemini case, the first thing that breaks is the token budget. The billing mainframe is next. Cloud Run is about 0.1 % of the bill.
 
 **Mistral and a fleet, 19 September 2026.** The same demand is 4.8 / 14.3 / 47.7 M total tokens per minute. This
 demand needs a rate-limit request of 60 RPS and 19 M TPM. On the planning mix, the cost is $0.0131 per conversation (90 %
@@ -103,8 +103,8 @@ residency decides the path, and the arithmetic puts a price on the decision.
 This lab comes after layer 05's [serving orchestration](../../../05-orchestrator/serving-orchestration/README.md)
 (routing and replica autoscaling) and layer 04's [serving engine](../../../04-inference-engine/serving-engine/README.md).
 The `minengine.perf` model of the serving engine is the reference step-time model for the simpler estimate in `serving.py`.
-Beside this lab is [identity and security](../../identity-security/README.md). That topic says what an agent can
-do. This lab says how much it can run. After this lab comes the durable turn in layer 07.
+Beside this lab is [identity and security](../../identity-security/README.md). That topic says what an agent has
+permission to do. This lab says how much it has permission to run. After this lab comes the durable turn in layer 07.
 
 ## Caveats
 

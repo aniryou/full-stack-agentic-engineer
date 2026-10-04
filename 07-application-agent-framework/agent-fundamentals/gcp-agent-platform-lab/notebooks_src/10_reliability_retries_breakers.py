@@ -11,7 +11,7 @@
 # In this notebook, you do these steps:
 # 1. Watch a simple retry refund a customer two times. Then repair it with an idempotency key.
 # 2. Move a circuit breaker through the states closed, open, half-open and closed again, with a fake clock.
-# 3. Put deadlines, bulkheads and a fallback chain together. Then a dead dependency gives a degraded answer, not a dead agent.
+# 3. Put deadlines, bulkheads and a fallback chain together. When you do this, a dead dependency gives a degraded answer, not a dead agent.
 
 # %%
 import asyncio
@@ -119,7 +119,7 @@ show_schedule(RetryPolicy(max_attempts=6, cap_s=4.0, jitter_s=0.0))
 # $$
 #
 # for the attempt index $i = 0, 1, \ldots$.
-# Get the jitter from `rng.uniform` one time for each delay, in order. Then the result agrees with the library for the same seed.
+# Get the jitter from `rng.uniform` one time for each delay, in order. If you do this, the result agrees with the library for the same seed.
 
 # %% exercise
 def my_backoff_schedule(policy: RetryPolicy, rng: random.Random) -> list[float]:
@@ -210,7 +210,7 @@ print("metrics:", breaker.metrics)
 #
 # ### Exercise 4.1 — implement the half-open transition
 #
-# `MiniBreaker` in the next cell has the code that keeps the state already written for you. Implement `allow()`:
+# The next cell contains `MiniBreaker`. The code that keeps its state is already there. Implement `allow()`:
 #
 # * **closed**: permit the call.
 # * **open**: if `recovery_timeout_s` has not passed since `opened_at`, refuse the call. If it has passed, move to **half_open**.
@@ -372,7 +372,7 @@ print("✅ transient and unavailable fall through; wrong requests surface")
 # %% [markdown]
 # ## 8. A GracefulTool inside an agent: the model is told the tool is down
 #
-# The last part puts all of sections 1 to 7 around an agentlab tool. `GracefulTool` retries transient
+# The last part puts the mechanisms of sections 1 to 7 around an agentlab tool. `GracefulTool` retries transient
 # failures and sends each attempt through a breaker. When the circuit opens, it returns a **structured**
 # `unavailable` result. The hint in that result tells the model what to do. Thus there is no stack trace, no
 # hang, and no model that continues to call a dead tool.
@@ -442,8 +442,8 @@ print("✅ the model was told the tool is down and answered honestly")
 # that each layer owns:
 #
 # * **classify**: retry 429/5xx/timeouts, never 4xx. Unknown errors are bugs.
-# * **retry with capped exponential backoff + jitter**. For writes, retry only with an idempotency key. (The
-#   timeout-after-success case is the one that costs money.)
+# * **retry with capped exponential backoff + jitter**. For writes, retry only with an idempotency key. The
+#   timeout-after-success case is the one that costs money.
 # * **circuit breaker** for each dependency: fail fast, send one probe in each recovery period, and alert on
 #   each open.
 # * **bulkhead** for each slow dependency: bounded concurrency *and* a bounded queue. Refuse the rest.
@@ -452,4 +452,4 @@ print("✅ the model was told the tool is down and answered honestly")
 # * and, at the tool boundary, a structured `unavailable` result with a hint. Then the *model* can tell the
 #   user the truth.
 #
-# The key sentence: *"Reliability is a property of the harness, not the model. The model only sees structured results."*
+# The key sentence: *"Reliability is a property of the harness, not the model — the model only sees structured results."*

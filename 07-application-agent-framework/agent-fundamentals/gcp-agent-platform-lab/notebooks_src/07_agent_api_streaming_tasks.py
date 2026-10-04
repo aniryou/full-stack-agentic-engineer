@@ -4,7 +4,7 @@
 # "API discussions" here mean the interface that the agent presents to the channel or to other systems.
 # This notebook builds that API **in-process on `agentlab.agents.Runner`**. It uses no web framework, only the shapes.
 # The entry point is `request(method, path, headers, body)`.
-# It returns a status, headers, and JSON or a stream of SSE-style events.
+# It returns a status, headers, and either JSON or a stream of SSE-style events.
 # Every design point of that API is here:
 #
 # - Events (not tokens) on the stream.
@@ -16,8 +16,8 @@
 # **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md). For more depth in this repo, see the [scaling primer](../../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §5.3 (admission control) and §5.7 (streaming and connections).
 #
 # In this notebook, you will:
-# 1. Operate the API from end to end. Make a session and run a streamed turn.
-#    Pause for approval and answer it. Run a turn as a background task.
+# 1. Operate the API from end to end. Make a session. Run a streamed turn.
+#    Pause for approval. Then answer the approval request. Run a turn as a background task.
 # 2. See a retry run a turn two times. Then make the API idempotent.
 # 3. Write the four mechanisms yourself: event to SSE, idempotency dedupe, the handler for job polls and a token bucket.
 
@@ -353,7 +353,7 @@ api = AgentApi(runner, verify_agent_token, version=AGENT_VERSION)
 # %% [markdown]
 # ## 3. Driving it
 #
-# The next cell makes a session bound to Alice's tenant and user. Then it runs a streamed turn.
+# The next cell makes a session bound to Alice's tenant and user. The cell after it runs a streamed turn.
 # The stream has **events**: model turns, tool calls, tool results and the final answer.
 # Thus a client can show progress, not only text.
 
@@ -389,7 +389,7 @@ print("final text:", runner.store.get("case-4711").last_final_text())
 # %% [markdown]
 # **Long-running work gets a handle.** `Prefer: respond-async` returns `202` and a task id immediately.
 # The turn runs in the background on a durable `TaskRecord` (the MCP Tasks shape), and the client polls.
-# Look at how few facts the simple `GET /tasks/{id}` tells you. Exercise 2.3 repairs that.
+# Look at how few facts the simple `GET /tasks/{id}` tells you. Exercise 2.3 repairs this handler.
 
 # %%
 accepted = await api.request("POST", "/v1/sessions/case-4711/messages", {**ALICE, "Idempotency-Key": "k-5", "Prefer": "respond-async"}, {"message": "send me a statement"})
@@ -408,7 +408,7 @@ print("served by:", resp.headers["x-agent-version"])
 print("pinned to an old release:", (await api.request("GET", "/v1/tasks/x", {**ALICE, "X-Agent-Version": "bank-assistant@deadbeef+fake-flash"})).body)
 
 # %% [markdown]
-# **Clients retry — and without idempotency the agent runs twice.** The same request with the same key runs a second time.
+# **Clients retry. Without idempotency, the agent runs two times.** The same request with the same key runs a second time.
 # The agent calls the model again, and the tool runs again. On a refund, that is money that moves two times.
 
 # %%
@@ -475,8 +475,8 @@ print("✅ typed events on the stream:", typed)
 #   If the first request has not completed yet, it raises `ApiError(409, "idempotency_in_progress", …)`.
 # * `complete(key, response)` stores the response. `abort(key)` removes the reservation.
 #
-# (A production store puts a TTL on the entries and makes their keys specific to each tenant.
-# Keep the in-memory dict here.)
+# A production store puts a TTL on the entries and makes their keys specific to each tenant.
+# Keep the in-memory dict here.
 
 # %% exercise
 class IdempotencyCache:

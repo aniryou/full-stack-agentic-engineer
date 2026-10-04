@@ -88,7 +88,7 @@ print("from cache:", [eng.requests[r].num_cached_tokens for r in ["r0", "r1", "r
 # safe, because the forward pass writes the K/V of each layer for the *whole* step before any request attends at that
 # layer. The model code does `cache.write(...)` for all tokens, then the per-request attention.
 #
-# The same write order also explains a rule of the scheduler. In each step, the scheduler first makes sure that no
+# Publication at schedule time also explains a rule of the scheduler. In each step, the scheduler first makes sure that no
 # more preemption is possible in that step. Only after that does the scheduler publish the blocks of the requests
 # that run. A request that the scheduler removes from the batch
 # must not publish blocks that it will never compute. If an engine publishes blocks only after the step, a burst

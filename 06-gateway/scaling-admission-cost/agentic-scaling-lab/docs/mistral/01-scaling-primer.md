@@ -14,7 +14,7 @@
 
 The code and the notebooks are in this lab (`agentic-scaling-lab`). `python -m scalelab.mistral` calculates every number in this primer, or `scalelab/sim.py` measures it with `make_setup(mode, provider="mistral")`. The output of `python -m scalelab.mistral` is the Mistral section of [`03-capacity-plan.md`](../03-capacity-plan.md). Thus the numbers in the primer and in the code cannot become different.
 
-The self-hosted throughput comes from the replica model of the lab, which starts from first principles (`scalelab/serving.py`). This throughput is an estimate until `vllm bench serve` replaces it on the target hardware. Notebook `05_hosted_or_own_gpus` works the parts about hosted against self-hosted. Notebooks 01–04 work the rest on the Gemini anchor.
+The self-hosted throughput comes from the replica model of the lab, which starts from first principles (`scalelab/serving.py`). This throughput is an estimate until `vllm bench serve` replaces it on the target hardware. Notebook `05_hosted_or_own_gpus` works the comparison of hosted and self-hosted. Notebooks 01–04 work the rest on the Gemini anchor.
 
 ---
 
@@ -23,7 +23,7 @@ The self-hosted throughput comes from the replica model of the lab, which starts
 You scale an agent system with limits on its tokens, not with more servers. Pods, connections, queue depth and database throughput look like classic capacity problems. Everything of that type is small and low-cost next to one number: the tokens per minute at the model. The design work has three parts:
 
 - Make the demand for that resource predictable (admission control, routing, caching, compaction).
-- When the resource runs out, go down to a lower level of service, and do not collapse (degrade levels, shed turns, fallbacks, spill-over).
+- When the resource runs out, go down to a lower level of service, and do not collapse (degrade levels, the shed of turns, fallbacks, spill-over).
 - Make every turn survive the failures that a long unit of work with side effects invites (checkpoints, idempotency, at-least-once delivery).
 
 With Mistral, there are two ways to pay for those tokens. The selection between them is the spine of the design. On Mistral's API, the constraint is a rate limit. The rate limit has three units: requests per second, tokens per minute and tokens per month. It applies per model, and your whole organisation shares it. The price is per token: it is linear in volume, and it is zero when there is no traffic.
@@ -61,7 +61,7 @@ The model decides the length of the turn at run time. The steps are sequential, 
 
 ### 1.2 The binding constraint is model throughput — shared on the API, sized by you on a fleet
 
-On Mistral's API, Mistral applies the limits per model. The limits have three units: requests per second, tokens per minute (input and output together) and tokens per month. The limits increase with the cumulative billing of the organisation. Only the console shows the numbers of the paid tiers. Above the top tier, you write to support. A 429 means that the traffic hit the limit, and the docs do not document a `Retry-After` header.
+On Mistral's API, Mistral applies the limits per model. The limits have three units: requests per second, tokens per minute (input and output together) and tokens per month. The limits increase with the cumulative billing of the organisation. Only the console shows the numbers of the paid tiers. Above the top tier, you write to support. A 429 means that the traffic hit the limit, and Mistral documents no `Retry-After` header.
 
 You share the limit with other projects. Thus another project in the same organisation can use the headroom that you planned on. Ask if the limit applies to the workspace or to the organisation, because the docs disagree. There is no self-service purchase: the capacity plan *is* the support request. The Priority Tier (`service_tier="auto"`, 1.75× list) holds the custom limits per model and the documented SLA.
 
@@ -118,7 +118,7 @@ The loop has these steps:
 5. More turns are in flight.
 6. The model becomes slower again.
 
-Without a brake, the system becomes slower for all users. Then the deadlines expire, and the users stop. But the system already used the tokens. On the API, the loop shows itself as a 429 storm. On a fleet, the loop is silent: vLLM never says no, and the batch grows. The time per token grows with the batch, and nothing in the error logs changes while the p50 doubles.
+Without a brake, the system becomes slower for all users. Then the deadlines expire, and the users leave the conversation. But the system already used the tokens. On the API, the loop shows itself as a 429 storm. On a fleet, the loop is silent: vLLM never says no, and the batch grows. The time per token grows with the batch, and nothing in the error logs changes while the p50 doubles.
 
 The load generator (`scalelab/sim.py`, notebook 05) reproduces the two forms (simulated). The simulated API pool has 3 M TPM. In it, 120 users with simple retries push the p95 turn to 39 s. The run has 394 rate-limit responses and 35 failed turns.
 
@@ -128,7 +128,7 @@ On two Ministral 3 14B replicas, the same overload gives *zero errors and zero 4
 
 ### 1.7 Multi-agent multiplies everything
 
-A coordinator with three specialists changes 2.2 model calls per turn into eight. It multiplies the cost by 3.6×, and the latency by 2×, also when the specialists run in parallel. At 95 % per hop, the probability that every hop succeeds goes from $0.95^{2.2} \approx 0.89$ to $0.95^{8} \approx 0.66$. Thus the multi-agent question is never "how do I scale the coordinator". The question is "what measured problem justifies that multiple". Usually, the problem is a tool set that is too large for one context, or permissions that must be different for each step.
+A coordinator with three specialists changes 2.2 model calls per turn into eight. It multiplies the cost by 3.6×, and it multiplies the latency by 2× although the specialists run in parallel. At 95 % per hop, the probability that every hop succeeds goes from $0.95^{2.2} \approx 0.89$ to $0.95^{8} \approx 0.66$. Thus the multi-agent question is never "how do I scale the coordinator". The question is "what measured problem justifies that multiple". Usually, the problem is a tool set that is too large for one context, or permissions that must be different for each step.
 
 ### 1.8 Sovereignty is a scaling dimension
 
@@ -215,9 +215,11 @@ Say the calculation out loud in four steps:
 3. × 2.2 calls ≈ 15 calls a second.
 4. × 5,200 tokens × 60 ≈ 4.8 M tokens a minute.
 
-The peak is 14.3 M, inside a 20 M limit. An incident is 47.7 M, two and a half times the limit in tokens and in requests. The peak needs a support ticket. You must *shape* the incident, because no tier makes 48 M TPM appear in a minute. Also, no fleet sized for the peak carries 2.3 times the peak.
+The peak is 14.3 M, inside a 20 M limit. An incident is 47.7 M, two and a half times the limit in tokens and in requests. The peak needs a support ticket. You must *shape* the incident, because no tier makes 48 M TPM appear in a minute. The second reason is that no fleet sized for the peak carries 2.3 times the peak.
 
-> **Verify.** Find out if cached tokens count at full weight against the TPM limit. The docs define the limit as input plus output, and they say nothing about cached tokens. Thus the lab counts cached tokens fully and treats relief as upside. Also examine the scope of the limit (workspace or organisation) and the absence of a `Retry-After` header. Cause a 429, then read the headers.
+> **Verify.** Find out if cached tokens count at full weight against the TPM limit. The docs define the limit as input plus output, and they say nothing about cached tokens. Thus the lab counts cached tokens fully and treats relief as upside.
+>
+> Also examine the scope of the limit (workspace or organisation) and the absence of a `Retry-After` header. Cause a 429. Then read the headers.
 
 ### 3.3 Concurrency, from Little's law
 
@@ -299,7 +301,7 @@ Medium 3.5 (134 GB FP8) is an eight-GPU replica plus a commercial licence. Large
 
 The two bills grow with volume. The API grows linearly at $0.0131 a conversation. The fleet grows in steps of one replica as the peak grows. Thus the break-even is not a volume but a GPU price. At 28 % average utilisation, the fleet spends 0.16 GPU-minutes on a conversation. Thus it costs less than the hosted planning mix when an H100-hour costs less than $0.0131 ÷ (0.16 ÷ 60) ≈ **$4.95**:
 
-| GPU price | $ / GPU-hour | Peak fleet, $ / month | $ / conversation | vs the hosted mix | Floor: conversations / day to amortise two replicas |
+| GPU price | $ / GPU-hour | Peak fleet, $ / month | $ / conversation | against the hosted mix | Floor: conversations / day to amortise two replicas |
 |---|---:|---:|---:|---:|---:|
 | AWS on-demand | 6.88 | $55,246 | $0.0182 | 1.39× | 25 k |
 | AWS capacity block (Tokyo/Sydney/Mumbai) | 4.72 | $37,902 | $0.0125 | 0.95× | 17 k |
@@ -338,7 +340,7 @@ The non-GPU estate is a few dozen vCPUs of pods plus a small Postgres, Redis and
 
 ### 3.8 What breaks first
 
-| Level | Resource | Demand vs limit | Fix |
+| Level | Resource | Demand against limit | Fix |
 |---|---|---:|---|
 | Incident | Hosted RPS limit (60) | 2.55× | shape demand (admission, degrade levels), ask for burst headroom |
 | Incident | Hosted TPM limit (20 M) | 2.38× | shape demand, use a sibling model with its own limit, decrease the tokens per call |
@@ -347,7 +349,7 @@ The non-GPU estate is a few dozen vCPUs of pods plus a small Postgres, Redis and
 | Incident | CRM | 0.24× | prefetch at session start, 5-minute profile cache |
 | Incident | Redis, Postgres, RabbitMQ, orchestrator pods | < 0.05× | nothing |
 
-At peak, everything fits (0.76× and 0.72× on the hosted limits, 0.69× on the fleet). Kubernetes and the orchestrator pods are not on the list on either path. The model breaks first, in its two forms. The billing system, sized for people, breaks second.
+At peak, everything fits (0.76× and 0.72× on the hosted limits, 0.69× on the fleet). Kubernetes and the orchestrator pods are not on the list on either path, because the model breaks first, in its two forms. The billing system, sized for people, breaks second.
 
 ---
 
@@ -401,7 +403,7 @@ Then the pod writes the transcript and publishes the terminal event. It decremen
 - It gives at-least-once execution with redelivery.
 - It lets the token bucket or the fleet's batch set the pace, not the ingress.
 
-*Postgres holds the durable state and Redis the hot state* because their access patterns are opposite. Postgres gets a small number of row writes per turn, which must survive anything. Redis gets thousands of sub-millisecond operations per second, which the system can lose without harm.
+*Postgres holds the durable state and Redis the hot state* because their access patterns are opposite. Postgres gets a small number of row writes per turn, and these writes must survive anything. Redis gets thousands of sub-millisecond operations per second, and the system can lose these operations without harm.
 
 *The model gateway is a library with two backends and a policy, not a service*. Its state fits in Redis and in vLLM's `/metrics`. The fleet and the API are two entries in its routing table. Thus hosted, self-hosted and hybrid are the same code with a different configuration. The model gateway becomes a service when many agents share one fleet. That is the job of an inference gateway in front of the GPUs.
 
@@ -436,7 +438,7 @@ On the API, you shape the demand before it reaches the limit, in three layers.
 2. A token bucket per model in the model gateway (`TokenBucket` in `scalelab/resilience.py`) spreads calls within each second. At the incident, the requests-per-second limit binds first. The rate of the bucket is *your share* of the granted limit. Its capacity is about six seconds of refill. When there is more than one pod, the bucket is a Lua script in Redis.
 3. You select the endpoint and the tier for each call:
    - the global endpoint, unless the data policy says EU or US,
-   - the Priority Tier, for traffic that must not wait in a queue. `service_tier="auto"` changes to the standard tier when the Priority Tier runs out. It reports `service_tier` in the response.
+   - the Priority Tier, for traffic that must not wait in a queue. With `service_tier="auto"`, the API changes to the standard tier when the Priority Tier runs out, and the response reports `service_tier`.
    - the Batch API at half price, with a 24-hour default `timeout_hours`, for offline work only.
 
 The paperwork half is also part of the plan. Tiers unlock on cumulative billing. Thus a new organisation starts in free mode at 1 RPS, and it goes up only when it spends money. Send the request of the plan to support as soon as you know the shape of the pilot. If the service needs an SLA, add a Priority Tier entitlement.
@@ -503,7 +505,7 @@ The cap starts at the number from the capacity plan. That is 175 turns from the 
 - the state of each breaker (open or not),
 - the *saturation* of the backend.
 
-The controller writes the level to Redis, so every pod goes to the same degrade level at the same time. The fleet needs the saturation signal, and the API does not. Saturation is KV-cache usage plus the queue. The Gateway API Inference Extension's saturation detector reads the same two quantities, with defaults of a queue depth of 5 and KV utilisation of 0.8. Each level buys capacity, and it gives something up for it:
+The controller writes the level to Redis, so every pod goes to the same degrade level at the same time. The fleet needs the saturation signal, and the API does not. Saturation is KV-cache usage plus the queue. The Gateway API Inference Extension's saturation detector reads the same two quantities, with defaults of a queue depth of 5 and KV utilisation of 0.8. Each level buys capacity, and the price is that the level gives something up:
 
 | Level | Trigger | What changes | Effect in the lab's runs |
 |---|---|---|---|
@@ -560,7 +562,7 @@ The tools are usually the real bottleneck. The reason is that their owners sized
 5. A timeout.
 6. One retry, for idempotent reads only.
 
-Failures come back to the model as *structured data* (`{"error": "billing: rate limited"}`), never as exceptions that abort the turn. The model can usually give an answer without a fact that is not available. An aborted turn is the outcome with the highest cost of all.
+Failures come back to the model as *structured data* (`{"error": "billing: rate limited"}`), never as exceptions that abort the turn. This is because the model can usually give an answer without the missing fact. Also, an aborted turn is the outcome with the highest cost of all.
 
 Two habits remove most tool latency from the critical path:
 
@@ -718,7 +720,7 @@ A measurement starts each stage, and the design must name it:
 
 - the queue, when the peak-hour p95 goes above the budget,
 - the rate-limit request, when the traffic shape of the pilot is stable,
-- GPUs, when the residency policy says that the data must not leave. Also GPUs when your GPU price is under the break-even and the volume goes above the two-replica floor.
+- GPUs, when the residency policy says that the data must not leave. GPUs are also correct when your GPU price is under the break-even and the volume goes above the two-replica floor.
 - a second zone, when the availability target says so.
 
 Custom models come late and for a different reason. Forge is Mistral's custom-model service, dated 17 March 2026 (verify), and it is for quality. An example is a Singapore agent that must work in Singlish, Malay and Tamil. Another example is a domain vocabulary where the base model makes errors. Forge changes the fleet arithmetic in one way only. You must self-host a custom model or run it on Mistral's dedicated deployments, so its GPUs are in the plan from the start.
@@ -743,7 +745,7 @@ Custom models come late and for a different reason. Forge is Mistral's custom-mo
 ### 8.2 Questions that change the design
 
 - "Which data may leave Singapore, and which may reach a shared API at all?" (the path, and the spill-over rule).
-- "Is ten seconds with progress events acceptable, or is six seconds a contract?" (the batch target. If six seconds is a contract, three to four times the GPUs.)
+- "Is ten seconds with progress events acceptable, or is six seconds a contract?" (the batch target. If six seconds is a contract, the fleet needs three to four times the GPUs.)
 - "What is the daily volume?" (the volume amortises the two-replica floor above 14–25 k a day. Above that, the GPU price decides.)
 - "What does an H100-hour cost you, and on what term?" (under about $4.95, the fleet costs less than the API. At $6.88 on-demand, it costs $15.5 k a month more.)
 - "Do you want Medium 3.5 on your own GPUs?" (a commercial licence and an eight-GPU replica).

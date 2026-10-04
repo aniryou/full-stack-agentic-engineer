@@ -30,10 +30,12 @@ from agentlab.observability import (DEFAULT_PRICES, AlertRule, Price, RedactingE
 # The agent loop opens one span for each agent turn, each model call and each tool call. It puts
 # OpenTelemetry GenAI attribute names on these spans (`gen_ai.request.model`, `gen_ai.usage.input_tokens`,
 # `gen_ai.usage.cache_read.input_tokens`, `gen_ai.response.finish_reasons`, `gen_ai.tool.name` …, as of
-# September 2026, verify). The conventions are at Development stability. Thus a backend on the same
-# convention version reads the attributes without a mapping. A tool can add data to its own span through
-# `ctx.span`. `create_case` records the case details in its span, and this is exactly how personal data
-# gets into traces (section 5).
+# September 2026, verify). As of September 2026 (verify), the conventions are at Development stability.
+# Because the spans use these names, a backend on the same convention version reads the attributes without
+# a mapping.
+#
+# A tool can add data to its own span through `ctx.span`. `create_case` records the case details in its
+# span. This record is exactly how personal data gets into traces (section 5).
 
 # %%
 @tool
@@ -99,9 +101,9 @@ for s in conv2.by_kind("model"):
 # %% [markdown]
 # ## 2. Cost per conversation
 #
-# `TraceSummary` reduces a trace to the numbers of the operator. The price table puts a separate price on
-# uncached input, on cached input and on output. The default table is **illustrative**. **Compare it with the
-# official pricing page.**
+# `TraceSummary` reduces a trace to the numbers that the operator monitors. The price table puts a separate
+# price on uncached input, on cached input and on output. The default table is **illustrative**. **Make sure
+# that it agrees with the official pricing page.**
 
 # %%
 summaries = TraceSummary.from_tracer(tracer, DEFAULT_PRICES, latency=reported_latency_ms)
@@ -169,10 +171,10 @@ print("✅ cost formula matches the price table on every traced conversation")
 # %% [markdown]
 # ## 3. Latency by span kind, and the most expensive step
 #
-# This section calculates the percentiles for each **span kind**. The "p95 latency" of a turn mixes model
-# calls, tool calls and orchestration into one number, and nobody can act on that number. `FakeLLM` does not
-# really sleep. Thus the notebook reads the latency that it *reports* (`model.latency_ms`). In production, the
-# span duration is the truth.
+# This section calculates the percentiles for each **span kind**. It does so because the "p95 latency" of a
+# turn mixes model calls, tool calls and orchestration into one number. Nobody can act on that number.
+# `FakeLLM` does not really sleep. Thus the notebook reads the latency that it *reports* (`model.latency_ms`).
+# In production, the span duration is the truth.
 
 # %%
 for kind, stats in summarize_latencies(tracer.spans, latency=reported_latency_ms).items():
@@ -309,7 +311,7 @@ print("✅ card numbers redacted, everything else untouched")
 #
 # These two numbers are worth an alert, together with the p95 model latency. `agent_metrics` calculates them
 # from a tracer and the session logs. Note that caching makes the cost drift smaller, because the repeated
-# prompt prefix is low-cost. But the steps and the wrong-tool rate fully double.
+# prompt prefix is low-cost. But the steps and the wrong-tool rate both double in full.
 
 # %%
 def repeat_until_stopped(messages, tools):
@@ -394,8 +396,8 @@ print("✅ retention rule explained")
 #
 # * **One trace per turn, spans per agent / model / tool**. The attribute names come from the OpenTelemetry
 #   GenAI (`gen_ai.*`) conventions. These conventions are at Development stability as of September 2026
-#   (verify). Thus a tracing backend on the same convention version (Cloud Trace, an OTel collector) reads
-#   them without a mapping. Tool spans hold `gen_ai.tool.name` and also the lab's own `tool.ok` and
+#   (verify). Because the spans use these attribute names, a tracing backend on the same convention version
+#   (Cloud Trace, an OTel collector) reads them without a mapping. Tool spans hold `gen_ai.tool.name` and also the lab's own `tool.ok` and
 #   `tool.error`. Model spans hold the input, cached input and output tokens and the finish reasons.
 # * **Cost is arithmetic on those spans**: uncached input, cached input and output, with a price for each
 #   model. Say the two levers out loud: model tier is ≈4×, and prompt caching is ≈2×. Both come from prompt

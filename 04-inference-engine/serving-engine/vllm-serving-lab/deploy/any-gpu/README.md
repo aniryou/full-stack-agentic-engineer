@@ -101,7 +101,7 @@ The bandwidth and the latency of the collectives themselves are the subject of l
 * **RunPod / Vast.ai** give you a *container*. Select the `vllm/vllm-openai` image as the template image. Put the
   model and the flags in the container arguments. Expose port 8000. Set `--api-key`, because the endpoint is
   public. An RTX 4090 (24 GB) costs approximately $0.3-0.4/hr (verify in
-  [`COMPUTE.md`](../../../../../COMPUTE.md)). With per-second billing, a 30-minute session costs a few cents.
+  [`COMPUTE.md`](../../../../../COMPUTE.md)). With per-second billing, a 30-minute session costs cents.
 * **Lambda** (and GCP Compute Engine) give you a *VM*. Install Docker and the NVIDIA Container Toolkit (layer 02), or
   run `pip install vllm`. Then run `./serve.sh`.
 * If you do not want the network in your TTFT, run the benchmark **from the same machine**

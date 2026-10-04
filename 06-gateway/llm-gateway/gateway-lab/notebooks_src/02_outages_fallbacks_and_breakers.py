@@ -16,8 +16,8 @@
 #    auth failure is a failure of our credential, not of the credential of the caller. In these cases, the next
 #    provider also refuses the request, or the fault is ours and we must repair it.
 # 2. **Fall back only before the first byte.** The gateway holds the first chunk until it knows that the upstream
-#    produces tokens. After a token reaches the client, the gateway reports a failure *in the stream*. To join the
-#    continuation of another model to half an answer is incorrect.
+#    produces tokens. After a token reaches the client, the gateway reports a failure *in the stream*. It is incorrect
+#    to join the continuation of another model to half an answer.
 # 3. **A breaker per target** changes repeated failures into instant skips for a cool-down period. This lab uses the
 #    same rules as 07.2's `CircuitBreaker` (gcp-agent-platform-lab notebook 10, the canonical home). The breaker opens
 #    after 3 *consecutive* failures. It goes half-open after the recovery timeout, and then one probe decides. Retries
@@ -59,7 +59,7 @@ print("chain for alias chat:", stack.cfg.aliases["chat"].targets, "| bolt is slo
 #
 # The core classified statuses (gateway-core notebook 02, exercise 2.1). Over HTTP, the owner of a client asks a
 # different question: *what do I get back?* The check switches on each fault below at `acme` (the first target of
-# `chat`) for one streamed request. Write `client_sees(fault)`. It returns `(status, served_by, error_in_stream)`:
+# `chat`) for one streamed request. Write `client_sees(fault)`. Return `(status, served_by, error_in_stream)`:
 #
 # - the HTTP status that the client receives,
 # - the `x-gwlab-target` that served the request (`None` if no target did),
@@ -77,8 +77,8 @@ print("chain for alias chat:", stack.cfg.aliases["chat"].targets, "| bolt is slo
 # - `"bad_key"`: acme rejects the *gateway's* provider key with a 401.
 #
 # Predict the results before you run anything. The check causes each fault, one at a time, and prints what the gateway
-# did. The breakers reset between the faults, because three faults in sequence are sufficient to open the breaker of acme. That breaker
-# is the subject of the second half.
+# did. The breakers reset between the faults, because three faults in sequence are sufficient to open the breaker of
+# acme. That breaker is the subject of the second half.
 
 # %% exercise
 def client_sees(fault: str) -> tuple:
@@ -205,8 +205,10 @@ print("✅ the chain's mean TTFT is a mixture: most requests at the primary's sp
 # requests skip `acme` and do not touch it.
 #
 # At each recovery timeout (1 s), the breaker lets one probe through. The probe fails and opens the breaker again. This
-# continues until the outage ends. Then a probe succeeds, and the traffic goes back to `acme`. With a *stall* instead of
-# a 503, each of those attempts costs the 0.4 s first-byte timeout. That is the real value of the breaker.
+# continues until the outage ends. Then a probe succeeds, and the traffic goes back to `acme`.
+#
+# If the fault is a *stall* and not a 503, each attempt at `acme` during the outage costs the 0.4 s first-byte timeout.
+# The breaker prevents most of those attempts, and that is its real value.
 
 # %%
 reset_breakers()
@@ -258,9 +260,9 @@ print("✅ without the breaker all ~40 would have paid a failed attempt; with it
 #
 # When you set `GWLAB_VLLM_URL`, a second gateway puts the real vLLM first in `chat` (config `vllm`) and a fake second.
 # The next cell sends two requests a second for 20 s. After 8 s, the cell itself stops vLLM, because Colab and Kaggle
-# give you no second terminal. It uses `gwlab.t1.stop_vllm`: `pkill -f "vllm serve"`, else `docker compose ... stop
-# vllm`. This step needs an explicit opt-in (`GWLAB_T1_STOP=1`). Thus, if you run the notebook again, it never stops
-# your engine by surprise.
+# give you no second terminal. It uses `gwlab.t1.stop_vllm`: `pkill -f "vllm serve"`, else
+# `docker compose ... stop vllm`. This step needs an explicit opt-in (`GWLAB_T1_STOP=1`). Thus, if you run the notebook
+# again, it never stops your engine by surprise.
 #
 # The served-by line changes from `v` to `a` after a few connection errors. Then the breaker skips vLLM. The cell
 # prints how to start vLLM again, because notebooks 03 and 04 need it again. If you forget, their T1 cells find no vLLM

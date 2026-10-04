@@ -125,12 +125,12 @@ error (`api.error_body()`):
 
 ### 1.4 Chat completions and SSE as the lingua franca
 
-The OpenAI chat-completions request (`model`, `messages`, `tools`, `max_completion_tokens`, `stream`, …) is the API
-that every gateway, engine and SDK speaks. The API server of vLLM also speaks it (serving-engine PRIMER §1), and the
-04 lab's [`fakeserver.py`](../../04-inference-engine/serving-engine/vllm-serving-lab/servelab/fakeserver.py) emulates it.
-A streamed answer is a sequence of `chat.completion.chunk` objects. Each object is an SSE frame `data: {…}` and a
-blank line, and `data: [DONE]` ends the sequence (`api.sse()`, `api.parse_sse()`). Three details decide if a gateway
-does its metering correctly:
+The OpenAI chat-completions request (`model`, `messages`, `tools`, `max_completion_tokens`, `stream`, …) is the API that
+every gateway, engine and SDK speaks. The API server of vLLM also speaks it (serving-engine PRIMER §1), and the 04 lab's
+[`fakeserver.py`](../../04-inference-engine/serving-engine/vllm-serving-lab/servelab/fakeserver.py) emulates it. A
+streamed answer is a sequence of `chat.completion.chunk` objects. Each object is an SSE frame `data: {…}` and a blank
+line, and `data: [DONE]` ends the sequence (`api.sse()`, `api.parse_sse()`). Three details decide if a gateway does its
+metering correctly:
 
 - **Usage arrives only if asked.** With `stream_options.include_usage: true`, the server sends one more chunk before
   `[DONE]`. That chunk has `choices: []` and the request's `usage`. If the stream stops before its end, it is
@@ -138,21 +138,21 @@ does its metering correctly:
   the usage. It removes that chunk from the stream to a client that did not ask (`Gateway.handle()`, stage 6), with
   the same design as LiteLLM's proxy. It must ask only on streamed requests: vLLM rejects `stream_options` without
   `stream: true` with a 400.
-- **The gateway accumulates a stream and does not read it.** It concatenates the content. Tool calls arrive as deltas with
-  `index` as their key. Only the first delta carries the call's `id` and `function.name`. The `arguments` string
-  arrives in fragments, and the fragments are not valid JSON until the last one arrives (`api.StreamAccumulator`). A
-  cut stream leaves half a JSON object: report it, and never guess the rest (`tool_calls()` returns
-  `valid_json: False`).
+- **The gateway accumulates a stream, and does not read each chunk alone.** It concatenates the content. Tool calls
+  arrive as deltas with `index` as their key. Only the first delta carries the call's `id` and `function.name`. The
+  `arguments` string arrives in fragments, and the fragments are not valid JSON until the last one arrives
+  (`api.StreamAccumulator`). A cut stream leaves half a JSON object: report it, and never guess the rest (`tool_calls()`
+  returns `valid_json: False`).
 - **Errors can arrive inside a 200.** In vLLM v0.30.0, the server reports a failure in the middle of a stream as a
   `data:` chunk that holds an `error` object. Then it sends `[DONE]`, and all of this is under HTTP 200. Also, its
   error `code` is the HTTP status as an integer, but OpenAI's code is a string (`api.normalize_error()`). A relay that
   examines only the status counts a failure as a success in its metering.
 
-The gateway's token stream is not the agent's own API. The 07.2 lab's
-[notebook 07](../../07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks/07_agent_api_streaming_tasks.ipynb)
+The gateway's token stream is not the agent's own API. The 07.2 lab's [notebook
+07](../../07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks/07_agent_api_streaming_tasks.ipynb)
 sends a stream of *agent events* to an end user (`Last-Event-ID` resume, `Idempotency-Key`, a per-tenant 429). The
-gateway relays *model tokens* to that agent. A resume across a gateway failure is the job of the agent API, not of
-the gateway.
+gateway relays *model tokens* to that agent. A resume across a gateway failure is the job of the agent API, not of the
+gateway.
 
 ### 1.5 Adapters as data, and what does not normalise
 
@@ -205,7 +205,7 @@ gives 99.945 % (`routing.chain_availability([0.995, 0.99], common_mode=0.0005)` 
 gateway like the most critical service that you have:
 
 - Run several replicas across zones.
-- Keep no state in the process. The limits and caches are in a shared store (§4.4).
+- Keep no state in the process. Put the limits and caches in a shared store (§4.4).
 - Keep the path fast. Measure its added latency. Give that latency a budget. The lab runs the gateway over HTTP on
   localhost, where you can measure the time of the hop.
 - Keep the keys in a secret manager, which logs each access (§6).
@@ -236,7 +236,7 @@ chat-eu   → [google/gemini-3.5-flash (europe-west4), self/lab/llm (europe-west
 - the prompt plus the output with the context window,
 - the region with the tenant's residency.
 
-Then the router **orders** the targets that pass by a policy:
+Then the router **orders** the targets that pass the filters. A policy sets the order:
 
 | Policy | Orders by | Use when |
 |---|---|---|
@@ -247,10 +247,10 @@ Then the router **orders** the targets that pass by a policy:
 | tier | a separate chain per tier (`chat@gold`) | paid tiers get the better or less contended model |
 | effort | the reasoning filter of §2.2 | only thinking models take high `reasoning_effort` |
 
-Routing by effort puts the RL primer's point into practice ([00.5 PRIMER §7](../../00-foundations/rl-and-thinking-models/PRIMER.md#7-what-thinking-does-to-serving)).
-The bill counts a thinking token as output. Thus the lowest-cost way to buy accuracy is to send only the hard
-requests to a thinking model. This routing needs a classifier, or a low-cost first pass, that knows which requests are
-hard.
+Routing by effort puts the RL primer's point into practice ([00.5 PRIMER
+§7](../../00-foundations/rl-and-thinking-models/PRIMER.md#7-what-thinking-does-to-serving)). The bill counts a thinking
+token as output. Thus the lowest-cost way to buy accuracy is to send only the hard requests to a thinking model. This
+routing needs a classifier, or a low-cost first pass, that knows which requests are hard.
 
 ### 2.3 What falls through, and what must not
 
@@ -280,8 +280,8 @@ or an error chunk that arrives *first* inside a 200 (`Gateway.handle()`, stage 6
 ### 2.4 Retries and breakers
 
 Retries with full jitter, `Retry-After` and a deadline come from the scaling primer (§5.2,
-`scalelab.resilience.backoff`, `call_with_retries`). The 07.2 lab's
-[notebook 10](../../07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks/10_reliability_retries_breakers.ipynb)
+`scalelab.resilience.backoff`, `call_with_retries`). The 07.2 lab's [notebook
+10](../../07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks/10_reliability_retries_breakers.ipynb)
 teaches the full state machine of the breaker
 ([`agentlab/reliability/breaker.py`](../../07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/agentlab/reliability/breaker.py)).
 
@@ -316,9 +316,9 @@ primary 99.5 %, fallback 99.0 %, independent:        1 − 0.005 × 0.01 = 99.99
 the same, with a 0.1 % common-mode failure:          0.999 × 0.99995  = 99.895 %  (0.99895005)
 ```
 
-The common-mode term has the largest effect on the result. A third independent target moves the independent part to 99.99995 %, but
-the chain stays at 99.9 %. Put fallbacks in *different* failure domains. Give them a quota that is sufficient for the
-traffic that they will take.
+The common-mode term has the largest effect on the result. A third independent target moves the independent part to
+99.99995 %, but the chain stays at 99.9 %. Put fallbacks in *different* failure domains. Give them a quota that is
+sufficient for the traffic that they will take.
 
 The expected latency and cost come from a walk along the chain (`routing.chain_cost(steps)`). Each step succeeds with
 probability $p$, and every later outcome pays the time of a failure. In a bad hour, the primary fails 5 % of
@@ -355,9 +355,9 @@ directions are different:
 Thus, map the tiers explicitly. The second thing is cost. A pool has no per-token price, and chargeback divides its
 bill by GPU time (§5.4).
 
-The choice between a hosted provider and your own pool is a break-even on $ per million tokens against utilisation.
-The 01 primer's [§8.1](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md#81-from-gpu-hour-to-m-tokens) changes
-a GPU-hour into $/M, and §5.3 compares the two at one call shape. Module 06.5 covers the capacity side, in the scaling
+The choice between a hosted provider and your own pool is a break-even on $ per million tokens against utilisation. The
+01 primer's [§8.1](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md#81-from-gpu-hour-to-m-tokens) changes a
+GPU-hour into $/M, and §5.3 compares the two at one call shape. Module 06.5 covers the capacity side, in the scaling
 lab's [Mistral scaling primer
 §3.5–3.6](../scaling-admission-cost/agentic-scaling-lab/docs/mistral/01-scaling-primer.md#35-self-hosted-the-replica-then-the-fleet)
 and its [notebook 05](../scaling-admission-cost/agentic-scaling-lab/notebooks/05_hosted_or_own_gpus.ipynb). A
@@ -376,11 +376,11 @@ Provisioned Throughput commitment is a target too, with its own quota and spill-
 | Provider prompt cache | the prompt's prefix, provider-side | ~90 % of the cached input's price, some TTFT | none to correctness. The provider controls placement and TTL. | provider |
 | Engine prefix cache | chained block hashes, a salt per tenant on the first block | prefill compute, TTFT | a timing side channel between tenants without a salt | engine |
 
-The last two caches are never incorrect, because they reuse computation, not answers. Other primers teach them.
-Provider prompt caching is the §3.4 lever of the scaling primer. The anchor call costs $0.01065 uncached and $0.007005
-with 2,700 of its 5,000 input tokens cached, 34 % less (`metering.price_call()`). The engine's block-hash prefix cache
-with its per-tenant `cache_salt` is in [serving-engine PRIMER §5](../../04-inference-engine/serving-engine/PRIMER.md#5-prefix-caching)
-(module 04.3).
+The last two caches are never incorrect, because they reuse computation, not answers. Other primers teach them. Provider
+prompt caching is the §3.4 lever of the scaling primer. The anchor call costs $0.01065 uncached and $0.007005 with 2,700
+of its 5,000 input tokens cached, 34 % less (`metering.price_call()`). The engine's block-hash prefix cache with its
+per-tenant `cache_salt` is in [serving-engine PRIMER
+§5](../../04-inference-engine/serving-engine/PRIMER.md#5-prefix-caching) (module 04.3).
 
 For those two caches, the job of the gateway is layout and isolation. It puts stable prefixes first, and it sends a
 `cache_salt` per tenant on every request to a vLLM pool (§6.4). The first two caches return a stored *answer*. They
@@ -401,9 +401,9 @@ The lab's [notebook 03](gateway-lab/notebooks/03_semantic_cache_vs_the_prefix_ca
 "How do I cancel my subscription?" as personal and "What is my plan limit?" as general. Thus, in that notebook, a
 regex can only *veto* a declared shared class. It never makes a request cacheable.
 
-The **verified tenant** sets the namespace of the key, and the user also sets it for per-user classes. OSS Portkey's
-exact-cache key has no tenant in it (§9). LiteLLM's semantic cache uses the virtual key of the caller as its scope by default. Find out
-what your product does.
+The namespace of the key contains the **verified tenant**, and for per-user classes it also contains the user. OSS
+Portkey's exact-cache key has no tenant in it (§9). LiteLLM's semantic cache uses the virtual key of the caller as its
+scope by default. Find out what your product does.
 
 The exact key is a hash of the fields that change the answer: the model alias, messages, tools, `response_format`,
 sampling parameters, `max_completion_tokens` and `reasoning_effort`. It does not include the fields that do not change
@@ -415,9 +415,11 @@ When a model or a prompt template changes, increase a version in the namespace.
 
 Embed the query. Find the nearest cached query in the tenant's namespace. If the cosine similarity is at or above a
 threshold $\tau$, serve its answer. Also guard exactly what an embedding cannot see: numbers, dates, codes and named
-entities must match (`cache.entities()`). The [embeddings primer §15](../../07-application-agent-framework/retrieval-rag/embeddings-lab/docs/primer.md#15-retrieval-pipelines-for-rag-and-agents),
-"Embeddings elsewhere in agent systems", and the [vector-databases primer §17](../../07-application-agent-framework/retrieval-rag/vector-databases-primer.md)
-warn about exactly these false positives.
+entities must match (`cache.entities()`). The [embeddings primer
+§15](../../07-application-agent-framework/retrieval-rag/embeddings-lab/docs/primer.md#15-retrieval-pipelines-for-rag-and-agents),
+"Embeddings elsewhere in agent systems", and the [vector-databases primer
+§17](../../07-application-agent-framework/retrieval-rag/vector-databases-primer.md) warn about exactly these false
+positives.
 
 The core's embedder is the 07.4 hashing embedder
 ([`ragkit.embed.HashingEmbedder`](../../07-application-agent-framework/retrieval-rag/rag-from-scratch/ragkit/embed.py)),
@@ -436,9 +438,9 @@ served over all 44 cacheable lookups:
 | 0.90 | 21.7 % | 4.5 % | 17.4 % | 4.5 % |
 | 0.95 | 17.4 % | 0.0 % | 13.0 % | 0.0 % |
 
-Read the table as a design review reads it. On this embedder, near misses are *closer* than paraphrases. "What were
-the Q3 2024 revenue figures?" scores 0.882 against the cached Q3 2025 question. "Is SSO included in the Pro plan?"
-scores 0.617 against its own answer. Thus no threshold gives many hits without false hits.
+Read the table as a design review reads it. On this embedder, near misses are *nearer* to the cached questions than the
+paraphrases are. "What were the Q3 2024 revenue figures?" scores 0.882 against the cached Q3 2025 question. "Is SSO
+included in the Pro plan?" scores 0.617 against its own answer. Thus no threshold gives many hits without false hits.
 
 The entity guard halves the false hits at low thresholds. It finds Q3 2024 against Q3 2025, SCIM against SSO, 403
 against 429 and GBP against EUR. But it cannot see a word-level difference ("Business" against "Team" plan, "disable"
@@ -447,7 +449,8 @@ five codes. At $\tau$ = 0.95, only case and punctuation variants hit. A *normali
 safely.
 
 A real embedder increases the paraphrase scores (at T1, for example a small model on vLLM's pooling runner or
-all-MiniLM-L6-v2 on CPU, verify). But near misses that differ in one word stay near the cached query in any embedding. Thus:
+all-MiniLM-L6-v2 on CPU, verify). But near misses that differ in one word stay near the cached query in any embedding.
+Thus:
 
 - Cache narrow, declared classes.
 - Measure the hit and false-hit rates on your own labelled traffic before you select $\tau$.
@@ -489,8 +492,8 @@ lognormal with median 1,500 and $\sigma$ = 1. The lognormal gives these values: 
 Take a bucket that charges a constant estimate per request. The estimate fits yesterday's outputs, median 300 (mean
 494.6, `ratelimit.lognormal_mean()`), plus a 1,500-token prompt. This bucket admits the same number of *requests* per
 minute, whatever their real cost is. When the outputs grow, it lets through
-$(\text{prompt} + \text{new mean}) / (\text{prompt} + \text{old mean})$ = 3,973 / 1,995 = **1.99×** the tokens of its
-design (`ratelimit.overadmission_ratio()`). Then the provider answers with 429s.
+$(\text{prompt} + \text{new mean}) / (\text{prompt} + \text{old mean})$ = 3,973 / 1,995 = **1.99×** the tokens that you
+calculated its size for (`ratelimit.overadmission_ratio()`). Then the provider answers with 429s.
 
 ### 4.2 Reserve → stream → reconcile
 
@@ -510,17 +513,19 @@ random traffic. A stream cut before its usage chunk reconciles on the tokens cou
 marks it as estimated (§5.2).
 
 Envoy AI Gateway's token costs (`llmRequestCosts`) and a simple bucket debit only *after* the response, so they never
-reserve concurrent long streams. LiteLLM's v3 limiter (`parallel_request_limiter_v3.py` at `849f303`) reserves the
-prompt estimate plus `max_tokens`. When the request has no `max_tokens`, it reserves a per-key configured estimate, or
-else max(the input estimate, 1,024). That 1,024 is a quarter of its 4,096 default, lowered to a quarter of the
-smallest configured TPM limit when that is smaller. In that case, it also writes the lowered bound into the request as
-`max_tokens`. Then it reconciles after the call (verify both).
+reserve concurrent long streams.
 
-The experiment in §4.3 also assumes something about the provider: it counts tokens when the model processes them. It
-is possible that a hosted API does its own reserve and reconcile instead, and charges the requested output bound at
-admission. OpenAI's rate-limit guide counts the larger of `max_tokens` and an estimate against TPM. Anthropic
-estimates output tokens per minute from `max_tokens` when a request starts. It corrects the estimate at the end
-(verify both: these facts are from memory, because the docs sites were not available for this primer).
+LiteLLM's v3 limiter (`parallel_request_limiter_v3.py` at `849f303`) reserves the prompt estimate plus `max_tokens`.
+When the request has no `max_tokens`, it reserves a per-key configured estimate, or else max(the input estimate, 1,024).
+That 1,024 is a quarter of its 4,096 default, lowered to a quarter of the smallest configured TPM limit when that is
+smaller. In that case, it also writes the lowered bound into the request as `max_tokens`. Then it reconciles after the
+call. Both of these behaviours of the LiteLLM limiter need a check (verify both).
+
+The experiment in §4.3 also assumes something about the provider: it counts tokens when the model processes them. It is
+possible that a hosted API does its own reserve and reconcile instead, and charges the requested output bound at
+admission. OpenAI's rate-limit guide counts the larger of `max_tokens` and an estimate against TPM. Anthropic estimates
+output tokens per minute from `max_tokens` when a request starts. It corrects the estimate at the end. Both of these
+provider facts are from memory (verify both: the docs sites were not available for this primer).
 
 Against such a provider, the reservation of the gateway must obey the rule of the provider. Reserve the `max_tokens`
 that the gateway actually sends upstream, or send upstream the bound that it reserved. Take a gateway that reserves
@@ -531,8 +536,8 @@ for providers and self-hosted pools that count the processed tokens.
 
 `ratelimit.compare_buckets()` sends 12 requests a second for ten minutes to a provider key with a 1,000,000
 tokens-per-minute limit. The prompts have 1,500 tokens, and each stream gives 50 output tokens a second. In this
-simulation, the provider is a sliding 60-second window over processed tokens (simulated). Each run continues past t = 600 s until
-its admitted streams drain:
+simulation, the provider is a sliding 60-second window over processed tokens (simulated). Each run continues past t =
+600 s until its admitted streams drain:
 
 | Limiter | Admitted | Peak window ÷ limit | Seconds over the limit (whole run) | Tokens served ÷ limit |
 |---|---|---|---|---|
@@ -541,10 +546,11 @@ its admitted streams drain:
 | reserve prompt + 4,096, debit, reconcile | 1,920 | 0.77 | 0 | 0.704 |
 | reserve prompt + the 16,384 cap, debit, reconcile | 725 | 0.31 | 0 | 0.265 |
 
-The per-request bucket cannot see the rollout. It admits exactly as many requests, and it pushes 1.97× the limit at
-the peak. Then, from the moment it binds (t = 45 s), the provider's window stays over the limit with no break. The
-window stays over the limit until the admitted thinking streams have drained (t = 648 s). The per-request bucket for
-yesterday's outputs has the correct size for the mean, but it still stays over the limit for 116 of 600 seconds. The reason is that the tail is not the mean.
+The per-request bucket cannot see the rollout. It admits exactly as many requests, and it pushes 1.97× the limit at the
+peak. Then, from the moment it binds (t = 45 s), the provider's window stays over the limit with no break. The window
+stays over the limit until the admitted thinking streams have drained (t = 648 s). The per-request bucket for
+yesterday's outputs has the correct size for the mean, but it still stays over the limit for 116 of 600 seconds. The
+reason is that the tail is not the mean.
 
 A reservation of the full cap is exact and wasteful. A 16K reservation held for a minute-long stream leaves most of
 the budget unused (26.5 % served).
@@ -598,10 +604,11 @@ you keep every row, as you keep financial records. That is the difference betwee
 ### 5.2 Usage is authoritative
 
 The provider's `usage` is the bill. The gateway puts a price on it, and it makes an estimate only where no `usage`
-exists. The bill counts thinking as output ([00.5 PRIMER §5](../../00-foundations/rl-and-thinking-models/PRIMER.md#5-thinking-models)).
-The §1.5 call with 1,200 reasoning tokens costs $0.017805 on gemini-3.5-flash, 2.54× the $0.007005 of the same call
-billed on its 350 visible tokens alone. `metering.price_call()` gives both prices. A gateway that reads Gemini's
-`candidatesTokenCount` without `thoughtsTokenCount` charges the lower price.
+exists. The bill counts thinking as output ([00.5 PRIMER
+§5](../../00-foundations/rl-and-thinking-models/PRIMER.md#5-thinking-models)). The §1.5 call with 1,200 reasoning tokens
+costs $0.017805 on gemini-3.5-flash, 2.54× the $0.007005 of the same call billed on its 350 visible tokens alone.
+`metering.price_call()` gives both prices. A gateway that reads Gemini's `candidatesTokenCount` without
+`thoughtsTokenCount` charges the lower price.
 
 Estimates (`api.estimate_tokens()`, four characters a token, labelled) cover only two cases. The first case is
 admission (§4.2). The second case is a stream cut before its usage chunk. The gateway bills that stream on the tokens
@@ -625,7 +632,8 @@ The blended price is over its 5,350 tokens (`metering.cost_per_million()`):
 | gpt-5.4-mini | $0.0035025 | $0.6547 |
 | gemini-3.5-flash-lite | $0.001646 | $0.3077 |
 
-Self-hosted rows come from the 01 primer ([§8.1](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md#81-from-gpu-hour-to-m-tokens)).
+Self-hosted rows come from the 01 primer
+([§8.1](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md#81-from-gpu-hour-to-m-tokens)).
 `metering.self_hosted_per_million()` is `roofline.cost.cost_per_million_tokens()`:
 
 $$
@@ -681,9 +689,9 @@ per request (`POST /v1/chat/completions`). It also emits one **CLIENT** span per
 (`chat {model}`), because different providers are different operations. Retries against one target stay inside the
 span of that target (`gwcore.otel.Tracer`).
 
-Attribute names obey the OpenTelemetry GenAI conventions. These conventions are still at *development* stability,
-and they change. The v1.41.0 release (April 2026) is the last semantic-conventions release that defines them. They
-now live in `semantic-conventions-genai`. That repository renamed `gen_ai.usage.cache_creation.input_tokens` to `…cache_write…`
+Attribute names obey the OpenTelemetry GenAI conventions. These conventions are still at *development* stability, and
+they change. The v1.41.0 release (April 2026) is the last semantic-conventions release that defines them. They now live
+in `semantic-conventions-genai`. That repository renamed `gen_ai.usage.cache_creation.input_tokens` to `…cache_write…`
 and replaced the `gen_ai.client.token.usage` histogram with counters. Neither change has a release yet.
 
 `otel.py` pins the names that the two agree on. These are the same constants as in the 07.2 lab's
@@ -727,10 +735,10 @@ every tenant at risk.
 
 ### 6.2 Provider keys only in the gateway
 
-Provider keys live in a secret manager, and only the gateway's identity can read them. The gateway injects them on
-the way out. This is the **gateway path** of the identity primer (§5): the app never sees the keys. It is the same
-pattern as the egress proxy of the sandbox, which injects credentials that the sandboxed code never holds
-([sandboxed-execution PRIMER §4](../../07-application-agent-framework/sandboxed-execution/PRIMER.md#4-network-and-secrets)).
+Provider keys live in a secret manager, and only the gateway's identity can read them. The gateway injects them on the
+way out. This is the **gateway path** of the identity primer (§5): the app never sees the keys. It is the same pattern
+as the egress proxy of the sandbox, which injects credentials that the sandboxed code never holds ([sandboxed-execution
+PRIMER §4](../../07-application-agent-framework/sandboxed-execution/PRIMER.md#4-network-and-secrets)).
 
 Rotation is add, overlap, retire (`keys.ProviderKeys.rotate()`). The new key becomes current at once. The old key
 stays valid for an overlap window, so that in-flight requests and every gateway replica finish on it. Then the old
@@ -790,10 +798,10 @@ TLS configuration again from the stream. It must also replace its connections be
 A guardrail is a check at a **hook**, at a **placement** that decides its latency and exposure. The hooks are the
 input, a tool call, a tool result, the streamed output and the final output (`guardrails.HOOKS`).
 
-The core's checker is a regex screener (`guardrails.RegexScreener`). It is a labelled stand-in, and its patterns
-have bounds. An unbounded `[\w]+@` is quadratic on a long prompt, and a check on every request must not become the
-lowest-cost DoS. Real checkers are classifiers such as Llama Prompt Guard 2 (22M and 86M parameters, a 512-token
-window, input-side). Another such classifier is Llama Guard (1B, 8B and 12B), which examines prompts and responses. A managed
+The core's checker is a regex screener (`guardrails.RegexScreener`). It is a labelled stand-in, and its patterns have
+bounds. An unbounded `[\w]+@` is quadratic on a long prompt, and a check on every request must not become the
+lowest-cost DoS. Real checkers are classifiers such as Llama Prompt Guard 2 (22M and 86M parameters, a 512-token window,
+input-side). Another such classifier is Llama Guard (1B, 8B and 12B), which examines prompts and responses. A managed
 service such as Model Armor is also a real checker (identity primer §4.1, §6.1: `INSPECT_ONLY` first).
 
 | Placement | How | TTFT added | Exposure |
@@ -831,11 +839,11 @@ of 16 finishes in about the same 92.4 ms. The model card does not say this (its 
 classification). Measure the batch latency before you rely on it (`guardrails.cost_per_1k_checks()` divides by the
 concurrency that you give it).
 
-The chance of a false block increases with each check, because the pass rates of the checks multiply. The scaling primer has 13 model calls per conversation, and a check of the input and the
-output of each call gives 26 checks. At a 1 % false-positive rate, 23.0 % of conversations hit at least one false
-block, and at 0.1 %, 2.57 % (`guardrails.false_block_rate()` = $1 - (1 - \text{fpr})^{\text{checks}}$). That cost,
-not the dollars, is usually the binding cost. It is why screens start in inspect-only mode, and why you measure the
-rate per placement.
+The chance of a false block increases with each check, because the pass rates of the checks multiply. The scaling primer
+has 13 model calls per conversation, and a check of the input and the output of each call gives 26 checks. At a 1 %
+false-positive rate, 23.0 % of conversations hit at least one false block, and at 0.1 %, 2.57 %
+(`guardrails.false_block_rate()` = $1 - (1 - \text{fpr})^{\text{checks}}$). That cost, not the dollars, is usually the
+cost that limits the design. It is why screens start in inspect-only mode, and why you measure the rate per placement.
 
 ### 7.4 Risk reduced, risk bounded
 
@@ -853,13 +861,15 @@ check and gives its price.
 
 ### 8.1 Why the gateway is the client
 
-Agents reach MCP servers through the gateway. The 07.2 lab's
-[MCP egress gateway](../../07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/agentlab/mcp/gateway.py)
-([notebook 05](../../07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks/05_mcp_server_client_gateway.ipynb))
+Agents reach MCP servers through the gateway. The 07.2 lab's [MCP egress
+gateway](../../07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/agentlab/mcp/gateway.py)
+([notebook
+05](../../07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks/05_mcp_server_client_gateway.ipynb))
 enforces policy, screens arguments and results, and does not permit token passthrough. It also writes an audit record
-for every call. The MCP server is an OAuth 2.1 resource server ([identity primer §7.1](../identity-security/agentic-identity-gcp-lab/docs/primer.md#71-mcp-the-server-is-an-oauth-21-resource-server)).
-Thus the caller of the server runs the **client** side of the MCP authorization spec (revision 2026-07-28, verify).
-The 07.2 lab's
+for every call. The MCP server is an OAuth 2.1 resource server ([identity primer
+§7.1](../identity-security/agentic-identity-gcp-lab/docs/primer.md#71-mcp-the-server-is-an-oauth-21-resource-server)).
+Thus the caller of the server runs the **client** side of the MCP authorization spec (revision 2026-07-28, verify). The
+07.2 lab's
 [`docs/MCP_REVISIONS.md`](../../07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/docs/MCP_REVISIONS.md)
 lists what changed in each revision.
 
@@ -898,11 +908,11 @@ Each step is a function in `mcp_authz` and a rule that the spec sets (verify eac
   8414 path insertion (`/.well-known/oauth-authorization-server/tenant1`), then OIDC path insertion
   (`/.well-known/openid-configuration/tenant1`), then OIDC path appending (`/tenant1/.well-known/openid-configuration`).
   The `issuer` of the document must be equal to the issuer that the client used to build the URL.
-- **Registration**: the first choice is pre-registration. If the client is not pre-registered, it uses a **Client ID Metadata Document** when the AS
-  advertises `client_id_metadata_document_supported` (SHOULD). Otherwise, it uses Dynamic Client Registration (MAY,
-  deprecated). The `client_id` is an HTTPS URL with a path. Its document holds at least `client_id` (equal to the
-  URL), `client_name` and `redirect_uris`, and no shared secret (`validate_cimd()`). The AS fetches the document with
-  a ~5 KB read cap, refuses special-use addresses, and never caches an invalid document.
+- **Registration**: the first choice is pre-registration. If the client is not pre-registered, it uses a **Client ID
+  Metadata Document** when the AS advertises `client_id_metadata_document_supported` (SHOULD). Otherwise, it uses
+  Dynamic Client Registration (MAY, deprecated). The `client_id` is an HTTPS URL with a path. Its document holds at
+  least `client_id` (equal to the URL), `client_name` and `redirect_uris`, and no shared secret (`validate_cimd()`). The
+  AS fetches the document with a ~5 KB read cap, refuses special-use addresses, and never caches an invalid document.
 - **PKCE** is S256 only. The client **must refuse** when the metadata does not have
   `code_challenge_methods_supported`. RFC 7636 Appendix B pins the method: verifier
   `dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk` → challenge `E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM`
@@ -934,8 +944,8 @@ the `scopes_supported` of the metadata: least privilege first, and a step-up whe
 
 ### 8.5 DPoP nonces
 
-A sender-constrained token
-([identity primer §3.5](../identity-security/agentic-identity-gcp-lab/docs/primer.md#35-delegation-mechanics-standards-you-should-be-able-to-draw))
+A sender-constrained token ([identity primer
+§3.5](../identity-security/agentic-identity-gcp-lab/docs/primer.md#35-delegation-mechanics-standards-you-should-be-able-to-draw))
 has a binding to a key. The client sends `Authorization: DPoP <token>` and a `DPoP` proof that the client signs with
 that key. The proof is a JWT with `jti`, `htm`, `htu`, `iat`, and `ath` = base64url(SHA-256(token)).
 
@@ -948,9 +958,9 @@ DPoP comes from RFC 9449, **not** from the MCP spec. The MCP spec does not menti
 `agentsec.identity.tokens.DPoP.proof()` accepts a `nonce`, but its `verify()` never issues a nonce or examines one.
 `mcp_authz` closes that gap.
 
-The signer of `mcp_authz` is pluggable, and the signer in the package is an HMAC stand-in (`mcp_authz.HMACSigner`) with the label
-non-conformant. RFC 9449 makes an asymmetric algorithm necessary, and the standard library has none. The lab signs
-with `cryptography` when that package is available.
+The signer of `mcp_authz` is pluggable, and the signer in the package is an HMAC stand-in (`mcp_authz.HMACSigner`) with
+the label non-conformant. RFC 9449 makes an asymmetric algorithm necessary, and the standard library has none. The lab
+signs with `cryptography` when that package is available.
 
 ---
 
@@ -1027,8 +1037,8 @@ on counted deltas. The chargeback of the self-hosted pool is by GPU-seconds. Tra
 ledger is the bill. Provider keys live only in the gateway and rotate with an overlap.
 
 "We place guardrails by their cost. Inline input checks are low-cost, and held-back output windows cost a window of
-generation in TTFT. The chance of a false block increases with each check in a conversation. Policy outside the model bounds what the guardrails
-miss.
+generation in TTFT. The chance of a false block increases with each check in a conversation. Policy outside the model
+bounds what the guardrails miss.
 
 "For MCP, the gateway is the OAuth client. It does discovery, and it uses a metadata-document client id and PKCE with
 resource. It uses refresh tokens that rotate, a step-up with the union of scopes, and DPoP nonces. The tokens are per
@@ -1038,11 +1048,12 @@ principal and resource, never in the agent."
 
 1. *A provider outage lasted five minutes. Our incident lasted forty, and the bill doubled.*
 
-    Clients retried without a budget, so the retry wave lasted longer than the outage. Streams that failed in the
-    middle ran again from the start, and the bill counted two times the output that the model had already generated. Also,
-    the whole chain fell through to a higher-cost model at full traffic until the quota of that model ran out. Use
-    retry budgets with jitter and a breaker per target. Fall back only before the first byte. Set the size and the
-    price of the fallback capacity in advance, in an independent failure domain, and add a cost alert per tenant (§2).
+    Clients retried without a budget, so the retry wave lasted longer than the outage. Streams that failed in the middle
+    ran again from the start, and the bill counted two times the output that the model had already generated. Also, the
+    whole chain fell through to a higher-cost model at full traffic until the quota of that model ran out. Use retry
+    budgets with jitter and a breaker per target. Fall back only before the first byte. Calculate the size and the cost
+    of the fallback capacity in advance. Put that capacity in an independent failure domain. Add a cost alert per tenant
+    (§2).
 
 2. *The semantic cache answered one user with another user's order status.*
 
@@ -1113,14 +1124,16 @@ principal and resource, never in the agent."
 - OpenAI OpenAPI description, `openai/openai-openapi` `42eccf1` (2026-09-26): `CreateChatCompletionRequest`,
   `ChatCompletionStreamOptions`, `CreateChatCompletionStreamResponse`, `CompletionUsage`, `ErrorResponse`.
 - vLLM v0.30.0 (`ced6857`): `vllm/entrypoints/openai/chat_completion/protocol.py` (`cache_salt`, `priority`,
-  `validate_stream_options`), `vllm/entrypoints/generate/base/protocol.py` (`StreamOptions`), `chat_completion/serving.py`
-  (errors inside the stream, `[DONE]`), `vllm/entrypoints/launchers/cli_args.py`, `vllm/v1/core/kv_cache_utils.py`.
+  `validate_stream_options`), `vllm/entrypoints/generate/base/protocol.py` (`StreamOptions`),
+  `chat_completion/serving.py` (errors inside the stream, `[DONE]`), `vllm/entrypoints/launchers/cli_args.py`,
+  `vllm/v1/core/kv_cache_utils.py`.
 - OpenTelemetry semantic conventions v1.41.0 (`model/gen-ai/`) and `semantic-conventions-genai` `e57c543`
   (`model/gen-ai/*.yaml`, `changelog.d/`). OTLP/JSON encoding (`opentelemetry-proto` `docs/specification.md`).
 - Model Context Protocol specification, revision 2026-07-28, `basic/authorization/` (index, authorization server
   discovery, client registration, security considerations). The MCP Python SDK `src/mcp/client/auth/`.
 - OAuth 2.1 (draft-ietf-oauth-v2-1, editor's copy) §4.1.1, §4.3.1, §7.5, and
-  draft-ietf-oauth-client-id-metadata-document. RFC 7636 (PKCE, Appendix B), RFC 8414, RFC 8707, RFC 9207 and RFC 9728. RFC 9449 (DPoP, `danielfett/draft-dpop`).
+  draft-ietf-oauth-client-id-metadata-document. RFC 7636 (PKCE, Appendix B), RFC 8414, RFC 8707, RFC 9207 and RFC 9728.
+  RFC 9449 (DPoP, `danielfett/draft-dpop`).
 - SPIFFE `standards/SPIFFE_Workload_API.md`, `SPIFFE_Workload_Endpoint.md`. SPIRE `doc/spire_server.md`,
   `doc/spire_agent.md`, `pkg/common/rotationutil/rotationutil.go`.
 - LiteLLM 1.104.0 (`litellm/router.py`, `litellm/proxy/`, `litellm/caching/`, `model_prices_and_context_window.json`

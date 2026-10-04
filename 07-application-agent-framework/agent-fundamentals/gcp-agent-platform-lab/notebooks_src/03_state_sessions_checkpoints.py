@@ -13,7 +13,7 @@
 # In this notebook, you will:
 # 1. Read the event log of a session and the view for the model that the runtime *derives* from it. See what the model never sees.
 # 2. Use compare-and-set stores and a file-backed store that survives a restart. Use the pause and resume of the Runner for irreversible tools.
-# 3. Build a workflow with checkpoints that crashes in the middle and resumes exactly-once. Also build bounded retries, a saga and per-session locks.
+# 3. Build a workflow that writes checkpoints, crashes in the middle and resumes exactly-once. Also build bounded retries, a saga and per-session locks.
 
 # %%
 import asyncio
@@ -655,8 +655,8 @@ print("✅ questions:", *qs, sep="\n   ")
 # Approval is a state transition that can arrive from another process after a restart.
 # A long-running job is a task record. The worker saves its `completed_steps` after every step.*
 #
-# *"Every external write has an idempotency key made from the task and the step. The reason: one
-# day, the worker will stop between the payment call and the checkpoint. A saga of compensations covers the steps that
+# *"Every external write has an idempotency key made from the task and the step. The key is necessary
+# because one day the worker will stop between the payment call and the checkpoint. A saga of compensations covers the steps that
 # nobody can undo."*
 #
 # Then ask the important question: *what happens if the worker dies right here?* Then point at the line.

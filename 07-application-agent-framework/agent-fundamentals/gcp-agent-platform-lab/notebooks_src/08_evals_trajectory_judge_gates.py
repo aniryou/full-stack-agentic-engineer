@@ -37,7 +37,7 @@ from agentlab.evals import (Gate, GoldenCase, GoldenSet, KeywordJudge, RubricJud
 # The agent has four tools with explicit side-effect classes (Notebook 01): two reads, one reversible write,
 # and one **irreversible** write that must have a confirmation.
 # The planner is a `KeywordPlanner` inside a `FlakyPlanner`. The `FlakyPlanner` sometimes "forgets" one tool call.
-# This is a stand-in for the noise of the sampler, so that repeated runs disagree as real runs do.
+# The forgotten tool call is a stand-in for sampling noise, so that repeated runs disagree as real runs do.
 
 # %%
 @tool
@@ -195,7 +195,7 @@ for actual in (["get_balance", "list_transactions"],
 # - The agent called no forbidden tool.
 #
 # `score_case` *reports* exact match and efficiency, but a pass does not depend on them.
-# A redundant lookup is a cost problem, not a correctness problem.
+# The reason is that a redundant lookup is a cost problem, not a correctness problem.
 
 # %%
 result = score_case(golden.get("acc-04"), demo.session)
@@ -389,8 +389,8 @@ print("lazy judge:", calibrate(lazy, human_scores))
 #
 # Write the unweighted kappa for two raters `a`, `b` over the same items:
 # $\kappa = (p_o - p_e) / (1 - p_e)$. Here $p_o$ is the observed agreement.
-# $p_e = \sum_k \frac{n_{a=k}}{n}\cdot\frac{n_{b=k}}{n}$ is the agreement by chance, calculated from the
-# marginals. When $p_e = 1$ (both raters are constant and identical), return `1.0`.
+# $p_e = \sum_k \frac{n_{a=k}}{n}\cdot\frac{n_{b=k}}{n}$ is the agreement that you expect by chance, calculated
+# from the marginals. When $p_e = 1$ (both raters are constant and identical), return `1.0`.
 
 # %% exercise
 from collections import Counter
@@ -418,7 +418,7 @@ print(f"✅ kappa: keyword judge {my_kappa(judge_scores, human_scores):.3f}, laz
 # %% [markdown]
 # **Position bias.** In a pairwise comparison, many judges prefer the answer that they read first.
 # `pairwise` asks two times, with the order swapped.
-# If a verdict changes with the *slot* and not with the *answer*, `pairwise` flags the verdict. It does not trust it.
+# If a verdict changes with the *slot* and not with the *answer*, `pairwise` flags the verdict and does not trust that verdict.
 
 # %%
 good, bad = "Your balance is SGD 1234.5.", "I cannot help with that."
@@ -432,7 +432,7 @@ print("keyword judge:    ", await pairwise(KeywordJudge(["1234.5", "SGD"]), QUES
 # A gate is a list of thresholds that an eval run must clear. Two kinds are important here:
 #
 # * An ordinary threshold on a rate. The gate judges it on the observed value and reports it with its interval.
-# * An **absolute** threshold. It must have 100% across every run. This is the pattern for irreversible actions.
+# * An **absolute** threshold. It accepts only 100% across every run. This is the pattern for irreversible actions.
 #   "Card blocks pass 96% of the time" is not a pass rate. It is an incident rate.
 #
 # ### Exercise 6.1 — encode "card blocks must be perfect, aggregate ≥ 0.9"
@@ -465,10 +465,10 @@ print("✅ gate encodes the policy and the baseline passes it")
 # %% [markdown]
 # ## 7. A deliberate regression, caught above the noise
 #
-# Someone "simplifies" the card rule and removes `freeze`. One way to say the request now fails.
+# Someone "simplifies" the card rule and removes `freeze`. One form of the request now fails.
 # The gate fails on the absolute threshold. `regression_vs` compares against the baseline **per scope**.
 # A drop counts only when it is larger than the run-to-run spread.
-# Thus ordinary intermittent failures do not block releases, but a broken intent does.
+# Thus ordinary flaky cases do not block releases, but a broken intent does.
 #
 # Look at the aggregate. The three new failures are the same size as the variation between runs.
 # Thus the aggregate cannot tell a regression from noise. The `cards` stratum, with zero noise, can.
@@ -560,7 +560,7 @@ print("promoted:", [(c.id, c.expected_tools) for c in reviewed])
 #
 # Add it to `golden`.
 # Then repair the agent: `FIXED_RULES` must extend `BANK_RULES`, so that the balance rule also matches the word `funds`.
-# (Hint: copy the list and replace the keyword of the first rule.)
+# Hint: copy the list and replace the keyword of the first rule.
 
 # %% exercise
 ### BEGIN SOLUTION

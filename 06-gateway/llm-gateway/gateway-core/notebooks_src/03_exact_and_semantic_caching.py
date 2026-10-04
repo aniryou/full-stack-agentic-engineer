@@ -168,7 +168,7 @@ print(f"✅ tau={tau} guard={guard}: {table[(guard, tau)]['hit_rate']:.1%} of pa
 
 # %% [markdown]
 # ## Exercise 3.4 — price a false hit
-# At $\tau = 0.90$ with the guard, for each 44 cacheable lookups, the cache serves `right` correct answers and `wrong`
+# At $\tau = 0.90$ with the guard, in 44 cacheable lookups, the cache serves `right` correct answers and `wrong`
 # incorrect answers (from `cache.sweep_thresholds`). A correct hit saves the §5.3 call on gemini-3.5-flash
 # (`metering.price_call`, 5,000 in of which 2,700 cached, 350 out). Set `break_even` to the cost of one incorrect
 # answer, in dollars, at which the cache saves exactly nothing.
@@ -231,7 +231,8 @@ print("✅ faq: one namespace per tenant; account: one per (tenant, user); no tw
 # ## Exercise 3.6 — what the provider's prompt cache saves instead
 # The prompt cache of the provider is never incorrect. It bills cached input at ~10 % of the input price. Take
 # the §5.3 call on **gpt-5.4-mini** (5,000 input tokens, 350 output). Use `metering.price_call` to set `uncached`,
-# `cached` (2,700 of the input cached) and `saved_share` (the fraction of the uncached cost that the cache saves).
+# `cached` (2,700 of the input cached) and `saved_share`. `saved_share` is the fraction of the uncached cost that the
+# cache saves.
 
 # %% exercise
 ### BEGIN SOLUTION

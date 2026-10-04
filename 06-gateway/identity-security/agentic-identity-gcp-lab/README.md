@@ -34,7 +34,7 @@ in `docs/deploy.md`). You pay for the T3 path per use.
 | **MCP server as an OAuth 2.1 resource server**: RFC 9728 metadata, audience validation, a map from scope to tool, annotations, no token passthrough, optional DPoP. | `mcp/server.py`, `mcp/client.py` |
 | **A2A**: Agent Card security schemes, detached-JWS signatures, per-hop re-authorization. | `a2a/*.py` |
 | **Audit by construction**: one structured event for each decision, with the user, the agent, the authority, the reasons and the approver. | `audit/log.py` |
-| The connections to Google Cloud: Agent Engine with `identity_type = AGENT_IDENTITY`, an Auth Manager provider, and a Cloud Run MCP server registered in Agent Registry. It also has Agent Gateway, a Model Armor template and floor settings, a deny policy, an audit sink, and opt-in VPC-SC and org policy. | `infra/terraform/*.tf`, `infra/scripts/*`, `docs/deploy.md` |
+| The Google Cloud configuration has Agent Engine with `identity_type = AGENT_IDENTITY`, an Auth Manager provider, and a Cloud Run MCP server registered in Agent Registry. The configuration also has Agent Gateway, a Model Armor template and floor settings, a deny policy, an audit sink, and opt-in VPC-SC and org policy. | `infra/terraform/*.tf`, `infra/scripts/*`, `docs/deploy.md` |
 
 ## Quick start (offline)
 

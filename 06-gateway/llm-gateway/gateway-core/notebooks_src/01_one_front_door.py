@@ -77,8 +77,8 @@ print("text:", repr(acc.text()), "| finish:", acc.finish_reason, "| usage:", acc
 # ## Worked example 2 — other dialects stream differently
 # Anthropic sends named events. Gemini sends whole function calls and puts a flag on the thought parts.
 # `normalize_stream` changes both into canonical chunks. The *usage* survives: the final `message_delta` of Anthropic
-# carries the cumulative count, and `output_tokens_details` holds the thinking tokens (anthropic-sdk-python 1.8.0
-# `MessageDeltaUsage`). But this is true only if the stream ends.
+# carries the cumulative count, and that count includes the thinking tokens in `output_tokens_details`
+# (anthropic-sdk-python 1.8.0 `MessageDeltaUsage`). But this is true only if the stream ends.
 #
 # If you cut the stream before `message_delta`, you hold only the usage of `message_start`. Its `output_tokens` is 1,
 # and that is not a bill. Then the normaliser emits no usage chunk at all. The gateway estimates from the deltas that it
@@ -271,8 +271,8 @@ print(f"✅ cut after 7 chunks: bill {cut_estimate} completion tokens, marked es
 
 # %% [markdown]
 # ## Exercise 1.5 — what the hop costs in availability
-# The gateway is in series with every provider. Your chain answers when one of its two targets answers: 99.5 % and
-# 99.0 %, independent. The gateway itself has 99.95 %. Set `with_gateway` to the availability that a client sees. Use
+# The gateway is in series with every provider. Your chain answers when at least one of its two targets answers:
+# 99.5 % and 99.0 %, independent. The gateway itself has 99.95 %. Set `with_gateway` to the availability that a client sees. Use
 # `routing.chain_availability`, and think of the gateway as the common-mode term. Set `nines_lost` to how much of the
 # availability of the chain the gateway costs, in percentage points.
 
@@ -334,12 +334,12 @@ print("✅ from the file alone:", attempts, "| names pinned to", otel.PINNED)
 # 1. *Why does the gateway inject `stream_options.include_usage` itself?* Because the usage chunk is the bill, and it
 #    arrives only if the request asks for it. It is possible that the client does not ask. Inject it only on streamed
 #    requests (if not, vLLM rejects it). Remove the chunk from the clients that did not ask for it.
-# 2. *A stream stops after 200 tokens and no usage arrives. What does the ledger say?* The ledger has an estimated row,
+# 2. *A stream is cut after 200 tokens and no usage arrives. What does the ledger say?* The ledger has an estimated row,
 #    with status `cut`, for the tokens that the gateway counted from the relayed deltas. Later, the gateway reconciles
 #    the row against the export of the provider. The row is never zero and never the output cap.
-# 3. *What does not normalise across providers?* Three things. First, the stream shapes (named events against chunks,
-#    whole function calls against argument fragments, no `[DONE]` from Anthropic). Second, the location of the
-#    reasoning text. Third, the time when the counts arrive.
+# 3. *What does not normalise across providers?* Three things do not normalise. The first is the stream shapes (named
+#    events against chunks, whole function calls against argument fragments, no `[DONE]` from Anthropic). The second is
+#    the location of the reasoning text. The third is the time when the counts arrive.
 #
 #    The thinking tokens of Anthropic come only in the final `message_delta`. Thus, if the stream is cut before
 #    that `message_delta`, the gateway has no usage that it can trust. The adapter reports the count that is not there.

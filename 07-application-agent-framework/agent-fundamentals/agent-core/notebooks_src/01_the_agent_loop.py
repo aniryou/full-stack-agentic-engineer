@@ -24,10 +24,10 @@ print("turn 2 →", "text:", r2.text)
 
 # %% [markdown]
 # ## A tool to call
-# `@tool` reads the function signature and makes from it the schema that the model sees.
-# It validates the arguments before the tool runs. It also puts the result in a wrapper,
-# `{"ok": ..., "data"/"error": ...}`. (Notebook 02 is about tools. Here, you need only
-# one tool.)
+# `@tool` reads the function signature. It uses the signature to make the schema that
+# the model sees. It validates the arguments before the tool runs. It also puts the
+# result in a wrapper, `{"ok": ..., "data"/"error": ...}`. Notebook 02 is about tools.
+# Here, you need only one tool.
 
 # %%
 @tool
@@ -130,7 +130,7 @@ print("✅ run_loop works — you just built an agent")
 # ## The packaged version
 # `agentcore.Agent` is the same loop that you wrote, with two more conveniences: a
 # `Result` object and an `on_confirm` hook (Notebook 04). Read `agentcore/agent.py`. Now
-# you can read it as the loop that you wrote.
+# it is possible that the code looks familiar to you.
 
 # %%
 from agentcore import Agent

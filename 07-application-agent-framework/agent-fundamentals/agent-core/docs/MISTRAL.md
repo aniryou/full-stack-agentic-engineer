@@ -48,21 +48,23 @@ In 1.x, it is `from mistralai import Mistral`. The adapter tries both. The call 
 sends nothing.
 
 `tool_choice` accepts `"auto"`, `"any"` (the model must call a tool), or `"none"`. The
-surface of the SDK changes. If a call fails, examine https://docs.mistral.ai.
+surface of the SDK changes. If a call fails, read https://docs.mistral.ai.
 
 ## Choosing a model (list prices 2026-09-19, verify)
 
 The prices are USD per million tokens, input / output. The repo pins them in
 `06-gateway/scaling-admission-cost/agentic-scaling-lab/scalelab/mistral.py` (dated
 2026-09-19). The rows with the mark † come from the pricing page of the provider on the same
-date. No test pins them. Aliases such as `mistral-large-latest` move to newer releases.
-Before you trust an alias or a price, make sure what the alias points at, and make sure of
-the price.
+date. No test pins them.
+
+Aliases such as `mistral-large-latest` move to newer releases.
+Before you use an alias, find what it points at. Before you use a price, make sure that
+it is correct.
 
 | Model string | Use for | Input / output ($ per 1M) | Weights |
 |--------------|---------|---------------------------|---------|
 | `mistral-large-latest` (Large 3, 675B MoE, 41B active) | The most difficult tasks, **agents / tool use**, long context | $0.50 / $1.50 | **open (Apache-2.0)** |
-| `mistral-medium-latest` (Medium 3.5, 128B dense) | Frontier-class agentic work and code | $1.50 / $7.50 | Published (modified MIT). Above $20 M of monthly revenue, you must have a commercial licence (verify). Thus notebook 05's snapshot counts it as not self-hostable. |
+| `mistral-medium-latest` (Medium 3.5, 128B dense) | Frontier-class agentic work and code tasks | $1.50 / $7.50 | Published (modified MIT). Above $20 M of monthly revenue, a commercial licence is necessary (verify). Thus notebook 05's snapshot counts it as not self-hostable. |
 | `mistral-small-latest` (Small 4, 119B MoE, 6.5B active) | Cost-effective general work and tool use | $0.15 / $0.60 | **open (Apache-2.0)** |
 | `ministral-14b-2512` / `ministral-8b-2512` / `ministral-3b-2512` | On-device use, low-cost high-volume work | $0.20 / $0.20, $0.15 / $0.15, $0.10 / $0.10 | **open (Apache-2.0)** |
 | `magistral-medium-latest` † | Step-by-step **reasoning** | $2 / $5 | API |
@@ -82,7 +84,7 @@ The general rule for an agent has three parts:
 **Deployment posture.** The place where the model can run is a design input, not an
 afterthought. The open-weight models can run anywhere. Thus the same agent can call the
 managed API (`la Plateforme`), run on weights deployed in your own VPC, or run fully on-prem.
-When the data is regulated (banking, health, public sector) or must stay in one
+When the data is regulated (banks, health, public sector) or must stay in one
 jurisdiction, that choice can decide the model.
 
 In a design review, name the deployment

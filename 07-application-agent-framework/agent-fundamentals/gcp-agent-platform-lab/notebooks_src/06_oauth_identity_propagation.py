@@ -13,7 +13,7 @@
 # **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md). For more depth in this repo, see the [identity primer](../../../../06-gateway/identity-security/agentic-identity-gcp-lab/docs/primer.md) §3.5 (delegation mechanics) and §7.1 (the MCP server as an OAuth 2.1 resource server).
 #
 # In this notebook, you will:
-# 1. Run the MCP authorization chain: 401, protected-resource metadata, AS metadata, PKCE and an audience-bound token.
+# 1. Run the MCP authorization chain in this sequence: 401, protected-resource metadata, AS metadata, PKCE, then an audience-bound token.
 # 2. See that token fail at a different server. Step up a scope. Exchange the token (RFC 8693) for a downstream credential.
 #    That credential still has the user's `sub`. Then see the system of record enforce per-user ACLs on it.
 # 3. Reproduce the confused deputy with a shared service account. Map verified claims onto agentlab's `Identity`.
@@ -113,7 +113,7 @@ print("WWW-Authenticate:", first_401.headers["www-authenticate"])
 # ## 3. The discovery chain, hop by hop
 #
 # The chain starts with the 401. Then it goes to Protected Resource Metadata (RFC 9728) and AS metadata (RFC 8414).
-# Then it does an authorization code and PKCE with a resource indicator (RFC 8707), and a check of `iss` (RFC 9207).
+# Then the client does the authorization code flow with PKCE and a resource indicator (RFC 8707), and a check of `iss` (RFC 9207).
 # Then the client redeems the code and gets an audience-bound token.
 
 # %%
@@ -198,7 +198,7 @@ print("cancel →", (await mcp.call_tool("cancel_order", {"order_id": "ORD-1"}))
 #
 # The ledger is the system of record. It accepts only tokens minted **for it** (`aud = LEDGER_URL`).
 # It enforces per-user ACLs itself. Thus the MCP server cannot pass the user's token through.
-# The audience is incorrect, and MCP forbids it in any case.
+# The audience is incorrect, and MCP forbids token passthrough in any case.
 # Instead, the server does an RFC 8693 **token exchange**:
 #
 # - The IdP verifies the inbound token.
@@ -259,7 +259,7 @@ print("issued_token_type:", exchanged["issued_token_type"] == ACCESS_TOKEN_TYPE,
 # Through the shared service account, the ledger sees `sub=orders-svc` with admin scope, and it answers.
 # This request just used the MCP server as a confused deputy.
 # A confused deputy is a privileged component that someone tricks.
-# It then uses its own broad credentials for a less-privileged requester.
+# The trick causes it to use its own broad credentials for a less-privileged requester.
 #
 # The defence is structural. The agent and the server never hold credentials broader than the user that they serve.
 # Every downstream call has the identity of the requester.
@@ -442,7 +442,7 @@ print("✅ step-up re-authorizes for", sorted(bob_rw.scopes))
 #
 # Close the confused-deputy hole. `StrictLedger.authorize_read(claims, account_id)` must raise `PermissionError`
 # unless `claims["sub"]` owns the account. There is no admin bypass, and there are no exceptions for service accounts.
-# (A component that must act for a user must come with the `sub` of that user, through an exchange.)
+# A component that must act for a user must come with the `sub` of that user, through an exchange.
 
 # %% exercise
 class StrictLedger(Ledger):
@@ -479,7 +479,7 @@ print("✅ ownership enforced in the system of record; the service account can n
 # ### Exercise 8.5 — the rule, in one sentence
 #
 # Write `the_rule`: one sentence that states where authorisation decisions occur, and what the agent must never hold.
-# Mention the system of record, the prompt and credentials in it.
+# Mention the system of record, the prompt and credentials in that sentence.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -507,7 +507,7 @@ print("✅", the_rule)
 #   with the same `sub` and an `act` claim.
 # - The system of record validates *its* audience and enforces the entitlements of the user.
 #
-# Two identities go with every call. The identity of the user tells what the agent can do.
+# Two identities go with every call. The identity of the user tells what the system permits for that user.
 # The identity of the agent tells which tools it can reach, and what the audit uses as its key.
 #
 # Then name the anti-pattern before someone else names it: one shared service account for all users,

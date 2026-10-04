@@ -12,7 +12,7 @@
 #
 # - The **provider keys**. Callers get *virtual* keys. The gateway stores only a hash of each key, and each key has a
 #   scope of aliases. An operator can revoke a key.
-# - The **decision** for each request: if it runs, and which model, provider or pool serves it. Then the 05 router
+# - The **decision for each request: if it runs, and which model, provider or pool serves it**. Then the 05 router
 #   selects the replica, and the engine makes the batches (05 PRIMER §1.3, §3.3, §7).
 # - The **meter**: one ledger row for each request, with a price from the `usage` of the provider.
 # - The **trace**: GenAI spans.
@@ -27,8 +27,8 @@
 # Two details make metering work on streams:
 #
 # 1. The gateway sets `stream_options.include_usage` on every streamed upstream request. Thus it always gets the count
-#    of the provider. It never sets it on a non-streamed request, because vLLM answers 400. The gateway also removes
-#    that usage chunk from the response to a client that did not ask for it.
+#    of the provider. It never sets the option on a non-streamed request, because vLLM answers 400. The gateway also
+#    removes that usage chunk from the response to a client that did not ask for it.
 # 2. The gateway parses every chunk. But the 05 router sends the bytes on with no change. The gateway owns the bill.
 #    Thus the gateway must read the bill.
 #
@@ -57,8 +57,8 @@ print("gateway:", stack.url, "| providers:", {n: f.url for n, f in stack.fakes.i
 # ## Worked example: a virtual key, and what the gateway stores
 #
 # An operator issues keys through the admin API. The admin API returns the secret **once**. The gateway stores the
-# SHA-256 of the secret (as LiteLLM's `hash_token` does) and a display prefix. The key sets the tenant. A caller can put
-# any value in a header, but the gateway bills and limits the tenant of the key.
+# SHA-256 of the secret (as LiteLLM's `hash_token` does) and a display prefix. Each key belongs to one tenant. A caller
+# can put any value in a header, but the gateway bills and limits the tenant of the key.
 
 # %%
 key_a = stack.issue_key("team-a")
@@ -134,9 +134,8 @@ print("served by", via.header("x-gwlab-target"))
 # wire. Return the canonical `{"prompt_tokens", "completion_tokens", "cached_tokens", "reasoning_tokens"}`. The prompt
 # count includes the cache reads and the cache writes. The completion count includes the thinking tokens.
 #
-# If the stream
-# ended before its `message_delta`, return `None`. Then the numbers of `message_start` are not a bill, and the gateway
-# must make an estimate.
+# If the stream ended before its `message_delta`, return `None`. In that case, the numbers of `message_start` are not a
+# bill, and the gateway must make an estimate instead.
 #
 # The check reads real streams from `bolt` over HTTP: a warm stream with cache reads, and a stream that the provider
 # cuts in the middle. It compares your result with the translator and the ledger of the gateway.
@@ -200,7 +199,7 @@ print(f"✅ warm: {usage_from_events(warm)} | cut after 3 chunks: None, so the g
 # %% [markdown]
 # ## Exercise 1.2 — rebuild a streamed answer, and notice an error after the first byte
 #
-# Write `accumulate(chunks)`. Its input is the `chat.completion.chunk` dicts that a client read from the gateway.
+# Write `accumulate(chunks)`. Its inputs are the `chat.completion.chunk` dicts that a client read from the gateway.
 # Return a dict with these keys:
 #
 # - `content`: the concatenated text.
@@ -269,15 +268,15 @@ print(f"✅ tool calls rebuilt by index; a stream acme cut after 4 chunks is sti
 # %% [markdown]
 # ## Exercise 1.3 — the body the gateway sends to an Anthropic-dialect provider
 #
-# The OpenAI half of the relay rule is the exercise 1.3 of the core: ask for `include_usage` on streams only. The other
-# dialect needs a real translation, and `bolt` refuses a body that has an error in it. Write `to_anthropic(body, model,
-# cap)` for a chat-completions `body` with no tools. Return a body with these parts:
+# The OpenAI half of the relay rule is exercise 1.3 of the core: ask for `include_usage` on streams only. The other
+# dialect needs a real translation, and `bolt` refuses a body that has an error in it.
+# Write `to_anthropic(body, model, cap)` for a chat-completions `body` with no tools. Return a body with these parts:
 #
 # - The `system` and `developer` messages, moved out into one `system` string. Join them with a newline. If there are
 #   none, do not include the key.
 # - The other messages, as `{"role", "content"}`.
 # - `model`.
-# - `max_tokens`. Anthropic makes it necessary. Use `cap` if the caller gives it, else
+# - `max_tokens`. The Anthropic API must have it. Use `cap` if the caller gives it, else
 #   `adapters.ANTHROPIC_DEFAULT_MAX_TOKENS`.
 # - `stream`, as a bool.
 # - `temperature` and `top_p`, copied when they are present.
@@ -329,8 +328,8 @@ print(f"✅ four bodies translated as the gateway does and accepted by bolt; wit
 #
 # Every request makes one SERVER span (`POST /v1/chat/completions`). It also makes one CLIENT span for each upstream
 # target that it tried (`chat {model}`). The spans use the GenAI names that `gwlab.gateway.otel` pins. These names are
-# the set that semantic-conventions v1.41.0 and the main branch of the GenAI repo have in common. Make sure that they are
-# still correct when you move the pin.
+# the set that semantic-conventions v1.41.0 and the main branch of the GenAI repo have in common. Make sure that they
+# are still correct when you move the pin.
 #
 # The next cell sends a request whose first target fails one time. The result is two client spans under one server
 # span.
@@ -439,9 +438,10 @@ stack.stop()
 # Its cost is a hop of a few milliseconds, a failure point that we must run with redundancy, and one box that holds
 # every key. That is why it is the service that we protect the most."
 #
-# **Drill 1.** *Why not let each app call the providers with its own keys?* Then every app holds provider keys. Each
-# app does retries, limits and fallbacks in a different way, and no one place bills anything. Then a leaked key is a
-# provider incident, not a revocation with one call. Also, no one can answer "who spent what".
+# **Drill 1.** *Why not let each app call the providers with its own keys?* If each app calls the providers
+# itself, every app holds provider keys. Each app does retries, limits and fallbacks in a different way, and no one
+# place bills anything. A leaked key is a provider incident, not a revocation with one call. Also, no one can answer
+# "who spent what".
 #
 # **Drill 2.** *A client streams without `include_usage`. How does the ledger know the output count?* The gateway sets
 # it on the upstream request anyway, and it removes the usage chunk from the response. If the stream stops before that

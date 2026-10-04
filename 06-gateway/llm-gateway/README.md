@@ -35,7 +35,7 @@ paths add approximately 2 GPU-hours.
 |---|---|---|---|
 | [PRIMER.md](PRIMER.md) | Explain the decisions of the gateway and their costs, §1–§9. The primer has a walkthrough for a design review and six drills. | ~2.5 h | reading |
 | [`gateway-core/`](gateway-core/) (package `gwcore`, standard library + numpy) | Build each decision in process on a virtual clock. You build adapters, chains and breakers, exact and semantic caches, and the sequence reserve, then stream, then reconcile. You also build the ledger and chargeback, virtual keys and `cache_salt`, guardrail placement, the MCP client flow and GenAI spans. | ~8 h, 5 notebooks | T0 |
-| [`gateway-lab/`](gateway-lab/) (package `gwlab`) | Run the same gateway over HTTP in front of fake providers or a real vLLM. See what a client sees for each fault. Put a semantic cache on declared classes, and compare it live with its sweep. See the prefix-cache timing attack that `cache_salt` closes. Reconcile a ledger with the `usage` and `/metrics` of vLLM. The lab also shows key rotation under load and MCP authorization over HTTP. | ~6 h, 5 notebooks | T0, T0 + Docker, T1 |
+| [`gateway-lab/`](gateway-lab/) (package `gwlab`) | Run the same gateway over HTTP in front of fake providers or a real vLLM. See what a client sees for each fault. Put a semantic cache on declared classes. Compare it live with its sweep. See the prefix-cache timing attack that `cache_salt` closes. Reconcile a ledger with the `usage` and `/metrics` of vLLM. See key rotation under load and MCP authorization over HTTP. | ~6 h, 5 notebooks | T0, T0 + Docker, T1 |
 
 The modules, one for each pair of notebooks:
 
@@ -93,5 +93,5 @@ output tails that break per-request limits. The learning path is in [`CURRICULUM
   has no asymmetric keys. The core labels it. When you install `cryptography`, the lab signs with real keys.
 - Prices, context windows, product features and spec revisions have the date 2026-09-26. The Verify list of the primer
   marks them `(verify)`. [`COMPUTE.md`](../../COMPUTE.md) gives GPU prices and tells how easy it is to get each GPU. The T1 paths
-  cost nothing on Colab or Kaggle, or approximately $0.3–0.7 an hour on a rented 24 GB GPU (verify). The T3 path uses the GCP
-  deploys of the 04 and 05 labs again, and it bills what they bill.
+  cost nothing on Colab or Kaggle, or approximately $0.3–0.7 an hour on a rented 24 GB GPU (verify). The T3 path uses the same GCP
+  deploys as the 04 and 05 labs, and it bills what they bill.

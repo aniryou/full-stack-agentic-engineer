@@ -901,7 +901,7 @@ notebook 02 (SIMULATED), a saturated engine produces 1,700–2,300 tok/s. But it
 load, with the step-time model of §3. It reproduces the *shape* of every trade-off in the knob table of this
 section in seconds on a laptop. Thus the measurements of the lab become predictions that you examine.
 
-Its output has the label SIMULATED. Its assumptions (efficiencies, overhead, spec-sheet numbers) are parameters.
+The output of `perf.simulate()` has the label SIMULATED. Its assumptions (efficiencies, overhead, spec-sheet numbers) are parameters.
 Calibrate them against one real measurement before you trust absolute values.
 
 ## 12. Engines and where to run them

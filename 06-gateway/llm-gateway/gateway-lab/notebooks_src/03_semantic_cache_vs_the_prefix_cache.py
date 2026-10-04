@@ -12,7 +12,7 @@
 #
 # | cache | where | a hit saves | the risk |
 # |---|---|---|---|
-# | exact response | gateway | the whole call: tokens, dollars, seconds | stale answers. Leaks across tenants without a namespace. |
+# | exact response | gateway | the whole call: tokens, dollars, seconds | stale answers, and leaks across tenants without a namespace |
 # | semantic response | gateway | the whole call, for a *paraphrase* | **false hits**: a near miss gets the answer of another question |
 # | provider prompt cache | hosted API | ~90 % of the price of the cached input (scaling primer §3.4) | no risk to correctness |
 # | engine prefix cache | vLLM | prefill compute, thus TTFT (serving-engine PRIMER §5) | a timing side channel between tenants: `cache_salt` |
@@ -27,8 +27,8 @@
 #
 # A semantic cache embeds the question and finds its nearest cached neighbour. If the similarity is above a threshold,
 # the cache serves that neighbour. An exact **guard** on numbers, dates and codes stops the classic false hit ("order
-# 1234" answered with order 1243's status). The setting of the threshold is not a guess. Do a sweep of the threshold on labelled
-# traffic. Then make sure that the live gateway does what the sweep predicted.
+# 1234" answered with order 1243's status). The setting of the threshold is not a guess. Do a sweep of the threshold on
+# labelled traffic. Then make sure that the live gateway does what the sweep predicted.
 #
 # The embedder is the lexical hashing embedder of 07.4's `ragkit` (embeddings primer §15, "Embeddings elsewhere in agent
 # systems"). A real embedder (T1) moves both curves.
@@ -277,8 +277,8 @@ print(f"✅ live: {got['served']} served from the cache, {got['false']} of them 
 # Its TTFT decreases by the prefill that it skipped (0.5 ms per token here, simulated).
 #
 # The gateway sends the `cache_salt` of each tenant. The salt is an HMAC of the *verified* tenant under the secret of
-# the gateway. The salt has 43 characters. The gateway never takes it from the request. Thus another tenant with the same
-# prompt starts cold.
+# the gateway. The salt has 43 characters. The gateway never takes it from the request. Thus another tenant with the
+# same prompt starts cold.
 
 # %%
 system = "You are the support agent for a large company. Follow the policy exactly and cite the article you used. " * 6
@@ -376,8 +376,8 @@ print("✅ full blocks only, and never the last token: an identical 101-token pr
 #
 # Use the call shape of the scaling primer (5,000 input tokens, 350 output) at `gemini-3.5-flash` prices (verify,
 # 2026-09-26). With a prefix/prompt-cache hit on 2,700 of the input tokens, the provider bills them at 10 %. A semantic
-# hit skips the call. The engine prefix cache is the self-hosted version of the first hit. It saves prefill time, not a
-# line on the bill of a provider.
+# hit skips the call. The engine prefix cache is the self-hosted version of the prompt-cache hit. It saves prefill time,
+# not a line on the bill of a provider.
 
 # %%
 p = PRICES["gemini-3.5-flash"]
@@ -443,5 +443,5 @@ stack.stop()
 # the prompt invalidates the old entries by construction.
 #
 # **Drill 3.** *Why does a salt go on the first block only?* Block hashes form a chain. Thus a salt on the first block
-# changes every block after it. Then the whole prefix is private to the salt. In a tenant, the prefix cache works as
-# before.
+# changes every block after it. Thus the whole prefix is private to the salt. But for the requests of one tenant, the
+# prefix cache works as before.

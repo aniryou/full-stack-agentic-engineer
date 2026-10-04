@@ -347,8 +347,8 @@ SANDBOX.reset()
 # %% [markdown]
 # ## 3. The tool access layer: an MCP façade behind a gateway
 #
-# This design serves the accounts tools over MCP, with one server for each bounded context. (The legacy core and the cards
-# system share a façade.) Every request from an agent goes out through a **gateway**. The gateway does these tasks:
+# This design serves the accounts tools over MCP, with one server for each bounded context. The legacy core and the cards
+# system share a façade. Every request from an agent goes out through a **gateway**. The gateway does these tasks:
 #
 # * It knows which agent calls.
 # * It applies a deny-by-default policy for each tool, with conditions on the arguments.
@@ -425,7 +425,7 @@ print("✅ deny by default, reads for accounts (page <= 50), the block for cards
 # Start the gateway with that policy. Then use the server through an `McpToolset`, in the same way as an agent. The client
 # carries **two identities**:
 #
-# * `agent_identity`. The policy and the audit use it as their key. It is the SPIFFE id that an mTLS gateway gets.
+# * `agent_identity`. The policy and the audit use it as their key. In production, an mTLS gateway gets this SPIFFE id.
 # * The customer's bearer token. The server authorises on it.
 #
 # The gateway forwards the token because its audience is this server. If a token has a different audience, the gateway removes
@@ -509,7 +509,8 @@ print("\nbob, cards agent, block_card →", (await remote_tool("block_card", "ca
 #
 # **Token exchange, in one sentence.** In production, the MCP server never reads the core with alice's MCP token. It exchanges
 # the token (RFC 8693) for a core-banking credential with the same `sub` and `act = accounts-mcp`. The core enforces ownership
-# on *that* credential. The stub in the next cell stands in for the core and receives the verified subject.
+# on *that* credential. In the next cell, the read-model stub of §2 stands in
+# for the core and receives the verified subject.
 
 # %%
 for who, account in ((alice, "acc-1"), (alice, "acc-2"), (bob, "acc-2")):
@@ -524,7 +525,8 @@ for who, account in ((alice, "acc-1"), (alice, "acc-2"), (bob, "acc-2")):
 #
 # 1. **Hand-off, not delegation, for the specialist that pauses.** `AgentTool` delegation runs a child in its own session and
 #    returns only its final text. If the child raises a confirmation pause, the pause comes back to the parent as a tool
-#    *failure*. (The section *why the router hands off* shows this.) Here the router gives the *same* session to the specialist.
+#    *failure*. The section *Why the router hands off instead of delegating* shows this. Here the router gives the *same*
+#    session to the specialist.
 #    Thus `Paused` propagates, `session.pending` names the specialist, and `Runner.approve` resumes it by name.
 # 2. **Every fact from a tool.** The fake model renders its answer from tool results only. The `SpecialistPlanner` is a
 #    `KeywordPlanner` with a renderer for each tool. It stands in for a model with the same instructions.
@@ -600,7 +602,7 @@ print("helpers ready:", parse_tool_content('{"ok":true,"data":"<<<DATA source=\\
 # * If the read is at most `threshold_s` old, return `""`.
 # * If not, return `" as of HH:MM UTC (N min ago)"`, with `N` the whole minutes (for example `" as of 09:18 UTC (12 min ago)"`).
 #
-# Then connect it to the answer. `render_balance(data)` must make the balance sentence of the accounts specialist:
+# Then use it in `render_balance(data)`. That function must make the balance sentence of the accounts specialist:
 # `"Your balance on <account_id> is <currency> <balance with thousands separator and 2 decimals><note>."`. Use `CLOCK()` as
 # *now*. Thus the sentence carries "as of …" only when the read model is older than the threshold.
 
@@ -926,8 +928,8 @@ assert handoff_case["tried"] == ["list_transactions"] and handoff_case["recommen
 
 # %% [markdown]
 # The next cell sends the same request from **bob's** session. The loop pauses, bob approves, and the server still refuses,
-# because the token has no `cards:write`. The answer explains this from the structured error. (This is a known defect, and §8
-# lists it. The correct order is to examine the scope *before* the system asks the customer to confirm.)
+# because the token has no `cards:write`. The answer explains this from the structured error. The order of these steps is a
+# known defect, and §8 lists it. The correct order is to examine the scope *before* the system asks the customer to confirm.
 
 # %%
 bob_runner = Runner(make_bank_agent(bob), store=STORE, budget_factory=budget)
@@ -1048,7 +1050,7 @@ print("✅ cards stratum:", cards_only_run.render().splitlines()[1].strip())
 # * aggregate pass rate ≥ 0.9,
 # * no forbidden tool, ever.
 #
-# The fake model is deterministic. Thus the two runs agree. With a sampled model, the runs do not agree, and `flaky_cases()` is
+# The fake model is deterministic. Thus the two runs agree. With a sampled model, the runs can give different results, and `flaky_cases()` is
 # the triage list. Read the Wilson intervals: twenty-four case-runs at 100% *prove* only about 86%. The set grows from
 # production before it proves more.
 
@@ -1180,8 +1182,8 @@ print("✅ cost from spans matches TraceSummary on every conversation")
 
 # %% [markdown]
 # **Alerts on the agent's economics.** The next cell calculates these metrics from the tracer and the session logs: cost and steps
-# per conversation, p95 model latency and the wrong-tool rate. The thresholds have their anchor on the healthy baseline. An agent
-# in a loop is a cost incident before it is a quality incident. It shows here before it shows on the invoice.
+# per conversation, p95 model latency and the wrong-tool rate. Each threshold starts from the healthy baseline. An agent
+# in a loop is a cost incident before it is a quality incident. The incident shows here before it shows on the invoice.
 
 # %%
 metrics = agent_metrics(tracer, [STORE.get(sid) for sid in ("conv-a", "conv-b", "conv-c")], latency=reported_latency_ms)
@@ -1222,7 +1224,8 @@ print(f"\nlab conversations averaged {metrics['tokens_per_task']:,.0f} tokens; t
 # ## 8. Rollout, and what breaks first
 #
 # **Rollout.** *Shadow* comes first. The agent answers every conversation in the contact centre's queue, but nobody sees the
-# answers. The golden set grows from the transcripts that agents corrected.
+# answers. The golden set grows from the transcripts that the people in the contact centre
+# corrected.
 #
 # Then comes a *canary by intent*. Read-only intents
 # (balance, transactions, policy) go first, for 5% of app users. The §6 gate runs on every deploy, and autoraters score a
@@ -1237,10 +1240,10 @@ print(f"\nlab conversations averaged {metrics['tokens_per_task']:,.0f} tokens; t
 # | failure | symptom | mitigation built here |
 # |---|---|---|
 # | mainframe / read-model latency and outages | Balance questions time out. Customers repeat themselves. | Reads go to a read model, never to the mainframe. `GracefulTool` and the circuit breaker turn an outage into a structured `unavailable` that the model explains (§5). The p95 tool latency is on the alert list (§7). |
-# | injection through transaction descriptions | A merchant descriptor tells the model to block a card. | The harness wraps results as provenance-labelled data and flags them. The irreversible tool pauses. The per-agent allow-list denies the call even after approval. The gateway denies it too (§6). |
+# | injection through transaction descriptions | A merchant descriptor tells the model to block a card. | The harness wraps results as provenance-labelled data and marks them with a flag. The irreversible tool pauses. The per-agent allow-list denies the call even after approval. The gateway denies it too (§6). |
 # | staleness | A customer sees a balance that does not show this morning's salary. | `as_of` travels with every read. Past the threshold, the answer says "as of …" (§5). The refresh cadence is a product decision, not a prompt. |
 # | a talked-into approval | The customer confirms an action that someone manipulated them into. | The approval executes only what scope *and* allow-list permit (§4, §6). The cards stratum has an absolute gate. |
-# | cost drift | A model in a loop reads statements again. | budgets per turn, alerts on cost and steps per conversation (§7) |
+# | cost drift | A model in a loop reads statements again. | The runtime has budgets per turn. The alerts monitor the cost and the steps per conversation (§7). |
 #
 # **Known limitations of this build.**
 #
@@ -1254,7 +1257,7 @@ print(f"\nlab conversations averaged {metrics['tokens_per_task']:,.0f} tokens; t
 # unauthenticated channels, other languages, cross-session memory, proactive outreach.
 #
 # **The L7 layer** is what makes this more than one bot. The next three agents (collections, onboarding, the branch assistant)
-# and non-agent apps can use the accounts MCP façade again. Every `create_case` is product feedback. It is a labelled example
+# and non-agent apps can also use the accounts MCP façade. Every `create_case` is product feedback. It is a labelled example
 # of a task that v1 was not able to do. The cases get a rank by volume, and they go into the next intent.
 #
 # Also, enablement: the bank's own team owns the golden set, the policy text and the rule tables. Thus the next intent ships
@@ -1269,14 +1272,14 @@ print(f"\nlab conversations averaged {metrics['tokens_per_task']:,.0f} tokens; t
 #   v1* list on the board. Say "one write, confirmed, scoped" aloud.
 # * **5–12 min · §2.** Draw the systems of record and the tool contracts over them. Show the side-effect classes, structured
 #   errors with hints, a read model with `as_of`, and an idempotent block. Here, "every fact from a tool" becomes concrete.
-# * **12–20 min · §3–§4.** Next come the tool access layer and identity. There is an MCP façade per bounded context. The
+# * **12–20 min · §3–§4.** Next, explain the tool access layer and identity. There is an MCP façade per bounded context. The
 #   gateway has agent identity, a deny-by-default policy with conditions, data screens and audit. There is one token per hop.
 #   The customer's token authorises at the server, and the agent's identity is the key for policy and audit. Exchange the
 #   token, never forward it.
-# * **20–30 min · §5.** Next comes the runtime. Its points are router and specialists, why the specialist that pauses must own
+# * **20–30 min · §5.** Next, explain the runtime. Its points are router and specialists, why the specialist that pauses must own
 #   the session, budgets, and the cacheable policy prefix. Other points are confirmation as a state transition, escalation as
 #   a structured hand-off, and the breaker. Run conversation (b) aloud: pause, approve, execute once, confirm.
-# * **30–38 min · §6–§7.** Next come how you know it works and what it costs. The points are a stratified golden set, an
+# * **30–38 min · §6–§7.** Next, show how you know that the system works and what it costs. The points are a stratified golden set, an
 #   absolute gate on the irreversible stratum, and an injection suite that measures the harness. Other points are traces with
 #   `gen_ai.*` attributes, cost per conversation, and the production estimate. The estimate is about $0.04 per conversation,
 #   14 calls/s, ~5M input TPM, ~56 in flight.
@@ -1322,7 +1325,7 @@ print("✅ deep dives:", DEEP_DIVES[:140] + "…")
 # %% [markdown]
 # ### Closing
 #
-# Everything in this notebook ran offline against fakes. A cell did a check of every claim in the review:
+# Everything in this notebook ran offline against fakes. For each claim in the review, a cell did a check:
 #
 # * Facts came from tools.
 # * The answer stated the staleness.
@@ -1331,5 +1334,5 @@ print("✅ deep dives:", DEEP_DIVES[:140] + "…")
 # * The gate passed with an absolute bar on the irreversible stratum.
 # * The cost per conversation came from the trace.
 #
-# That is the standard for your own design. The standard is not "the model will handle it". It is *here is the mechanism, and here
+# Measure your own design against this standard. The standard is not "the model will handle it". It is *here is the mechanism, and here
 # is how I would know*.

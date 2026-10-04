@@ -102,7 +102,8 @@ Read the modules in this order. Each module starts with a docstring that gives t
   - An older value never supersedes a newer value. This is true in the writer, and in a consolidation run over
     windows that are out of order.
   - A consolidation job can crash after the writes of a slot and before its checkpoint. When the lease expires,
-    another worker resumes the job. The job writes each fact one time only (random ids cause duplicates).
+    another worker resumes the job. The job writes each fact one time only (if the ids are random, the job writes
+    duplicates).
   - A slow worker that lost its lease stops before it writes.
   - A deletion matches values on word boundaries, lists paraphrases for review and rotates the cache salt of the
     tenant.
@@ -142,7 +143,7 @@ and token ids are 4-character chunks. Thus text prefixes are token prefixes (a r
 boundary).
 
 The roofline model of `minengine.perf` (datasheet GPU numbers, 0.6/0.8 efficiencies, verify) gives the prefill
-times, which are **SIMULATED**. The prices are dated list prices `(verify)`. The model treats the caching minimum of the
+times, which are **SIMULATED**. The prices are dated list prices `(verify)`. The price calculation treats the caching minimum of the
 provider as a threshold on the request. It assumes that the cache of the provider hits the same prefix as the cache
 of vLLM.
 

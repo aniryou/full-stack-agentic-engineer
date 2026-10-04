@@ -110,7 +110,7 @@ print("✅ tool converter matches the library")
 # ## Exercise 5.2 — parse a Mistral tool-call reply
 # Write `first_tool_call(reply)`. The argument is a Mistral-shaped reply dict. The
 # function returns `(name, args_dict)` for the first tool call. It parses the JSON
-# `arguments` string. (This is the main part of what `parse_response` does.)
+# `arguments` string. This function does the main part of what `parse_response` does.
 
 # %% exercise
 def first_tool_call(reply):
@@ -127,15 +127,15 @@ print("✅ parsed the tool call:", name, args)
 # %% [markdown]
 # ## Exercise 5.3 — route a turn to the cheapest model that clears the bar
 # One part of the deployment story is to select the *cheapest model that clears the
-# bar*. When the data must stay in your environment, it is also to select only a model
-# whose weights you can run yourself. `CATALOGUE` is a snapshot of the table in
+# bar*. When the data must stay in your environment, the model must also have weights
+# that you can run yourself. `CATALOGUE` is a snapshot of the table in
 # `docs/MISTRAL.md`. Its prices are list prices per million tokens, from 2026-09-19, and
-# illustrative. Make sure that they are correct (verify) before you quote them.
+# illustrative. Make sure that they are correct before you quote them.
 #
 # Here, `open_weight` means "you can run it yourself without a separate licence".
-# Mistral publishes the weights of Medium. But its modified MIT licence asks for a
-# commercial licence above a revenue threshold (`docs/MISTRAL.md`). Thus the snapshot
-# marks it false. The strings are not important. The rule is important.
+# Mistral publishes the weights of Medium. But the modified MIT licence of Medium asks
+# for a commercial licence above a revenue threshold (`docs/MISTRAL.md`). Thus the
+# snapshot marks Medium false. The strings are not important. The rule is important.
 #
 # Write
 # `pick_model(catalogue, need, self_host=False, input_tokens=5_000, output_tokens=300)`.

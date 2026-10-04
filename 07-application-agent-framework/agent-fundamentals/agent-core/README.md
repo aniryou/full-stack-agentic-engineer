@@ -21,8 +21,8 @@ errors. You can also show that the loop does not care which provider answers.
 | `notebooks/01_the_agent_loop` | Build the loop: termination, tool dispatch and the budget. Then use the packaged `Agent`. | 50 min | T0 |
 | `notebooks/02_tools` | Write tool contracts: a schema, validation, structured errors and an idempotent write. Look at how the loop recovers from a not-found error. | 50 min | T0 |
 | `notebooks/03_state_and_control` | Keep multi-turn memory, react to results and find duplicate calls. Think about the step budget. | 50 min | T0 |
-| `notebooks/04_mini_support_agent` | Build a small bank support agent. Every fact comes from a tool. A card block must have a person's approval. Out-of-scope work goes to a case (escalation). This is the bank agent of `gcp-agent-platform-lab`'s notebook 14, in a smaller form. | 60 min | T0 |
-| `notebooks/05_going_live_on_mistral` | Replace `FakeLLM` with a provider adapter. Learn what the adapter translates. Write a routing rule that selects the lowest-cost model that gets to the bar. Make a guarded live call. | 45 min | T0 (a key adds the live call) |
+| `notebooks/04_mini_support_agent` | Build a small bank support agent. Every fact comes from a tool. A card block must have a person's approval. The agent escalates out-of-scope work as a case. This is the bank agent of `gcp-agent-platform-lab`'s notebook 14, in a smaller form. | 60 min | T0 |
+| `notebooks/05_going_live_on_mistral` | Replace `FakeLLM` with a provider adapter. Learn what the adapter translates. Write a routing rule that selects the lowest-cost model that meets the bar. Make a guarded live call. | 45 min | T0 (a key adds the live call) |
 | [`docs/MISTRAL.md`](docs/MISTRAL.md) | The reference of the adapter: shapes, the client, models and prices (dated) and the deployment posture. | 15 min | — |
 
 The solutions are in `solutions/`. Each exercise has a check cell. The check cell prints ✅ when your answer is
@@ -93,10 +93,12 @@ There is no async, no pydantic and no framework. There is only the shape.
 ## When you outgrow this
 
 Use [`gcp-agent-platform-lab`](../gcp-agent-platform-lab/README.md) for async and parallel tool execution, MCP
-servers with a policy gateway, OAuth identity propagation, evaluation gates and OpenTelemetry-style tracing. It has the same concepts and much more machinery, and all of it uses this loop. The
-[sandboxed-execution](../../sandboxed-execution/README.md) topic shows how to run a `run_code` tool safely. It gives
-no credentials and, by default, no network, and it has a budget for every resource. That topic uses the tool contract
-of this loop again. This lab is module 07.1 in [`CURRICULUM.md`](../../../CURRICULUM.md).
+servers with a policy gateway, OAuth identity propagation, evaluation gates and OpenTelemetry-style tracing.
+It has the same concepts and much more machinery, and all of it uses this loop.
+
+The [sandboxed-execution](../../sandboxed-execution/README.md) topic shows how to run a `run_code` tool safely. In that
+topic, the tool gets no credentials and, by default, no network. It also has a budget for every resource. That topic
+uses the tool contract of this loop again. This lab is module 07.1 in [`CURRICULUM.md`](../../../CURRICULUM.md).
 
 ## Caveats
 

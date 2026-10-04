@@ -1,6 +1,6 @@
 # deploy/gcp — consolidation as a Cloud Run job on Cloud Scheduler, and where the model and the store live (T3)
 
-**Tier:** T3 (Google Cloud, optional). **Everything here is printed, not run by the lab**: notebook 04 and
+**Tier:** T3 (Google Cloud, optional). **The lab prints everything here and runs none of it**: notebook 04 and
 `python -m memlab gcp-commands --project <id>` print the commands, and you run them. This lab has no Terraform.
 The GPU and Cloud Run infrastructure already has Terraform in the 04 serving lab.
 
@@ -20,8 +20,8 @@ Postgres + pgvector (Cloud SQL, verify) ◀── the job's tables; a memory ser
 ```
 
 **Weekly, on purpose.** There is one run id per (tenant, user, ISO week). Thus the trigger is weekly too. If a
-daily trigger has a weekly id, six of seven starts are no-ops ("run already done"). Also, the facts arrive up to a
-week late, but the trigger calls itself daily.
+daily trigger has a weekly id, six of seven starts are no-ops ("run already done"). Also, such a trigger makes the
+facts arrive up to a week late, but its name says that it is daily.
 
 The data that the next turn needs comes from extraction after the turn (PRIMER §2), not from this job. A daily job
 needs a per-day run id and a one-day window (`--window-days 1` and an id by date).
@@ -34,8 +34,8 @@ these changes:
 
 | Setting | Value | Why |
 |---|---|---|
-| model | `Qwen/Qwen2.5-1.5B-Instruct` | It can make tool calls. It has 3.1 GB of BF16 weights, on a 24 GB L4. |
-| extra vLLM args | `--enable-auto-tool-choice --tool-call-parser hermes --enable-prompt-tokens-details` | They give tool calls, and `cached_tokens` for each request, which notebook 03 uses. |
+| model | `Qwen/Qwen2.5-1.5B-Instruct` | It can make tool calls. Its 3.1 GB of BF16 weights fit on a 24 GB L4. |
+| extra vLLM args | `--enable-auto-tool-choice --tool-call-parser hermes --enable-prompt-tokens-details` | They let the server make tool calls. They also give `cached_tokens` for each request, and notebook 03 uses these counts. |
 | `max_instances` | 1 | This is a lab, not a fleet. |
 
 Then run `gcloud run services proxy <service> --region <r> --port 8000 &`. After that, run
@@ -46,11 +46,11 @@ arithmetic.
 
 The disk of a Cloud Run instance is temporary, and SQLite has no network protocol. Thus on GCP, the store is
 Postgres with the `vector` extension. Cloud SQL for PostgreSQL and AlloyDB both give pgvector (verify the versions
-against 0.8.6, because the SQL of this lab is for 0.8.6).
+against 0.8.6, the version that the SQL of this lab is for).
 
-`memlab.store.pgvector` holds every statement. The tests
-examine each statement offline with the parser of Postgres. These statements include the lease and checkpoint
-tables of the job. The consolidation job runs on it (`python -m memlab consolidate --pg-dsn` or `MEMLAB_PG_DSN`).
+`memlab.store.pgvector` holds every statement. The tests examine each statement offline with the parser of
+Postgres. This module also holds the statements for the lease and checkpoint tables of the job. The consolidation
+job runs on `memlab.store.pgvector` (`python -m memlab consolidate --pg-dsn` or `MEMLAB_PG_DSN`).
 
 **The memory service (`memlab serve`) is SQLite-only**, because its idempotency table uses SQLite SQL. Thus on GCP,
 this lab deploys only the job. The service needs a Postgres port of its own before it can share these tables.
@@ -62,7 +62,7 @@ The job connects to the instance through the Unix socket of the Cloud SQL connec
 host=/cloudsql/<project>:<region>:memlab-pg dbname=memlab user=memlab password=...
 ```
 
-(verify the flag on `gcloud run jobs create`.) A private-IP instance needs Direct VPC egress, `--network/--subnet`,
+(Verify the flag on `gcloud run jobs create`.) A private-IP instance needs Direct VPC egress, `--network/--subnet`,
 and a `host=<private IP>` DSN instead. Export the DSN as `MEMLAB_PG_DSN` in your shell. The printed commands pipe it
 into Secret Manager as `memlab-pg-dsn`, and they do not write it to a file. The job then reads it back as
 `MEMLAB_PG_DSN`.
@@ -79,9 +79,9 @@ context of the image.
 1. **the image**: the commands make an Artifact Registry repository `memlab` and run `gcloud auth configure-docker`.
    Then they run `docker build -f
    deploy/local/Dockerfile` and `docker push` of `memlab/memlab:0.1.0` (Docker on your machine, or Cloud Build).
-2. **the job's identity**: a service account `memlab-job`, never the default compute account. The commands make the
-   secret `memlab-pg-dsn` from `$MEMLAB_PG_DSN`. They give the account `roles/secretmanager.secretAccessor` on that
-   secret and `roles/cloudsql.client` on the project.
+2. **the job's identity**: the commands make a service account `memlab-job`, never the default compute account.
+   They make the secret `memlab-pg-dsn` from `$MEMLAB_PG_DSN`. They give the account
+   `roles/secretmanager.secretAccessor` on that secret and `roles/cloudsql.client` on the project.
 3. **the job**: the commands run `gcloud run jobs create` with `--service-account memlab-job@…`,
    `--set-cloudsql-instances`, `--tasks`, `--max-retries 3`, `--set-secrets MEMLAB_PG_DSN=memlab-pg-dsn:latest` and
    the command.
@@ -97,7 +97,8 @@ such calls. See
 the `oidc_token` of `google_cloud_scheduler_job.reaper` in its
 [Terraform](../../../../long-running-durable/lra-gcp/infra/terraform/main.tf).
 
-The Terraform sample of Google for scheduled jobs uses this v2 URI. The gcloud samples of Google use the v1 form
+The Terraform sample of Google for scheduled jobs uses the v2 URI of the diagram at the top of this README. The
+gcloud samples of Google use the v1 form
 `https://<region>-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/<project>/jobs/<job>:run` (verify
 which form your gcloud prefers). Also verify `--task-timeout`, `--set-secrets` and `--command/--args` on
 `gcloud run jobs create`. Also verify if `roles/run.invoker` on the job is sufficient to run it (the sample of
@@ -119,7 +120,7 @@ lease held or the run done (notebook 04).
 Ask each of these services the questions of this lab:
 
 - Does it take the scope from a verified principal?
-- Does it apply screening to writes, and does it keep provenance?
+- Does it examine each write before it keeps the write, and does it keep provenance?
 - Can a forget reach derived facts, indexes and backups?
 - Can you prove it?
 
@@ -130,7 +131,7 @@ Run, Cloud Scheduler and Cloud SQL (verify). The shape of the cost:
 
 - The job runs for minutes per night on CPU. The bill is per task-second.
 - The scheduler is a few jobs per month.
-- Cloud SQL bills per hour while the instance exists, also when it is idle. For a lab, this is the largest line.
+- Cloud SQL bills per hour while the instance exists, also when it is idle. For a lab, Cloud SQL is the largest line of the bill.
 - The L4 service bills per second while an instance is up, and it scales to zero.
 
 ## Cleanup
@@ -149,4 +150,5 @@ gcloud artifacts repositories delete memlab --project my-project --location us-c
 ```
 
 When you delete the Cloud SQL instance, you delete the memories. Its automated backups obey the backup retention
-setting of the instance (verify). This is the "backups" line of the deletion checklist in notebook 05.
+setting of the instance (verify). The backup retention is the subject of the "backups" line of the
+deletion checklist in notebook 05.

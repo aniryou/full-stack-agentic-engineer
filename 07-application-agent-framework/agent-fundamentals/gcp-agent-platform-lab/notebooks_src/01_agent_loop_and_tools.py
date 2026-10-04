@@ -174,7 +174,7 @@ for e in events:
     print(f"step {e.step}  {e.kind:12s} {json.dumps(e.payload)[:95]}")
 
 # %% [markdown]
-# The second model call must contain the tool result. If not, the model answers with no information.
+# The second model call must contain the tool result. If not, the model answers without the tool result.
 # `FakeLLM.calls` records every request that it received. Thus you can prove that the result went back:
 
 # %%
@@ -208,7 +208,7 @@ assert elapsed < 0.15, "tool calls ran sequentially?"
 # %% [markdown]
 # ### Unknown and repeated calls are answered, not crashed
 #
-# When the model hallucinates a tool name, the result is `unknown_tool`, with the real names in the hint.
+# When the model calls a tool name that does not exist, the result is `unknown_tool`, with the real names in the hint.
 # If the model repeats the same call more than `max_repeated_calls` times, the result is `duplicate_call`.
 # This is the lowest-cost possible brake on a "call, ignore the result, call again" spiral.
 
@@ -273,7 +273,7 @@ print("via Runner: error =", repr(r.error), "| session status =", r.session.stat
 # ### Exercise 3.1 — design a tool contract
 #
 # Define `get_order_status(order_id: str, include_items: bool = False)` with `@tool`.
-# The docstring is the only guidance that the model has about **when** to use the tool. Thus, say this clearly.
+# The docstring is the only guidance that the model has about **when** to use the tool. Thus, say clearly in the docstring when to use the tool.
 # Also say what the tool is *not* for (refunds go to a different tool).
 #
 # Return a dict with `order_id` and `status`. Add an `items` list only when the caller asks for it.
@@ -444,7 +444,7 @@ print(f"✅ stopped after {model_calls} model calls with reason {reason!r}; a no
 #
 # * `spec` is the **same** `ToolSpec` object as the spec of the wrapped tool. The contract of the model does not change.
 # * `run` delegates to the wrapped tool. If the result is `ok` and its compact JSON (`json.dumps(result.data, default=str)`)
-#   is longer than `max_chars`, replace `data`. Put the first `max_chars` characters, then the marker
+#   is longer than `max_chars`, replace `data`. The new `data` is the first `max_chars` characters, followed by the marker
 #   `…[truncated N chars; call again with a narrower request]`. `N` is the number of characters that you cut.
 # * Errors, small results and latency pass through with no change.
 #

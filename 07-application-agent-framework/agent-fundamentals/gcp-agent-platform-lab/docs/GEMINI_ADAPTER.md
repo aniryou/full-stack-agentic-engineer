@@ -14,8 +14,8 @@ Install the extra first: `pip install -e ".[gemini]"`.
 
 ## Verify before relying on it
 
-The author wrote the adapter against the `google-genai` 1.x surface, as its documentation was in
-mid-2026. The 2.x line of the SDK is on PyPI since 2026-05-07 (2.25.0 on 2026-09-22). The `[gemini]`
+The author wrote the adapter against the `google-genai` 1.x surface, as the documentation of mid-2026
+described it. The 2.x line of the SDK came onto PyPI on 2026-05-07 (2.25.0 on 2026-09-22). The `[gemini]`
 extra sets no upper limit on the version. Thus, compare these calls with the version that you install
 (verify):
 
@@ -38,7 +38,7 @@ does not depend on this file.
 - **Non-determinism.** The checks of the notebooks assume scripted behaviour. With a real model, run
   the evaluation notebooks (08) with `n_runs ≥ 3`. Then think about pass rates, not single passes.
 - **Thinking models and function calling.** Gemini 3.x thinking models return *thought signatures*
-  together with function calls. In multi-step flows, these signatures must make the round trip. The
+  together with function calls. In multi-step flows, the next request must send these signatures back to the model. The
   adapter passes through what the SDK returns. But if you build your own message conversion, keep
   those parts.
 - **Cost.** Before you run anything at volume, attach `observability.Tracer` and a `PriceTable` with

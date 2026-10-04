@@ -49,7 +49,7 @@ print(f"same turn with 4,000 of the 6,000 input cached: ${token_cost(6_000, 400,
 # * the cached share of input at `price.cached_input`,
 # * output at `price.output`.
 #
-# When `batch` is true, divide the result by two. (Ignore the long-context tier here.)
+# When `batch` is true, divide the result by two. Ignore the long-context tier here.
 
 # %% exercise
 def my_token_cost(in_tokens: float, out_tokens: float, price, cached_share: float = 0.0, batch: bool = False) -> float:
@@ -88,8 +88,8 @@ for sc in scenarios:
 # %% [markdown]
 # Say two things out loud. First, when you route 70% of calls to Flash, the bill decreases by half *without a
 # change to the prompt*. Second, when you cache the stable 4k prefix on Pro (**$3,840**), the result is better
-# than the mixed fleet on quality-per-dollar. This is why prompt layout is a cost lever, not a style choice
-# (Notebook 00).
+# than the mixed fleet on quality-per-dollar. This caching result is why prompt layout is a cost lever, not a
+# style choice (Notebook 00).
 #
 # The full report for scenario A also gives the capacity numbers:
 
@@ -132,7 +132,7 @@ print(f"✅ peak {round(a.peak_calls_per_sec())} calls/s → {peak_input_tpm(a) 
 #
 # The backlog has 20 M documents on Flash-Lite: 3 calls per document at 1,000 input tokens, and 300 output
 # tokens per document (100 per call). Backlogs are the case for **batch** pricing. Nobody waits for the
-# result, thus pay half.
+# result. Thus, pay half.
 
 # %%
 backlog = Scenario("backlog · Flash-Lite online", 20_000_000, 3, 1_000, 100, model_mix={"gemini-3.5-flash-lite": 1.0})
@@ -206,8 +206,8 @@ print("✅ parallel groups overlap; the turn is 4.7 s sequential, 4.3 s parallel
 # %% [markdown]
 # ### Exercise 6.1 — implement `vector_store_bytes`
 #
-# `my_vector_store_bytes(chunks, dims, bytes_per_dim=4, index_overhead=1.5)` returns the bytes, together with
-# the index overhead.
+# `my_vector_store_bytes(chunks, dims, bytes_per_dim=4, index_overhead=1.5)` returns the total bytes. The
+# total includes the index overhead.
 
 # %% exercise
 def my_vector_store_bytes(chunks: int, dims: int, bytes_per_dim: int = 4, index_overhead: float = 1.5) -> float:
@@ -270,9 +270,9 @@ LEVERS = [
 #
 # Implement `apply_playbook(scenario, turn, levers)`. It returns a list of rows
 # `(name, cost_per_conv, turn_seconds)`. The first row is a `"baseline"` row. Then there is one row per
-# lever, **applied cumulatively, from the lowest `risk_rank` to the highest**. (The playbook rule: change
-# nothing about model behaviour before you have changed everything else.) Use `Scenario.cost_per_unit()` and
-# `latency_budget(turn).total_s`.
+# lever, **applied cumulatively, from the lowest `risk_rank` to the highest**. This order is the playbook
+# rule: change nothing about model behaviour before you have changed everything else. Use
+# `Scenario.cost_per_unit()` and `latency_budget(turn).total_s`.
 
 # %% exercise
 def apply_playbook(scenario: Scenario, turn: list[Segment], levers: list[Lever]) -> list[tuple[str, float, float]]:

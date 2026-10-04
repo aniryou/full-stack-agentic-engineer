@@ -146,7 +146,7 @@ print("tail of what the model sees:", tool_msg["content"][-105:])
 # `max_recent_turns` keeps that number of user turns verbatim. The `summarizer` folds all older turns into one system message.
 # The default `naive_summarizer` keeps the asks of the user and the tool names.
 # But it loses everything that the assistant decided or looked up.
-# A later turn usually needs exactly this information (Exercise 6.1 repairs that).
+# A later turn usually needs exactly this information (Exercise 6.1 repairs that loss).
 
 # %%
 long = Session(id="long")

@@ -54,7 +54,7 @@ fakes. It pairs with [`scaling-admission-cost/`](../scaling-admission-cost/READM
 agent can run, and this topic says what the agent can do.
 
 This topic leads to layer 07. There, the policy permits or stops each tool call of the agent loop
-([`agent-fundamentals`](../../07-application-agent-framework/README.md)). It also leads to
+([`agent-fundamentals`](../../07-application-agent-framework/README.md)). This topic also leads to
 [sandboxed execution](../../07-application-agent-framework/sandboxed-execution/README.md). That topic starts from
 §6.2 of the primer (code execution). Sandboxed execution keeps secrets out of the sandbox with the same token
 discipline. In the [curriculum's spiral](../../CURRICULUM.md#31-why-this-order), this topic is step 25, after the scaling lab.

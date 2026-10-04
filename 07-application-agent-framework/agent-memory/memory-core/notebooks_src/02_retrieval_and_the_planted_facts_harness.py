@@ -42,7 +42,7 @@ emb = HashingEmbedder()
 # %% [markdown]
 # ## Worked example 1 — the embedder is lexical, on purpose
 # memcore implements `ragkit`'s crc32 hashing embedder (07.4) again. Each `[a-z0-9]+` token adds 1 to bucket
-# `crc32(token) % 1024`. Then the embedder L2-normalises the vector, thus a dot product is a cosine. Two texts are
+# `crc32(token) % 1024`. Then the embedder L2-normalises the vector. Thus a dot product is a cosine. Two texts are
 # similar if, and only if, they share tokens.
 
 # %%
@@ -120,7 +120,7 @@ for q in sc.questions:
 # multi-session, temporal reasoning and knowledge update. An `_abs` id suffix marks abstention.
 #
 # LoCoMo's data is CC BY-NC 4.0, and the harness bundles none of it. The harness downloads nothing. Here the adversarial
-# question asks about a fact that only a **tool result** asserted. The write path quarantined that fact, thus the
+# question asks about a fact that only a **tool result** asserted. The write path quarantined that fact. Thus the
 # correct answer is "I don't know".
 #
 # **A fixture artefact, disclosed.** Look at the planted statements: "I live in Prague. (about my home city)". No real
@@ -146,9 +146,9 @@ print(f"resampling users instead of questions (a cluster bootstrap): {c_lo:.1%}-
 
 # %% [markdown]
 # All answers are correct except the preference paraphrase. "Where does the user like to sit on a plane?" shares no
-# token with "The user's seat preference is aisle.". Every fact ties on relevance, and the fact with the lowest
-# importance loses its place in the budget. The reader is a strict template reader, thus each miss is a retrieval miss
-# or a write-path miss. That is the purpose of a memory benchmark.
+# token with "The user's seat preference is aisle.", the stored fact. Every fact ties on relevance, and the fact with
+# the lowest importance loses its place in the budget. The reader is a strict template reader. Thus each miss is a
+# retrieval miss or a write-path miss. That is the purpose of a memory benchmark.
 #
 # The Wilson interval treats the 390 questions as 390 independent trials. They are not independent. The thirteen
 # questions of each user share one store and one write path. Here, each of the 30 users misses the *same* question.
@@ -207,8 +207,8 @@ print("✅ the paper form: A 2.0000, B 2.1364, C 0.4286")
 
 # %% [markdown]
 # ## Exercise 2.2 — the code's recency
-# Write `code_recency(last_accessed)` the same way as the reference code. Sort by last access, **ascending** (oldest
-# first). Give the $i$-th memory (from 1) the value $0.99^i$. Return the values in the order of the input.
+# Write `code_recency(last_accessed)` the same way as the reference code. Sort by last access, **oldest first**.
+# Give the $i$-th memory (from 1) the value $0.99^i$. Return the values in the order of the input.
 
 # %% exercise
 def code_recency(last_accessed):
@@ -260,8 +260,8 @@ for hint in (True, False):
 
 # %% [markdown]
 # Read both columns. The *recall* of the code form is higher, because its relevance weight of 3 suits long episodes.
-# But 70% of its knowledge-update answers are stale (27% without the hints). A single aggregate selects the incorrect
-# form. The metrics for each type (stale answers, abstention) find the problem.
+# But 70% of its knowledge-update answers are stale (27% without the hints). In this harness, a single aggregate selects
+# the incorrect form. The metrics for each type (stale answers, abstention) find the problem.
 #
 # ## Exercise 2.4 — pack into the budget
 # Write `pack_budget(records, budget)`. Go through the records in the given order (best first). Take each record whose
@@ -337,7 +337,7 @@ print(f"✅ knee at {find_knee(rows)} tokens; you chose {my_budget}")
 
 # %% [markdown]
 # ## In a design review
-# **The two-minute version.** "Retrieval decides the quality of memory, thus we score and we measure. Each candidate
+# **The two-minute version.** "Retrieval decides the quality of memory. Thus we score and we measure. Each candidate
 # in the user's partition gets the generative-agents score: recency, importance and relevance, each min-max
 # normalised. We use the paper's form: recency decreases with the hours since last use.
 #
@@ -349,7 +349,7 @@ print(f"✅ knee at {find_knee(rows)} tokens; you chose {my_budget}")
 #
 # "We measure on a planted-facts harness in LongMemEval's and LoCoMo's task shapes. We use their shapes, not their
 # data. We report accuracy with a Wilson interval, recall within the budget, stale answers and abstention separately.
-# This is because a memory that stores nothing still gets the abstention questions correct. The knee of recall against
+# We report them separately because a memory that stores nothing still gets the abstention questions correct. The knee of recall against
 # budget sets the budget: 90 tokens here. A paraphrase subset tells us the gain that a real embedder must give over a
 # lexical embedder."
 #
@@ -359,5 +359,5 @@ print(f"✅ knee at {find_knee(rows)} tokens; you chose {my_budget}")
 # 2. *Accuracy is 92% on 13 questions. Ship?* 12/13 is a 67–99% Wilson interval, and that is too wide. Run hundreds of
 #    questions (390 here: 89–95%). Remember that they are not independent (resample users, compare per question type).
 #    Read recall, stale answers and abstention separately.
-# 3. *When do you need an ANN index for memory?* When one partition is large. The memory of one user is small, thus a
+# 3. *When do you need an ANN index for memory?* When one partition is large. The memory of one user is small. Thus a
 #    flat scan of the partition is exact. HNSW (M0 = 2M in minifaiss) gives a benefit at tenant or corpus scale.

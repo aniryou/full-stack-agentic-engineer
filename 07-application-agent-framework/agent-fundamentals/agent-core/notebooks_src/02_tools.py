@@ -2,9 +2,9 @@
 # # 02 · Tools are contracts
 #
 # A tool is a function that the model can call. But the model is a reader that cannot
-# ask follow-up questions, and it will guess freely. Thus a good tool removes the need
-# to guess. It has a clear schema. It validates the arguments **before** it runs. It
-# returns errors that the model can act on, not stack traces.
+# ask follow-up questions, and it is always ready to guess. Thus a good tool removes
+# the need to guess. It has a clear schema. It validates the arguments **before** it
+# runs. It returns errors that the model can act on, not stack traces.
 #
 # In this notebook, you write tools in the correct way. You also see how the loop reacts
 # to each kind of result.
@@ -69,7 +69,7 @@ print("✅ set_priority validates its input")
 #
 # A second call for the same order returns the **first** result, with
 # `{"already_done": True}` added. It does **not** refund or record again. This is also
-# true when the retry has a different `amount`.
+# true when the retry has a different refund value.
 
 # %% exercise
 def make_refund_tool():

@@ -38,7 +38,7 @@ notebook ends with *The one-minute version*: how to explain that topic in a desi
 | 00 | Setup and the fake model | — | Control a function-calling model in three ways. Look at caching and usage. |
 | 01 | Agent loop and tools | [sandbox](../../sandboxed-execution/PRIMER.md) §3 | Tool contracts from signatures, structured errors, idempotency, the loop with budgets and parallel calls |
 | 02 | Workflows and multi-agent | [scaling](../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §1.7 | Sequential/parallel/loop agents, delegation, when one more agent is worth its cost |
-| 03 | State, sessions, checkpoints | [durable](../../long-running-durable/PRIMER.md) §2–§3 | The event log and the working state, compare-and-set, durable tasks that resume after a crash, pause/approve |
+| 03 | State, sessions, checkpoints | [durable](../../long-running-durable/PRIMER.md) §2–§3 | The event log against the working state, compare-and-set, durable tasks that resume after a crash, pause/approve |
 | 04 | Context engineering and caching | [scaling](../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §5.5 | Cache-friendly layout, compaction, the shape of tool results, token budgets |
 | 05 | MCP server, client, gateway | [MCP revisions](docs/MCP_REVISIONS.md), [identity](../../../06-gateway/identity-security/agentic-identity-gcp-lab/docs/primer.md) §7 | A teaching subset of MCP (2026-07-28 shape): stateless requests, mirrored headers, MRTR, Tasks. Also a policy gateway. |
 | 06 | OAuth and identity propagation | [identity](../../../06-gateway/identity-security/agentic-identity-gcp-lab/docs/primer.md) §3.5, §7.1 | PKCE, resource indicators, audience-bound tokens, step-up, token exchange, the confused deputy |
@@ -47,7 +47,7 @@ notebook ends with *The one-minute version*: how to explain that topic in a desi
 | 09 | Tracing and metrics | [scaling](../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §5.10 | Spans with `gen_ai.*` attributes, cost per conversation, p95 for each step, TTFT and tokens/s, alerts |
 | 10 | Reliability | [scaling](../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §5.2 | Backoff with jitter, idempotent retries, circuit breakers, bulkheads, deadlines, fallbacks |
 | 11 | Security and prompt injection | [identity](../../../06-gateway/identity-security/agentic-identity-gcp-lab/docs/primer.md) §6, [sandbox](../../sandboxed-execution/PRIMER.md) §1 | An indirect injection demo, provenance-tagged data blocks, screening, allowlists, redaction |
-| 12 | Resource estimation | [scaling](../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §3 | Calculate the worked numbers again: cost, peak TPM, Little's law, latency waterfall, vectors. |
+| 12 | Resource estimation | [scaling](../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §3 | The worked numbers, calculated again: cost, peak TPM, Little's law, latency waterfall, vectors |
 | 13 | Code evaluation | [vectors](../../retrieval-rag/vector-databases-primer.md) §12 | Two full programs with bugs, and six drills. Their tests pass only when your repairs are correct. |
 | 14 | Capstone: the bank agent | all of the above | All the parts, put together along the spine, with a gate, traces and a production cost estimate |
 
@@ -94,8 +94,8 @@ The builder makes `notebooks/` and `solutions/` from `notebooks_src/*.py` (perce
 
 Run `pip install -e ".[gemini]"`. Set `GOOGLE_API_KEY` (or the Vertex environment variables). Then, in any
 notebook, replace `FakeLLM(...)` with `GeminiLLM(model="gemini-3-flash")` (the model string as of
-September 2026, verify). The author wrote the adapter against the `google-genai` 1.x surface. The SDK is
-on 2.x since May 2026. Thus, *make sure that the adapter works before you trust it*.
+September 2026, verify). The author wrote the adapter against the `google-genai` 1.x surface. The SDK
+changed to 2.x in May 2026. Thus, *make sure that the adapter works before you trust it*.
 
 The details are in [`docs/GEMINI_ADAPTER.md`](docs/GEMINI_ADAPTER.md). The mapping to Google's Agent
 Development Kit (2.x on PyPI since May 2026, verify) is in [`docs/LAB_TO_ADK.md`](docs/LAB_TO_ADK.md).
@@ -108,7 +108,7 @@ Development Kit (2.x on PyPI since May 2026, verify) is in [`docs/LAB_TO_ADK.md`
   identity, evaluation and tracing. Agent systems in production succeed or fail in the harness. The
   behaviour of a real model (and its real susceptibility to prompt injection) is out of scope.
 - The MCP of this lab has the shape of the 2026-07-28 revision. That is, it has stateless per-request
-  metadata, mirrored headers, embedded server-to-client interactions and the Tasks extension. The lab
+  metadata, mirrored headers, embedded server-to-client interactions and the Tasks extension. The author
   compared this shape with the spec repository on 2026-09-26 (verify). Many deployed servers still use
   the 2025 revisions. [`docs/MCP_REVISIONS.md`](docs/MCP_REVISIONS.md) tells what is different from
   2025-03-26, 2025-06-18 and 2025-11-25. It also tells where the subset of the lab is different from the

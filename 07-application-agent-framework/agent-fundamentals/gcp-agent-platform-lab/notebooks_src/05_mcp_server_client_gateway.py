@@ -12,7 +12,7 @@
 # The subset is sufficient to explain every hop in a design review.
 # It is not a conformant implementation.
 #
-# The last check against the spec repository was on 2026-09-26 (verify).
+# The check against the spec repository was on 2026-09-26 (verify).
 # The file [docs/MCP_REVISIONS.md](../docs/MCP_REVISIONS.md) tells you two things:
 #
 # - What is different from the 2025-03-26, 2025-06-18 and 2025-11-25 revisions.
@@ -50,8 +50,8 @@ from agentlab.mcp import (Forbidden, Gateway, HttpTransport, InProcessTransport,
 # | `reconcile_batch` | reversible, long | `task` handle. The client polls `tasks/get`. |
 #
 # A tool uses `NeedsInput` to ask the user a question.
-# The server changes it into an **embedded** elicitation request.
-# The server does not send its own request to the client. The revision removed server-initiated requests.
+# The server changes the `NeedsInput` into an **embedded** elicitation request.
+# The server does not send its own request to the client, because the revision removed server-initiated requests.
 # Then the client sends the *same* `tools/call` again, with `inputResponses`. `confirmed(ctx)` reads that answer.
 
 # %%
@@ -185,7 +185,7 @@ print("final:", snapshot["status"], snapshot["result"]["structuredContent"])
 # %% [markdown]
 # A client that did **not** declare the extension must never receive a task.
 # The server runs the same tool inline and answers when the tool completes.
-# Thus the same tool has two wire shapes for two clients:
+# The same tool has two wire shapes for two clients:
 
 # %%
 legacy = McpClient(InProcessTransport(orders_server), capabilities=client_capabilities(tasks=False))
@@ -265,7 +265,7 @@ except Forbidden as e:
 print("ops cancel        →", (await ops.call_tool("cancel_order", {"order_id": "ORD-1001"}, on_input_required=ask_user))["structuredContent"]["status"])
 
 # %% [markdown]
-# **Screening a poisoned result.** Order `ORD-1003` has an injection in a free-text field.
+# **The gateway screens a poisoned result.** Order `ORD-1003` has an injection in a free-text field.
 # This is the classic indirect prompt injection (Notebook 11).
 # Without the gateway, the text goes into the model's context as a tool result.
 # With the gateway, the gateway blocks the call, and the audit says why.
@@ -500,8 +500,8 @@ print("✅", why_strip)
 # - **Tasks.** Approvals and job ids become a protocol shape, not a custom API.
 #
 # Many servers still speak a 2025 revision. Thus, say which revision the design assumes.
-# The file [docs/MCP_REVISIONS.md](../docs/MCP_REVISIONS.md) tells you what is different,
-# and where the subset of this lab is different from the spec (checked 2026-09-26, verify).
+# The file [docs/MCP_REVISIONS.md](../docs/MCP_REVISIONS.md) tells you what is different.
+# It also tells you where the subset of this lab is different from the spec (the check was on 2026-09-26, verify).
 #
 # Then draw the gateway:
 #

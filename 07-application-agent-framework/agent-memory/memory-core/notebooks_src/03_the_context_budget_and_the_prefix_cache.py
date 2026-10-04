@@ -8,8 +8,9 @@
 #
 # ## The one-minute version
 # Memory costs tokens two times: the tokens that you inject, and the prefix-cache hits that you destroy. An engine uses
-# KV again only for an **exact prefix, in full blocks**. In vLLM, a block is 16 tokens, and a chained hash names each block: the
-# hash of a block includes the hash of its parent. The engine always computes the last token of a prompt again.
+# KV again only for an **exact prefix, in full blocks**. In vLLM, a block is 16 tokens, and a chained hash names each
+# block: the hash of a block includes the hash of its parent. In vLLM, the engine always computes the last token of a
+# prompt again.
 #
 # If the agent retrieves memory again at each turn and puts it **before the history**, the prefix changes immediately
 # after the system prompt. Then every history block after that point misses, and the engine prefills the whole
@@ -118,7 +119,7 @@ for layout in LAYOUTS:
 
 # %% [markdown]
 # Memory before the history makes turn 8's prefill 4.5× slower on an L4 (68.4 against 15.3 ms, SIMULATED). The engine
-# did the same work all the time. The layout decided how much of that work the engine did again.
+# did the same work during the whole session, but the layout decided how much of that work the engine did again.
 #
 # Money is a different system. A hosted API has its own cache. It bills the cached rate only when a request gets to
 # its **caching minimum**. On Gemini 3.5 Flash, the cached rate is \$0.15 instead of \$1.50 per M (5 Sep 2026,
@@ -140,8 +141,9 @@ for system in (2000, 4000):
 # %% [markdown]
 # With the 2,000-token system prompt, every prompt stays below 4,096 tokens. The provider bills no tokens at the cached
 # rate, and all three memory layouts cost the same. They cost 12% more than no memory, for the 400 tokens injected.
-# With a 4,000-token system prompt (tools and policies), every turn from the second gets to the minimum. (The support
-# turn of the scaling primer sends 4–6 k.) Then memory before the history costs 46% more than a pinned profile.
+# With a 4,000-token system prompt (tools and policies), every turn from the second gets to the minimum.
+# Then memory before the history costs 46% more than a pinned profile. The support turn of the scaling primer sends
+# 4–6 k.
 #
 # The larger prompt also gives the *lower-cost* session, because it is the prompt that the provider caches. The
 # minimum is a threshold, not a slope. Know the threshold of your provider.
@@ -339,7 +341,8 @@ print(f"✅ uncached tokens per turn {bad} -> {good}: stable first, history appe
 #    is, the whole history. But the pinned and tail layouts lose a constant quantity per turn.
 # 3. *Two tenants share a system prompt on one vLLM. Is there a risk?* Without a per-tenant `cache_salt`, the TTFT of
 #    one tenant shows if the other tenant sent the same prefix. Use a salt for each tenant (an HMAC under a server
-#    secret, never the tenant's name). Also, include in the budget the shared-prefix hits that you give up.
+#    secret, never the tenant's name). Also, include the cost of the shared-prefix hits that you give up in
+#    the budget.
 # 4. *We moved memory to the tail and the hosted-API bill did not change. Why?* Every prompt is below the caching
 #    minimum of the provider. Thus the provider billed nothing at the cached rate, before or after the change. The
 #    gain shows as TTFT on a self-hosted engine. It shows on the bill only when the prompt gets to the minimum.

@@ -23,11 +23,12 @@ This file is the brief that every contributor (a person or an agent) obeys. Thus
 ## Rules
 
 1. **Do not change `agentlab/llm/` or `agentlab/agents/`** (the core) unless you own that change. Every notebook
-   depends on them. If you need something from the core, record it in your report. Do not change the core.
-2. Dependencies: only the standard library, `pydantic` and `httpx`. In tests or notebooks, make no network calls.
-   Use no API keys. Do not put in a sleep longer than a few hundred milliseconds. Where the time is important,
+   depends on them. If you need something from the core and you do not own that change, record the need in your
+   report. Do not make the change yourself.
+2. Dependencies: only the standard library, `pydantic` and `httpx`. Tests and notebooks make no network calls and
+   use no API keys. They contain no sleep longer than a few hundred milliseconds. Where the time is important,
    inject clocks/sleepers.
-3. Every module has a `tests/test_<module>.py`. Run it with `python3 -m pytest -q tests/test_<module>.py`.
+3. Every module must have a `tests/test_<module>.py`. Run it with `python3 -m pytest -q tests/test_<module>.py`.
 4. Every notebook source obeys `notebooks_src/README.md` and uses the pattern in `notebooks_src/00_setup_and_fake_llm.py`.
    First come a heading, the concept that the notebook teaches (see `docs/PRIMER_MAP.md`) and a "you will" list.
    Then come worked examples. After them come 4–7 exercises, each with a check cell. Last comes a

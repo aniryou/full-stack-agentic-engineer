@@ -24,7 +24,7 @@ export MEMLAB_LLM_URL=http://127.0.0.1:8000
 | Flag | Why this lab needs it |
 |---|---|
 | `--enable-auto-tool-choice --tool-call-parser hermes` | It lets the model make `remember` / `recall` / `forget` calls. The chat template of Qwen2.5 uses Hermes-style tool calls (vLLM tool-calling docs, v0.30.0). |
-| `--enable-prompt-tokens-details` | It adds `usage.prompt_tokens_details.cached_tokens` for each request. This is the measured column of notebook 03. It is the only measured column: the prefill times stay a roofline estimate, and the dollars stay a price table. Without this flag, only `/metrics` has hits. |
+| `--enable-prompt-tokens-details` | It adds `usage.prompt_tokens_details.cached_tokens` for each request. That field is the measured column of notebook 03. It is the only measured column: the prefill times stay a roofline estimate, and the dollars stay a price table. Without this flag, only `/metrics` has hits. |
 | `GPU_MEM_UTIL=0.6` | It leaves space on the same GPU for the embedder in §2 (two vLLM processes, one model each). |
 
 `Qwen/Qwen2.5-1.5B-Instruct` has 1.54 B parameters. It is about 3.1 GB in BF16 (FP16 on a T4), with 28 KiB of KV
@@ -42,10 +42,10 @@ curl -s http://127.0.0.1:8001/v1/embeddings -H 'Content-Type: application/json' 
 
 vLLM v0.30.0 has no `--task` flag. `--runner pooling` selects the embedding path. Auto-detection also selects it
 for a Sentence-Transformers checkpoint. `bge-small-en-v1.5` is a 384-dimension BERT encoder of about 33 M
-parameters with 512 positions. Thus the command sets `MAX_MODEL_LEN=512` (verify its licence on the model card).
+parameters with 512 positions (verify its licence on the model card). Thus the command sets `MAX_MODEL_LEN=512`.
 
-Its vectors have 384 dimensions, not the 1,024 of the hashing embedder. Start a **fresh** store for it (the T1 cell
-of notebook 05 does this). Never mix dimensions in one table.
+The vectors of `bge-small-en-v1.5` have 384 dimensions, not the 1,024 of the hashing embedder. Thus, start a
+**fresh** store for it (the T1 cell of notebook 05 does this). Never mix dimensions in one table.
 
 ## 3. Run the notebooks against them
 
@@ -57,16 +57,17 @@ python -m memlab cachebench --url $MEMLAB_LLM_URL --gpu T4   # notebook 03's tab
 jupyter lab notebooks                  # 02 (real tool calls), 03 (measured cached tokens), 05 (real embedder)
 ```
 
-On Colab, run the pip path of `serve.sh` in a cell (see the README of the serving lab). Then set the two
-environment variables with `os.environ[...]`. Do this before you run the first cell of the notebook.
+On Colab, run the pip path of `serve.sh` in a cell (see the README of the serving lab). Then, before you run the
+first cell of the notebook, set the two environment variables with `os.environ[...]`.
 
 ## Cost
 
-A free T4 costs only session time (Colab and Kaggle limit weekly GPU hours, verify). A rented 24 GB card at about
+A free T4 costs only session time. Colab and Kaggle limit weekly GPU hours (verify). A rented 24 GB card at about
 $0.3–0.7 per hour runs notebooks 02, 03 and 05 in much less than an hour.
 
 ## Cleanup
 
 Stop both `vllm serve` processes (Ctrl-C, or `docker stop` if `serve.sh` used Docker). Then terminate the rented
-instance. Most providers continue to bill for a GPU instance that is stopped but still allocated (verify yours).
+instance. This is necessary because most providers continue to bill for a GPU instance that is stopped but still
+allocated (verify yours).
 The Hugging Face cache (`~/.cache/huggingface`) holds the weights. If you share the disk, delete the cache.

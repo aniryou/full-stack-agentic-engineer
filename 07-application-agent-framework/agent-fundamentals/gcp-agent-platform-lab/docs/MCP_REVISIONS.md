@@ -7,7 +7,7 @@ where the subset that the lab teaches is different from the spec.
 
 The last check of this page was on 2026-09-26. It compared the page with the changelog of each
 revision and with the 2026-07-28 schema in the `modelcontextprotocol/modelcontextprotocol`
-repository (verify). The spec changes. Before you rely on a row, read the changelog of the
+repository (verify: the spec changes). Before you rely on a row, read the changelog of the
 revision that you target again.
 
 ## What changed, revision by revision
@@ -27,8 +27,8 @@ revision that you target again.
 
 For a design review, the first three rows are the rows that change an architecture. Without
 sessions, a load balancer can send any request to any replica. With `Mcp-Method` / `Mcp-Name`
-in headers, a gateway can enforce a per-tool policy without a parse of the JSON body (notebook
-05, section 6). MRTR and the Tasks extension change the two difficult cases into an ordinary
+in headers, a gateway can enforce a per-tool policy and does not have to parse the JSON body
+(notebook 05, section 6). MRTR and the Tasks extension change the two difficult cases into an ordinary
 request and response. The two cases are "ask the user" and "this takes ten minutes". This
 change is what lets the server stay stateless.
 
@@ -41,8 +41,8 @@ reader thinks that the lab is a conformant implementation:
   an open string in the schema, so an extension can add values. Before you rely on this shape,
   examine the exact shape on the Tasks extension's own page (verify).
 - **Authorization error codes.** `Unauthorized` (-32001) and `Forbidden` (-32003) are lab codes
-  in the legacy -32000..-32019 range. The spec marks that range as NOT RECOMMENDED for new
-  implementations. The HTTP status (401 / 403) and the `WWW-Authenticate` challenge are the
+  in the legacy -32000..-32019 range. The revision says that new implementations SHOULD NOT use
+  that range. The HTTP status (401 / 403) and the `WWW-Authenticate` challenge are the
   parts that carry the OAuth meaning.
 - **Out of scope:** stdio, notifications, the request-scoped SSE stream for progress,
   `subscriptions/listen`, `ttlMs` / `cacheScope` on list results, `clientInfo` / `serverInfo`
@@ -53,14 +53,16 @@ reader thinks that the lab is a conformant implementation:
 ## Talking to a 2025 server
 
 An agent that must reach both kinds of server needs a client with two abilities. For a 2025
-server, the client can do the `initialize` handshake and keep the session id. For a 2026
-server, it can send `_meta` per request.
+server, the client must do the `initialize` handshake and keep the session id. For a 2026
+server, the client must send `_meta` per request.
 
 The 2026-07-28 revision names the probe: call `server/discover` first. The changelog names
 this probe for stdio in particular. A server that answers uses the new revision. A server that returns method-not-found gets the old handshake.
 
 A 2025 server sends no `resultType`. The 2026-07-28 schema tells the client to treat an absent
 field as `"complete"`, and the lab's client does this. The lab's server sets `"complete"` on
-every ordinary result. The lab uses only 2026-07-28 on both sides. Its server rejects a client
+every ordinary result.
+
+The lab uses only 2026-07-28 on both sides. Its server rejects a client
 that sends `protocol_version="2025-11-25"` with -32022. The server also lists the versions
 that it supports (see `tests/test_mcp.py`).

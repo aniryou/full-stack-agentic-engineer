@@ -91,10 +91,10 @@ print(f"self-hosted H100 Spot, 6,846.5 tok/s: ${metering.self_hosted_per_million
 
 # %% [markdown]
 # ## Exercise 4.1 — predict the over-admission
-# The prompts of a route are 800 tokens. Its bucket charges a constant estimate, and the outputs of today give its size:
-# lognormal, median 200, $\sigma = 1.2$. The outputs of a new model are lognormal with median 2,000 and $\sigma = 1.2$.
-# When the bucket binds, it will let through more tokens than its size assumed. Set `ratio` to that multiple. Use the
-# lognormal mean $\text{median} \cdot \exp(\sigma^2/2)$.
+# The prompts of a route are 800 tokens. Its bucket charges a constant estimate, and the outputs of today give the size
+# of that estimate: lognormal, median 200, $\sigma = 1.2$. The outputs of a new model are lognormal with median 2,000 and $\sigma = 1.2$.
+# When the bucket binds, it will let through more tokens than the estimate counts. Set `ratio` to that multiple.
+# Use the lognormal mean $\text{median} \cdot \exp(\sigma^2/2)$.
 
 # %% exercise
 import math
@@ -303,8 +303,8 @@ print(f"✅ ledger {d['ledger']:,} vs provider {d['provider']:,} completion toke
 # candidates alone, you under-bill a thinking call 2.5×. We bill cut streams on the relayed deltas and mark them
 # estimated. The gateway reconciles the ledger daily against the export of the provider.
 #
-# "The chargeback of the self-hosted pool is by GPU-seconds, not by tokens. If not, the RAG tenant pays for the decode
-# of the thinking tenant."
+# "The chargeback of the self-hosted pool is by GPU-seconds, not by tokens. If the chargeback is by tokens, the RAG
+# tenant pays for the decode of the thinking tenant."
 #
 # **Drill questions**
 # 1. *After a thinking-model rollout the provider returns 429s, but our request limit never tripped. Why?* It charged
@@ -313,6 +313,6 @@ print(f"✅ ledger {d['ledger']:,} vs provider {d['provider']:,} completion toke
 # 2. *Why not simply reserve `max_tokens` for every request?* It is exact, but it holds budget for the life of every
 #    stream. At a 16K cap, the key served 26.5 % of its limit. Reserve an estimate, debit as the stream goes, and keep a
 #    margin. Reserve the cap only where a 429 from the provider is unacceptable.
-# 3. *The ledger and the invoice disagree by 3 % on output tokens. Where do you look?* Look at four causes. First, cut
-#    streams billed on estimates. Second, retries that the provider billed and that the ledger recorded once. Third, the
-#    pricing of cached tokens. Fourth, estimator drift. Reconcile for each model and field, daily, and alert on it.
+# 3. *The ledger and the invoice disagree by 3 % on output tokens. Where do you look?* Look at four causes. The first is
+#    cut streams that the gateway billed on estimates. The second is retries that the provider billed and that the
+#    ledger recorded once. The third is the pricing of cached tokens. The fourth is estimator drift. Reconcile for each model and field, daily, and alert on it.

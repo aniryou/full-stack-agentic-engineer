@@ -12,7 +12,7 @@ the idea that the notebook shows.
 
 ## Map: notebook → primer section
 
-| Notebook | Primer | What you demonstrate |
+| Notebook | Primer | What you show |
 |---|---|---|
 | `01_agent_identity_and_principals` | §3.1–§3.3 | SPIFFE IDs and `principal://` members. A `principalSet` match on **exact** segments. A runtime CA certificate with the SPIFFE SAN. A certificate-bound token (`cnf.x5t#S256`). A replay from another certificate that fails with `BindingMismatch`. Own against delegated `AuthorityContext`, and `audit_identities()`. |
 | `02_delegation_and_token_exchange` | §3.5, §4.3 | RFC 8693 exchange with the `act` claim. The exchange makes the scopes narrower. Nested `act.act` chains for sub-agents. Audience, expiry and scope failures. DPoP proofs, `ath` binding and `jti` replay. Credential Access Boundary JSON and its local evaluation. |

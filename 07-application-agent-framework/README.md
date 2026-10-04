@@ -6,7 +6,7 @@ Build the agent that the whole stack serves. After this layer, you can do these 
 - Design the platform around the loop: state, context for cache hits, MCP tools, evals and tracing.
 - Make a long-running agent continue correctly through crashes, duplicate deliveries and waits of more than one day.
 - Build retrieval from embeddings to hybrid search, and evaluate it.
-- Run code that a model wrote, and do not give that code your keys.
+- Run code that a model wrote, and keep your keys out of the reach of that code.
 - Give an agent a long-term memory that fits its token budget, stays inside its tenant and forgets when you ask it to.
 
 ## Where this layer sits
@@ -34,16 +34,16 @@ curriculum of the repo ([`CURRICULUM.md`](../CURRICULUM.md), modules 07.1–07.6
 
 | Topic | You will be able to… | Time | Tier |
 |---|---|---|---|
-| [`agent-fundamentals/`](agent-fundamentals/agent-core/README.md) | build the loop in [`agent-core`](agent-fundamentals/agent-core/README.md): termination, tool dispatch, a step budget, an approval gate and structured tool errors. The core uses the standard library and has 4 notebooks. A fifth notebook replaces the fake model with a Mistral provider adapter, and uses the live model when you set a key. Then build the platform in [`gcp-agent-platform-lab`](agent-fundamentals/gcp-agent-platform-lab/README.md). The lab covers workflows against multi-agent, state as an event log, context engineering and caching, and MCP behind a policy gateway. It also covers OAuth, evals, tracing, reliability and cost. It has 15 notebooks and 83 exercises. | ~4 h core, ~20 h platform lab | T0 (a model key is optional) |
+| [`agent-fundamentals/`](agent-fundamentals/agent-core/README.md) | build the loop in [`agent-core`](agent-fundamentals/agent-core/README.md): termination, tool dispatch, a step budget, an approval gate and structured tool errors. The core uses the standard library and has 4 notebooks. A fifth notebook replaces the fake model with a Mistral provider adapter, and uses the live model when you set a key. Then build the platform in [`gcp-agent-platform-lab`](agent-fundamentals/gcp-agent-platform-lab/README.md). The lab covers workflows compared with multi-agent designs, state as an event log, context engineering and caching, and MCP behind a policy gateway. It also covers OAuth, evals, tracing, reliability and cost. It has 15 notebooks and 83 exercises. | ~4 h core, ~20 h platform lab | T0 (a model key is optional) |
 | [`sandboxed-execution/`](sandboxed-execution/README.md) | say what a `run_code` tool can reach when an attacker takes control of the model. Say which control sets the limit on each risk. Say how much isolation you need, on the ladder from a process to a container, then gVisor, then a microVM. Say what a pool of sandboxes costs. Then enforce these controls on Docker, kind and GKE. The topic has a [PRIMER](sandboxed-execution/PRIMER.md), [`sandbox-core`](sandboxed-execution/sandbox-core/README.md) (standard library, 5 notebooks) and [`sandbox-lab`](sandboxed-execution/sandbox-lab/README.md) (5 notebooks). | ~4 h primer + core, ~8 h lab | T0, T0 + Docker, T3 |
 | [`long-running-durable/`](long-running-durable/README.md) | state the invariants of durable execution: durable state, the intent before the act, leases, budgets, and a run that waits and holds no process. Run fan-out/fan-in, human-in-the-loop, sagas, scheduled ticks, slow tools and a tool loop in which the model selects the tools. Run them on a queue, a store and stateless compute. Start with the [primer](long-running-durable/PRIMER.md), which has design drills. Then do [`lra-core`](long-running-durable/lra-core/README.md) (standard library, 3 notebooks), and after it [`lra-gcp`](long-running-durable/lra-gcp/README.md) (6 notebooks, with optional ADK 2 and Mistral paths). | ~10 h (the core, then the lab) | T0 (T3 optional) |
 | [`retrieval-rag/`](retrieval-rag/vector-databases-primer.md) | explain embeddings as factorizations and as contrastive training. Select and adjust an ANN index (IVF, PQ, HNSW). Build hybrid search with fusion and reranking. Evaluate retrieval with recall@k, MRR and nDCG. The topic has the [vector-databases primer](retrieval-rag/vector-databases-primer.md), [`embeddings-lab`](retrieval-rag/embeddings-lab/README.md) (numpy, 6 notebooks + exercises), [`rag-from-scratch`](retrieval-rag/rag-from-scratch/README.md) (7 notebooks) and [`vector_stores`](retrieval-rag/vector_stores/README.md) (FAISS index families and GraphRAG, built again in numpy). | ~28 h | T0 (the semantic embedder of `rag-from-scratch`: T0 + torch, or Colab) |
-| [`agent-memory/`](agent-memory/README.md) | decide what an agent writes to memory, from which source and for whom. Retrieve by similarity, recency and importance inside a token budget for each turn. Lay out memory so that the prefix cache stays valid. Calculate the cost of a turn with the cache and without it. Consolidate episodes into facts on a schedule. Forget by decay, TTL and budget. Make a deletion reach every copy. Keep the memory of another tenant, and the memory of an attacker, out of the prompt. The topic has a [PRIMER](agent-memory/PRIMER.md), [`memory-core`](agent-memory/memory-core/README.md) (standard library + numpy, 5 notebooks) and [`memory-lab`](agent-memory/memory-lab/README.md). The lab has 5 notebooks. They cover SQLite with FTS5 and a pgvector twin, and a memory service and an agent. They also cover prefix-cache hits on vLLM, a scheduled consolidation job, and a deletion with a check on disk. | ~13.5 h: the primer, ~6 h core, ~6.5 h lab | T0, T0 + Docker, T1, T3 (printed) |
+| [`agent-memory/`](agent-memory/README.md) | decide what an agent writes to memory, from which source and for whom. Retrieve by similarity, recency and importance inside a token budget for each turn. Lay out memory so that the prefix cache stays valid. Calculate the cost of a turn with the cache and without it. Consolidate episodes into facts on a schedule. Forget by decay, TTL and budget. Make a deletion reach every copy. Keep the memory of another tenant, and the memory of an attacker, out of the prompt. The topic has a [PRIMER](agent-memory/PRIMER.md), [`memory-core`](agent-memory/memory-core/README.md) (standard library + numpy, 5 notebooks) and [`memory-lab`](agent-memory/memory-lab/README.md). The lab has 5 notebooks. They cover SQLite with FTS5 and a pgvector twin. They also cover a memory service and an agent, prefix-cache hits on vLLM, a scheduled consolidation job and a deletion with a check on disk. | ~13.5 h: the primer, ~6 h core, ~6.5 h lab | T0, T0 + Docker, T1, T3 (printed) |
 
 ## Start here
 
 1. Run `cd agent-fundamentals/agent-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q`.
-   It runs 32 tests in about 20 s. Then open
+   The command runs 32 tests in about 20 s. Then open
    [`01_the_agent_loop`](agent-fundamentals/agent-core/notebooks/01_the_agent_loop.ipynb).
 2. Do the notebooks 00–14 of [`gcp-agent-platform-lab`](agent-fundamentals/gcp-agent-platform-lab/README.md) in
    order. If time is short, do at least 04 (context and caching), 08 (evals) and 09 (tracing).
@@ -96,10 +96,10 @@ the authority of the agent.
 
 ## Caveats
 
-- At T0, every model is a scripted model or a fake model. Thus the labs simulate their latencies and costs. Where a lab supports it,
-  a Gemini, Mistral or other model key puts a real model in place of the fake one.
-- The Google Cloud paths are optional T3 steps. They are the deploys of the durable labs and the GKE Sandbox pool of
-  the sandbox lab. They also include the printed consolidation job of the memory lab. The default install of the durable lab is pydantic plus
+- At T0, every model is a scripted model or a fake model. Thus the labs simulate their latencies and costs. If a lab
+  supports a real model, a Gemini, Mistral or other model key replaces the scripted or fake model with a real model.
+- The Google Cloud paths are optional T3 steps. They are the deploys of the durable labs, the GKE Sandbox pool of
+  the sandbox lab and the printed consolidation job of the memory lab. The default install of the durable lab is pydantic plus
   FastAPI. Its ADK 2 path (the `adk` extra, ~220 MB with the Google Cloud clients, measured 2026-09-26, verify) is
   optional. Its Mistral Workflows path (Python 3.12–3.14) is also optional. When you do not install these paths,
   their tests and their notebook skip.

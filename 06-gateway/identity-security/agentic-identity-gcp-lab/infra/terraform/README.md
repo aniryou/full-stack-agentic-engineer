@@ -26,14 +26,14 @@ Each file has one row in the table in `docs/primer.md` §10.
 | `logging.tf` | Audit (§9) | Data-access audit logs, BigQuery sink for agent principals and `agentsec-audit` |
 | `vpc_sc.tf` | Perimeter (§8), opt-in | Regular perimeter, and an egress rule for the agents principalSet |
 | `org_policy.tf` | Control-plane guardrails (§4.5), opt-in | Custom constraints: PKCE on auth providers, and Agent Identity on engines (illustrative) |
-| `locals.tf` / `outputs.tf` | Principal identifiers (§3.3) | `principal://…`, `principalSet://…`, URLs and names that other tools must have |
+| `locals.tf` / `outputs.tf` | Principal identifiers (§3.3) | `principal://…`, `principalSet://…`, URLs and names that are necessary for other tools |
 
 ## Prerequisites
 
 * Terraform **>= 1.11** (write-only arguments keep the OAuth client secret and the demo
   secret out of state), google provider >= 8.0.
 * A project with billing, and `gcloud` authenticated as a user with Owner or with the equivalent
-  set of admin roles. This set is Service Usage Admin, IAM Admin, Cloud Run Admin, Vertex AI Admin
+  set of admin roles. This set contains Service Usage Admin, IAM Admin, Cloud Run Admin, Vertex AI Admin
   and Secret Manager Admin. It also contains Model Armor Admin, Logging/BigQuery Admin and Agent
   Identity Admin.
 * For the opt-ins, these org-level roles are necessary: Access Context Manager Admin
@@ -68,7 +68,7 @@ after you deploy the agent, and Terraform cannot express every binding. The runb
 
 * **Agent Gateway** must have a network attachment for private destinations. Every destination must
   also have a publicly trusted certificate, and you must register every destination.
-  VPC-SC itself does not cover the gateway. Turn it on when the direct path works and you want
+  VPC-SC itself does not cover the gateway. Turn on the gateway when the direct path works and you want
   mTLS, DPoP, IAP per SPIFFE ID and Model Armor on egress. `agent_gateway.tf` configures all of
   these.
 * **VPC Service Controls** must have an organisation access policy. If the perimeter is incorrect,
@@ -96,7 +96,7 @@ snapshot in `docs/sources.md` (5 Sep 2026) did not confirm. These facts are:
 The idle cost is small, because the Cloud Run service scales to zero and the engine has
 `min_instances = 0`. Also, BigQuery is pay-per-query, with a 90-day table expiry. The data-access audit logs for `allServices`
 are the main variable. To switch them off, set `enable_data_access_audit_logs = false`. The gateway
-and a min-instance engine are the two things that bill while idle.
+and a min-instance engine are the two things that cost money while they are idle.
 
 `terraform destroy` removes everything that it created (buckets and datasets are `force_destroy` /
 `delete_contents_on_destroy`). You must remove two things by hand:

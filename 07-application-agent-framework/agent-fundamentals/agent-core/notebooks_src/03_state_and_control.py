@@ -1,13 +1,13 @@
 # %% [markdown]
 # # 03 · State and control
 #
-# Two things make a loop that you can operate different from a demo loop. First, it
-# remembers the conversation across turns. Second, it protects itself. It has a step
-# budget, and it does not call the same tool again and again.
+# Two things make the difference between a demo loop and a loop that you can operate.
+# First, it remembers the conversation across turns. Second, it protects itself. It has
+# a step budget, and it does not call the same tool again and again.
 #
 # This notebook adds both. It also shows a `policy` model that reacts to the tool
-# results that it gets. With it, you can drive multi-step behaviour without a rigid
-# script.
+# results that it gets. With this policy model, you can drive multi-step behaviour
+# without a rigid script.
 
 # %%
 from agentcore import Agent, FakeLLM, call, calls, text, tool
@@ -69,8 +69,8 @@ print("✅ policy drives the loop without a fixed script")
 # the signatures that already ran (use `tc.signature()`). Return only the calls whose
 # signature is **new**. Add them to `seen`.
 #
-# (In a loop in production, you also give the model a "you already have this" note for
-# the dropped calls. Here, you only filter them.)
+# In a loop in production, you also give the model a "you already have this" note for
+# the dropped calls. Here, you only filter them.
 
 # %% exercise
 def dedupe(tool_calls, seen: set) -> list:

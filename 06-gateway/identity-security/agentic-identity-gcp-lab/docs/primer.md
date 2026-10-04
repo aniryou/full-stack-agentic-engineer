@@ -1,6 +1,6 @@
 # Identity & Security for Agentic Systems — A Primer with a GCP Reference Implementation
 
-*The author wrote this primer on 5 September 2026, for the agent platform of Google Cloud. The sections have numbers, thus you can study one section at a time. Every section ends with "In one sentence" (the 30-second version). Most sections map to a module in `src/agentsec/` and a notebook in `notebooks/`. On the date above, the author made sure that the facts about Google Cloud products agree with the documentation. Before you rely on the items in the Verify list (§13), examine them again.*
+*The author wrote this primer on 5 September 2026, for the agent platform of Google Cloud. The sections have numbers, thus you can study one section at a time. Every section ends with "In one sentence" (the 30-second version). Most sections map to a module in `src/agentsec/` and a notebook in `notebooks/`. On that date, the author made sure that the facts about Google Cloud products agree with the documentation. Before you rely on the items in the Verify list (§13), examine them again.*
 
 ---
 
@@ -8,7 +8,7 @@
 
 An agent is a **workload that turns untrusted text into privileged actions**. Every security problem in this primer comes from that one sentence:
 
-- *Untrusted text*: the model reads prompts, tool results, web pages, documents, and messages from other agents. The model cannot reliably tell instructions from data. Anything that the agent reads is an attack surface.
+- *Untrusted text*: the model reads prompts, tool results, web pages, documents, and messages from other agents. The model cannot reliably find the difference between instructions and data. Anything that the agent reads is an attack surface.
 - *Privileged actions*: the agent holds credentials and calls tools. Its blast radius is the union of everything that those credentials can do.
 - *Workload*: it runs in some location, under some identity. You must be able to govern it like any other production system. It must have a name and permissions, you must be able to observe it, and you must be able to revoke it.
 
@@ -39,7 +39,7 @@ Classical IAM has two kinds of principals. The first kind is **humans** (interac
 |---|---|---|
 | The code of a workload sets its behavior | At runtime, the model selects the tools to call and their arguments. Untrusted input has an effect on this selection. | You cannot list what the workload "needs". You must bound what it *can* do, and put a gate on what it *does*. |
 | One identity per deployment is sufficient | Dozens of agents can share a runtime. An agent can spawn sub-agents. One agent serves many users. | Shared identities make attribution and revocation impossible. You need per-agent identity plus per-user delegation. |
-| Instructions come from the developer. Data comes from users. | Instructions and data arrive in the same channel (the context window). The model cannot cryptographically tell them apart. | Prompt injection is not a bug that a patch can repair. It is a property of the medium. Treat every input as untrusted, and enforce policy outside the model. |
+| Instructions come from the developer. Data comes from users. | Instructions and data arrive in the same channel (the context window). The model cannot cryptographically find the difference between them. | Prompt injection is not a bug that a patch can repair. It is a property of the medium. Treat every input as untrusted, and enforce policy outside the model. |
 | The caller of an API is the entity that decided to call it | The *model* decided. The *agent runtime* did the call. The *user* asked for a fully different thing. | The "confused deputy" problem is the default state of an agent, not an edge case. |
 | Long-lived secrets with an occasional rotation are acceptable for workloads | Agents do arbitrary reasoning on content. An attacker can write some of that content so that it exfiltrates secrets from the context or the environment of the agent. | Assume that a long-lived credential in the reach of an agent can leak. Use short-lived, sender-constrained tokens that the issuer gives just in time. |
 
@@ -48,7 +48,7 @@ Two well-known framings are useful here:
 - **The lethal trifecta** (Simon Willison) has three legs. They are (a) access to private data, (b) exposure to untrusted content, and (c) a way to communicate externally. If an agent has all three, an attacker can make it exfiltrate data. Remove one leg, or put a deterministic gate on it.
 - **Google's three principles for secure agents** (2025) are these. Agents must have *well-defined human controllers*. Agent *powers must be limited*. Agent *actions and planning must be observable*. Google uses these principles together with a hybrid defense: deterministic runtime policy enforcement plus reasoning-based defenses (model hardening, classifiers).
 
-**In one sentence:** "An agent is a workload. At runtime, a model that reads untrusted input selects its behavior. Thus I do not try to predict what it needs. I bound what it can do: I give it its own identity, and I limit the credential of each action to that action. I enforce policy outside the model, and I log everything with the identity of the user and the identity of the agent."
+**In one sentence:** "An agent is a workload. At runtime, a model that reads untrusted input selects the behavior of the workload. Thus I do not try to predict what it needs. I bound what it can do: I give it its own identity, and I limit the credential of each action to that action. I enforce policy outside the model, and I log everything with the identity of the user and the identity of the agent."
 
 ---
 
@@ -83,7 +83,7 @@ Two habits make a threat model credible when you draw it on a whiteboard:
 
     Each flow across a boundary gets an identity, a policy and a log.
 
-- **Ask "what if the model is fully adversarial?"** for each tool. If the answer is "it can do X, and nothing outside the model stops it", then X is your risk. Then add the deterministic control.
+- **Ask "what if the model is fully adversarial?"** for each tool. If the answer is "it can do X, and nothing outside the model stops it", X is your risk. Then add the deterministic control.
 
 **In one sentence:** "I use the agentic top ten of OWASP as the checklist. But the design question is always the same. Assume that an attacker hijacked the model. What is the worst thing that it can do with the credentials and tools that it holds? Which control outside the model stops it?"
 
@@ -106,7 +106,7 @@ An agentic system has more principals than a classical app. Name all of them:
 
 Every action of the agent is under one of two authorities. Make this explicit in code, tokens and logs:
 
-- **Own authority**: the agent uses *its* identity and *its* IAM grants. Example: the agent writes traces to Cloud Logging or reads a shared knowledge base. Or it calls a 2-legged-OAuth SaaS API with credentials that the organization gave *the agent*. Audit logs show only the identity of the agent.
+- **Own authority**: the agent uses *its* identity and *its* IAM grants. Example: the agent writes traces to Cloud Logging or reads a shared knowledge base. It can also call a 2-legged-OAuth SaaS API with credentials that the organization gave *the agent*. Audit logs show only the identity of the agent.
 - **Delegated authority (on behalf of a user)**: the agent acts with credentials that *the user consented to*, typically 3-legged OAuth. Example: the agent reads the user's calendar, creates a ticket as the user, or sends a query to BigQuery with the user's own dataset permissions. Audit logs must show **both** the agent and the user. Google's Agent Identity does exactly this when it acts through Auth Manager.
 
 You cannot use one authority in place of the other. A common design error is to give broad permissions to the agent's own identity ("it needs to read everyone's tickets"). The correct design uses delegation: the agent reads *this user's* tickets with *this user's* token. Delegation keeps the agent's own blast radius small. It also makes authorization decisions the problem of the resource, which already knows how to authorize users.
@@ -125,7 +125,7 @@ A good agent identity has the properties in this table. Google Cloud's Agent Ide
 | **Governable as a group** | Policy at fleet scale | `principalSet://…/attribute.platformContainer/aiplatform/projects/PROJECT_NUMBER` (all agents in a project), `…/attribute.platform/aiplatform` (all agents in the org) |
 | **Usable in all policy types** | Same controls as any principal | IAM allow and deny policies, Principal Access Boundary policies, VPC-SC ingress/egress rules |
 
-The runtimes that support it today are **Agent Runtime** (Agent Engine, resource type `reasoningEngines`), **Gemini Enterprise**, and **Cloud Run** (`gcloud beta run deploy … --functional-type=agent --identity-type=agent-identity`, and MCP servers with `--functional-type=mcp-server`). To deploy with the Python SDK, use `client.agent_engines.create(agent=AdkApp(agent), config={"identity_type": types.IdentityType.AGENT_IDENTITY, …})`. To deploy with ADK deploy, put `{"identity_type": "AGENT_IDENTITY"}` in `.agent_engine_config.json`. Inside the agent, Application Default Credentials transparently get the certificate-bound token from the metadata server. Thus `google.auth.default()` works with the agent identity, and you do nothing more.
+Today, these runtimes support Agent Identity: **Agent Runtime** (Agent Engine, resource type `reasoningEngines`), **Gemini Enterprise**, and **Cloud Run** (`gcloud beta run deploy … --functional-type=agent --identity-type=agent-identity`, and MCP servers with `--functional-type=mcp-server`). To deploy with the Python SDK, use `client.agent_engines.create(agent=AdkApp(agent), config={"identity_type": types.IdentityType.AGENT_IDENTITY, …})`. To deploy with ADK deploy, put `{"identity_type": "AGENT_IDENTITY"}` in `.agent_engine_config.json`. Inside the agent, Application Default Credentials transparently get the certificate-bound token from the metadata server. Thus `google.auth.default()` works with the agent identity, and you do nothing more.
 
 Know these two things:
 
@@ -137,7 +137,7 @@ Know these two things:
 Agent Identity does not replace the rest of Google Cloud IAM. You use them together:
 
 - **Service accounts** stay the identity for non-agent infrastructure (build pipelines, the front-end, a Cloud SQL proxy). They are also the identity for Cloud Run MCP servers that select `--identity-type=service-account`.
-- **Workload Identity Federation** brings external identities (GitHub Actions OIDC, AWS/Azure workloads, on-prem SPIFFE) into IAM through STS token exchange, without keys. This is the correct way for CI to deploy agents.
+- **Workload Identity Federation** brings external identities (GitHub Actions OIDC, AWS/Azure workloads, on-prem SPIFFE) into IAM through STS token exchange, without keys. Workload Identity Federation is the correct way for CI to deploy agents.
 - **Short-lived impersonation** (`generateAccessToken`, `generateIdToken`) and **Credential Access Boundaries** (downscoped tokens, Cloud Storage only) let a broker issue narrowly scoped, short-lived credentials for one tool call.
 - **IAM Conditions** (CEL on resource name, time, request attributes), **deny policies**, **Principal Access Boundary policies**, and **Org Policy custom constraints** set the "cannot exceed" envelope. The allow grants do not change that envelope.
 
@@ -152,11 +152,12 @@ Agent Identity does not replace the rest of Google Cloud IAM. You use them toget
     Before it issues anything, the STS verifies both inputs. The subject token must have an audience that the STS serves. The actor token must authenticate the agent (with the agent's own credential, not a claim in the request).
 
     If the subject token carries `may_act` (§4.4), only the actor that it names can act for the user. Chains (`act.act`) represent multi-hop delegation. Google's own STS uses this grant for Workload Identity Federation.
+
 - **RFC 9449 DPoP**: on every request, the client proves that it has a private key, with a signed `DPoP` header (`htm`, `htu`, `iat`, `jti`, `ath`). The token carries `cnf.jkt`. A replayed bearer token without the key fails.
 - **RFC 8705 mTLS-bound tokens**: the token carries `cnf.x5t#S256` (certificate thumbprint). The resource server makes sure that the TLS client certificate matches. This is what "certificate-bound" means for Agent Identity.
 - **Credential Access Boundaries**: a downscoped Google access token, restricted to specific buckets/prefixes and permissions. It is the pattern for "give this tool call access to exactly one prefix for five minutes".
 
-The reference implementation contains a small local STS. It does RFC 8693 exchange with an `act` claim, issues certificate-bound (`cnf.x5t#S256`) agent tokens, and verifies DPoP proofs. Thus you can *show* that a replay fails, and not only describe it.
+The reference implementation contains a small local STS. It does RFC 8693 exchange with an `act` claim, issues certificate-bound (`cnf.x5t#S256`) agent tokens, and verifies DPoP proofs. Thus you can *show* that a replay fails, in place of a description of the failure.
 
 **In one sentence:** "Each agent gets its own SPIFFE identity with a runtime-attested certificate. Its tokens are bound to that certificate, thus a token theft does not help. Then I separate the agent's own authority from delegated authority. The agent's identity gets narrow infrastructure roles. Anything user-specific occurs with a user-delegated token that names both the user and the agent. Thus the resource authorizes the user, and the log shows both."
 
@@ -217,7 +218,7 @@ Confirmation is a control only if the person sees **what will execute**, not wha
 
 1. **No secrets in prompts, instructions, tool descriptions, or session state.** The model can read the context window. Thus anyone who can inject into the context window can also read it. ADK's `tool_context.state` is session state. Treat it as semi-trusted. In production, never put raw refresh tokens there.
 2. **Prefer no secret at all.** Agent Identity and Workload Identity Federation give you keyless auth to Google APIs and external providers. Where you can replace a stored secret with a runtime-attested identity, replace it.
-3. **When a secret is unavoidable, keep it in a vault and let a broker issue it.** API keys and OAuth client secrets live in **Auth Manager** (agent-facing) or **Secret Manager** (infrastructure-facing). Each secret has IAM on it, a log of each access and a scheduled rotation. The agent's own principal gets `roles/secretmanager.secretAccessor` on exactly the secrets that it needs.
+3. **When a secret is unavoidable, keep it in a vault and give it out through a broker.** API keys and OAuth client secrets live in **Auth Manager** (agent-facing) or **Secret Manager** (infrastructure-facing). Each secret has IAM on it, a log of each access and a scheduled rotation. The agent's own principal gets `roles/secretmanager.secretAccessor` on exactly the secrets that it needs.
 4. **Short-lived, audience-bound, sender-constrained.** The lifetime is minutes, not days. The token has one audience. Where the ecosystem supports it, the token is bound to the caller's certificate or DPoP key.
 5. **Redact by default.** Structured logs go through a redactor. The code wraps secret values in types whose `repr` never prints them.
 
@@ -226,7 +227,7 @@ Confirmation is a control only if the person sees **what will execute**, not wha
 - **Direct path**: ADK intercepts the tool call and asks Auth Manager for the credential. Then the agent process attaches the credential to the outbound request. This path is simple. But a compromised runtime or a successful injection can read the token from memory for its lifetime.
 - **Gateway path**: Auth Manager encrypts the end-user credentials. Only **Agent Gateway** decrypts them, and it injects them into the egress request. The agent code never sees the raw credential. The blast-radius story is stronger. This path needs the gateway in the path, and registered destinations.
 
-Neither path removes credential risk. They move it from a thousand config files into one well-defended box. Say that aloud, because that is the honest way to describe it.
+Neither path removes credential risk. They move it from a thousand config files into one well-defended box. Say this point aloud, because it is the honest description of the two paths.
 
 **In one sentence:** "First, I design for no secrets, with agent identity and WIF. I keep all other secrets in a vault, in Auth Manager or Secret Manager, with per-secret IAM. The broker issues a credential for each call. Each credential is short-lived and bound to the caller. I also decide explicitly if the agent process can ever hold a raw user credential. If not, egress goes through Agent Gateway, which decrypts and injects at the edge."
 
@@ -269,7 +270,7 @@ For multi-step tasks, make the agent produce a plan (the list of tool calls that
 The MCP authorization specification (revision 2025-11-25) sets the roles. The **MCP client** is an OAuth 2.1 client, the **MCP server** is a **resource server**, and an **authorization server** issues tokens. The 2026-07-28 revision keeps the same model. It deprecates Dynamic Client Registration, and recommends Client ID Metadata Documents in its place. Know these requirements well, so that you can say them from memory:
 
 - Servers **MUST** implement **Protected Resource Metadata** (RFC 9728) and advertise it. They use `WWW-Authenticate: Bearer resource_metadata="…"` on 401 and/or `/.well-known/oauth-protected-resource[/path]`. Clients find the authorization server from it (RFC 8414 or OIDC discovery).
-- Clients **MUST** use **PKCE (S256)**. If the AS metadata does not have `code_challenge_methods_supported`, they must refuse to continue.
+- Clients **MUST** use **PKCE (S256)**. If the AS metadata does not have `code_challenge_methods_supported`, they **MUST** refuse to continue.
 - Clients **MUST** send the **`resource` parameter** (RFC 8707) in both authorization and token requests. Its value is the canonical URI of the MCP server. Servers **MUST** validate that tokens were issued *for them* (audience).
 - **No token passthrough.** A server must not accept tokens issued for other resources. It must not forward the token that it received to upstream APIs. If it calls upstream, it is a separate OAuth client with a separate token. This is the confused-deputy guard.
 - Tokens go in `Authorization: Bearer`, never in query strings. A `403 insufficient_scope` with a `scope` challenge starts step-up authorization. Redirect URIs are localhost or HTTPS. Access tokens are short-lived. Public clients use refresh-token rotation.
@@ -344,7 +345,7 @@ The governance loop has these steps, in this order:
 
 Treat instructions, tool lists and policies as versioned artifacts with review.
 
-**In one sentence:** "I want every tool call to leave one event. That event tells who asked, which agent acted, under whose authority, what exactly ran, who approved it, and why the policy permitted it. Then I send that event into anomaly detection. I keep a one-line kill switch: a deny policy on the agent's principal."
+**In one sentence:** "I want every tool call to leave one event. That event shows who asked, which agent acted, under whose authority, what exactly ran, who approved it, and why the policy permitted it. Then I send that event into anomaly detection. I keep a one-line kill switch: a deny policy on the agent's principal."
 
 ---
 
@@ -357,7 +358,7 @@ Treat instructions, tool lists and policies as versioned artifacts with review.
 | Primer concept | Google Cloud control | In this repository |
 |---|---|---|
 | Agent as first-class principal | Agent Identity (SPIFFE, cert-bound tokens) | `agentsec.identity.AgentIdentity`, `certs.py`, Terraform `reasoning_engine.tf` (`identity_type = "AGENT_IDENTITY"`), `infra/scripts/deploy_mcp_cloud_run.sh` |
-| Own or delegated authority | ADC for own, Auth Manager 3LO for delegated, dual-identity audit logs | `identity/delegation.py`, `identity/auth_manager.py` (`LocalAuthManager`, the local equivalent of ADK `GcpAuthProvider`) |
+| Own or delegated authority | ADC for own, Auth Manager 3LO for delegated, dual-identity audit logs | `identity/delegation.py`, `identity/auth_manager.py` (`LocalAuthManager`, which works with ADK `GcpAuthProvider`) |
 | Scoped credential per call | Auth Manager providers + IAM, STS/impersonation, Credential Access Boundaries | `identity/tokens.py` (RFC 8693 exchange, DPoP), `identity/downscope.py` |
 | Runtime PEP | ADK plugin callbacks | `policy/engine.py`, `policy/adk_plugin.py`, `policies/*.yaml` |
 | Human confirmation | ADK tool confirmation | `agents/tools.py`, `runtime.py` |

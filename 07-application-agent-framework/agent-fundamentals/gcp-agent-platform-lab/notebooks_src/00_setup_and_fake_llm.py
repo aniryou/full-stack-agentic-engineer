@@ -2,7 +2,7 @@
 # # 00 · Setup and the fake model
 #
 # Everything in this lab runs **offline**. A scripted `FakeLLM` takes the place of Gemini.
-# Thus you can learn the mechanics that a design review really examines, and you need no API key.
+# Thus you can do exercises on the mechanics that a design review really examines, and you need no API key.
 # These mechanics are tool contracts, loops, state, identity, evaluation and cost.
 # When you have a key, `agentlab.llm.gemini.GeminiLLM` is a drop-in replacement (see `docs/GEMINI_ADAPTER.md`).
 #
@@ -39,7 +39,7 @@ print("text:", r2.text, "| usage:", r2.usage)
 # %% [markdown]
 # Every response has `usage` (the input, output and cached tokens) and a simulated `latency_ms`.
 # The token count is an estimate (≈ 4 characters per token).
-# The estimate is sufficient to make the budgets and the cost calculations behave as in production.
+# The estimate is sufficient to make the budgets and the cost calculations behave approximately as in production.
 
 # %%
 print("tokens in 'Hello, agentic world':", count_tokens("Hello, agentic world"))
@@ -64,7 +64,7 @@ for turn in ("Can I return shoes?", "What about electronics?", "And gift cards?"
 # %% [markdown]
 # ### Exercise 2.1 — break the cache, then explain it
 #
-# Change *one thing* in how you build the messages, so that the second and third turns cache **no** tokens.
+# Change *one thing* in how you build the messages, so that the second and third turns have **no** cached tokens.
 # Do not change the policy text. (Hint: what occurs if the volatile part comes *before* the stable part?)
 #
 # Then write one sentence in `explanation`. Say why that order is high-cost in production.
@@ -121,7 +121,7 @@ print("two rules matched → two parallel tool calls:", [tc.name for tc in r.too
 # ### Exercise 3.1 — extract arguments with a regex
 #
 # Write a `Rule` whose `args` function gets the order id from messages such as
-# *"where is order ORD-10442?"* and *"status of ORD-7?"*. The function returns `{"order_id": "ORD-10442"}`.
+# *"where is order ORD-10442?"* and *"status of ORD-7?"*. For the first message, the function must return `{"order_id": "ORD-10442"}`.
 # If no id is present, return `{"order_id": None}`.
 # Then the schema validation of the tool produces a useful error (Notebook 01).
 

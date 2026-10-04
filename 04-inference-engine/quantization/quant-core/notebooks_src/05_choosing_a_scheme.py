@@ -56,7 +56,7 @@ def show(rows, session=2000):
 show(C.table(L4, m8, schemes=["bf16", "w8a16-fp8", "w4a16", "w8a8-fp8"]))
 
 # %% [markdown]
-# Read each row of the table by its bound. Decode at batch 1 is the weight read. Weights of 16.1, 9.1 and 5.7 GB give 65, 36 and
+# Read each column of the table by its bound. Decode at batch 1 is the weight read. Weights of 16.1, 9.1 and 5.7 GB give 65, 36 and
 # 22 ms. The decrease is not 3.9×, because the 16-bit LM head, the KV read and the step overhead do not decrease.
 # Prefill is compute: only FP8 W8A8 halves it. The number of sessions depends on the bytes that stay for KV: FP8 KV
 # doubles it at any weight format.

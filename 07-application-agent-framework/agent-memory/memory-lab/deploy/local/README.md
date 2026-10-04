@@ -2,7 +2,7 @@
 
 **Tier:** T0 + Docker. **Cost:** free. **Time:** about 5 minutes the first time (image build and a Postgres pull).
 
-This folder starts the services in the table. All of them are bound to 127.0.0.1:
+The `up.sh` script of this folder starts the services in the table. All of them are bound to 127.0.0.1:
 
 | Service | Port | What it is |
 |---|---|---|
@@ -24,7 +24,7 @@ export MEMLAB_LLM_URL=http://127.0.0.1:8000                     # notebooks 02/0
 export MEMLAB_PG_DSN=postgresql://memlab:memlab-local-only@127.0.0.1:5432/memlab   # notebook 01, with psycopg
 ```
 
-If there is no Docker daemon, `up.sh` prints the commands and exits 0. Then the notebooks run their T0 paths.
+If there is no Docker daemon, `up.sh` prints the commands and exits 0, and the notebooks run their T0 paths.
 Where a container gives the answer on a machine with Docker, the notebooks show sample output in the documented
 format (illustrative).
 

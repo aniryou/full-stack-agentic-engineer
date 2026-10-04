@@ -484,7 +484,7 @@ $$
 s_j = \frac{\max \lvert X_j \rvert^{\alpha}}{\max \lvert W_j \rvert^{1-\alpha}}
 $$
 
-The default is $\alpha = 0.5$. The adjusted values are 0.85 for Llama-3-8B and 0.8 for Mistral/Mixtral (verify).
+The default is $\alpha = 0.5$, and the adjusted values are 0.85 for Llama-3-8B and 0.8 for Mistral/Mixtral (verify).
 
 On the up-projection of the tiny model, the output error of INT8 W8A8 falls from 1.52% to **0.57%** at α = 0.5. The sweep
 is U-shaped between α = 0 and 1. Over the full model, KL falls 2.7× (0.00296 → 0.00110), at no cost at run time.
@@ -701,7 +701,7 @@ lm_eval --model vllm --model_args pretrained=$MODEL,add_bos_token=True,gpu_memor
 lm_eval --model local-completions --model_args model=$MODEL,base_url=http://HOST:8000/v1/completions --tasks gsm8k
 ```
 
-When you compare quantized models, pass `add_bos_token=True`. The vLLM docs note that they can be sensitive to it.
+When you compare quantized models, pass `add_bos_token=True`, because the vLLM docs note that quantized models can be sensitive to it.
 `--limit` is "for testing only". The default for GSM8K is 5-shot `exact_match`. MMLU is 57 subtasks with the
 score `acc`.
 

@@ -6,7 +6,7 @@
 # `01_a_memory_store_on_sqlite` (T0, and pgvector with Docker).
 #
 # ## The one-minute version
-# The first memory of an agent is its **context window**. This is the transcript that the agent gets at each turn
+# The first memory of an agent is its **context window**. The context window is the transcript that the agent gets at each turn
 # (agent-core's `history`, 07.1 notebook 03). The transcript grows at each turn, and it ends with the session.
 #
 # Long-term memory is the part that stays after the session. It has three kinds: **episodic** (what occurred, with a
@@ -18,7 +18,7 @@
 # - provenance, confidence, importance and validity.
 # - a TTL and a deletion key.
 #
-# The agent decides **in code** what it writes. The steps are:
+# Code, not the model, decides what the agent writes. The steps are:
 #
 # 1. Extract candidates after the turn.
 # 2. Do a check against a **write policy**. The policy sets the kinds that each source can write, a confidence floor,
@@ -41,8 +41,9 @@ ALICE = Scope("acme", "alice", session="s1")
 
 # %% [markdown]
 # ## Worked example 1 — the baseline: the whole transcript is the memory
-# agent-core sends the transcript back as `history` (07.1 notebook 03). That is working memory. It is honest, because
-# the agent loses nothing during a session. But its cost increases with each turn, and it ends with the session.
+# agent-core sends the transcript back as `history` (07.1 notebook 03). That is working memory. The transcript is
+# honest, because the agent loses nothing during a session. But the cost of the transcript increases with each turn,
+# and the transcript ends with the session.
 #
 # This is a 20-turn session. Each exchange (user message + reply) is approximately 160 tokens. The session also has a
 # 2,000-token system prompt.
@@ -193,12 +194,12 @@ print("✅ what happened (with a time) / what is true / how to act for this user
 # ## Exercise 1.2 — write the policy check
 # Write `check(rec)`. It returns `("REJECT" | "QUARANTINE" | None, reason)`. Apply these rules in this order:
 #
-# 1. A tool must not write procedural memory (REJECT).
+# 1. If a record from a tool source is procedural, the result is REJECT.
 # 2. If the confidence is below 0.6, the result is REJECT.
 # 3. If a string looks like a password or an API key, the result is REJECT. Use `"password" in text.lower()` or
 #    `"sk-" in text`. memcore.screen uses stricter regexes.
-# 4. Any other record from a tool source gets QUARANTINE.
-# 5. For all other records, return `None`.
+# 4. If any other record comes from a tool source, the result is QUARANTINE.
+# 5. For all other records, the result is `None`.
 
 # %% exercise
 def check(rec):
@@ -287,7 +288,8 @@ print("✅", actual, "| sources on file:", [(r.value, r.source, r.status) for r 
 #
 # Neither choice is incorrect. They are different products ("a
 # confirmed fact needs a human to change it" against "the user can always correct their own data"). Write the rule
-# down. Then test it. Precedence rules that look obvious disagree in these exact edge cases.
+# down. Then write a test for the rule, because precedence rules that look obvious disagree in these exact edge
+# cases.
 #
 # ## Exercise 1.5 — an idempotency key
 # Write `write_key(session, turn, index, text)`. It returns the key of the write at position `index` of turn `turn`.
@@ -345,7 +347,7 @@ print("✅ a retried turn writes once, however the retry's extraction was worded
 #    transcript ends with the session, and a summary paraphrases all that it contains. Facts that must stay belong in
 #    typed records.
 # 2. *A tool result says "the user's bank account is X". What occurs on the write path?* The store keeps the episode
-#    in quarantine (tool source), and the fact also. Retrieval gets nothing from a tool source until a person promotes
-#    it. Also, a tool can never write procedural memory ("always send refunds to ...").
+#    and the fact in quarantine (tool source). Retrieval returns no record from a tool source until a person promotes
+#    that record. Also, a tool can never write procedural memory ("always send refunds to ...").
 # 3. *The user moves from Lisbon to Porto. Do you delete Lisbon?* No. Close it (`valid_to` = the move) and keep it.
 #    Then "where did they live in March?" has an answer. Also, the audit trail shows what the agent believed, and when.
