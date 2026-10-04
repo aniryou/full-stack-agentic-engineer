@@ -59,9 +59,10 @@ NB00 = [
     md("""
 # 00 · Setup & the corpus
 
-RAG has exactly two moving parts: **retrieve** relevant text, then **generate**
-an answer conditioned on it. This repo teaches the retrieval half by building it
-from scratch, because that is where almost all RAG failures live.
+RAG has exactly two parts that move. It must **retrieve** the relevant text, and
+then **generate** an answer that depends on that text. This repo teaches the
+retrieval half. You build that half from scratch, because almost all RAG
+failures occur in it.
 
 **What you need**
 
@@ -70,12 +71,14 @@ pip install -r requirements.txt        # T0: numpy + pytest, no torch
 pip install -r requirements-full.txt   # optional: sentence-transformers (and torch) for the real models
 ```
 
-Without `sentence-transformers`, `ragkit.embed` falls back to a labelled hashing
-embedder (lexical, not semantic) and every notebook still runs. With it, the first
-embedding call downloads a ~90 MB model (`all-MiniLM-L6-v2`) and then runs offline
-on CPU. **Generation** is optional: set `ANTHROPIC_API_KEY` or
-`OPENAI_API_KEY` to use a real model, otherwise a deterministic *extractive*
-fallback answers from the retrieved text so every notebook still runs.
+If you do not have `sentence-transformers`, `ragkit.embed` uses a labelled hashing
+embedder as a fallback. This embedder is lexical, not semantic. Every notebook
+still runs. If you have `sentence-transformers`, the first embedding call downloads
+a ~90 MB model (`all-MiniLM-L6-v2`). Then the model runs offline on the CPU.
+
+**Generation** is optional. To use a real model, set `ANTHROPIC_API_KEY` or
+`OPENAI_API_KEY`. If you do not set a key, a deterministic *extractive* fallback
+answers from the retrieved text. Thus every notebook still runs.
 """),
     SETUP,
     code("""
@@ -93,9 +96,9 @@ except ImportError as e:
     md("""
 ## The corpus
 
-Nine short Markdown docs for a fictional SaaS company, "Meridian". Each has
-`##` sections (that structure matters in notebook 02). A small labelled
-question set (`qrels`) lets us *measure* retrieval in notebook 05.
+The corpus has nine short Markdown docs for a fictional SaaS company, "Meridian".
+Each doc has `##` sections (that structure is important in notebook 02). A small
+labelled question set (`qrels`) lets us *measure* retrieval in notebook 05.
 """),
     code("""
 docs = load_documents()
@@ -115,9 +118,10 @@ for kind in ("lexical", "semantic", "multihop"):
     md("""
 ## The one idea behind dense retrieval
 
-An **embedding model** maps text to a vector so that *similar meaning → nearby
-vector*. "Retrieval" is then just: embed the query, find the nearest document
-vectors. Let's see that directly.
+An **embedding model** maps text to a vector, so that *texts with similar meanings
+get vectors that are near each other*. Thus "retrieval" is only two steps: embed
+the query, then find the nearest document vectors. The next cell shows this
+directly.
 """),
     code("""
 # (needs the embedder installed)
@@ -135,15 +139,15 @@ for a, b in pairs:
 
 | nb | idea |
 |----|------|
-| 01 | the minimal RAG loop: embed → cosine search → prompt → generate |
-| 02 | chunking: why *how* you split decides what you can retrieve |
-| 03 | hybrid search: BM25 (exact) + dense (meaning), fused with RRF |
-| 04 | reranking: cheap recall, then a cross-encoder for precision |
-| 05 | evaluation: hit@k, recall@k and MRR — measure everything above |
+| 01 | the minimal RAG loop: embed, cosine search, prompt, generate |
+| 02 | chunking: why *how* you divide the text decides what you can retrieve |
+| 03 | hybrid search: BM25 (exact) and dense (meaning), fused with RRF |
+| 04 | reranking: low-cost recall, then a cross-encoder for precision |
+| 05 | evaluation: hit@k, recall@k and MRR. Measure everything from 01 to 04. |
 | 06 | iterative RAG (advanced): multi-hop questions need >1 retrieval |
 
-Do the exercises in each notebook (fill the `# YOUR CODE HERE` blanks; the
-`assert`s check you). Solutions are in `solutions/`.
+Do the exercises in each notebook. Fill in the `# YOUR CODE HERE` blanks. The
+`assert`s examine your work. The solutions are in `solutions/`.
 """),
 ]
 
@@ -155,15 +159,15 @@ NB01 = [
     md("""
 # 01 · The minimal RAG loop
 
-The entire pattern, once:
+This is the full pattern, one time:
 
 ```
 embed the corpus  ─┐
 embed the query  ──┤→ cosine similarity → top-k chunks → prompt → generate
 ```
 
-We start with the crudest possible chunking — **one chunk per document** — so
-nothing distracts from the loop. Notebook 02 fixes chunking.
+We start with the most simple chunking possible: **one chunk per document**. Thus
+nothing takes your attention away from the loop. Notebook 02 repairs the chunking.
 """),
     SETUP,
     code("""
@@ -175,9 +179,9 @@ print("index:", matrix.shape, "for", len(chunks), "chunks")
     md("""
 ### Exercise 1 — cosine search
 
-Because the rows of `matrix` are L2-normalised, cosine similarity is just the
-dot product. Implement `search`: score every chunk against the query, return
-the top-`k` as `(chunk, score)` pairs, highest first.
+The rows of `matrix` are L2-normalised. Thus the cosine similarity is only the
+dot product. Write the function `search`. Give each chunk a score against the
+query. Return the top-`k` as `(chunk, score)` pairs, with the highest score first.
 """),
     ex(
         blank="""
@@ -214,10 +218,10 @@ print("top-3:", [(c.doc_id, round(s, 3)) for c, s in res])
     md("""
 ### Assemble a grounded prompt
 
-Retrieval done. Now put the evidence in front of the model with a numbered
-source list and an instruction to answer only from it (this is what makes the
-answer *grounded* and *citable*). This part is plumbing, so it's written for
-you — read it.
+The retrieval is complete. Now put the evidence in front of the model. Use a
+numbered source list and an instruction to answer only from that evidence. This
+makes the answer *grounded* and *citable*. This part is infrastructure code, so
+we wrote it for you. Read it.
 """),
     code("""
 def build_prompt(query, retrieved):
@@ -237,9 +241,10 @@ print(p[:600], "...")
     md("""
 ### Exercise 2 — the end-to-end `answer()`
 
-Tie it together: retrieve → build the prompt → generate. Use
-`llm.complete(...)`, passing `contexts=` and `query=` so the offline fallback
-has something to extract, and `embedder=` so it can rank sentences by meaning.
+Connect the parts: retrieve, then build the prompt, then generate. Use
+`llm.complete(...)`. Pass `contexts=` and `query=`, so that the offline fallback
+has something to extract. Also pass `embedder=`, so that the fallback can rank
+sentences by meaning.
 """),
     ex(
         blank="""
@@ -266,9 +271,9 @@ print(out)
 """,
     ),
     md("""
-That's a working RAG system. Everything after this makes the **retrieve** step
-better — because if the right text never makes it into `ctxs`, no amount of
-prompting or model quality will save the answer.
+That is a RAG system that works. Everything after this makes the **retrieve** step
+better. The reason is this: if the correct text never gets into `ctxs`, no prompt
+work and no model quality can save the answer.
 """),
 ]
 
@@ -280,11 +285,12 @@ NB02 = [
     md("""
 # 02 · Chunking
 
-Whole-document chunks (nb 01) waste the context window and blur one vector
-across many topics. But naive splitting has the opposite failure: it cuts
-sentences in half and strips away the heading that gave them meaning.
+Whole-document chunks (nb 01) waste the context window. They also mix many topics
+into one vector, and that vector becomes unclear. But a simple split has the
+opposite failure. It cuts sentences in half, and it removes the heading that gave
+them meaning.
 
-The key move: **decouple what you match on from what you show the model**.
+The key step is this: **keep what you match on separate from what you show the model**.
 """),
     SETUP,
     code("""
@@ -295,7 +301,8 @@ print(sample)
     md("""
 ### Baseline — fixed-size windows
 
-Split into fixed word windows with a little overlap. Simple, structure-blind.
+Divide the text into fixed word windows with a small overlap. This method is
+simple, and it does not see the structure.
 """),
     code("""
 def fixed_size_chunks(doc_id, text, size=40, overlap=10):
@@ -318,13 +325,17 @@ print("-", fx[1][:160], "...")
     md("""
 ### Exercise 1 — structure-aware chunks
 
-Markdown already tells us the boundaries. Split on `##` headings, and **prepend
-the doc title + heading** to each chunk so it is self-describing (a chunk that
-says *"Access Control Standard (SEC-011) > Production Access"* retrieves far better than a
-bare paragraph that starts with "Access to production...").
+Markdown already shows the boundaries. Divide the text at the `##` headings. **Put
+the doc title and the heading at the start of each chunk**, so that each chunk
+describes itself.
 
-Return a list of `(section_heading, chunk_text)` where `chunk_text` starts with
-the header line `"<title> > <heading>"`.
+Compare two chunks. One chunk says *"Access Control Standard
+(SEC-011) > Production Access"*. The other chunk is a paragraph with no header
+that starts with "Access to production...". Retrieval finds the first chunk far
+better.
+
+Return a list of `(section_heading, chunk_text)`. Each `chunk_text` must start
+with the header line `"<title> > <heading>"`.
 """),
     ex(
         blank="""
@@ -392,10 +403,10 @@ print("\\n", prod)
     md("""
 ### Small-to-big (sentence-window)
 
-Precision *and* context: match on a small unit (a sentence), but **return** its
-parent section. You search with fine granularity and hand the model enough
-surrounding text to answer. The reference `sentence_chunks` implements this —
-we import it rather than rebuild it.
+This method gives precision *and* context. Match on a small unit (a sentence), but
+**return** the parent section of that unit. You search at a fine granularity.
+Then you give the model sufficient text around the match to answer. The reference
+`sentence_chunks` does this. We import it, and we do not build it again.
 """),
     code("""
 from ragkit.reference import sentence_chunks
@@ -408,7 +419,7 @@ print("return this:", parent_of[s.chunk_id].text[:120], "...")
     md("""
 **Takeaway.** Structure-aware chunks with prepended headers are the highest-ROI
 default for document corpora. Small-to-big adds precision when sections are
-long. We'll quantify the difference in notebook 05.
+long. We will measure the difference with numbers in notebook 05.
 """),
 ]
 
@@ -420,10 +431,11 @@ NB03 = [
     md("""
 # 03 · Hybrid search — BM25 + dense, fused with RRF
 
-Dense retrieval matches *meaning* but can fumble exact tokens — error codes,
-policy IDs, product names. Lexical **BM25** nails those but misses paraphrases.
-Real systems run both and fuse the results. We build BM25 from scratch, then
-fuse with **Reciprocal Rank Fusion**.
+Dense retrieval matches *meaning*. But it can make errors on exact tokens, for
+example error codes, policy IDs and product names. Lexical **BM25** gets those
+tokens correct, but it misses paraphrases. Systems in production run both and
+fuse the results. We build BM25 from scratch. Then we fuse the results with
+**Reciprocal Rank Fusion**.
 """),
     SETUP,
     code("""
@@ -442,14 +454,15 @@ print(len(chunks), "chunks indexed")
     md(r"""
 ### Exercise 1 — BM25 scoring
 
-BM25 scores a query term $t$ in document $i$ as
+BM25 gives a query term $t$ in document $i$ this score:
 
 $$
 \mathrm{idf}(t) \cdot \frac{f(t,i) \cdot (k_1 + 1)}{f(t,i) + k_1 \cdot (1 - b + b \cdot \lvert d_i \rvert / \mathrm{avgdl})}
 $$
 
-where ${f(t,i)}$ is the term's frequency in doc $i$, $\lvert d_i \rvert$ its length, $\mathrm{avgdl}$
-the mean length. Fill in that formula (the `idf` and counts are precomputed).
+In this formula, ${f(t,i)}$ is the frequency of the term in doc $i$. The length of
+doc $i$ is $\lvert d_i \rvert$, and $\mathrm{avgdl}$ is the mean length. Fill in
+that formula. The code already calculates the `idf` and the counts.
 """),
     ex(
         blank="""
@@ -544,8 +557,8 @@ print("ERR_4290 ->", chunks[top_i].doc_id)
     md("""
 ### See where each method wins
 
-Build a dense index over the same chunks and compare the two retrievers on a
-**lexical** query (exact code) and a **semantic** query (paraphrase).
+Build a dense index over the same chunks. Then compare the two retrievers on a
+**lexical** query (an exact code) and a **semantic** query (a paraphrase).
 """),
     code("""
 emb = get_embedder()
@@ -568,18 +581,18 @@ for q in ["what does ERR_4290 mean",                       # lexical
     md(r"""
 ### Exercise 2 — Reciprocal Rank Fusion
 
-RRF combines ranked lists using only **rank position**, so it doesn't care that
-BM25 and cosine scores live on different scales:
+RRF combines ranked lists with only the **rank position**. Thus the different
+scales of BM25 scores and cosine scores have no effect on RRF:
 
 $$
 \mathrm{score}(d) = \sum_{\text{lists}} \frac{1}{k + r(d)}
 $$
 
-$k = 60$; $r(d) = 1$ for the top result of a list.
+Here $k = 60$, and $r(d) = 1$ for the top result of a list.
 
-(`enumerate` counts from 0, so in code that is `1 / (k + rank + 1)`.)
+(`enumerate` counts from 0. Thus in code, the term is `1 / (k + rank + 1)`.)
 
-Implement it, then fuse the dense and BM25 rankings.
+Write RRF. Then fuse the two ranked lists from dense search and BM25.
 """),
     ex(
         blank="""
@@ -653,9 +666,9 @@ for q in ["what does ERR_4290 mean", "am I allowed to work from home every day"]
 """,
     ),
     md("""
-Hybrid gets the exact-code query *and* the paraphrase. In notebook 05 we'll
-confirm with numbers that it beats either method alone across the whole query
-set.
+Hybrid gets the exact-code query *and* the paraphrase correct. In notebook 05, we
+will show with numbers that hybrid is better than each method alone, across the
+whole query set.
 """),
 ]
 
@@ -667,10 +680,11 @@ NB04 = [
     md("""
 # 04 · Reranking
 
-First-stage retrievers (dense, BM25) are built to be *cheap* and favour recall:
-get the right chunk somewhere in the top 20–100. A **cross-encoder** then reads
-each `(query, chunk)` pair *together* and scores relevance far more accurately —
-too slow to run over the whole corpus, perfect over a shortlist.
+First-stage retrievers (dense, BM25) are *low-cost* by design, and they give
+priority to recall. Their job is to get the correct chunk somewhere in the top
+20–100. Then a **cross-encoder** reads each `(query, chunk)` pair *together*. It
+gives a relevance score that is far more accurate. It is too slow to run over the
+whole corpus, but it is perfect over a shortlist.
 
 ```
 retrieve top-N (cheap)  →  cross-encoder rerank  →  keep top-k (precise)
@@ -692,9 +706,9 @@ def retrieve(query, n=10):
     md("""
 ### Exercise — two-stage retrieve-then-rerank
 
-`get_cross_encoder()` returns a model with `.predict([(query, passage), ...])`
-giving a relevance score per pair. Retrieve `n` candidates, score them, and
-return the top `k` chunks by cross-encoder score.
+`get_cross_encoder()` returns a model with `.predict([(query, passage), ...])`.
+This method gives a relevance score for each pair. Retrieve `n` candidates. Give
+each candidate a score. Return the top `k` chunks by cross-encoder score.
 """),
     ex(
         blank="""
@@ -736,9 +750,9 @@ print("reranked top-3:", [c.chunk_id for c in top])
     md("""
 ### Watch it fix an ordering
 
-Compare the rank of the truly-relevant chunk before vs after reranking. The
-cross-encoder typically promotes the exact-answer chunk that first-stage cosine
-buried behind topically-similar neighbours.
+Compare the rank of the truly-relevant chunk before and after the rerank. The
+cross-encoder usually moves the exact-answer chunk up. First-stage cosine search
+put that chunk below its topically-similar neighbours.
 """),
     code("""
 def dense_order(query, n=10):
@@ -753,8 +767,8 @@ def first_hit(order):
 print("rank of incident-response chunk  before:", first_hit(before), " after:", first_hit(after))
 """),
     md("""
-Reranking is usually the single best precision upgrade after hybrid retrieval,
-and it's a drop-in: retrieve wide, rerank, keep few.
+Reranking is usually the single best precision improvement after hybrid retrieval.
+It is also a drop-in step: retrieve many candidates, rerank them, keep a few.
 """),
 ]
 
@@ -766,23 +780,25 @@ NB05 = [
     md("""
 # 05 · Evaluation
 
-You cannot improve what you don't measure, and "the demo looked good" is not
-measurement. With the labelled `qrels` we can score each retriever with two
-standard metrics:
+You cannot improve what you do not measure. A statement such as "the demo looked
+good" is not a measurement. With the labelled `qrels`, we can give each retriever
+a score with two standard metrics:
 
-* **Hit@k** — is *any* gold document in the top $k$? (Did we fetch something useful?)
-* **Recall@k** — are *all* the gold documents in the top $k$? (Did we fetch everything
-  the answer needs?) On a one-gold question the two agree; on a two-gold (multihop)
-  question hit@k can say 1.0 while half the answer is missing.
-* **MRR** — 1/rank of the first gold hit. (How high did it land?)
+* **Hit@k**: is *any* gold document in the top $k$? (Did we get something useful?)
+* **Recall@k**: are *all* the gold documents in the top $k$? (Did we get everything
+  that the answer needs?) On a one-gold question, the two metrics agree. On a
+  two-gold (multihop) question, hit@k can show 1.0 while the results do not have
+  half of the answer.
+* **MRR**: 1/rank of the first gold hit. (How high was its rank?)
 """),
     SETUP,
     md("""
 ### Exercise 1 — the metrics
 
-Implement both over **document-level** rankings (gold labels are per document).
-`recall_at_k(..., require_all=False)` is hit@k; with `require_all=True` it is
-recall@k. These are pure functions — the asserts pin the exact maths.
+Write both metrics over **document-level** ranked lists (the gold labels are per
+document). `recall_at_k(..., require_all=False)` is hit@k. With
+`require_all=True`, it is recall@k. These are pure functions. The asserts compare
+the results against the exact maths.
 """),
     ex(
         blank="""
@@ -833,9 +849,10 @@ print("metrics OK")
     md("""
 ### Exercise 2 — the evaluation harness
 
-`evaluate` takes a retrieval function `run(query) -> ranked list of doc_ids` and
-averages hit@k, recall@k (every gold document) and MRR over a set of questions. Fill the averaging loop; the
-assert uses a fake `run` with a known answer so it's model-independent.
+`evaluate` takes a retrieval function `run(query) -> ranked list of doc_ids`. It
+calculates the mean of hit@k, recall@k (every gold document) and MRR over a set of
+questions. Fill in the loop that calculates the means. The assert uses a fake
+`run` with a known answer, so the assert does not depend on the model.
 """),
     ex(
         blank="""
@@ -884,9 +901,9 @@ print("harness OK:", res)
     md("""
 ### The payoff — compare the retrievers you built
 
-Wire up dense, BM25, and hybrid (RRF) over the section chunks, then score them
-overall and broken down by question kind. This is where the earlier notebooks
-prove themselves.
+Connect dense, BM25 and hybrid (RRF) over the section chunks. Then give each
+retriever a score for all questions together, and for each question kind. Here
+the earlier notebooks show their value.
 """),
     code("""
 from ragkit.reference import (structure_aware_chunks, chunk_corpus, BM25,
@@ -929,18 +946,21 @@ for kind in ("lexical", "semantic", "multihop"):
     print(f"  {kind:8}", {k: round(v, 2) for k, v in row.items()})
 """),
     md("""
-Read the by-kind table: BM25 should shine on **lexical**, dense on **semantic**,
-and **hybrid** should be the most consistent across both — which is exactly why
-hybrid is the sane default. (`multihop` stays hard for every single-shot
-retriever on recall@3 — hit@3 would hide it, because one of the two gold
-documents is enough for a hit; that's notebook 06.)
+Read the by-kind table. We expect BM25 to do well on **lexical**, and dense to do
+well on **semantic**. We expect **hybrid** to be the most consistent across both.
+This is exactly why hybrid is the sensible default.
+
+(On recall@3, `multihop` stays
+difficult for every single-shot retriever. Hit@3 does not show this, because one
+of the two gold documents is sufficient for a hit. Notebook 06 is about this
+problem.)
 
 ### A note on faithfulness
 
-Retrieval metrics aren't the whole story — a grounded answer must actually be
-*supported* by what was retrieved. A cheap proxy: check that each answer
-sentence has a high-similarity sentence in the context. Real systems use an
-NLI/LLM judge, but the idea is the same.
+Retrieval metrics do not tell the full story. The retrieved text must actually
+*support* a grounded answer. Here is a low-cost proxy: make sure that each answer
+sentence has a high-similarity sentence in the context. Systems in production use
+an NLI/LLM judge, but the idea is the same.
 """),
     code("""
 def faithfulness(answer_text, contexts, emb, thresh=0.5):
@@ -972,14 +992,20 @@ NB06 = [
     md("""
 # 06 · Iterative RAG (advanced)
 
-Single-shot retrieve-then-read fails on **multi-hop** questions, where the
-answer lives in two places and the second query only makes sense after you've
-read the first result. Example: *"Which VPN client does the security policy
-require, and which OSes does it support?"* — the client name is in one doc, the
-OS list in another.
+Single-shot retrieve-then-read fails on **multi-hop** questions. In such a
+question, the answer is in two places. The second query only makes sense after you
+read the first result. For example, look at this question:
 
-The fix is a loop: retrieve → decide what's still missing → retrieve again →
-stop when you have enough (or hit a budget).
+*"Which VPN client does the security policy require, and which OSes does it support?"*
+
+The client name is in one doc, and the OS list is in another.
+
+The solution is a loop:
+
+1. Retrieve.
+2. Decide what information you do not have yet.
+3. Retrieve again.
+4. Stop when you have sufficient information (or when you reach a budget).
 """),
     SETUP,
     code("""
@@ -1003,10 +1029,11 @@ print("single-shot retrieved:", single)
     md("""
 ### The planner
 
-Deciding the next sub-query is the one step that wants a real LLM. So the
-planner is pluggable: with an API key it asks the model to decompose the
-question; offline it uses a hand-written decomposition for the demo questions,
-so the loop still runs. (This mirrors production: swap the stub for the model.)
+The decision about the next sub-query is the one step that needs a real LLM. Thus
+the planner is pluggable. With an API key, the planner asks the model to make a
+decomposition of the question. Offline, it uses a decomposition written by hand
+for the demo questions, so the loop still runs. (Production has the same shape:
+replace the stub with the model.)
 """),
     code("""
 # Hand-written decompositions so the notebook runs with no API key.
@@ -1032,9 +1059,10 @@ def plan(question, qid=None):
     md("""
 ### Exercise — the iterative loop
 
-Implement `iterative_retrieve`: walk the planned sub-queries, retrieve `k`
-chunks for each, accumulate **unique** chunks (dedupe by `chunk_id`), and stop
-once you hit `budget` sub-queries. Then answer over everything gathered.
+Write `iterative_retrieve`. Go through the planned sub-queries in sequence.
+Retrieve `k` chunks for each sub-query. Collect the **unique** chunks (remove
+duplicates by `chunk_id`). Stop when you reach `budget` sub-queries. Then answer
+from all of the chunks that you collected.
 """),
     ex(
         blank="""
@@ -1097,16 +1125,22 @@ prompt, ctxs = build_prompt(q["question"], gathered)
 print(llm.complete(prompt, contexts=ctxs, query=q["question"], embedder=emb))
 """),
     md("""
-**This is the seed of agentic RAG.** Make the planner a real model, let it
-choose *which tool* to call (vector search, BM25, SQL, web) and *when to stop*,
-add reflection on the results, and enforce a budget — and you have the loop that
-powers modern "deep research" agents. The mechanics are exactly what you just
-wrote; the sophistication is in the policy and the guardrails.
+**This is the seed of agentic RAG.** Make the planner a real model. Let the model
+select *which tool* to call (vector search, BM25, SQL, web) and *when to stop*.
+Add reflection on the results. Make the loop obey a budget. Then you have the loop
+inside modern "deep research" agents.
 
-Where to go next: fine-tune the retriever/reranker on query logs, add a router
-that sends simple questions down the cheap single-shot path, and evaluate
-whole *trajectories* (did it find both docs? in how many steps?) rather than
-just final answers. The primer's Part III and Part IV map the rest.
+The mechanics are exactly what you wrote in
+the exercise. The complexity is in the policy and the guardrails.
+
+Where to go next:
+
+- Fine-tune the retriever/reranker on query logs.
+- Add a router that sends simple questions down the low-cost single-shot path.
+- Do an eval of whole *trajectories* (did it find both docs? in how many steps?),
+  not only of final answers.
+
+Part III and Part IV of the primer describe the rest.
 """),
 ]
 

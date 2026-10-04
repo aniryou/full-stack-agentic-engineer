@@ -1,24 +1,27 @@
 # %% [markdown]
 # # 02 · A process sandbox: rlimits, timeouts, streamed output — and what it cannot stop
 #
-# **Tier:** T0 — laptop / Colab CPU / CI, free, about a minute. Real container and microVM isolation is the
-# lab (`../sandbox-lab`, notebook 01 hardened containers); the concepts are all here.
+# **Tier:** T0: a laptop, a Colab CPU or CI, free, about a minute. Real container and microVM isolation is in the
+# lab (`../sandbox-lab`, notebook 01 hardened containers). The concepts are all here.
 #
 # ## The one-minute version
-# In-process restrictions are not a boundary — code that shares your interpreter can undo them — so the first
-# real boundary is a **separate process** you start clean and bound from outside.
+# In-process restrictions are not a boundary, because code that shares your interpreter can undo them. Thus the first
+# real boundary is a **separate process** that you start clean and bound from outside.
 #
-# A process sandbox does six things: (1) a **clean environment**, so no inherited credentials; (2) an
-# **ephemeral workspace** (mode 0700, deleted after the call); (3) **POSIX resource limits** in the child —
-# CPU seconds, address space, processes, file size, open files; (4) a **wall-clock deadline** and a kill of
-# the whole process group; (5) output **read as it streams**, keeping the first `output_bytes` and stopping
-# the run past `output_kill_bytes`, so a flood never lands in your memory; (6) when it runs as root, **its own
-# UID per execution** — the control that makes the process limit real, keeps your files unreadable, and lets
-# it find and kill a process that left the group.
+# A process sandbox does six things:
 #
-# It states what it does *not* stop: the network, the host kernel, and — without that UID — your files and a
-# `setsid()` escape. Primer: `../PRIMER.md` §2 (the isolation ladder), §3 (the execution contract). Numbers
-# here are **measured on this machine** and labelled so.
+# 1. A **clean environment**, so no credentials come with the code.
+# 2. An **ephemeral workspace** (mode 0700, deleted after the call).
+# 3. **POSIX resource limits** in the child: CPU seconds, address space, processes, file size, open files.
+# 4. A **wall-clock deadline**, and a kill of the full process group.
+# 5. Output **read as it streams**. The sandbox keeps the first `output_bytes` and stops the run past
+#    `output_kill_bytes`, so a flood never lands in your memory.
+# 6. When it runs as root, **its own UID per execution**. This control makes the process limit real and keeps
+#    your files unreadable. It also lets the sandbox find and kill a process that left the group.
+#
+# The sandbox states what it does *not* stop: the network, the host kernel and, without that UID, your files and a
+# `setsid()` escape. Primer: `../PRIMER.md` §2 (the isolation ladder), §3 (the execution contract). This notebook
+# measures the numbers here **on this machine**, and it labels them so.
 
 # %%
 from sandboxcore import Budgets, ExecutionRequest, ProcessSandbox, SandboxConfig, running_as_root
@@ -30,10 +33,10 @@ for k, v in sb.isolation_report().items():
 
 # %% [markdown]
 # ## Worked example 1 — a clean environment, and why `HOME` is not a boundary
-# The child cannot see the parent's environment: we plant a token in *our* environment and it comes back
-# absent. `HOME` points at the workspace, so `~/.ssh` is empty — but that is a convenience, not isolation:
-# the real home is one `pwd` lookup away. Only a **different UID** turns "you can find it" into "you cannot
-# open it". Compare the per-execution UID with `drop_to_uid=None` (what a non-root laptop gets).
+# The child cannot see the environment of the parent. We put a token in *our* environment, and it comes back
+# absent. `HOME` points at the workspace, so `~/.ssh` is empty. But that is a convenience, not isolation: the real
+# home is one `pwd` lookup away. Only a **different UID** turns "you can find it" into "you cannot open it". Compare
+# the per-execution UID with `drop_to_uid=None` (what a non-root laptop gets).
 
 # %%
 import os
@@ -60,15 +63,15 @@ shutil.rmtree(victim_home)
 del os.environ["DEMO_TOKEN"]
 
 # %% [markdown]
-# The token is `ABSENT` either way. With the per-execution UID the key is a path the code knows but cannot
-# open (a 0700 directory of another UID). Without it — any non-root laptop — the code runs as you: `~`
-# moved, your files did not.
+# The token is `ABSENT` in the two cases. With the per-execution UID, the key is a path that the code knows but
+# cannot open (a 0700 directory of a different UID). Without that UID, on any non-root laptop, the code runs as you:
+# `~` moved, but your files did not.
 #
 # ## Worked example 2 — the resource limits, one at a time
-# Each budget maps to a POSIX `setrlimit` applied in the child, except the two the parent enforces while it
-# reads: the wall clock and the output kill. The exit reason tells the caller *why* it stopped, and
-# `reason_source` says who decided it — the parent's own measurement, a kernel signal, or the code's own exit
-# status and stderr (which it can forge).
+# Each budget maps to a POSIX `setrlimit` that the sandbox applies in the child. Two budgets are the exception,
+# because the parent enforces them while it reads: the wall clock and the output kill. The exit reason tells the
+# caller *why* the run stopped. `reason_source` tells who decided it. The source is the measurement of the parent,
+# a kernel signal, or the exit status and stderr of the code. The code can forge that last source.
 
 # %%
 cases = [
@@ -88,18 +91,20 @@ for label, code, b in cases:
           f"wall={r.usage.wall_s:.2f}s rss={r.usage.max_rss_mb}MB{extra}")
 
 # %% [markdown]
-# "print forever" writes gigabytes a second; the parent keeps 2 KB, counts the rest, and stops the run once the
-# total passes `output_kill_bytes` (1 MiB by default) — its own memory never sees the flood. "forge a reason"
-# ends as `memory` with source `code`: the program *said* MemoryError. Count only `parent` and `signal`
-# reasons when you look for abuse (notebook 03's audit, primer §8).
+# "print forever" writes gigabytes a second. The parent keeps 2 KB, counts the rest, and stops the run when the
+# total passes `output_kill_bytes` (1 MiB by default). Its own memory never sees the flood. "forge a reason" ends as
+# `memory` with source `code`: the program *said* MemoryError. When you look for abuse, count only the `parent` and
+# `signal` reasons (the audit of notebook 03, primer §8).
 #
 # ## Worked example 3 — the grandchild, and the process that leaves the group
-# `subprocess.run(timeout=...)` kills only the direct child; a backgrounded grandchild survives, re-parented
-# to init. The sandbox starts the child in a new **session** and kills the whole **process group** — which
-# catches the grandchild. But the group is advisory: code can call `setsid()` itself and leave it. That
-# escapee is found only by its **UID**: with a per-execution UID the sandbox kills every process of that UID
-# after the run and removes any file it left in `/tmp`. Without one it cannot tell the escapee from your own
-# processes.
+# `subprocess.run(timeout=...)` kills only the direct child. A grandchild in the background survives, and init
+# becomes its new parent. The sandbox starts the child in a new **session** and kills the full **process group**,
+# and that catches the grandchild.
+#
+# But the group is advisory: code can call `setsid()` itself and leave it. Only
+# its **UID** finds that escapee. With a per-execution UID, the sandbox kills every process of that UID after the
+# run and removes all the files that it left in `/tmp`. Without that UID, the sandbox cannot tell the escapee from
+# your own processes.
 
 # %%
 grandchild = ("import subprocess, sys, time; "
@@ -122,13 +127,15 @@ for note in r.notes:
 
 # %% [markdown]
 # ## Worked example 4 — how the limits are applied (and why not `preexec_fn`)
-# `subprocess`'s `preexec_fn` runs Python code in the child between `fork` and `exec`; in a parent with other
-# threads (a proxy server, a listener, a thread pool) that can deadlock the child, and the docs say so. So the
-# sandbox asks `Popen` to do the privileged part in C — `user=`, `group=`, `extra_groups=[]`,
-# `start_new_session=True` — and the child's own interpreter lowers the limits (`executor._LAUNCHER`) before
-# it executes the code. Lowering a limit needs no privilege, and an unprivileged process cannot raise its hard
-# limit again. The root caveat: `RLIMIT_NPROC` counts **every task of the real UID** and is **ignored for
-# uid 0**, so as root without a UID switch a fork bomb is not stopped — and root could even raise its own limits.
+# The `preexec_fn` of `subprocess` runs Python code in the child between `fork` and `exec`. In a parent with other
+# threads (a proxy server, a listener, a thread pool), that can deadlock the child, and the docs say so. Thus the
+# sandbox asks `Popen` to do the privileged part in C: `user=`, `group=`, `extra_groups=[]`,
+# `start_new_session=True`. Then the interpreter of the child itself lowers the limits (`executor._LAUNCHER`)
+# before it executes the code. A process needs no privilege to lower a limit, and an unprivileged process cannot
+# raise its hard limit again.
+#
+# The root caveat: `RLIMIT_NPROC` counts **every task of the real UID**, and the kernel **ignores it for uid 0**.
+# Thus, as root without a UID switch, the sandbox does not stop a fork bomb. Root can even raise its own limits.
 
 # %%
 from sandboxcore import rlimits_for
@@ -140,10 +147,10 @@ print("without a UID switch here: nproc_enforced =", rep["nproc_enforced"],
 
 # %% [markdown]
 # ## Exercise 2.1 — set the resource limits in the child
-# Implement `child_limits(budgets)` returning the list of `(resource name, soft, hard)` tuples for file size,
-# address space, open files and CPU (names like `"RLIMIT_CPU"`). File size, address space and open files get
-# soft == hard, in bytes where the budget is in MiB. **CPU gets soft one below hard**, so the soft limit
-# raises a catchable `SIGXCPU` before the hard limit's `SIGKILL`.
+# Implement `child_limits(budgets)`. It returns the list of `(resource name, soft, hard)` tuples for file size,
+# address space, open files and CPU (names like `"RLIMIT_CPU"`). File size, address space and open files get soft ==
+# hard, in bytes where the budget is in MiB. **CPU gets soft one below hard**. Thus the soft limit raises a
+# `SIGXCPU` that the code can catch, before the `SIGKILL` of the hard limit.
 
 # %% exercise
 def child_limits(budgets):
@@ -167,11 +174,15 @@ print("✅ your limits match the sandbox's; CPU is a warning at", mine["RLIMIT_C
 
 # %% [markdown]
 # ## Exercise 2.2 — map a real child's return code to an exit reason
-# When a child dies from a signal, `subprocess` returns `-signum`; when it exits, the status. Write
-# `reason_for_returncode(rc)` in the contract's vocabulary (`contract.EXIT_REASONS`): what does the CPU
-# limit's *soft* signal mean, what does the file-size signal mean, and what is any other signal? What is a
-# clean exit, and what is any non-zero status (before reading stderr)? The check kills real children with
-# real signals and compares your answer with the sandbox's own classifier.
+# When a signal stops a child, `subprocess` returns `-signum`. When the child exits, it returns the status. Write
+# `reason_for_returncode(rc)` in the vocabulary of the contract (`contract.EXIT_REASONS`). Answer these questions:
+#
+# - What does the *soft* signal of the CPU limit mean?
+# - What does the file-size signal mean, and what is any other signal?
+# - What is a clean exit, and what is any non-zero status (before you read stderr)?
+#
+# The check kills real children with real signals. Then it compares your answer with the classifier of the
+# sandbox itself.
 
 # %% exercise
 import signal
@@ -201,8 +212,8 @@ print("✅ exit reasons let the model recover (‘cpu_time: use a cheaper algori
 
 # %% [markdown]
 # ## Exercise 2.3 — predict, then measure, the sleeper
-# A program that only `time.sleep(30)`s uses no CPU. Predict the exit reason under `Budgets(cpu_s=5,
-# wall_s=1)` — CPU budget generous, wall budget tight — then run it and confirm.
+# A program that only does `time.sleep(30)` uses no CPU. Predict the exit reason under `Budgets(cpu_s=5,
+# wall_s=1)`, with a generous CPU budget and a tight wall budget. Then run it and confirm.
 
 # %% exercise
 predicted = None
@@ -218,9 +229,9 @@ print("✅ CPU limits never fire on a sleeper; the wall clock does")
 
 # %% [markdown]
 # ## Exercise 2.4 — does the escapee survive?
-# Predict, for this machine, whether a `setsid()` escapee (worked example 3's code) is **still running after
-# the call returns** under two configurations: the default sandbox, and `drop_to_uid=None`. Derive it from
-# each sandbox's `isolation_report()` rather than guessing; the check runs both and looks for the process.
+# For this machine, predict if a `setsid()` escapee (the code of worked example 3) is **still alive after the call
+# returns**. Predict it for two configurations: the default sandbox, and `drop_to_uid=None`. Derive the answer from
+# the `isolation_report()` of each sandbox, not from a guess. The check runs both and looks for the process.
 
 # %% exercise
 def survives(sandbox):
@@ -240,28 +251,31 @@ print("✅ the process group is advisory; only the UID (or a cgroup / PID namesp
 
 # %% [markdown]
 # ## In a design review
-# **The two-minute version.** "The process sandbox is the T0 boundary: a separate child started from a clean
-# environment in a throwaway 0700 workspace, so no credentials come along. Before the code runs the child
-# lowers its own POSIX limits — CPU seconds, address space, open files, file size and the process count — and
-# I hold a wall-clock deadline and read its output as it streams, keeping a budget's worth and killing the run
-# if it floods, so neither a sleeper nor a print loop can hurt the caller.
+# **The two-minute version.** "The process sandbox is the T0 boundary. It is a separate child that starts from a
+# clean environment in a throwaway 0700 workspace, so no credentials come with it. Before the code runs, the child
+# lowers its own POSIX limits: CPU seconds, address space, open files, file size and the process count.
 #
-# "On a host where I can, each execution also gets its own unprivileged UID: that is what makes the process
-# limit bite, keeps my files unreadable — pointing HOME elsewhere does not — and lets me kill a process that
-# left the group with setsid().
+# "I hold a
+# wall-clock deadline and read its output as it streams. I keep a budget's worth and kill the run if it floods. Thus
+# neither a sleeper nor a print loop can hurt the caller.
 #
-# "I say out loud what this does not do: it does not block the network and it shares the kernel, and without
-# the UID my files and escapees are exposed. For a stronger boundary I move up the ladder — a container, then
-# gVisor, then a microVM — but the contract and the limits are the same shape."
+# "On a host where I can, each execution also gets its own unprivileged UID. That UID makes the process limit bite.
+# It keeps my files unreadable, and a HOME that points to a different directory does not. It also lets me kill a
+# process that left the group with setsid().
+#
+# "I say clearly what this does not do. It does not block the network, and it shares the kernel. Without the UID, my
+# files and escapees have no protection. For a stronger boundary I move up the ladder: a container, then gVisor, then a
+# microVM. But the contract and the limits have the same shape."
 #
 # **Drill questions**
-# 1. *Why a separate process, not a restricted interpreter?* — In-process restrictions share the
-#    interpreter's state; the code can reach around them. A separate process with OS-enforced limits is the
+# 1. *Why a separate process, not a restricted interpreter?* In-process restrictions share the state of the
+#    interpreter, and the code can reach around them. A separate process with limits that the OS enforces is the
 #    first real boundary.
-# 2. *`RLIMIT_CPU` soft == hard vs soft < hard — what changes?* — Equal gives an immediate `SIGKILL`; soft
-#    below hard raises a catchable `SIGXCPU` at the soft limit and guarantees `SIGKILL` at the hard one.
-# 3. *You set a 2-second CPU limit and the code hangs for a minute. Why?* — It is sleeping or blocked on I/O,
-#    using no CPU. Only the wall-clock timeout stops it; always run both.
-# 4. *We kill the process group on timeout — can anything survive?* — Yes: a descendant that called
-#    `setsid()` is in another group. Kill by a per-execution UID after the run, or use a cgroup / PID
-#    namespace (a container) that dies with the sandbox.
+# 2. *`RLIMIT_CPU` soft == hard against soft < hard: what changes?* When they are equal, the code gets an
+#    immediate `SIGKILL`. When soft is below hard, the soft limit raises a `SIGXCPU` that the code can catch. The
+#    hard limit guarantees a `SIGKILL`.
+# 3. *You set a 2-second CPU limit and the code hangs for a minute. Why?* The code sleeps or waits for I/O, and it
+#    uses no CPU. Only the wall-clock timeout stops it. Always run both.
+# 4. *We kill the process group on timeout. Can anything survive?* Yes. A descendant that called `setsid()` is in
+#    a different group. Kill by a per-execution UID after the run. Or use a cgroup or PID namespace (a container)
+#    that stops with the sandbox.
