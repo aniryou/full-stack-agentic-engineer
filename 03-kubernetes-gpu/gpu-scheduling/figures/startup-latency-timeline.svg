@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="272" viewBox="0 0 880 272" role="img" aria-label="The two cases of autoscaler.startup_latency() on one time scale: a new node takes 380 s for node, driver, image, weights and warm-up, and a warm node with image streaming and a weights cache takes 70 s, most of it warm-up." style="color: #E4EAE7">
+  <title>The two cases of autoscaler.startup_latency() on one time scale: a new node takes 380 s for node, driver, image, weights and warm-up, and a warm node with image streaming and a weights cache takes 70 s, most of it warm-up.</title>
+  <rect x="0" y="0" width="880" height="272" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="50" font-size="11.5" fill="#97A59F">time from Pending to Ready, the same scale for both rows</text>
+    <text x="24" y="110" font-weight="600">new node</text>
+    <text x="24" y="126" font-size="11" fill="#97A59F">cold start</text>
+    <rect x="170" y="96" width="255.0" height="30" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="297.5" y="115" font-size="11.5" text-anchor="middle">node 150 s</text>
+    <rect x="425.0" y="96" width="153.0" height="30" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="501.5" y="115" font-size="11.5" text-anchor="middle">driver 90 s</text>
+    <rect x="578.0" y="96" width="81.6" height="30" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="618.8" y="115" font-size="11.5" text-anchor="middle">image</text>
+    <rect x="659.6" y="96" width="54.4" height="30" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="714.0" y="96" width="102.0" height="30" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="765.0" y="115" font-size="11.5" text-anchor="middle">warm-up 60 s</text>
+    <text x="618.8" y="84" font-size="11" fill="#97A59F" text-anchor="middle">12 GB at 0.25 GB/s</text>
+    <path d="M618.8 88 L618.8 95" stroke="#97A59F" stroke-width="1"/>
+    <path d="M686.8000000000001 127 L686.8000000000001 134" stroke="#97A59F" stroke-width="1"/>
+    <text x="686.8000000000001" y="146" font-size="11" fill="#97A59F" text-anchor="middle">16 GB of weights at 0.5 GB/s</text>
+    <text x="170" y="84" font-size="11" fill="#97A59F" text-anchor="middle">Pending</text>
+    <text x="816.0" y="84" font-size="11" fill="#97A59F" text-anchor="middle">Ready</text>
+    <text x="824.0" y="115" font-weight="600">380 s</text>
+    <text x="24" y="210" font-weight="600">warm node</text>
+    <text x="24" y="226" font-size="11" fill="#97A59F">image streaming</text>
+    <text x="24" y="240" font-size="11" fill="#97A59F">weights from a cache</text>
+    <rect x="170" y="196" width="10.2" height="30" rx="1" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="180.2" y="196" width="6.8" height="30" rx="1" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="187.0" y="196" width="102.0" height="30" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="238.0" y="215" font-size="11.5" text-anchor="middle">warm-up 60 s</text>
+    <text x="297.0" y="215" font-weight="600">70 s</text>
+    <text x="333.0" y="215" font-size="11.5" fill="#97A59F">· most of it warm-up</text>
+    <path d="M170 232 L170 238 L187.0 238 L187.0 232" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <text x="170" y="254" font-size="11" fill="#97A59F">image 12 GB at 2 GB/s, weights 16 GB at 4 GB/s</text>
+  </g>
+</svg>

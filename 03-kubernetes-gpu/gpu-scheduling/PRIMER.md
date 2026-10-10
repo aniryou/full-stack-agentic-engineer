@@ -47,6 +47,12 @@ A GPU is an **integer** to Kubernetes.
   available at all. The cloud can reclaim them (Spot). A gang needs all its nodes at the same time. Queued,
   all-or-nothing provisioning (DWS flex-start) is for this problem.
 
+![The control loop of the layer: a Job goes through Kueue's LocalQueue, ClusterQueue quota and whole-gang admission to kube-scheduler, which places one pod at a time on the integer that the kubelet advertises from the device plugin's healthy devices, and a Pending pod asks the cluster autoscaler for a new node.](figures/control-loop.svg)
+
+*The control loop of this layer. The device plugin reports the healthy devices to the kubelet, and the node
+advertises an integer. Kueue admits a job as a whole against quota (§4, §6). Then kube-scheduler places its pods one
+at a time (§3). A Pending pod is a request to the cluster autoscaler for a node (§7).*
+
 ---
 
 ## 1. What Kubernetes sees
@@ -190,6 +196,21 @@ spec:
 The pod lists the claim in `spec.resourceClaims`. Each container refers to the claim in `resources.claims`. The
 `DynamicResources` plugin of the scheduler allocates specific devices during the scheduling cycle. Thus the plugin
 can make decisions from attributes and from how pods share devices, not from counts.
+
+```mermaid
+flowchart TB
+  DRV["DRA driver"] -->|"writes, per node or pool"| RS["ResourceSlice<br/>devices: attributes, capacity"]
+  ADMIN["cluster admin"] -->|"writes"| DC["DeviceClass<br/>a named selection"]
+  WL["workload"] -->|"writes"| RC["ResourceClaimTemplate<br/>devices.requests: deviceClassName,<br/>CEL selectors, count"]
+  RC -->|"listed in spec.resourceClaims"| POD["Pod<br/>containers: resources.claims"]
+  RS --> DRP
+  DC --> DRP
+  POD --> DRP["DynamicResources plugin<br/>allocates specific devices<br/>in the scheduling cycle"]
+```
+
+*The DRA data path. The DRA driver writes a ResourceSlice for each node or pool, the admin writes a DeviceClass, and
+the workload writes a claim. The pod lists the claim, and the DynamicResources plugin of the scheduler allocates
+specific devices in the scheduling cycle (§3.1).*
 
 The NVIDIA DRA driver (`kubernetes-sigs/dra-driver-nvidia-gpu`) officially supports **ComputeDomains**. A
 ComputeDomain is a multi-node NVLink (IMEX) domain for GB200/GB300-class racks. But in September 2026, the
@@ -363,6 +384,12 @@ GPUs become stranded in two ways:
   sidecars. The lab's `k8sgpu.machines.stranded_gpus()` does this for real machine shapes, after GKE's
   reservations.
 
+![On one 8-GPU node with 96 cores and 768 GiB, six 1-GPU pods of 16 cores and 64 GiB use all the CPU, the seventh pod is Pending on Insufficient cpu, and 2 GPUs are stranded.](figures/bundle-stranding.svg)
+
+*Stranded GPUs from the CPU of the bundle, not from the GPU count. Six 1-GPU pods of 16 cores and 64 GiB use all 96
+cores of the node. The seventh pod is Pending on `Insufficient cpu`, which leaves 2 stranded GPUs although
+$8 \bmod 1 = 0$.*
+
 Monitor the stranded GPUs for each pod shape that is important to you, next to utilisation. A cluster can be 50%
 utilised and 100% fragmented for its largest jobs. The shapes come from the size of the model: the number of GPUs
 that one replica needs for weights and KV cache
@@ -438,6 +465,21 @@ nothing (`gang.admit_gangs()`). Then 4 GPUs are idle instead of 12, and B starts
 The pattern that works today, on GKE and elsewhere, is Kueue in front of the default scheduler. Jobs wait in the
 queue as whole units. TAS or a ProvisioningRequest makes sure that the nodes exist and fit. `waitForPodsReady`
 catches the rest.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Suspended: Job created with the queue-name label, the webhook sets spec.suspend
+    Suspended --> QuotaReserved: the whole Workload fits the ClusterQueue quota (logical)
+    QuotaReserved --> Admitted: admission checks pass, TAS assignment or ProvisioningRequest (physical)
+    Admitted --> Running: Job unsuspended, pods get the flavor nodeSelector, all pods Ready
+    Admitted --> Evicted: pods not all Ready within 30 min (waitForPodsReady)
+    Evicted --> Suspended: requeued with backoff
+    Running --> [*]: Job complete
+```
+
+*One gang job under Kueue. The webhook suspends the Job at creation. Kueue reserves quota for the whole Workload,
+runs the admission checks, and then unsuspends the Job. If the pods are not all Ready within 30 min,
+`waitForPodsReady` evicts the job and requeues it with backoff.*
 
 ### 4.3 JobSet and LeaderWorkerSet
 
@@ -526,6 +568,12 @@ b0-s1 = 3, b1-s0 = 2 and b1-s1 = 4. In b1-s0, one of the hosts has a single GPU 
 | 5 | required sub-block | none: waits |
 | 5 | preferred sub-block | block b1 (2 + 4 = 6 ≥ 5). The host pass over both sub-blocks gives 2 in b1-s0 + 3 in b1-s1 |
 | 3 | unconstrained | LeastFreeCapacity: no host holds 3, so 1 in b0-s0 + 2 in b0-s1 — the gang crosses sub-blocks |
+
+![Two placements of the worked example on a fleet of two blocks, two sub-blocks each and four hosts per sub-block: a gang of 3 with a required sub-block goes to b0-s1, and a gang of 5 with a preferred sub-block widens to block b1 with 2 pods in b1-s0 and 3 in b1-s1.](figures/tas-placement.svg)
+
+*Two rows of the table on the fleet of the worked placement. Left: the gang of 3 with `podset-required-topology` at
+sub-block level goes to b0-s1, the tightest sub-block that holds 3. Right: no sub-block holds 5, so the preferred
+constraint widens to block b1. The host pass then gives 2 in b1-s0 + 3 in b1-s1.*
 
 Select the constraint for each workload:
 
@@ -621,6 +669,12 @@ reverse order.
 With `reclaimWithinCohort: Any`, the 16-GPU job of team A preempts exactly the third job of B (the newest, which
 borrows). Then Kueue admits the job of team A. B is back at its nominal 16. With `withinClusterQueue: LowerPriority`, a
 priority-100 job in a full queue evicts the newest priority-0 job.
+
+![Two ClusterQueues of 16 GPUs in one cohort: team B's third 8-GPU job borrows 8 of team A's idle GPUs, team A's 16-GPU job waits with reclaimWithinCohort Never, and with Any it preempts that third job and B is back at its nominal 16.](figures/cohort-borrow-reclaim.svg)
+
+*The GPU example of §6.2 and §6.3 in one cohort. Team B runs three 8-GPU jobs, and the third job borrows 8 of the
+idle GPUs of team A. With `reclaimWithinCohort: Never`, the 16-GPU job of team A waits, with 8 more needed. With
+`Any`, it preempts the third job of B, the newest, and B is back at its nominal 16.*
 
 **Fair sharing** is the alternative algorithm. Each ClusterQueue gets a weighted share value of the borrowable
 resources. Admission selects the lowest share first, and preemption takes from the highest share first. Preemption
@@ -756,6 +810,24 @@ The ordinary pool paid **31.3 node-hours (251 GPU-hours)** for nodes that waited
 paid **1.3** (only the boot, in every run). Also, over 200 seeds the ordinary pool averages **22.4 node-hours** and a
 1.95 h start. Queued provisioning does not create capacity. With it, you do not pay for the partial set.
 
+```mermaid
+sequenceDiagram
+    participant J as Job
+    participant K as Kueue
+    participant C as cluster-autoscaler,<br/>DWS flex-start pool
+    J->>K: created suspended, queue-name label
+    K->>K: reserves the quota
+    K->>C: ProvisioningRequest, the admission check
+    Note over K,C: the pool holds the request until capacity exists, up to 7 days,<br/>then creates the whole gang at once
+    C-->>K: Provisioned, 300 s boot
+    K->>J: admitted: Job unsuspended, pods bind
+    Note over J,C: simulated, 16 nodes: the ordinary pool pays 31.3 node-hours for nodes that wait, the queued pool 1.3
+```
+
+*A ProvisioningRequest as a Kueue admission check. Kueue reserves the quota, creates the request, and admits the job
+only when the capacity is `Provisioned`. The cloud creates the whole gang at once, so the queued pool pays only the
+boot (simulated).*
+
 A **custom ComputeClass** (`cloud.google.com/v1`, verify) gives one class of workload an ordered fallback list.
 An example is reservation, then Spot, then on-demand, then flex-start. GKE's node auto-provisioning creates node
 pools that match, on demand. Pods select the class with a node selector (verify the field names against the CRD).
@@ -813,6 +885,11 @@ weights from a fast cache (4 GB/s). It takes **70 s**, most of it warm-up. These
 A cold start takes minutes. Thus the autoscaling of LLM replicas needs headroom and scale-ahead signals
 ([`05-orchestrator/serving-orchestration/PRIMER.md`](../../05-orchestrator/serving-orchestration/PRIMER.md) §4.3 *Cold start
 anatomy*). For the same reason, "scale to zero" is a cost decision with a latency price.
+
+![The two cases of autoscaler.startup_latency() on one time scale: a new node takes 380 s for node, driver, image, weights and warm-up, and a warm node with image streaming and a weights cache takes 70 s, most of it warm-up.](figures/startup-latency-timeline.svg)
+
+*The two cases of `autoscaler.startup_latency()` on one time scale. A new node takes 380 s: node, driver, image,
+weights and warm-up. A warm node with image streaming and a weights cache takes 70 s, most of it warm-up.*
 
 ---
 

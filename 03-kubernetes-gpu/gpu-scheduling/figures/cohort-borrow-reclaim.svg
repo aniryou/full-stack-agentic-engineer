@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="352" viewBox="0 0 880 352" role="img" aria-label="Two ClusterQueues of 16 GPUs in one cohort: team B's third 8-GPU job borrows 8 of team A's idle GPUs, team A's 16-GPU job waits with reclaimWithinCohort Never, and with Any it preempts that third job and B is back at its nominal 16." style="color: #E4EAE7">
+  <title>Two ClusterQueues of 16 GPUs in one cohort: team B's third 8-GPU job borrows 8 of team A's idle GPUs, team A's 16-GPU job waits with reclaimWithinCohort Never, and with Any it preempts that third job and B is back at its nominal 16.</title>
+  <rect x="0" y="0" width="880" height="352" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <rect x="240" y="36" width="436" height="304" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4" rx="8"/>
+    <text x="458" y="54" fill="#97A59F" text-anchor="middle">cohort: ClusterQueues lend unused nominal quota</text>
+    <text x="354.0" y="74" font-size="11.5" fill="#97A59F" text-anchor="middle">team A · nominal 16</text>
+    <text x="562.0" y="74" font-size="11.5" fill="#97A59F" text-anchor="middle">team B · nominal 16</text>
+    <path d="M458 80 L458 116" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="3 3"/>
+    <path d="M458 152 L458 188" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="3 3"/>
+    <path d="M458 268 L458 304" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="3 3"/>
+    <text x="24" y="98" font-weight="600">1 · B runs three 8-GPU jobs</text>
+    <text x="24" y="114" font-size="11" fill="#97A59F">the third job borrows idle GPUs of A</text>
+    <rect x="250" y="84" width="104" height="28" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="3 3"/>
+    <text x="302" y="102" font-size="11.5" fill="#97A59F" text-anchor="middle">idle</text>
+    <rect x="354" y="84" width="104" height="28" rx="6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 3"/>
+    <text x="406" y="102" font-size="11.5" text-anchor="middle">job 3 · borrows 8</text>
+    <rect x="458" y="84" width="104" height="28" rx="6" fill="#97A59F" fill-opacity="0.22" stroke="#97A59F" stroke-width="1.2"/>
+    <text x="510" y="102" font-size="11.5" text-anchor="middle">job 1 · 8</text>
+    <rect x="562" y="84" width="104" height="28" rx="6" fill="#97A59F" fill-opacity="0.22" stroke="#97A59F" stroke-width="1.2"/>
+    <text x="614" y="102" font-size="11.5" text-anchor="middle">job 2 · 8</text>
+    <text x="690" y="102" font-size="11.5">A can use 8, not 16</text>
+    <text x="24" y="170" font-weight="600">2 · A submits a 16-GPU job</text>
+    <text x="24" y="186" font-family="JetBrains Mono, monospace" font-size="11" fill="#97A59F">reclaimWithinCohort: Never</text>
+    <rect x="250" y="156" width="104" height="28" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="3 3"/>
+    <text x="302" y="174" font-size="11.5" fill="#97A59F" text-anchor="middle">idle</text>
+    <rect x="354" y="156" width="104" height="28" rx="6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 3"/>
+    <text x="406" y="174" font-size="11.5" text-anchor="middle">job 3 · borrows 8</text>
+    <rect x="458" y="156" width="104" height="28" rx="6" fill="#97A59F" fill-opacity="0.22" stroke="#97A59F" stroke-width="1.2"/>
+    <text x="510" y="174" font-size="11.5" text-anchor="middle">job 1 · 8</text>
+    <rect x="562" y="156" width="104" height="28" rx="6" fill="#97A59F" fill-opacity="0.22" stroke="#97A59F" stroke-width="1.2"/>
+    <text x="614" y="174" font-size="11.5" text-anchor="middle">job 2 · 8</text>
+    <rect x="250" y="194" width="208" height="28" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="354" y="212" text-anchor="middle" font-weight="600">16-GPU job of A: waits</text>
+    <text x="458" y="240" font-family="JetBrains Mono, monospace" font-size="11" fill="#97A59F" text-anchor="middle">insufficient unused quota for nvidia.com/gpu</text>
+    <text x="458" y="254" font-family="JetBrains Mono, monospace" font-size="11" fill="#97A59F" text-anchor="middle">in flavor h100, 8 more needed</text>
+    <text x="690" y="174" font-size="11.5">nothing occurs until the</text>
+    <text x="690" y="190" font-size="11.5">job of B that borrows ends</text>
+    <text x="24" y="286" font-weight="600">3 · reclaim is on</text>
+    <text x="24" y="302" font-family="JetBrains Mono, monospace" font-size="11" fill="#97A59F">reclaimWithinCohort: Any</text>
+    <rect x="250" y="272" width="208" height="28" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="354" y="290" fill="#7ADACF" text-anchor="middle" font-weight="600">16-GPU job of A · admitted</text>
+    <rect x="458" y="272" width="104" height="28" rx="6" fill="#97A59F" fill-opacity="0.22" stroke="#97A59F" stroke-width="1.2"/>
+    <text x="510" y="290" font-size="11.5" text-anchor="middle">job 1 · 8</text>
+    <rect x="562" y="272" width="104" height="28" rx="6" fill="#97A59F" fill-opacity="0.22" stroke="#97A59F" stroke-width="1.2"/>
+    <text x="614" y="290" font-size="11.5" text-anchor="middle">job 2 · 8</text>
+    <rect x="458" y="310" width="104" height="24" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="510" y="326" font-size="11.5" text-anchor="middle">job 3 evicted</text>
+    <text x="690" y="290" font-size="11.5">B is back at its</text>
+    <text x="690" y="306" font-size="11.5">nominal 16</text>
+  </g>
+</svg>
