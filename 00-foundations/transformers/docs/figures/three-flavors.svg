@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="370" viewBox="0 0 900 370" role="img" aria-label="The three flavors as attention patterns: the encoder sees every token in both directions, the decoder sees only the tokens before it, and the encoder-decoder adds cross-attention from the decoder to the encoder output." style="color: #E4EAE7">
+  <title>The three flavors as attention patterns: the encoder sees every token in both directions, the decoder sees only the tokens before it, and the encoder-decoder adds cross-attention from the decoder to the encoder output.</title>
+  <rect x="0" y="0" width="900" height="370" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <rect x="20" y="20" width="272" height="330" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="36" y="42" font-size="11.5" fill="#97A59F">Encoder-only (BERT)</text>
+    <text x="160" y="72" text-anchor="middle" font-size="11" fill="#97A59F">key j</text>
+    <text x="124" y="88" text-anchor="middle" font-size="10.5" fill="#97A59F">1</text>
+    <text x="148" y="88" text-anchor="middle" font-size="10.5" fill="#97A59F">2</text>
+    <text x="172" y="88" text-anchor="middle" font-size="10.5" fill="#97A59F">3</text>
+    <text x="196" y="88" text-anchor="middle" font-size="10.5" fill="#97A59F">4</text>
+    <text x="104" y="88" text-anchor="end" font-size="11" fill="#97A59F">query i</text>
+    <text x="104" y="112" text-anchor="end" font-size="10.5" fill="#97A59F">1</text>
+    <text x="104" y="136" text-anchor="end" font-size="10.5" fill="#97A59F">2</text>
+    <text x="104" y="160" text-anchor="end" font-size="10.5" fill="#97A59F">3</text>
+    <text x="104" y="184" text-anchor="end" font-size="10.5" fill="#97A59F">4</text>
+    <g fill="#16302A" stroke="#4CC5B7" stroke-width="1">
+      <rect x="112" y="96" width="24" height="24"/><rect x="136" y="96" width="24" height="24"/><rect x="160" y="96" width="24" height="24"/><rect x="184" y="96" width="24" height="24"/>
+      <rect x="112" y="120" width="24" height="24"/><rect x="136" y="120" width="24" height="24"/><rect x="160" y="120" width="24" height="24"/><rect x="184" y="120" width="24" height="24"/>
+      <rect x="112" y="144" width="24" height="24"/><rect x="136" y="144" width="24" height="24"/><rect x="160" y="144" width="24" height="24"/><rect x="184" y="144" width="24" height="24"/>
+      <rect x="112" y="168" width="24" height="24"/><rect x="136" y="168" width="24" height="24"/><rect x="160" y="168" width="24" height="24"/><rect x="184" y="168" width="24" height="24"/>
+    </g>
+    <text x="36" y="224" font-size="11" fill="#97A59F">every token attends to every other token,</text>
+    <text x="36" y="240" font-size="11" fill="#97A59F">in both directions: no mask</text>
+    <text x="36" y="256" font-size="11" fill="#97A59F">training: predict masked tokens</text>
+    <text x="36" y="272" font-size="11" fill="#97A59F">use: classification, embeddings, extraction</text>
+    <rect x="314" y="20" width="272" height="330" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="330" y="42" font-size="11.5" fill="#97A59F">Decoder-only (GPT)</text>
+    <text x="454" y="72" text-anchor="middle" font-size="11" fill="#97A59F">key j</text>
+    <text x="418" y="88" text-anchor="middle" font-size="10.5" fill="#97A59F">1</text>
+    <text x="442" y="88" text-anchor="middle" font-size="10.5" fill="#97A59F">2</text>
+    <text x="466" y="88" text-anchor="middle" font-size="10.5" fill="#97A59F">3</text>
+    <text x="490" y="88" text-anchor="middle" font-size="10.5" fill="#97A59F">4</text>
+    <text x="398" y="88" text-anchor="end" font-size="11" fill="#97A59F">query i</text>
+    <text x="398" y="112" text-anchor="end" font-size="10.5" fill="#97A59F">1</text>
+    <text x="398" y="136" text-anchor="end" font-size="10.5" fill="#97A59F">2</text>
+    <text x="398" y="160" text-anchor="end" font-size="10.5" fill="#97A59F">3</text>
+    <text x="398" y="184" text-anchor="end" font-size="10.5" fill="#97A59F">4</text>
+    <g fill="#16302A" stroke="#4CC5B7" stroke-width="1">
+      <rect x="406" y="96" width="24" height="24"/>
+      <rect x="406" y="120" width="24" height="24"/><rect x="430" y="120" width="24" height="24"/>
+      <rect x="406" y="144" width="24" height="24"/><rect x="430" y="144" width="24" height="24"/><rect x="454" y="144" width="24" height="24"/>
+      <rect x="406" y="168" width="24" height="24"/><rect x="430" y="168" width="24" height="24"/><rect x="454" y="168" width="24" height="24"/><rect x="478" y="168" width="24" height="24"/>
+    </g>
+    <g fill="none" stroke="#97A59F" stroke-width="0.8">
+      <rect x="430" y="96" width="24" height="24"/><rect x="454" y="96" width="24" height="24"/><rect x="478" y="96" width="24" height="24"/>
+      <rect x="454" y="120" width="24" height="24"/><rect x="478" y="120" width="24" height="24"/>
+      <rect x="478" y="144" width="24" height="24"/>
+    </g>
+    <g font-size="9.5" fill="#E39A62" text-anchor="middle">
+      <text x="442" y="112">−∞</text><text x="466" y="112">−∞</text><text x="490" y="112">−∞</text>
+      <text x="466" y="136">−∞</text><text x="490" y="136">−∞</text>
+      <text x="490" y="160">−∞</text>
+    </g>
+    <text x="330" y="224" font-size="11" fill="#97A59F">token i attends only to tokens j ≤ i:</text>
+    <text x="330" y="240" font-size="11" fill="#97A59F">the causal mask sets future scores to −∞,</text>
+    <text x="330" y="256" font-size="11" fill="#97A59F">so their weight is exactly zero</text>
+    <text x="330" y="272" font-size="11" fill="#97A59F">training: predict the next token at every</text>
+    <text x="330" y="288" font-size="11" fill="#97A59F">position · use: general-purpose models</text>
+    <rect x="608" y="20" width="272" height="330" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="624" y="42" font-size="11.5" fill="#97A59F">Encoder–decoder (the original)</text>
+    <text x="659" y="90" text-anchor="middle" font-size="11" fill="#97A59F">encoder: source</text>
+    <g fill="#16302A" stroke="#4CC5B7" stroke-width="1">
+      <rect x="626" y="100" width="22" height="22"/><rect x="648" y="100" width="22" height="22"/><rect x="670" y="100" width="22" height="22"/>
+      <rect x="626" y="122" width="22" height="22"/><rect x="648" y="122" width="22" height="22"/><rect x="670" y="122" width="22" height="22"/>
+      <rect x="626" y="144" width="22" height="22"/><rect x="648" y="144" width="22" height="22"/><rect x="670" y="144" width="22" height="22"/>
+    </g>
+    <path d="M692 133 L756 133" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <text x="724" y="126" text-anchor="middle" font-size="10.5" fill="#97A59F">K, V</text>
+    <text x="791" y="90" text-anchor="middle" font-size="11" fill="#97A59F">cross-attention</text>
+    <g fill="#16302A" stroke="#4CC5B7" stroke-width="1">
+      <rect x="758" y="100" width="22" height="22"/><rect x="780" y="100" width="22" height="22"/><rect x="802" y="100" width="22" height="22"/>
+      <rect x="758" y="122" width="22" height="22"/><rect x="780" y="122" width="22" height="22"/><rect x="802" y="122" width="22" height="22"/>
+      <rect x="758" y="144" width="22" height="22"/><rect x="780" y="144" width="22" height="22"/><rect x="802" y="144" width="22" height="22"/>
+    </g>
+    <text x="791" y="188" text-anchor="middle" font-size="11" fill="#97A59F">decoder: causal</text>
+    <g fill="#16302A" stroke="#4CC5B7" stroke-width="1">
+      <rect x="758" y="198" width="22" height="22"/>
+      <rect x="758" y="220" width="22" height="22"/><rect x="780" y="220" width="22" height="22"/>
+      <rect x="758" y="242" width="22" height="22"/><rect x="780" y="242" width="22" height="22"/><rect x="802" y="242" width="22" height="22"/>
+    </g>
+    <g fill="none" stroke="#97A59F" stroke-width="0.8">
+      <rect x="780" y="198" width="22" height="22"/><rect x="802" y="198" width="22" height="22"/>
+      <rect x="802" y="220" width="22" height="22"/>
+    </g>
+    <g font-size="9.5" fill="#E39A62" text-anchor="middle">
+      <text x="791" y="213">−∞</text><text x="813" y="213">−∞</text>
+      <text x="813" y="235">−∞</text>
+    </g>
+    <text x="624" y="290" font-size="11" fill="#97A59F">encoder: reads the source, both directions</text>
+    <text x="624" y="306" font-size="11" fill="#97A59F">decoder: its own earlier outputs (causal),</text>
+    <text x="624" y="322" font-size="11" fill="#97A59F">plus the encoder output (cross-attention)</text>
+    <text x="624" y="338" font-size="11" fill="#97A59F">use: translation, T5, speech recognition</text>
+    <rect x="20" y="357" width="10" height="10" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <text x="36" y="366" font-size="11" fill="#97A59F">a filled cell: the token of the row (the query) attends to the token of the column (the key)</text>
+  </g>
+</svg>

@@ -57,6 +57,10 @@ $$
 \end{aligned}
 $$
 
+![The toy calculation of §2.3 as a soft lookup: the query of token 3 meets the three keys, softmax changes the scores into weights, and the weighted sum of the values is the output.](figures/attention-soft-lookup.svg)
+
+*The toy calculation of §2.3 as a lookup. The query of token 3 meets each key, and the dot products give the scores. The softmax changes the scores into positive weights with a sum of 1. The weighted sum of the values is the output of token 3, in value space.*
+
 At the end, token 3 holds mostly the value of token 1, with a small part of each other value. Note two things. First, the weights are a convex combination. Thus, attention calculates an average of the values, and it does not make one value larger. Second, the output is in value space. What a token *receives* comes from $W_V$, not from the raw embedding of the token that it attends to.
 
 ### 2.4 Self-attention and cross-attention
@@ -137,6 +141,10 @@ A Transformer block does exactly two things:
 
 If you put $L$ blocks in a stack, each token gets $L$ rounds of "gather context, then think about it." That is the architecture. The rest of this document tells how sequences go in and out. It also tells what occurs when you train and run the model.
 
+![One pre-norm block: the residual stream goes through it, attention reads from it after a Norm and adds its output back, then the MLP does the same for each position on its own.](figures/transformer-block-residual-stream.svg)
+
+*One pre-norm block, in the view of §3.4. The residual stream goes through the block, and each sub-layer reads from it after a Norm and adds its output back. Attention mixes information across positions, and the MLP processes each position on its own. The shapes are those of GPT-2 small (§8.3).*
+
 ## 4. Getting sequences in and out
 
 ### 4.1 Tokens, not words
@@ -148,6 +156,10 @@ Models do not see characters or words. They see **tokens** from a fixed vocabula
 ### 4.2 Embeddings
 
 A learned table of shape $(\text{vocab} \times d_{\text{model}})$ maps each token id to its initial vector. This vector is the initial contents of the residual stream of that token. At the output, a linear map of shape $(d_{\text{model}} \times \text{vocab})$ changes the final stream into a score (logit) for each vocabulary entry. This map is the "unembedding", or LM head. Softmax changes those scores into next-token probabilities. Some models share the two matrices (GPT-2, Gemma), and the Llama family keeps them separate.
+
+![The path in and out of the model: text to token ids, the embedding table and the position into the residual stream, then through the blocks, the final Norm, the LM head, the logits and the softmax to next-token probabilities.](figures/tokens-in-and-out.svg)
+
+*The path in and out of the model (§4). The tokenizer makes token ids, the embedding table gives each id its first vector, and the position goes in before the blocks. At the output, the LM head changes the final stream into one logit per vocabulary entry, and the softmax gives the next-token probabilities. Some models tie the two matrices.*
 
 ### 4.3 Position: attention has no sense of order
 
@@ -170,6 +182,10 @@ Two simplifications came after it:
 - **Encoder-only** (BERT, 2018): only the encoder. Its training masks random tokens, and the model predicts them. Each token sees every other token, in the two directions. It is excellent for classification, embeddings and extraction: for anything where you have the full input and want a representation of it.
 - **Decoder-only** (GPT, 2018 onward): only the self-attention of the decoder, with training to predict the next token. Each token can attend only to tokens *before* it. The **causal mask** enforces this rule. It sets the score for each future position to $-\infty$ before the softmax, so that the weight of that position is exactly zero.
 
+![The three flavors as attention patterns: the encoder sees every token in both directions, the decoder sees only the tokens before it, and the encoder-decoder adds cross-attention from the decoder to the encoder output.](figures/three-flavors.svg)
+
+*The three flavors of §5 as attention patterns. Each cell says if the token of the row attends to the token of the column. The encoder sees both directions, the decoder sees only the tokens before it, and the encoder-decoder adds cross-attention from the decoder to the encoder output.*
+
 Decoder-only won the scaling race, and the reason is important. Next-token prediction gives a training signal at *every* position of *every* sequence. It needs no labels, and it makes no distinction between input and output. You can write any task as "here is some text; continue it." This is true for translation, summarization, classification and code. The result is one objective, one architecture and data with effectively no limit.
 
 Encoder-decoder models stay excellent when the task has a clear structure from input to output. Examples are T5 and the systems behind most machine translation and speech recognition. For general-purpose models, decoder-only is the default.
@@ -183,6 +199,10 @@ In the rest of this primer, "Transformer" means decoder-only, unless the text sa
 Take a long sequence of tokens. At each position $t$, the model outputs a distribution over the token at ${t+1}$. The loss is the cross-entropy against the token that actually came next, averaged over all positions. Pretraining of an LLM runs this over trillions of tokens. Distillation trains on the same cross-entropy. Its target is the whole next-token distribution of a larger model, not the one-hot next token ([distillation primer §2](../../distillation/PRIMER.md#2-soft-targets-temperature-and-the-choice-of-divergence)).
 
 The causal mask makes this efficient. Position $t$ sees only positions $\le t$. Thus, one forward pass over a sequence of length $n$ makes $n$ next-token predictions, each conditioned on exactly the correct prefix. You get $n$ training examples for the price of one pass, and the model calculates them in parallel. During training, the model always sees the true prefix and never its own predictions. This is "teacher forcing."
+
+![Next-token training: one forward pass over the true text gives a prediction at every position, each compared with the token that actually came next, so one pass yields n training examples.](figures/next-token-training.svg)
+
+*Next-token training on six tokens of the sentence of §2.1 (§6.1). One forward pass with the causal mask gives a prediction at every position. The loss compares each prediction with the token that actually came next. Thus one pass gives $n$ training examples, and the model sees the true prefix at each position.*
 
 An RNN gives the same $n$ examples, but it calculates them serially. This parallelism, more than any representational advantage, is the reason why Transformers scaled and RNNs did not.
 
@@ -226,6 +246,10 @@ This divides generation into two phases with large differences:
 - **Decode:** the model makes one token per forward pass. To make a single token, each step must read *every weight in the model* from GPU memory. This is a matmul with batch size 1, and it has a terrible arithmetic intensity. Decode is **memory-bandwidth-bound**, not compute-bound.
 
 As a concrete example, a 7B-parameter model in 16-bit precision has ~14 GB of weights. To generate one token, the GPU must move those 14 GB through the memory bus. At 2–3 TB/s, that is 5–7 ms per token for a single sequence, and the compute units are idle most of the time. Systems that serve models get efficiency back with **batching**: one weight read serves dozens or hundreds of sequences at the same time.
+
+![Prefill and decode on a time line: prefill reads the whole prompt in one parallel pass and fills the KV cache, then each decode step makes one token, reads all cached K and V and every weight, and appends its own K and V.](figures/prefill-decode-kv-cache.svg)
+
+*Prefill and decode on a time line (§7.2). Prefill reads the whole prompt in one parallel pass and writes the K and V of every prompt token into the cache. Each decode step then makes one token. It reads all cached K and V and every weight of the model, and it appends its own K and V.*
 
 This single fact explains most of the economics of LLM serving. It explains these things:
 

@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="290" viewBox="0 0 880 290" role="img" aria-label="Next-token training: one forward pass over the true text gives a prediction at every position, each compared with the token that actually came next, so one pass yields n training examples." style="color: #E4EAE7">
+  <title>Next-token training: one forward pass over the true text gives a prediction at every position, each compared with the token that actually came next, so one pass yields n training examples.</title>
+  <rect x="0" y="0" width="880" height="290" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="40" y="44" font-size="11" fill="#97A59F">input: the true text at positions 1 … 6 (teacher forcing: the model sees the true prefix, never its own predictions)</text>
+    <g fill="none" stroke="currentColor" stroke-width="1.2">
+      <rect x="40" y="56" width="110" height="34" rx="6"/><rect x="164" y="56" width="110" height="34" rx="6"/><rect x="288" y="56" width="110" height="34" rx="6"/>
+      <rect x="412" y="56" width="110" height="34" rx="6"/><rect x="536" y="56" width="110" height="34" rx="6"/><rect x="660" y="56" width="110" height="34" rx="6"/>
+    </g>
+    <g font-family="JetBrains Mono, monospace" font-size="11" text-anchor="middle">
+      <text x="95" y="78">cross</text><text x="219" y="78">the</text><text x="343" y="78">street</text>
+      <text x="467" y="78">because</text><text x="591" y="78">it</text><text x="715" y="78">was</text>
+    </g>
+    <g font-size="10" fill="#97A59F">
+      <text x="103" y="107">t = 1</text><text x="227" y="107">t = 2</text><text x="351" y="107">t = 3</text>
+      <text x="475" y="107">t = 4</text><text x="599" y="107">t = 5</text><text x="723" y="107">t = 6</text>
+    </g>
+    <rect x="40" y="118" width="730" height="40" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="405" y="142" text-anchor="middle" font-size="11.5" fill="#7ADACF">one forward pass with the causal mask: position t sees only positions ≤ t</text>
+    <g stroke="#97A59F" stroke-width="1.2" fill="none">
+      <path d="M95 90 L95 116" marker-end="url(#arr)"/><path d="M219 90 L219 116" marker-end="url(#arr)"/><path d="M343 90 L343 116" marker-end="url(#arr)"/>
+      <path d="M467 90 L467 116" marker-end="url(#arr)"/><path d="M591 90 L591 116" marker-end="url(#arr)"/><path d="M715 90 L715 116" marker-end="url(#arr)"/>
+      <path d="M95 158 L95 184" marker-end="url(#arr)"/><path d="M219 158 L219 184" marker-end="url(#arr)"/><path d="M343 158 L343 184" marker-end="url(#arr)"/>
+      <path d="M467 158 L467 184" marker-end="url(#arr)"/><path d="M591 158 L591 184" marker-end="url(#arr)"/><path d="M715 158 L715 184" marker-end="url(#arr)"/>
+    </g>
+    <g fill="none" stroke="currentColor" stroke-width="1.2">
+      <rect x="40" y="186" width="110" height="48" rx="6"/><rect x="164" y="186" width="110" height="48" rx="6"/><rect x="288" y="186" width="110" height="48" rx="6"/>
+      <rect x="412" y="186" width="110" height="48" rx="6"/><rect x="536" y="186" width="110" height="48" rx="6"/><rect x="660" y="186" width="110" height="48" rx="6"/>
+    </g>
+    <g font-size="11" fill="#97A59F" text-anchor="middle">
+      <text x="95" y="204">P(next | ≤ t)</text><text x="219" y="204">P(next | ≤ t)</text><text x="343" y="204">P(next | ≤ t)</text>
+      <text x="467" y="204">P(next | ≤ t)</text><text x="591" y="204">P(next | ≤ t)</text><text x="715" y="204">P(next | ≤ t)</text>
+    </g>
+    <g font-family="JetBrains Mono, monospace" font-size="11" text-anchor="middle">
+      <text x="95" y="224">target: the</text><text x="219" y="224">street</text><text x="343" y="224">because</text>
+      <text x="467" y="224">it</text><text x="591" y="224">was</text><text x="715" y="224">too</text>
+    </g>
+    <text x="826" y="200" text-anchor="middle" font-size="11.5" font-weight="600">n = 6</text>
+    <text x="826" y="216" text-anchor="middle" font-size="11" fill="#97A59F">examples</text>
+    <text x="826" y="230" text-anchor="middle" font-size="11" fill="#97A59F">in one pass</text>
+    <text x="40" y="266" font-size="11" fill="#97A59F">output: a distribution at each position, compared with the token that actually came next (the target) · loss = the cross-entropy, averaged over all positions</text>
+    <text x="40" y="282" font-size="11" fill="#97A59F" font-family="JetBrains Mono, monospace">in code (§11): F.cross_entropy(logits[:, :-1], idx[:, 1:])</text>
+  </g>
+</svg>

@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="300" viewBox="0 0 880 300" role="img" aria-label="The 80 GB of one H100 in the bank example: the weights take 48 GB in bf16 or 24 GB in fp8, about 10% goes to the CUDA context and the activations, and the spare holds the KV cache of about 89 or about 355 sessions." style="color: #E4EAE7">
+  <title>The 80 GB of one H100 in the bank example: the weights take 48 GB in bf16 or 24 GB in fp8, about 10% goes to the CUDA context and the activations, and the spare holds the KV cache of about 89 or about 355 sessions.</title>
+  <rect x="0" y="0" width="880" height="300" rx="8" fill="#161E1C"/>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="520" y="36" text-anchor="middle" font-size="11.5" fill="#97A59F">one H100: 80 GB of HBM, drawn to scale (8 px per GB)</text>
+    <path d="M200 46 L200 52 M840 46 L840 52" stroke="#97A59F" stroke-width="1"/>
+    <text x="200" y="44" text-anchor="middle" font-size="10.5" fill="#97A59F">0</text>
+    <text x="840" y="44" text-anchor="middle" font-size="10.5" fill="#97A59F">80 GB</text>
+    <text x="184" y="86" text-anchor="end" font-weight="600">bf16</text>
+    <rect x="200" y="60" width="384" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="392" y="86" text-anchor="middle">weights: 48 GB (bf16)</text>
+    <rect x="584" y="60" width="192" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="680" y="78" text-anchor="middle" font-size="11.5" fill="#7ADACF">spare: the KV cache</text>
+    <text x="680" y="95" text-anchor="middle" font-size="11.5" fill="#7ADACF" font-weight="600">~89 sessions</text>
+    <rect x="776" y="60" width="64" height="44" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="808" y="86" text-anchor="middle" font-size="11.5">~10%</text>
+    <text x="840" y="122" text-anchor="end" font-size="11" fill="#97A59F">~10% for the CUDA context and the activations</text>
+    <text x="184" y="166" text-anchor="end" font-weight="600">fp8</text>
+    <rect x="200" y="140" width="192" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="296" y="166" text-anchor="middle">weights: 24 GB (fp8)</text>
+    <rect x="392" y="140" width="384" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="584" y="158" text-anchor="middle" font-size="11.5" fill="#7ADACF">spare: the KV cache</text>
+    <text x="584" y="175" text-anchor="middle" font-size="11.5" fill="#7ADACF" font-weight="600">~355 sessions</text>
+    <rect x="776" y="140" width="64" height="44" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="808" y="166" text-anchor="middle" font-size="11.5">~10%</text>
+    <text x="40" y="222" font-size="11.5">the need: ~100 live sessions · bf16: 2 GPUs · fp8: 1 GPU</text>
+    <text x="40" y="242" font-size="11" fill="#97A59F">KV per token: ≈ 164 kB (bf16), 82 kB (fp8) · fp8 divides the weights by two (more spare) and divides the KV by two: ~4× the sessions</text>
+    <text x="40" y="262" font-size="11" fill="#97A59F">the spare after weights decides how many users you serve; the 80 does not</text>
+    <text x="40" y="282" font-size="11" fill="#97A59F">the binding constraint is KV-cache memory, and fp8 is the largest lever on it</text>
+  </g>
+</svg>
