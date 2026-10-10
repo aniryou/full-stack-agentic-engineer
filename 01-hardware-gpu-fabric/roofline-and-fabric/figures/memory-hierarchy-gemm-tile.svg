@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="440" viewBox="0 0 900 440" role="img" aria-label="The memory hierarchy of an H100 from registers to host DRAM, with the size and speed of each level, and one GEMM tile: its A and B panels stream from HBM through L2 into shared memory and its accumulators sit in registers." style="color: #E4EAE7">
+  <title>The memory hierarchy of an H100 from registers to host DRAM, with the size and speed of each level, and one GEMM tile: its A and B panels stream from HBM through L2 into shared memory and its accumulators sit in registers.</title>
+  <rect x="0" y="0" width="900" height="440" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="32" font-weight="600">The H100 memory hierarchy, and where one GEMM tile lives</text>
+    <rect x="24" y="58" width="340" height="58" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="38" y="81" font-weight="600">registers</text>
+    <text x="134" y="81" font-size="11.5" fill="#97A59F">256 KB per SM (33 MB total)</text>
+    <text x="38" y="102" font-size="11" fill="#97A59F">accumulators of the tile that the kernel computes</text>
+    <rect x="24" y="128" width="340" height="58" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="38" y="151" font-weight="600">SMEM / L1</text>
+    <text x="134" y="151" font-size="11.5" fill="#97A59F">up to 228 KB per SM</text>
+    <text x="38" y="172" font-size="11" fill="#97A59F">operand tiles, staged by TMA / async copy</text>
+    <rect x="24" y="198" width="340" height="58" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="38" y="221" font-weight="600">L2</text>
+    <text x="134" y="221" font-size="11.5" fill="#97A59F">50 MB, shared</text>
+    <text x="38" y="242" font-size="11" fill="#97A59F">re-reads of panels by nearby thread blocks</text>
+    <rect x="24" y="268" width="340" height="58" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="38" y="291" font-weight="600">HBM</text>
+    <text x="134" y="291" font-size="11.5" fill="#97A59F">80 GB at 3.35 TB/s</text>
+    <text x="38" y="312" font-size="11" fill="#97A59F">everything else: weights, KV cache, activations</text>
+    <rect x="24" y="338" width="340" height="58" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="38" y="361" font-weight="600">host DRAM</text>
+    <text x="134" y="361" font-size="11.5" fill="#97A59F">over PCIe Gen5 (63 GB/s/dir)</text>
+    <text x="38" y="382" font-size="11" fill="#97A59F">offload, load, swap</text>
+    <path d="M386 297 L386 87" fill="none" stroke="#4CC5B7" stroke-width="1.4" marker-end="url(#arrA)"/>
+    <text x="398" y="208" font-size="11" fill="#7ADACF">operand panels</text>
+    <text x="398" y="223" font-size="11" fill="#7ADACF">stream up</text>
+    <text x="398" y="246" font-size="11" fill="#97A59F">reuse needed per byte</text>
+    <text x="398" y="261" font-size="11" fill="#97A59F">≈ peak ÷ bandwidth:</text>
+    <text x="398" y="276" font-size="11" font-weight="600" fill="#97A59F">295 for HBM</text>
+    <text x="38" y="414" font-size="11" fill="#97A59F">each level down is larger and slower</text>
+    <rect x="520" y="50" width="356" height="370" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="698.0" y="70" text-anchor="middle" font-size="11.5" fill="#97A59F">one 128 × 256 output tile on one SM</text>
+    <rect x="676.0" y="90" width="192.0" height="48.0" rx="3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="772.0" y="118.0" text-anchor="middle" font-size="11" fill="#7ADACF">B panel slice: k × Tn, 64-wide</text>
+    <rect x="616" y="150.0" width="48.0" height="96.0" rx="3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="608" y="194.0" text-anchor="end" font-size="11" fill="#7ADACF">A slice</text>
+    <text x="608" y="209.0" text-anchor="end" font-size="11" fill="#7ADACF">Tm × k</text>
+    <rect x="676.0" y="150.0" width="192.0" height="96.0" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="772.0" y="178.0" text-anchor="middle" font-weight="600">C tile Tm × Tn = 128 × 256</text>
+    <text x="772.0" y="200.0" text-anchor="middle" font-size="11" fill="#97A59F">fp32 accumulators in registers:</text>
+    <text x="772.0" y="216.0" text-anchor="middle" font-size="11" fill="#97A59F">128 KiB, half the register file</text>
+    <text x="536" y="278.0" font-size="11.5">A and B slices in shared memory, 4 pipeline stages:</text>
+    <text x="536" y="296.0" font-size="11.5" fill="#97A59F">4 × (128 + 256) × 64 × 2 = 192 KiB (84% of the SM)</text>
+    <text x="536" y="322.0" font-size="11.5">each k-step loads (Tm + Tn) elements for 2 Tm Tn FLOPs:</text>
+    <text x="536" y="340.0" font-size="11.5" fill="#97A59F">tile intensity 85 FLOP/B, below the HBM ridge of 295</text>
+    <text x="536" y="366.0" font-size="11.5">the rest of the reuse comes from the L2: thread blocks</text>
+    <text x="536" y="384.0" font-size="11.5">that run at the same time share panels</text>
+  </g>
+</svg>

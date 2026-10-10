@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="330" viewBox="0 0 880 330" role="img" aria-label="A GPU is a memory system with arithmetic attached to it: HBM streams bytes at 3.35 TB/s to the SMs, which do 989 TFLOP/s, and every step pays the larger of bytes over bandwidth and FLOPs over peak." style="color: #E4EAE7">
+  <title>A GPU is a memory system with arithmetic attached to it: HBM streams bytes at 3.35 TB/s to the SMs, which do 989 TFLOP/s, and every step pays the larger of bytes over bandwidth and FLOPs over peak.</title>
+  <rect x="0" y="0" width="880" height="330" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="32" font-weight="600">H100 SXM, dense bf16: every step pays max(FLOPs ÷ peak, bytes ÷ bandwidth)</text>
+    <rect x="24" y="60" width="300" height="118" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="174" y="86" text-anchor="middle" font-weight="600">HBM: 80 GB at 3.35 TB/s</text>
+    <text x="174" y="108" text-anchor="middle" font-size="11.5" fill="#7ADACF">weights, streamed one time per step</text>
+    <text x="174" y="126" text-anchor="middle" font-size="11.5" fill="#7ADACF">Llama-3.1-8B bf16: 15.0 GB</text>
+    <text x="174" y="144" text-anchor="middle" font-size="11.5" fill="#7ADACF">KV cache: 128 KiB per token</text>
+    <text x="174" y="162" text-anchor="middle" font-size="11" fill="#97A59F">activations stay on chip (fused)</text>
+    <rect x="556" y="60" width="300" height="118" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="706" y="86" text-anchor="middle" font-weight="600">SMs, tensor cores: 989 TFLOP/s</text>
+    <text x="706" y="108" text-anchor="middle" font-size="11.5" fill="#97A59F">FLOPs = 2 × tokens × P</text>
+    <text x="706" y="126" text-anchor="middle" font-size="11.5" fill="#97A59F">P = 6.98 B per-token matmul parameters</text>
+    <text x="706" y="144" text-anchor="middle" font-size="11.5" fill="#97A59F">plus the LM head and attention</text>
+    <text x="706" y="162" text-anchor="middle" font-size="11" fill="#97A59F">sustained clock below boost (§2)</text>
+    <path d="M326 112 L552 112" fill="none" stroke="#4CC5B7" stroke-width="2" marker-end="url(#arrA)"/>
+    <text x="440" y="100" text-anchor="middle" font-size="11.5" fill="#7ADACF">bytes ÷ bandwidth</text>
+    <text x="440" y="142" text-anchor="middle" font-size="11.5" fill="#97A59F">ridge = peak ÷ bandwidth</text>
+    <text x="440" y="158" text-anchor="middle" font-size="11.5" font-weight="600" fill="#97A59F">= 295 FLOP/B</text>
+    <rect x="24" y="206" width="832" height="46" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="40" y="225" font-weight="600">prefill, 2,048 tokens</text>
+    <text x="40" y="243" font-size="11.5" fill="#97A59F">FLOPs = 2.97 × 10¹³, bytes = 15.3 GB</text>
+    <text x="300" y="225" font-weight="600">FLOPs ÷ peak = 30.0 ms</text>
+    <text x="300" y="243" font-size="11.5" fill="#97A59F">the larger term: compute-bound, TTFT ≈ 30 ms</text>
+    <text x="600" y="225" >bytes ÷ bandwidth = 4.57 ms</text>
+    <text x="600" y="243" font-size="11.5" fill="#97A59F">intensity 1,941 FLOP/B, above the ridge</text>
+    <rect x="24" y="266" width="832" height="46" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="40" y="285" font-weight="600">decode, batch 1, 1K context</text>
+    <text x="40" y="303" font-size="11.5" fill="#97A59F">~16 GFLOPs, re-reads 15 GB of weights</text>
+    <text x="300" y="285" >FLOPs ÷ peak: the smaller term</text>
+    <text x="300" y="303" font-size="11.5" fill="#97A59F">the tensor cores are mostly idle</text>
+    <text x="600" y="285" font-weight="600">bytes ÷ bandwidth = 4.52 ms</text>
+    <text x="600" y="303" font-size="11.5" fill="#97A59F">the larger term: memory-bound, 221 tokens/s</text>
+  </g>
+</svg>

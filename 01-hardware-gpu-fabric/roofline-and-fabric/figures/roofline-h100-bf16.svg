@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="480" viewBox="0 0 900 480" role="img" aria-label="The H100 roofline in dense bf16 on log-log axes: the memory-bound slope at 3.35 TB/s meets the 989 TFLOP/s ceiling at the ridge of 295 FLOP/B; the kernels of the table and the decode and prefill steps of section 3 sit at their intensities." style="color: #E4EAE7">
+  <title>The H100 roofline in dense bf16 on log-log axes: the memory-bound slope at 3.35 TB/s meets the 989 TFLOP/s ceiling at the ridge of 295 FLOP/B; the kernels of the table and the decode and prefill steps of section 3 sit at their intensities.</title>
+  <rect x="0" y="0" width="900" height="480" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="32" font-weight="600">H100 SXM, dense bf16: attainable FLOP/s = min(peak, intensity × bandwidth)</text>
+    <line x1="90" y1="400" x2="850" y2="400" stroke="#E4EAE7" stroke-width="1"/>
+    <line x1="90" y1="60" x2="90" y2="400" stroke="#E4EAE7" stroke-width="1"/>
+    <line x1="90.0" y1="400" x2="90.0" y2="405" stroke="#E4EAE7" stroke-width="1"/>
+    <text x="90.0" y="420" text-anchor="middle" font-size="11" fill="#97A59F">0.1</text>
+    <line x1="242.0" y1="400" x2="242.0" y2="405" stroke="#E4EAE7" stroke-width="1"/>
+    <text x="242.0" y="420" text-anchor="middle" font-size="11" fill="#97A59F">1</text>
+    <line x1="394.0" y1="400" x2="394.0" y2="405" stroke="#E4EAE7" stroke-width="1"/>
+    <text x="394.0" y="420" text-anchor="middle" font-size="11" fill="#97A59F">10</text>
+    <line x1="546.0" y1="400" x2="546.0" y2="405" stroke="#E4EAE7" stroke-width="1"/>
+    <text x="546.0" y="420" text-anchor="middle" font-size="11" fill="#97A59F">100</text>
+    <line x1="698.0" y1="400" x2="698.0" y2="405" stroke="#E4EAE7" stroke-width="1"/>
+    <text x="698.0" y="420" text-anchor="middle" font-size="11" fill="#97A59F">1,000</text>
+    <line x1="850.0" y1="400" x2="850.0" y2="405" stroke="#E4EAE7" stroke-width="1"/>
+    <text x="850.0" y="420" text-anchor="middle" font-size="11" fill="#97A59F">10,000</text>
+    <line x1="85" y1="342.33497464227844" x2="90" y2="342.33497464227844" stroke="#E4EAE7" stroke-width="1"/>
+    <text x="81" y="346.3" text-anchor="end" font-size="11" fill="#97A59F">1</text>
+    <line x1="85" y1="259.83497464227844" x2="90" y2="259.83497464227844" stroke="#E4EAE7" stroke-width="1"/>
+    <text x="81" y="263.8" text-anchor="end" font-size="11" fill="#97A59F">10</text>
+    <line x1="85" y1="177.33497464227844" x2="90" y2="177.33497464227844" stroke="#E4EAE7" stroke-width="1"/>
+    <text x="81" y="181.3" text-anchor="end" font-size="11" fill="#97A59F">100</text>
+    <line x1="85" y1="94.83497464227844" x2="90" y2="94.83497464227844" stroke="#E4EAE7" stroke-width="1"/>
+    <text x="81" y="98.8" text-anchor="end" font-size="11" fill="#97A59F">1,000</text>
+    <text x="470.0" y="444" text-anchor="middle" font-size="11.5" fill="#97A59F">arithmetic intensity I (FLOP per byte, log scale)</text>
+    <text x="26" y="235.0" text-anchor="middle" font-size="11.5" fill="#97A59F" transform="rotate(-90 26 235.0)">attainable TFLOP/s (log scale)</text>
+    <path d="M90.0 381.5 L617.5 95.2 L850 95.2" fill="none" stroke="#4CC5B7" stroke-width="2"/>
+    <line x1="617.5" y1="95.2" x2="617.5" y2="400" stroke="#97A59F" stroke-width="1.2" stroke-dasharray="4 3"/>
+    <text x="624.5" y="390" font-size="11.5" fill="#97A59F">ridge: 295 FLOP/B</text>
+    <text x="608.5" y="83.2" text-anchor="end" font-size="11.5" fill="#7ADACF">peak: 989 TFLOP/s</text>
+    <text x="410" y="268" font-size="11.5" fill="#7ADACF">slope = bandwidth: 3.35 TB/s</text>
+    <text x="250" y="125" text-anchor="middle" font-size="12.5" font-weight="600" fill="#97A59F">memory-bound</text>
+    <text x="250" y="142" text-anchor="middle" font-size="11" fill="#97A59F">move fewer bytes</text>
+    <text x="735" y="250" text-anchor="middle" font-size="12.5" font-weight="600" fill="#97A59F">compute-bound</text>
+    <text x="735" y="267" text-anchor="middle" font-size="11" fill="#97A59F">buy FLOPs, narrower precision</text>
+    <circle cx="123.7" cy="363.1" r="4.5" fill="#E4EAE7"/>
+    <text x="133.7" y="379.1" font-size="11.5" fill="#E4EAE7">vector add z = x + y: 0.17</text>
+    <circle cx="242.0" cy="299.0" r="4.5" fill="#E4EAE7"/>
+    <text x="233.0" y="291.0" text-anchor="end" font-size="11.5" fill="#E4EAE7">GEMV, 1 token: 1.0</text>
+    <circle cx="248.3" cy="295.6" r="4.5" fill="#4CC5B7"/>
+    <text x="236.3" y="272.6" text-anchor="end" font-size="11.5" fill="#7ADACF">decode, batch 1: 1.1</text>
+    <circle cx="470.8" cy="174.8" r="4.5" fill="#4CC5B7"/>
+    <text x="480.8" y="190.8" font-size="11.5" fill="#7ADACF">decode, batch 64: 32.0</text>
+    <circle cx="514.4" cy="151.1" r="4.5" fill="#E4EAE7"/>
+    <text x="505.4" y="144.1" text-anchor="end" font-size="11.5" fill="#E4EAE7">GEMM 64 × 4096 × 4096: 62</text>
+    <circle cx="718.5" cy="95.2" r="4.5" fill="#E4EAE7"/>
+    <text x="718.5" y="119.2" text-anchor="middle" font-size="11.5" fill="#E4EAE7">GEMM 4096³: 1,365</text>
+    <circle cx="741.8" cy="95.2" r="4.5" fill="#4CC5B7"/>
+    <text x="741.8" y="81.2" text-anchor="middle" font-size="11.5" fill="#7ADACF">prefill, 2,048 tokens: 1,941</text>
+    <circle cx="30.0" cy="462.0" r="4.5" fill="#E4EAE7"/>
+    <text x="40" y="466" font-size="11" fill="#97A59F">kernels of the table above (compulsory traffic)</text>
+    <circle cx="330.0" cy="462.0" r="4.5" fill="#4CC5B7"/>
+    <text x="340" y="466" font-size="11" fill="#7ADACF">LLM steps of §3 (Llama-3.1-8B, 2K context)</text>
+  </g>
+</svg>

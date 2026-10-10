@@ -28,6 +28,10 @@ same quantities on the hardware that you have (T0 CPU, T1 one GPU, T2 several, T
 
 A GPU is a memory system with arithmetic attached to it.
 
+![The HBM of an H100 streams bytes at 3.35 TB/s to the SMs, which do 989 TFLOP/s, and every step pays the larger of its two terms.](figures/gpu-memory-system.svg)
+
+*The HBM supplies the bytes, and the SMs do the FLOPs. Every step pays the larger of its two terms. A 2K-token prefill pays for its FLOPs, and a batch-1 decode step pays for its bytes (§3).*
+
 - Every kernel pays **max(FLOPs ÷ peak, bytes ÷ bandwidth)**. The ratio peak ÷ bandwidth is the
   **ridge point**, about 295 FLOP per byte for an H100 in bf16. It is the arithmetic intensity that a
   kernel needs before the math units are the limit.
@@ -153,6 +157,10 @@ operand one time and writes each result one time. A perfectly fused and tiled ke
 | GEMM 64 × 4096 × 4096 | 2mnk | (mk + kn + mn) × 2 | 62 | 208 TFLOP/s, memory-bound |
 | GEMM 4096 × 4096 × 4096 | 2n³ | 3n² × 2 | 1,365 | 989 TFLOP/s, compute-bound |
 
+![The H100 roofline in dense bf16 on log axes, with the kernels of the table and the decode and prefill steps of section 3 at their intensities.](figures/roofline-h100-bf16.svg)
+
+*The figure draws the H100 roofline in dense bf16 to scale on log axes. The kernels of the table sit on the slope or on the roof at their intensities. Teal marks the decode and prefill steps of §3.*
+
 Remember the GEMM formula:
 
 $$
@@ -246,6 +254,10 @@ each sequence also reads its own KV cache:
 | 64 | 32.0 | 9.61 ms | 6,659 | 104 | 53% |
 | 128 | 41.7 | 14.74 ms | 8,682 | 68 | 70% |
 | 208 (HBM limit) | 47.2 | 21.16 ms | 9,832 | 47 | 79% |
+
+![One decode step per batch row: the weight stream takes the same time in every row and the KV read grows with the batch.](figures/decode-step-weights-vs-kv.svg)
+
+*Each bar is one decode step. The weight stream (teal) takes the same time in every row, because the batch shares it. The KV read (orange) grows with each sequence, until it is most of the bytes (§3.4).*
 
 Throughput increases with batch, and the speed per user decreases. This is the trade that you adjust
 against an ITL SLO. The table stops where HBM does: 208 sequences of 2K tokens fit beside the weights with
@@ -376,6 +388,10 @@ Each level down the hierarchy is larger and slower (for approximate H100 bandwid
 | HBM | 80 GB at 3.35 TB/s | everything else: weights, KV cache, activations |
 | host DRAM | over PCIe Gen5 (63 GB/s/dir) | offload, load, swap |
 
+![The memory hierarchy of an H100 with the size and speed of each level, and where the panels and accumulators of one GEMM tile live.](figures/memory-hierarchy-gemm-tile.svg)
+
+*Each level is larger and slower than the one above it. A GEMM streams its operand panels up this ladder into shared memory and keeps the accumulators in registers (§4.1). The tile's 85 FLOP/B is below the HBM ridge of 295, so the L2 must supply the rest of the reuse.*
+
 Every level has its own roofline. To keep the tensor cores busy, a kernel must reuse each byte that it
 fetches from level X approximately peak ÷ bandwidth(X) times. For HBM, that is 295 on an H100. Tiling is
 how a kernel makes that reuse.
@@ -457,6 +473,10 @@ NVSwitch makes the NVLink domain all-to-all: any GPU pair gets the full per-GPU 
 domain is the most important property (8 GPUs in an HGX node, 72 in an NVL72 rack). The
 [deployment primer §5](../gpu-deployment/gpu-deployment-primer.md#5-the-interconnect-hierarchy) shows the
 cliff between scale-up and scale-out.
+
+![One HGX H100 node with NVSwitch, 8 GPUs and a NIC per GPU, and the rail leaf that each NIC connects to.](figures/node-nvlink-nics-rails.svg)
+
+*NVSwitch joins the 8 GPUs of one HGX node at 450 GB/s per direction, and each GPU drives its own NIC over PCIe (§5.6). NIC i connects to the rail-i leaf, so same-index GPUs are one switch hop apart (§5.4). Beyond the node, the share of each GPU goes over a NIC 9× slower than NVLink (§5.3).*
 
 ### 5.2 The α-β model and the ring all-reduce
 
@@ -647,6 +667,10 @@ The table assumes these stage times: provision 120 s, image 60 s, engine init 90
 | new node, parallel + streamed weights | 281 s | provision node, 43% |
 | warm node, checkpoint in page cache | 97 s | engine init + warm-up, 93% |
 
+![The three cold-start scenarios as bars on one time scale, with the largest stage of each row marked.](figures/cold-start-timeline.svg)
+
+*With one stream, the fetch of the weights is 84% of the cold start. With parallel and streamed weights, the node provision is the largest stage. On a warm node, the engine init is 93% of the time (§6.2, `cold_start()`).*
+
 The lesson is the order of attack. First, work on the weights (parallelism, streaming, a local or
 regional cache, smaller precision). Then work on the node (warm pools, pre-pulled or streamed images:
 see layer 03). Then work on the engine (layer 04).
@@ -695,6 +719,10 @@ $$
 \text{at } \tau^{*}\text{:}\quad \text{waste} &= \sqrt{2\delta/M} + R/M
 \end{aligned}
 $$
+
+![A time line with checkpoint writes, a failure, the lost work since the last checkpoint and a restart.](figures/checkpoint-interval-timeline.svg)
+
+*A job writes a checkpoint every $\tau$ seconds, and each write takes $\delta$. A failure loses the work since the last checkpoint, about $\tau/2$ on average, plus the restart $R$. The interval $\sqrt{2\,\delta M}$ balances the two losses (§7.2).*
 
 Daly (2006) adds higher-order terms: `young_daly_interval(..., higher_order=True)`.
 
@@ -757,6 +785,18 @@ largest batch that meets an **ITL of 10 ms** (100 tokens/s per user) and fits in
 | H100 Spot, bf16 | 68 (ITL-bound) | 9.93 ms | 6,847 | 101 | $0.150 | $0.250 |
 | H100 on demand, FP8 | 193 (ITL-bound) | 9.98 ms | 19,345 | 100 | $0.158 | $0.263 |
 | L4 on demand, bf16 — misses the SLO | 20 (HBM-bound) | 67.9 ms | 294 | 14.7 | $0.660 | $1.10 |
+
+```mermaid
+flowchart TB
+  SLO(["ITL SLO: 10 ms, 100 tokens/s per user"]) --> B["best_batch_under_itl()<br/>the largest batch that meets the ITL and fits in HBM<br/>68 (bf16), 193 (FP8)"]
+  B --> T["decode(): tokens/s<br/>6,847 (bf16), 19,345 (FP8)"]
+  P["$/GPU-hr<br/>H100 on demand ~$11<br/>Spot ~$3.7 (verify)"] --> C
+  T --> C["cost_per_million_tokens()<br/>$/GPU-hr × GPUs ÷ (tokens/s × 3600 × utilisation) × 10⁶"]
+  U["utilisation()<br/>mean load ÷ peak: 60%"] --> C
+  C --> R["$/M output tokens<br/>bf16: $0.446 at 100%, $0.744 at 60%<br/>FP8: $0.158 at 100%, $0.263 at 60%"]
+```
+
+*The ITL SLO and the HBM capacity set the batch, and the decode step sets the tokens per second. The price per GPU-hour and the utilisation then set the cost of a token (§8.1 to §8.3).*
 
 The L4 cannot meet the SLO at any batch, because at batch 1 it needs 50.9 ms to stream the weights. Thus
 its row is at its HBM limit. The L4 row is a slower product. Even so, the H100 gives the lower-cost token. Its
