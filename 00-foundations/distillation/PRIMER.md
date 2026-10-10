@@ -61,6 +61,10 @@ term on the logits of the student is $T \cdot (q_T - p_T)$.
 - A **draft model** is a student whose metric is acceptance, $\alpha = 1 - \mathrm{TV}$.
 - Measure students by agreement *and* by task accuracy with intervals, per slice.
 
+![What flows from the teacher to the student in the four recipes of the core: hard labels, logit KD, SeqKD and on-policy GKD.](figures/four-recipes.svg)
+
+*Four ways to train the student, and what each one takes from the teacher. Hard labels and logit KD train on given text, with one sampled token or the teacher's full distribution at every position (§1, §2). SeqKD trains on text that the teacher wrote and that the verifier kept (§3). In on-policy GKD, the student samples its own text, and the teacher scores every position of it (§4).*
+
 The payoff is in serving, with a 1.5B student as the example. It is ~16× cheaper per token on the roofline than a 32B
 teacher served on two H100s (the 96× you get against one H100). That 96× is a separate case: on one H100, the teacher
 has no room left to batch. The cost reduction comes with a one-off bill, and the teacher's tokens are the largest part
@@ -239,6 +243,10 @@ The forward fit is nearly flat. It puts 45.4% of its samples where the teacher a
 samples are in the space between the modes. The reverse fit selects one mode and leaves half of the teacher's mass
 uncovered. With this family, the fit of the JSD flips from covering to seeking between β = 0.6 and β = 0.7.
 
+![A one-bump student fitted to a two-bump teacher: forward KL spreads across both modes, reverse KL selects one mode.](figures/forward-reverse-kl.svg)
+
+*The teacher of `divergences.fit_bump()` has two modes, at 2 and 8, on 11 tokens. Under each divergence, the chart shows the best one-bump student. The forward fit (μ, s = 5.0, 8.6) is nearly flat. It puts 0.454 of its mass where the teacher gives less than 1%. The reverse fit (μ, s = 2.0, 0.7) selects one mode. It leaves 0.51 of the teacher's mass uncovered.*
+
 For classification, the choice has almost no effect, because you use only the argmax. For generation, every sampled
 token conditions the next token. Thus where the student puts its low-probability mass is what it writes.
 
@@ -309,6 +317,10 @@ the rule. Here, its samples follow the rule 0.792 of the time at position 1, lik
 There, its top token is incorrect about a quarter of the time. Thus per-position accuracy drops to 0.788 by position
 4 and then stays there (0.774 at position 12).
 
+![At train time the student sees the teacher's prefixes, at decode time its own, and one error puts it in contexts that no training example covered.](figures/exposure-bias.svg)
+
+*Exposure bias in the §3 experiment, as `seqkd.exposure_bias()` measures it. The student trains on the teacher's prefixes, where every context has a training example. When it decodes on its own prefixes, one error puts it in contexts that no training example covered. After that error, its top token is incorrect about a quarter of the time. Whole outputs become incorrect more often as the length increases.*
+
 What compounds with length is the output as a whole. Take the probability that the top token of the KD student is
 correct at every position so far. This probability falls to 0.650 by position 4 and 0.190 by position 12, where the
 teacher's stays at 1.000. The first of two cures is to cover more of the states that the student will visit. For
@@ -343,6 +355,25 @@ TRL's `GKDTrainer` minimises $\mathrm{JSD}(\beta)$ and mixes the data sources pe
 - Otherwise, the trainer uses the completion from the dataset (supervised KD).
 
 `onpolicy.gkd_train()` has the same loop.
+
+```mermaid
+flowchart TB
+  P([prompts]) --> C{"λ coin flip, per batch"}
+  C -->|"with probability λ"| S["Student samples a continuation (on-policy)"]
+  C -->|"otherwise, seq_kd=True"| T["Teacher generates"]
+  C -->|"otherwise"| D[("the completion from the dataset")]
+  S --> X["the text of the batch"]
+  T --> X
+  D --> X
+  X --> TS["Teacher: its full next-token distribution at every position"]
+  X --> SS["Student: its distribution at the same positions"]
+  TS --> J["JSD(β): β = 0 forward KL, β = 1 reverse KL"]
+  SS --> J
+  J -->|"gradient on the student's logits"| U[["update the student"]]
+  U -.->|"next step"| S
+```
+
+*The GKD loop of TRL's `GKDTrainer`, which `onpolicy.gkd_train()` repeats. A coin flip with probability λ selects the source of each batch. Then the teacher gives its full next-token distribution at every position of that text, and the student minimises JSD(β) there. At β = 1, the per-token reward of the policy-gradient view gives the same gradient in expectation (`onpolicy.token_pg_identity()`).*
 
 **Exposure bias removed.** Continue the training of the §3 KD student with GKD at λ = 1 for 300 steps (notebook
 02):
@@ -463,6 +494,17 @@ teachers support the sampled-token reward, not full logit KD.
 Thus what a small student takes from the teacher is its **procedure**: its format, its steps and how long it thinks.
 The toy of the core uses the ThinkTask formula of rlcore. The model thinks $L$ tokens, and then it answers. The
 answer is correct with probability $1 - e_0 \cdot (1 - q)^L$ ($e_0 = 0.8,\; q = 0.1$, at most 32 tokens).
+
+```mermaid
+flowchart TB
+  T["Teacher: a thinking policy from RL (reasoning.reinforce, 16,000 rollouts)"] -->|"1,000 traces: the thinking length L, correct or not"| F{"the filter (reasoning.distil)"}
+  F -->|"keep all, the correct only, or the correct with L ≤ 16 or 12"| M["LengthPolicy.fit(): the stop rule, the fraction of traces that stopped at each length"]
+  M --> S["Student: the same procedure, the same thinking length"]
+  S --> W["the serving workload: decode-heavy, heavy-tailed"]
+  S --> K["its accuracy comes from its own knowledge q"]
+```
+
+*The trace pipeline of §5. The teacher's traces go through a filter, and `LengthPolicy.fit()` reads the stop rule from the lengths that stay. The student copies that rule, that is the procedure and the thinking length, but its accuracy comes from its own knowledge $q$.*
 
 A policy is a rule that decides when to stop. SFT on traces is maximum likelihood, and it has a closed form for this
 rule. At each length, the closed form is the fraction of traces that stopped at that length, among the traces that
@@ -603,6 +645,10 @@ Take that primer's own $p$ = (0.5, 0.3, 0.15, 0.05) and $q$ = (0.2, 0.2, 0.2, 0.
 tokens per pass at k = 4, and at c = 0.1 the best depth is k = 3 with a 1.6738× speedup. `draft.best_k()` finds
 that depth. The tests of the core reproduce `minengine.spec` on these inputs, and on the α = 0.8 examples of that
 primer.
+
+![One round of speculative decoding: k draft steps propose k tokens, one target pass accepts or rejects them, and the round yields the accepted tokens plus one.](figures/speculative-decoding-pass.svg)
+
+*One round of speculative decoding (§7). The draft proposes $k$ tokens in $k$ small steps, each $c$ target steps long. Then one target pass accepts each token with probability $\min(1, p/q)$, stops at the first rejected token, and adds one token of its own. At $\alpha = 0.6$ and $k = 4$, a round yields 2.3056 tokens on average.*
 
 A draft is good exactly when its distribution is near the distribution of the target **on the target's own text**.
 Distillation from the target optimises exactly this. By Pinsker, $\mathrm{TV} \le \sqrt{\mathrm{KL}/2}$. Thus, when
@@ -788,6 +834,10 @@ API. Evals, engineering and the work to keep a second model current are extra, a
 **Break-even** (`cost.break_even()`) is that bill divided by the cost reduction per token. With the self-hosted teacher,
 $192.21 ÷ ($0.890 − $0.056 per million) is 230.6 million tokens: 4.6 days at 50 million output tokens a day ($41.68
 a day saved), 46.1 days at 5 million, 230.6 days at 1 million.
+
+![Cumulative cost against output tokens: the teacher line from zero, the student line from the one-off bill with a lower slope, and the crossing at 230.6 million tokens.](figures/break-even.svg)
+
+*Break-even in the §9 example (`cost.break_even()`). The student starts with the one-off bill, and the teacher's tokens are 93% of that bill. Each million tokens then saves the difference between $0.890 and $0.056, so the lines cross at 230.6 million tokens. That is 4.6 days at 50 million output tokens a day, and 46.1 days at 5 million.*
 
 With data from the teacher that you already serve, break-even is near the volume that the teacher wrote for the
 student (here 2 × 10⁸ tokens). This is true at any cost per token of the teacher. Data bought through an API instead

@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="364" viewBox="0 0 880 364" role="img" aria-label="A one-bump student fitted to a two-bump teacher: forward KL spreads across both modes, reverse KL selects one mode." style="color: #E4EAE7">
+  <title>A one-bump student fitted to a two-bump teacher: forward KL spreads across both modes, reverse KL selects one mode.</title>
+  <rect x="0" y="0" width="880" height="364" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <rect x="20" y="20" width="410" height="300" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="36" y="44" font-size="12.5" font-weight="600">forward KL(p ‖ q): the student covers every mode</text>
+    <text x="36" y="62" font-size="11" fill="#97A59F">the best fit: μ, s = 5.0, 8.6, nearly flat</text>
+    <rect x="188.27272727272725" y="132" width="93.45454545454545" height="124" rx="8" fill="none" stroke="#E39A62" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="235.0" y="104" font-size="11" fill="#E39A62" text-anchor="middle">0.454 of the student's mass</text>
+    <text x="235.0" y="120" font-size="11" fill="#E39A62" text-anchor="middle">where the teacher gives &lt; 1%</text>
+    <line x1="60" y1="86" x2="60" y2="256" stroke="#97A59F" stroke-width="1"/>
+    <line x1="60" y1="256" x2="410" y2="256" stroke="#97A59F" stroke-width="1"/>
+    <rect x="63.0" y="254.6" width="12" height="1.4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="77.0" y="232.8" width="12" height="23.2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="75.9090909090909" y="272" font-size="11" fill="#97A59F" text-anchor="middle">0</text>
+    <rect x="94.8" y="226.9" width="12" height="29.1" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="108.8" y="231.3" width="12" height="24.7" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="107.72727272727272" y="272" font-size="11" fill="#97A59F" text-anchor="middle">1</text>
+    <rect x="126.6" y="175.3" width="12" height="80.7" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="140.6" y="230.1" width="12" height="25.9" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="139.54545454545453" y="272" font-size="11" fill="#97A59F" text-anchor="middle">2</text>
+    <rect x="158.5" y="226.9" width="12" height="29.1" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="172.5" y="229.2" width="12" height="26.8" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="171.36363636363635" y="272" font-size="11" fill="#97A59F" text-anchor="middle">3</text>
+    <rect x="190.3" y="254.6" width="12" height="1.4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="204.3" y="228.7" width="12" height="27.3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="203.18181818181816" y="272" font-size="11" fill="#97A59F" text-anchor="middle">4</text>
+    <rect x="222.1" y="256.0" width="12" height="0.0" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="236.1" y="228.5" width="12" height="27.5" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="235.0" y="272" font-size="11" fill="#97A59F" text-anchor="middle">5</text>
+    <rect x="253.9" y="254.6" width="12" height="1.4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="267.9" y="228.7" width="12" height="27.3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="266.8181818181818" y="272" font-size="11" fill="#97A59F" text-anchor="middle">6</text>
+    <rect x="285.7" y="226.9" width="12" height="29.1" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="299.7" y="229.2" width="12" height="26.8" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="298.6363636363637" y="272" font-size="11" fill="#97A59F" text-anchor="middle">7</text>
+    <rect x="317.5" y="175.3" width="12" height="80.7" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="331.5" y="230.1" width="12" height="25.9" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="330.45454545454544" y="272" font-size="11" fill="#97A59F" text-anchor="middle">8</text>
+    <rect x="349.4" y="226.9" width="12" height="29.1" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="363.4" y="231.3" width="12" height="24.7" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="362.2727272727273" y="272" font-size="11" fill="#97A59F" text-anchor="middle">9</text>
+    <rect x="381.2" y="254.6" width="12" height="1.4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="395.2" y="232.8" width="12" height="23.2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="394.0909090909091" y="272" font-size="11" fill="#97A59F" text-anchor="middle">10</text>
+    <text x="139.54545454545456" y="286" font-size="10.5" fill="#97A59F" text-anchor="middle">mode</text>
+    <text x="330.45454545454544" y="286" font-size="10.5" fill="#97A59F" text-anchor="middle">mode</text>
+    <text x="56" y="80" font-size="10.5" fill="#97A59F">probability</text>
+    <rect x="450" y="20" width="410" height="300" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="466" y="44" font-size="12.5" font-weight="600">reverse KL(q ‖ p): the student selects one mode</text>
+    <text x="466" y="62" font-size="11" fill="#97A59F">the best fit: μ, s = 2.0, 0.7, one mode</text>
+    <rect x="713.7272727272727" y="132" width="93.45454545454545" height="124" rx="8" fill="none" stroke="#E39A62" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="760.4545454545455" y="104" font-size="11" fill="#E39A62" text-anchor="middle">0.51 of the teacher's mass</text>
+    <text x="760.4545454545455" y="120" font-size="11" fill="#E39A62" text-anchor="middle">left uncovered</text>
+    <line x1="490" y1="86" x2="490" y2="256" stroke="#97A59F" stroke-width="1"/>
+    <line x1="490" y1="256" x2="840" y2="256" stroke="#97A59F" stroke-width="1"/>
+    <rect x="493.0" y="254.6" width="12" height="1.4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="507.0" y="253.3" width="12" height="2.7" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="505.90909090909093" y="272" font-size="11" fill="#97A59F" text-anchor="middle">0</text>
+    <rect x="524.8" y="226.9" width="12" height="29.1" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="538.8" y="197.8" width="12" height="58.2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="537.7272727272727" y="272" font-size="11" fill="#97A59F" text-anchor="middle">1</text>
+    <rect x="556.6" y="175.3" width="12" height="80.7" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="570.6" y="94.5" width="12" height="161.5" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="569.5454545454545" y="272" font-size="11" fill="#97A59F" text-anchor="middle">2</text>
+    <rect x="588.5" y="226.9" width="12" height="29.1" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="602.5" y="197.8" width="12" height="58.2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="601.3636363636364" y="272" font-size="11" fill="#97A59F" text-anchor="middle">3</text>
+    <rect x="620.3" y="254.6" width="12" height="1.4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="634.3" y="253.3" width="12" height="2.7" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="633.1818181818181" y="272" font-size="11" fill="#97A59F" text-anchor="middle">4</text>
+    <rect x="652.1" y="256.0" width="12" height="0.0" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="666.1" y="256.0" width="12" height="0.0" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="665.0" y="272" font-size="11" fill="#97A59F" text-anchor="middle">5</text>
+    <rect x="683.9" y="254.6" width="12" height="1.4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="697.9" y="256.0" width="12" height="0.0" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="696.8181818181818" y="272" font-size="11" fill="#97A59F" text-anchor="middle">6</text>
+    <rect x="715.7" y="226.9" width="12" height="29.1" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="729.7" y="256.0" width="12" height="0.0" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="728.6363636363636" y="272" font-size="11" fill="#97A59F" text-anchor="middle">7</text>
+    <rect x="747.5" y="175.3" width="12" height="80.7" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="761.5" y="256.0" width="12" height="0.0" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="760.4545454545454" y="272" font-size="11" fill="#97A59F" text-anchor="middle">8</text>
+    <rect x="779.4" y="226.9" width="12" height="29.1" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="793.4" y="256.0" width="12" height="0.0" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="792.2727272727273" y="272" font-size="11" fill="#97A59F" text-anchor="middle">9</text>
+    <rect x="811.2" y="254.6" width="12" height="1.4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="825.2" y="256.0" width="12" height="0.0" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="824.0909090909091" y="272" font-size="11" fill="#97A59F" text-anchor="middle">10</text>
+    <text x="569.5454545454545" y="286" font-size="10.5" fill="#97A59F" text-anchor="middle">mode</text>
+    <text x="760.4545454545455" y="286" font-size="10.5" fill="#97A59F" text-anchor="middle">mode</text>
+    <text x="486" y="80" font-size="10.5" fill="#97A59F">probability</text>
+    <rect x="300" y="344" width="12" height="10" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="318" y="353" font-size="11" fill="#97A59F">teacher p: two modes, at 2 and 8, on 11 tokens</text>
+    <rect x="600" y="344" width="12" height="10" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="618" y="353" font-size="11" fill="#97A59F">student q: the best one-bump fit</text>
+  </g>
+</svg>

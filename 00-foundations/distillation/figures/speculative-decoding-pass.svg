@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="350" viewBox="0 0 880 350" role="img" aria-label="One round of speculative decoding: k draft steps propose k tokens, one target pass accepts or rejects them, and the round yields the accepted tokens plus one." style="color: #E4EAE7">
+  <title>One round of speculative decoding: k draft steps propose k tokens, one target pass accepts or rejects them, and the round yields the accepted tokens plus one.</title>
+  <rect x="0" y="0" width="880" height="350" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <path d="M40 44 L840 44" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <text x="838" y="36" font-size="11" fill="#97A59F" text-anchor="end">time</text>
+    <rect x="60" y="62" width="52" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="86" y="80" font-size="11.5" fill="#7ADACF" text-anchor="middle">draft</text>
+    <text x="86" y="96" font-size="11.5" fill="#7ADACF" text-anchor="middle">step 1</text>
+    <rect x="122" y="62" width="52" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="148" y="80" font-size="11.5" fill="#7ADACF" text-anchor="middle">draft</text>
+    <text x="148" y="96" font-size="11.5" fill="#7ADACF" text-anchor="middle">step 2</text>
+    <rect x="184" y="62" width="52" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="210" y="80" font-size="11.5" fill="#7ADACF" text-anchor="middle">draft</text>
+    <text x="210" y="96" font-size="11.5" fill="#7ADACF" text-anchor="middle">step 3</text>
+    <rect x="246" y="62" width="52" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="272" y="80" font-size="11.5" fill="#7ADACF" text-anchor="middle">draft</text>
+    <text x="272" y="96" font-size="11.5" fill="#7ADACF" text-anchor="middle">step 4</text>
+    <text x="179" y="124" font-size="11" fill="#97A59F" text-anchor="middle">k = 4 draft steps, each c target steps</text>
+    <rect x="340" y="62" width="420" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="550" y="80" text-anchor="middle" font-weight="600">Target: one forward pass over the k drafted tokens</text>
+    <text x="550" y="97" font-size="11" fill="#97A59F" text-anchor="middle">it accepts each token with probability min(1, p/q)</text>
+    <text x="550" y="124" font-size="11" fill="#97A59F" text-anchor="middle">1 target step</text>
+    <text x="69" y="144" font-size="11" fill="#97A59F">proposed:</text>
+    <rect x="69" y="152" width="34" height="28" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="86" y="171" font-size="11" fill="#7ADACF" text-anchor="middle" font-family="JetBrains Mono, monospace">t1</text>
+    <rect x="131" y="152" width="34" height="28" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="148" y="171" font-size="11" fill="#7ADACF" text-anchor="middle" font-family="JetBrains Mono, monospace">t2</text>
+    <rect x="193" y="152" width="34" height="28" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="210" y="171" font-size="11" fill="#7ADACF" text-anchor="middle" font-family="JetBrains Mono, monospace">t3</text>
+    <rect x="255" y="152" width="34" height="28" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="272" y="171" font-size="11" fill="#7ADACF" text-anchor="middle" font-family="JetBrains Mono, monospace">t4</text>
+    <path d="M300 166 L338 166" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <text x="350" y="144" font-size="11" fill="#97A59F">the round yields:</text>
+    <rect x="350" y="152" width="40" height="28" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="370" y="171" font-size="11" fill="#7ADACF" text-anchor="middle" font-family="JetBrains Mono, monospace">t1</text>
+    <text x="370" y="198" font-size="11" fill="#97A59F" text-anchor="middle">accepted</text>
+    <rect x="440" y="152" width="40" height="28" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="460" y="171" font-size="11" fill="#7ADACF" text-anchor="middle" font-family="JetBrains Mono, monospace">t2</text>
+    <text x="460" y="198" font-size="11" fill="#97A59F" text-anchor="middle">accepted</text>
+    <rect x="530" y="152" width="40" height="28" rx="4" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="550" y="171" font-size="11" text-anchor="middle" font-family="JetBrains Mono, monospace">t3</text>
+    <text x="550" y="198" font-size="11" fill="#E39A62" text-anchor="middle">rejected</text>
+    <rect x="620" y="152" width="40" height="28" rx="4" fill="none" stroke="#97A59F" stroke-width="1.2"/>
+    <text x="640" y="171" font-size="11" fill="#97A59F" text-anchor="middle" font-family="JetBrains Mono, monospace">t4</text>
+    <text x="640" y="198" font-size="11" fill="#97A59F" text-anchor="middle">discarded</text>
+    <rect x="710" y="152" width="40" height="28" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="730" y="171" font-size="11" text-anchor="middle" font-family="JetBrains Mono, monospace">+1</text>
+    <text x="730" y="198" font-size="11" fill="#97A59F" text-anchor="middle">from the target</text>
+    <text x="40" y="232" font-size="11" fill="#97A59F">the pass stops at the first rejected token, and it always adds one token of its own.</text>
+    <text x="40" y="246" font-size="11" fill="#97A59F">Here the round yields 2 accepted tokens + 1 = 3 tokens for one target step.</text>
+    <rect x="40" y="272" width="800" height="56" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="64" y="294" font-size="11" font-family="JetBrains Mono, monospace">α = Σ min(p, q) = 1 − TV(p, q)</text>
+    <text x="440" y="294" font-size="11" text-anchor="middle" font-family="JetBrains Mono, monospace">E[tokens per pass] = (1 − α^(k+1)) / (1 − α)</text>
+    <text x="816" y="294" font-size="11" text-anchor="end" font-family="JetBrains Mono, monospace">speedup = E / (k·c + 1)</text>
+    <text x="440" y="314" font-size="11" fill="#97A59F" text-anchor="middle" font-family="JetBrains Mono, monospace">α = 0.6 and k = 4: 2.3056 tokens per pass · at c = 0.1 the best depth is k = 3 with a 1.6738× speedup</text>
+  </g>
+</svg>
