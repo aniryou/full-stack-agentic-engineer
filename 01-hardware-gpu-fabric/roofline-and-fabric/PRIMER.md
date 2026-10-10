@@ -28,9 +28,9 @@ same quantities on the hardware that you have (T0 CPU, T1 one GPU, T2 several, T
 
 A GPU is a memory system with arithmetic attached to it.
 
-![The HBM of an H100 streams bytes at 3.35 TB/s to the SMs, which do 989 TFLOP/s, and every step pays the larger of its two terms.](figures/gpu-memory-system.svg)
+![The HBM of an H100 streams bytes at 3.35 TB/s to the SMs, which do 989 TFLOP/s, and every kernel pays the larger of its two terms.](figures/gpu-memory-system.svg)
 
-*The HBM supplies the bytes, and the SMs do the FLOPs. Every step pays the larger of its two terms. A 2K-token prefill pays for its FLOPs, and a batch-1 decode step pays for its bytes (§3).*
+*The HBM supplies the bytes, and the SMs do the FLOPs. Every kernel pays the larger of its two terms. A 2K-token prefill pays for its FLOPs, and a batch-1 decode step pays for its bytes (§3).*
 
 - Every kernel pays **max(FLOPs ÷ peak, bytes ÷ bandwidth)**. The ratio peak ÷ bandwidth is the
   **ridge point**, about 295 FLOP per byte for an H100 in bf16. It is the arithmetic intensity that a
@@ -722,7 +722,7 @@ $$
 
 ![A time line with checkpoint writes, a failure, the lost work since the last checkpoint and a restart.](figures/checkpoint-interval-timeline.svg)
 
-*A job writes a checkpoint every $\tau$ seconds, and each write takes $\delta$. A failure loses the work since the last checkpoint, about $\tau/2$ on average, plus the restart $R$. The interval $\sqrt{2\,\delta M}$ balances the two losses (§7.2).*
+*A job writes a checkpoint every $\tau$ seconds, and each write takes $\delta$. A failure loses the work since the last checkpoint, about $\tau/2$ on average, plus the restart $R$. The interval $\sqrt{2\,\delta M}$ gives the least lost time, and the restart $R$ does not move it (§7.2).*
 
 Daly (2006) adds higher-order terms: `young_daly_interval(..., higher_order=True)`.
 
@@ -793,10 +793,10 @@ flowchart TB
   P["$/GPU-hr<br/>H100 on demand ~$11<br/>Spot ~$3.7 (verify)"] --> C
   T --> C["cost_per_million_tokens()<br/>$/GPU-hr × GPUs ÷ (tokens/s × 3600 × utilisation) × 10⁶"]
   U["utilisation()<br/>mean load ÷ peak: 60%"] --> C
-  C --> R["$/M output tokens<br/>bf16: $0.446 at 100%, $0.744 at 60%<br/>FP8: $0.158 at 100%, $0.263 at 60%"]
+  C --> R["$/M output tokens, H100 on demand<br/>bf16: $0.446 at 100%, $0.744 at 60%<br/>FP8: $0.158 at 100%, $0.263 at 60%"]
 ```
 
-*The ITL SLO and the HBM capacity set the batch, and the decode step sets the tokens per second. The price per GPU-hour and the utilisation then set the cost of a token (§8.1 to §8.3).*
+*The ITL SLO and the HBM capacity set the batch, and the decode step sets the tokens per second. The price per GPU-hour and the utilisation then set the cost of a token (§8.1 and §8.2).*
 
 The L4 cannot meet the SLO at any batch, because at batch 1 it needs 50.9 ms to stream the weights. Thus
 its row is at its HBM limit. The L4 row is a slower product. Even so, the H100 gives the lower-cost token. Its

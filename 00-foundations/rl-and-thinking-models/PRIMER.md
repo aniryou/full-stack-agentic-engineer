@@ -58,22 +58,22 @@ many things, and **RL** changes which of these things it actually does.
 
 ```mermaid
 flowchart LR
-  subgraph train ["post-training (§1 to §5)"]
+  subgraph train ["training (§1 to §5)"]
     direction TB
     P["Pretraining:<br/>what text looks like"] --> S["SFT: a format,<br/>by imitation"]
-    S --> R["RL: sample, score, reweight,<br/>near the SFT model"]
-    R --> T["a thinking model: long chains<br/>of thought grew because<br/>they increased the reward"]
+    S --> R["RL: sample, score,<br/>reweight, near<br/>the SFT model"]
+    R --> T["a thinking model:<br/>long chains of thought<br/>grew because they<br/>increased the reward"]
   end
   subgraph serve ["serving (§7)"]
     direction TB
-    D["decode-heavy,<br/>heavy-tailed traffic"] --> C["concurrency and KV per<br/>session grow with the output"]
+    D["decode-heavy,<br/>heavy-tailed traffic"] --> C["concurrency and KV<br/>per session grow<br/>with the output"]
     C --> G["memory and the ITL SLO<br/>set the GPU count"]
     G --> M["the metric:<br/>cost per correct answer"]
   end
   train -->|"a thinking token is<br/>an output token"| serve
 ```
 
-*The map of this primer. Post-training changes the signal, not the network (§1). RL reweights what the SFT model already samples. Models that got this training on math and code learned to think (§2 to §5). A thinking token is an output token. Thus the traffic is decode-heavy and heavy-tailed, and memory and the ITL SLO set the GPU count (§7).*
+*The map of this primer: post-training changes the signal, not the network (§1), and RL reweights what the SFT model already samples. Models that got this training on math and code learned to think (§2 to §5). A thinking token is an output token. Thus the traffic is decode-heavy and heavy-tailed, and memory and the ITL SLO set the GPU count (§7).*
 
 ---
 
@@ -283,27 +283,29 @@ Four networks are in memory: the policy, the reference, the reward model and the
 remove part of this cost.
 
 ```mermaid
-flowchart TB
-  P[("comparisons: chosen y+, rejected y−")]
+flowchart LR
+  P[("comparisons:<br/>chosen y+,<br/>rejected y−")]
   subgraph rlhf ["RLHF with PPO: four networks in memory"]
-    RM["reward model r:<br/>logistic regression<br/>on (chosen − rejected)"]
+    direction TB
     ENG["sample completions<br/>from the policy"]
-    SC["score: r on the last token,<br/>−β log(π/π_ref) on every token"]
-    V["value model V(s):<br/>per-token baselines (GAE)"]
-    PPO[["PPO step: the clipped ratio<br/>ρ = π/π_old"]]
-    RM --> SC
+    RM["reward model r:<br/>logistic regression<br/>on (chosen − rejected)"]
+    SC["score: r on the last token,<br/>−β log(π/π_ref)<br/>on every token"]
+    V["value model V(s):<br/>per-token baselines<br/>(GAE)"]
+    PPO[["PPO step:<br/>the clipped ratio<br/>ρ = π/π_old"]]
     ENG --> SC
+    RM --> SC
     SC --> PPO
     V --> PPO
     PPO -.->|"new weights"| ENG
   end
   subgraph dpo ["DPO: no reward model, no sampling"]
+    direction TB
     L["a classification loss<br/>on the policy's own<br/>log-ratios<br/>log π − log π_ref,<br/>for y+ and for y−"]
     IR["the implicit reward<br/>β log(π/π_ref)"]
     L --> IR
   end
-  P --> L
-  P --> RM
+  P --> rlhf
+  P --> dpo
 ```
 
 *Two paths from the same comparisons. RLHF fits a reward model on the pairs. Then PPO samples completions and scores them with that reward model and a per-token KL penalty, with per-token baselines from a value model. DPO trains the policy on the pairs directly, as a classification loss on its own log-ratios, with no reward model and no sampling (`pref.dpo_loss()`).*
@@ -661,15 +663,15 @@ helps questions where an attempt can come to a dead end, *if* something can sele
 ```mermaid
 flowchart TB
   B{"a budget per question:<br/>n · (L + 50) ≤ B"}
-  B -->|"sequential"| L["think longer: one attempt of L tokens, and each<br/>token cracks the problem with probability q"]
-  B -->|"parallel"| N["sample more: n attempts, and each starts on<br/>a workable approach with probability a"]
-  N --> PK{"what selects the sample?"}
+  B -->|"sequential"| L["think longer: one attempt<br/>of L tokens, and each<br/>token cracks the problem<br/>with probability q"]
+  B -->|"parallel"| N["sample more: n attempts,<br/>and each starts on<br/>a workable approach<br/>with probability a"]
+  N --> PK{"what selects<br/>the sample?"}
   PK -->|"a verifier"| V["best-of-n:<br/>1 − (1 − p)^n"]
-  PK -->|"a reward model"| RM["best-of-n through noise:<br/>a biased scorer selects for its bias"]
-  PK -->|"a majority vote"| MV["self-consistency: the correct answer<br/>must be the most common answer"]
+  PK -->|"a reward model"| RM["best-of-n through noise:<br/>a biased scorer<br/>selects for its bias"]
+  PK -->|"a majority vote"| MV["self-consistency:<br/>the correct answer must be<br/>the most common answer"]
 ```
 
-*The two budgets of test-time compute, as `rlcore.ttc` models them. A longer think helps a question that is slow to crack. More samples help a question where an attempt can come to a dead end. But the samples give accuracy only when a verifier, a reward model or a vote selects one of them (`ttc.allocate()`).*
+*Test-time compute as `rlcore.ttc` models it: `ttc.allocate()` divides one budget per question between a longer think and more samples. A longer think helps a question that is slow to crack. More samples help a question where an attempt can come to a dead end. But only a verifier or a vote turns the samples into accuracy, and a reward model sees correctness through noise.*
 
 **Sequential: diminishing returns.** The accuracy of one sample against thinking length (`ttc.accuracy()`):
 
@@ -775,7 +777,7 @@ tokens: 2.5×). The large increase is in the time for which the request holds th
 
 ![The KV a request holds at each decode step, drawn against time: a 300-token output on a 1,500-token prompt is a thin sliver, a 3,000-token output an area 18.2 times larger.](figures/kv-token-steps.svg)
 
-*The KV that one request holds at each decode step, drawn against time, with the prompt P = 1,500 in both cases (`workload.kv_token_steps()`). The 3,000-token output holds its KV ten times longer, and its peak is only 2.5 times higher. Thus its area, memory × time, is 18.2 times larger.*
+*The KV that one request holds at each decode step, drawn against time, with the prompt P = 1,500 in both cases (`workload.kv_token_steps()`). The longer output holds its KV for 3,000 steps instead of 300, and its peak is only 2.5 times higher. Thus its area, memory × time, is 18.2 times larger.*
 
 ### Sizing a fleet: Little's law, HBM and the ITL SLO
 

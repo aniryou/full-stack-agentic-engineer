@@ -4,8 +4,8 @@
   <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
     <text x="520" y="36" text-anchor="middle" font-size="11.5" fill="#97A59F">one H100: 80 GB of HBM, drawn to scale (8 px per GB)</text>
     <path d="M200 46 L200 52 M840 46 L840 52" stroke="#97A59F" stroke-width="1"/>
-    <text x="200" y="44" text-anchor="middle" font-size="10.5" fill="#97A59F">0</text>
-    <text x="840" y="44" text-anchor="middle" font-size="10.5" fill="#97A59F">80 GB</text>
+    <text x="200" y="44" text-anchor="middle" font-size="11" fill="#97A59F">0</text>
+    <text x="840" y="44" text-anchor="middle" font-size="11" fill="#97A59F">80 GB</text>
     <text x="184" y="86" text-anchor="end" font-weight="600">bf16</text>
     <rect x="200" y="60" width="384" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
     <text x="392" y="86" text-anchor="middle">weights: 48 GB (bf16)</text>

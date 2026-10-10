@@ -7,44 +7,44 @@
   <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
     <rect x="30" y="50" width="840" height="34" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
     <text x="48" y="71" font-size="12" fill="#7ADACF">residual stream x: (n tokens × d_model)</text>
-    <circle cx="390" cy="67" r="12" fill="#161E1C" stroke="currentColor" stroke-width="1.2"/>
-    <text x="390" y="72" text-anchor="middle" font-size="14" font-weight="600">+</text>
-    <text x="478" y="71" font-size="12" fill="#7ADACF">GPT-2 small: (n, 768) · x ← x + f(x)</text>
-    <circle cx="760" cy="67" r="12" fill="#161E1C" stroke="currentColor" stroke-width="1.2"/>
-    <text x="760" y="72" text-anchor="middle" font-size="14" font-weight="600">+</text>
+    <circle cx="408" cy="67" r="12" fill="#161E1C" stroke="currentColor" stroke-width="1.2"/>
+    <text x="408" y="72" text-anchor="middle" font-size="14" font-weight="600">+</text>
+    <text x="500" y="71" font-size="12" fill="#7ADACF">GPT-2 small: (n, 768) · x ← x + f(x)</text>
+    <circle cx="762" cy="67" r="12" fill="#161E1C" stroke="currentColor" stroke-width="1.2"/>
+    <text x="762" y="72" text-anchor="middle" font-size="14" font-weight="600">+</text>
     <text x="858" y="71" text-anchor="end" font-size="11.5" fill="#7ADACF">next block</text>
-    <rect x="50" y="120" width="60" height="36" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    <text x="80" y="143" text-anchor="middle" font-weight="600">Norm</text>
-    <rect x="150" y="112" width="260" height="134" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    <text x="280" y="134" text-anchor="middle" font-weight="600">Multi-head attention</text>
-    <text x="280" y="154" text-anchor="middle" font-size="11" fill="#97A59F">h heads in parallel, d_head = d_model / h</text>
-    <text x="280" y="171" text-anchor="middle" font-size="11" fill="#97A59F">per head: Q, K, V (n, 64), × 12 heads</text>
-    <text x="280" y="188" text-anchor="middle" font-size="11" fill="#97A59F">softmax(QKᵀ / √d_k) · V in each head</text>
-    <text x="280" y="205" text-anchor="middle" font-size="11" fill="#97A59F">concat the heads, then W_O</text>
-    <text x="280" y="228" text-anchor="middle" font-size="11.5">4·d² parameters: W_Q, W_K, W_V, W_O</text>
-    <text x="280" y="268" text-anchor="middle" font-size="11" fill="#97A59F">mixes across positions: the only place where tokens interact</text>
-    <rect x="430" y="120" width="60" height="36" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    <text x="460" y="143" text-anchor="middle" font-weight="600">Norm</text>
-    <rect x="520" y="112" width="260" height="134" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    <text x="650" y="134" text-anchor="middle" font-weight="600">MLP</text>
-    <text x="650" y="154" text-anchor="middle" font-size="11" fill="#97A59F">up-projection to 4·d_model: (n, 3072)</text>
-    <text x="650" y="171" text-anchor="middle" font-size="11" fill="#97A59F">nonlinearity: GELU, or SwiGLU today</text>
-    <text x="650" y="188" text-anchor="middle" font-size="11" fill="#97A59F">down-projection to d_model: (n, 768)</text>
-    <text x="650" y="205" text-anchor="middle" font-size="11" fill="#97A59F">the same weights at every position</text>
-    <text x="650" y="228" text-anchor="middle" font-size="11.5">8·d² parameters: about two-thirds of the block</text>
-    <text x="650" y="268" text-anchor="middle" font-size="11" fill="#97A59F">per position: the positions have no interaction</text>
+    <rect x="40" y="120" width="64" height="36" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="72" y="143" text-anchor="middle" font-weight="600">Norm</text>
+    <rect x="128" y="112" width="300" height="134" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="278" y="134" text-anchor="middle" font-weight="600">Multi-head attention</text>
+    <text x="278" y="154" text-anchor="middle" font-size="11" fill="#97A59F">h heads in parallel, d_head = d_model / h</text>
+    <text x="278" y="171" text-anchor="middle" font-size="11" fill="#97A59F">per head: Q, K, V (n, 64), × 12 heads</text>
+    <text x="278" y="188" text-anchor="middle" font-size="11" fill="#97A59F">softmax(QKᵀ / √d_k) · V in each head</text>
+    <text x="278" y="205" text-anchor="middle" font-size="11" fill="#97A59F">concat the heads, then W_O</text>
+    <text x="278" y="228" text-anchor="middle" font-size="11.5">4·d² parameters: W_Q, W_K, W_V, W_O</text>
+    <text x="278" y="268" text-anchor="middle" font-size="11" fill="#97A59F">mixes across positions: the only place where tokens interact</text>
+    <rect x="444" y="120" width="64" height="36" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="476" y="143" text-anchor="middle" font-weight="600">Norm</text>
+    <rect x="532" y="112" width="300" height="134" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="682" y="134" text-anchor="middle" font-weight="600">MLP</text>
+    <text x="682" y="154" text-anchor="middle" font-size="11" fill="#97A59F">up-projection to 4·d_model: (n, 3072)</text>
+    <text x="682" y="171" text-anchor="middle" font-size="11" fill="#97A59F">nonlinearity: GELU</text>
+    <text x="682" y="188" text-anchor="middle" font-size="11" fill="#97A59F">down-projection to d_model: (n, 768)</text>
+    <text x="682" y="205" text-anchor="middle" font-size="11" fill="#97A59F">the same weights at every position</text>
+    <text x="682" y="228" text-anchor="middle" font-size="11.5">8·d² parameters: about two-thirds of the block</text>
+    <text x="682" y="268" text-anchor="middle" font-size="11" fill="#97A59F">per position: the positions have no interaction</text>
     <g stroke="#97A59F" stroke-width="1.2" fill="none">
-      <path d="M80 84 L80 118" marker-end="url(#arr)"/>
-      <path d="M110 138 L148 138" marker-end="url(#arr)"/>
-      <path d="M390 112 L390 81" marker-end="url(#arr)"/>
-      <path d="M460 84 L460 118" marker-end="url(#arr)"/>
-      <path d="M490 138 L518 138" marker-end="url(#arr)"/>
-      <path d="M760 112 L760 81" marker-end="url(#arr)"/>
+      <path d="M72 84 L72 118" marker-end="url(#arr)"/>
+      <path d="M104 138 L126 138" marker-end="url(#arr)"/>
+      <path d="M408 112 L408 81" marker-end="url(#arr)"/>
+      <path d="M476 84 L476 118" marker-end="url(#arr)"/>
+      <path d="M508 138 L530 138" marker-end="url(#arr)"/>
+      <path d="M762 112 L762 81" marker-end="url(#arr)"/>
     </g>
-    <text x="92" y="104" font-size="11" fill="#97A59F">read</text>
-    <text x="402" y="100" font-size="11" fill="#97A59F">add</text>
-    <text x="472" y="104" font-size="11" fill="#97A59F">read</text>
-    <text x="772" y="100" font-size="11" fill="#97A59F">add</text>
+    <text x="84" y="104" font-size="11" fill="#97A59F">read</text>
+    <text x="420" y="100" font-size="11" fill="#97A59F">add</text>
+    <text x="488" y="104" font-size="11" fill="#97A59F">read</text>
+    <text x="774" y="100" font-size="11" fill="#97A59F">add</text>
     <text x="30" y="300" font-size="11" fill="#97A59F">pre-norm: the Norm comes before each sub-layer, and the residual add after it · per block ≈ 12·d² parameters · the block repeats L times</text>
     <text x="30" y="318" font-size="11" fill="#97A59F">each token gets L rounds of: gather context (attention), then think about it (MLP)</text>
   </g>

@@ -41,7 +41,9 @@
     <text x="735" y="250" text-anchor="middle" font-size="12.5" font-weight="600" fill="#97A59F">compute-bound</text>
     <text x="735" y="267" text-anchor="middle" font-size="11" fill="#97A59F">buy FLOPs, narrower precision</text>
     <circle cx="123.7" cy="363.1" r="4.5" fill="#E4EAE7"/>
-    <text x="133.7" y="379.1" font-size="11.5" fill="#E4EAE7">vector add z = x + y: 0.17</text>
+    <text x="133.7" y="383.5" font-size="11.5" fill="#E4EAE7">vector add z = x + y: 0.17</text>
+    <circle cx="150.5" cy="348.7" r="4.5" fill="#E4EAE7"/>
+    <text x="160.5" y="362.0" font-size="11.5" fill="#E4EAE7">sum of n fp32: 0.25</text>
     <circle cx="242.0" cy="299.0" r="4.5" fill="#E4EAE7"/>
     <text x="233.0" y="291.0" text-anchor="end" font-size="11.5" fill="#E4EAE7">GEMV, 1 token: 1.0</text>
     <circle cx="248.3" cy="295.6" r="4.5" fill="#4CC5B7"/>

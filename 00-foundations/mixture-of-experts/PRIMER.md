@@ -618,12 +618,12 @@ GPUs see all tokens, and an all-reduce restores the output of each layer (servin
 [§9](../../04-inference-engine/serving-engine/PRIMER.md#9-parallelism-inside-the-engine)). With EP, each GPU holds
 whole experts and ships only assignments.
 
-![What each GPU holds and what one MoE layer exchanges: on one GPU, under tensor parallelism, and under expert parallelism with data-parallel attention.](figures/expert-layouts-on-gpus.svg)
+![What each GPU holds and what one MoE layer exchanges: on one GPU, under tensor parallelism, and under expert parallelism with data-parallel attention and all-to-all kernels.](figures/expert-layouts-on-gpus.svg)
 
-*The three layouts of §6.1, §6.4 and §6.5 differ in what each GPU holds and in what one MoE layer exchanges.
-With tensor parallelism, every GPU holds a slice of every expert, and an all-reduce restores the output of the
-layer. With expert parallelism, each GPU holds whole experts, and the layer runs a dispatch and a combine
-all-to-all.*
+*The three layouts of §6.1, §6.4 and §6.5 are different in what each GPU holds and in what one MoE layer
+exchanges. With tensor parallelism, every GPU holds a slice of every expert, and an all-reduce restores the output
+of the layer. With expert parallelism, each GPU holds whole experts, and with data-parallel attention and
+all-to-all kernels, the layer runs a dispatch and a combine all-to-all.*
 
 Take a Mixtral MoE layer at batch 64 on 8 GPUs (`ep.moe_comm()`, simulated). TP's ring all-reduce sends 896 KiB per
 GPU in 30.0 µs. EP with data-parallel attention and dedicated all-to-all kernels (DeepEP, NIXL-EP or FlashInfer's

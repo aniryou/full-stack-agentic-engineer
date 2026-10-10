@@ -49,7 +49,7 @@
     <text x="440" y="256" text-anchor="middle" font-size="11" fill="#7ADACF" font-family="JetBrains Mono, monospace">pg.reinforce_grad()</text>
     <rect x="600" y="178" width="256" height="90" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
     <text x="728" y="202" text-anchor="middle" font-weight="600">advantage R − b</text>
-    <text x="728" y="222" text-anchor="middle" font-size="11" fill="#97A59F">b = the batch mean: no bias, less variance</text>
+    <text x="728" y="222" text-anchor="middle" font-size="11" fill="#97A59F">b = the batch mean: less variance</text>
     <text x="728" y="250" text-anchor="middle" font-size="11" fill="#97A59F" font-family="JetBrains Mono, monospace">pg.advantages("mean")</text>
     <g stroke="#97A59F" stroke-width="1.2" fill="none">
       <path d="M280 223 L310 223" marker-end="url(#arr)"/>

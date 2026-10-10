@@ -45,20 +45,17 @@
     <text x="808" y="176" font-size="11" fill="#97A59F">reads all</text>
     <text x="808" y="190" font-size="11" fill="#97A59F">cached K, V</text>
     <text x="40" y="222" font-size="11" fill="#97A59F">KV cache, in GPU memory</text>
-    <rect x="40" y="230" width="300" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
-    <text x="190" y="256" text-anchor="middle" font-size="11.5" fill="#7ADACF">K, V of the prompt tokens 1 … n</text>
-    <rect x="370" y="230" width="100" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
-    <text x="420" y="256" text-anchor="middle" font-size="11.5" fill="#7ADACF">+ token 1</text>
-    <rect x="490" y="230" width="100" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <rect x="40" y="230" width="790" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <path d="M355 230 L355 274 M480 230 L480 274 M600 230 L600 274 M720 230 L720 274" fill="none" stroke="#4CC5B7" stroke-width="1"/>
+    <text x="197" y="256" text-anchor="middle" font-size="11.5" fill="#7ADACF">K, V of the prompt tokens 1 … n</text>
+    <text x="418" y="256" text-anchor="middle" font-size="11.5" fill="#7ADACF">+ token 1</text>
     <text x="540" y="256" text-anchor="middle" font-size="11.5" fill="#7ADACF">+ token 2</text>
-    <rect x="610" y="230" width="100" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
     <text x="660" y="256" text-anchor="middle" font-size="11.5" fill="#7ADACF">+ token 3</text>
-    <rect x="730" y="230" width="100" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
-    <text x="780" y="256" text-anchor="middle" font-size="11.5" fill="#7ADACF">+ token 4</text>
-    <text x="40" y="300" font-size="11" fill="#97A59F">per token the cache stores 2 × L × d_model numbers: approximately 0.5 MB per token for Llama-2 7B in 16-bit, so ~2 GB at 4k tokens and ~16 GB at 32k</text>
+    <text x="775" y="256" text-anchor="middle" font-size="11.5" fill="#7ADACF">+ token 4</text>
+    <text x="40" y="300" font-size="11" fill="#97A59F">the cache stores 2 × L × d_model numbers per token: approximately 0.5 MB for Llama-2 7B in 16-bit, ~2 GB at 4k tokens, ~16 GB at 32k</text>
     <rect x="40" y="322" width="820" height="46" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
     <text x="450" y="341" text-anchor="middle" font-size="11.5" font-weight="600">Decode is memory-bandwidth-bound: each step reads every weight in the model from GPU memory</text>
-    <text x="450" y="358" text-anchor="middle" font-size="11">a 7B model in 16-bit: ~14 GB of weights, 5–7 ms per token at 2–3 TB/s, with the compute units idle most of the time</text>
+    <text x="450" y="358" text-anchor="middle" font-size="11">a 7B model in 16-bit: ~14 GB of weights, 5–7 ms per token for a single sequence at 2–3 TB/s, with the compute units idle most of the time</text>
     <text x="40" y="396" font-size="11" fill="#97A59F">batching: one weight read serves dozens or hundreds of sequences at the same time · prefill fills the cache, and decode grows it by one token per step</text>
   </g>
 </svg>

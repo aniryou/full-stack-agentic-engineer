@@ -41,7 +41,7 @@ The generation of a response has two phases with **opposite** hardware character
 
 ![Prefill reads the whole prompt in one forward pass and is compute-bound; decode loads the entire set of weights from HBM at each step to produce one token and is memory-bandwidth-bound, and batching lets one load serve 64 requests.](figures/prefill-vs-decode.svg)
 
-*Prefill (top) reads all the input tokens in one forward pass, and it uses each loaded weight for much arithmetic: compute-bound. Decode (bottom) loads the entire set of weights from HBM at each step to produce one token: memory-bandwidth-bound. With batching, the same loaded weights serve 64 requests in one step, which amortises the high-cost part 64× (§2).*
+*Prefill (top) is compute-bound: it reads all the input tokens in one forward pass and uses each loaded weight for much arithmetic. Decode (bottom) is memory-bandwidth-bound: at each step, it loads the entire set of weights from HBM to produce one token. With batching, the same loaded weights serve 64 requests in one step, which amortises the high-cost part 64× (§2).*
 
 ### Prefill (processing the prompt)
 
@@ -127,7 +127,7 @@ Think about a 70B model at FP8 on one 80 GB GPU. The 70 GB of weights leaves 10 
 
 There are five ways to divide work across GPUs. You can combine them. Actual deployments use two or three at the same time.
 
-![Tensor and expert parallelism divide the matrices of each layer or the experts and communicate at every layer, so they stay inside the NVLink domain; pipeline and data parallelism pass only activations or nothing, so they go across the network.](figures/parallelism-menu.svg)
+![Tensor parallelism does an all-reduce at each layer and expert parallelism does an all-to-all shuffle of the tokens, so both stay inside the NVLink domain; pipeline parallelism passes only the activations and data parallelism needs near-zero communication for inference, so both go across the network.](figures/parallelism-menu.svg)
 
 *Tensor parallelism gives each GPU a slice of each layer, with an all-reduce at each layer. Expert parallelism puts the experts on different GPUs, with an all-to-all shuffle of the tokens. Both stay inside the NVLink domain. Pipeline parallelism passes only the activations at each boundary, and data parallelism gives each replica a full copy, so both go across the network (§4).*
 
@@ -278,12 +278,14 @@ flowchart TB
     direction LR
     P1[prefill worker]
     P2[prefill worker]
+    P3[prefill worker]
   end
   P1 -- "the KV cache, over the fabric (RDMA)" --> D1
   subgraph DP["decode pool: memory-bound, sized on its own"]
     direction LR
     D1[decode worker]
     D2[decode worker]
+    D3[decode worker]
   end
   D1 --> U([token stream to the user])
 ```

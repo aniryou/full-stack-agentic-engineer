@@ -63,10 +63,10 @@
     </g>
     <!-- the arithmetic units, seen over time -->
     <rect x="200" y="312" width="640" height="5" rx="1" fill="#4CC5B7"/>
-    <text x="200" y="334" font-size="11" fill="#7ADACF">the arithmetic units always have a warp to issue</text>
-    <rect x="520" y="325" width="14" height="10" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
-    <text x="540" y="334" font-size="11" fill="#97A59F">a warp issues instructions</text>
-    <rect x="690" y="325" width="14" height="10" rx="2" fill="#3A2C25" stroke="#E39A62" stroke-width="1"/>
-    <text x="710" y="334" font-size="11" fill="#97A59F">the warp waits for memory</text>
+    <text x="200" y="334" font-size="11" fill="#7ADACF">the arithmetic units always have work</text>
+    <rect x="450" y="325" width="14" height="10" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <text x="470" y="334" font-size="11" fill="#97A59F">a warp issues instructions</text>
+    <rect x="640" y="325" width="14" height="10" rx="2" fill="#3A2C25" stroke="#E39A62" stroke-width="1"/>
+    <text x="660" y="334" font-size="11" fill="#97A59F">the warp waits for memory</text>
   </g>
 </svg>

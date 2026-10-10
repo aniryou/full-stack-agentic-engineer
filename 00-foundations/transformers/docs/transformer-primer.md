@@ -159,7 +159,7 @@ A learned table of shape $(\text{vocab} \times d_{\text{model}})$ maps each toke
 
 ![The path in and out of the model: text to token ids, the embedding table and the position into the residual stream, then through the blocks, the final Norm, the LM head, the logits and the softmax to next-token probabilities.](figures/tokens-in-and-out.svg)
 
-*The path in and out of the model (§4). The tokenizer makes token ids, the embedding table gives each id its first vector, and the position goes in before the blocks. At the output, the LM head changes the final stream into one logit per vocabulary entry, and the softmax gives the next-token probabilities. Some models tie the two matrices.*
+*The path in and out of the model (§4). The tokenizer makes token ids, the embedding table gives each id its first vector, and a sinusoidal or learned position goes in before the blocks. At the output, the LM head changes the final stream into one logit per vocabulary entry, and the softmax gives the next-token probabilities. Some models tie the two matrices.*
 
 ### 4.3 Position: attention has no sense of order
 

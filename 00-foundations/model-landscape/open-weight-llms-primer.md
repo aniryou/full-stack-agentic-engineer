@@ -399,21 +399,6 @@ The ladder is now standard: SFT, then RL with verifiable rewards (the GRPO linea
 4. **Full post-training and RL**: NeMo, TRL and verl-style stacks, or managed routes (Mistral Forge, Thinking Machines' Tinker). Harvey reached frontier-class legal accuracy on Nemotron at ≥10x lower cost per run. Arcee got to ~$0.90 per million output tokens.
 5. **Distillation**: compress a large open teacher into a task-specific student. Inkling-Small is the public worked example, and it also shows the factuality cost. For how it works, and when a student pays for itself, see [`distillation`](../distillation/README.md).
 
-```mermaid
-flowchart TB
-  A["1. Prompt and harness adjustment<br/>the prompts, tools and middleware change, with no new training of the model"]
-  B["2. Retrieval and tool grounding<br/>the same as for closed models, with the model in the same location as the data"]
-  C["3. PEFT: LoRA or QLoRA<br/>hours on one GPU"]
-  D["4. Full post-training and RL<br/>your own stack, or a managed route"]
-  E["5. Distillation<br/>a large open teacher into a task-specific student, with a factuality cost"]
-  A -->|"costs more"| B
-  B -->|"costs more"| C
-  C -->|"costs more"| D
-  D -->|"costs more"| E
-```
-
-*The adaptation ladder of this section, cheapest rung first. The first rung changes only the prompts, tools and middleware, and it does not train the model again. Retrieval is the same as for closed models, with the model next to the data. Then come PEFT, full post-training with RL, and distillation.*
-
 ### Operating discipline
 
 - **Governance:** in production, record the model version, the quantization format, the serving engine version and the license text. When three quants and two point releases are in use, "We run GLM-5.2" is not a complete answer. Forrester's Model Openness Framework (Apr 2026) and Gartner's AI TRiSM material are usable as a framework.
@@ -449,7 +434,7 @@ flowchart TB
 ```mermaid
 flowchart TB
   W(["requests"]) --> P{"route by the kind of task"}
-  P -->|"the new, high-stakes reasoning"| C["Closed frontier model: the orchestrator, it plans"]
+  P -->|"the new, high-stakes reasoning"| C["Closed frontier model: the orchestrator, which plans"]
   P -->|"the high-volume, private, latency-sensitive 80%"| M["Mid-size open models: extraction, classification, code review, triage, sub-agent tasks"]
   P -->|"always-on agents at the edge"| S["Small open models"]
   C -.->|"the plan, then execution by the specialists"| M

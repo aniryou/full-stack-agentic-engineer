@@ -11,8 +11,8 @@
     <text x="75" y="102" text-anchor="middle" font-size="11" fill="#97A59F">characters</text>
     <rect x="160" y="60" width="130" height="56" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
     <text x="225" y="78" text-anchor="middle" font-weight="600">tokenizer</text>
-    <text x="225" y="95" text-anchor="middle" font-size="11" fill="#97A59F">BPE, a fixed vocabulary</text>
-    <text x="225" y="109" text-anchor="middle" font-size="11" fill="#97A59F">≈ ¾ of a word per token</text>
+    <text x="225" y="95" text-anchor="middle" font-size="11" fill="#97A59F">a fixed vocabulary</text>
+    <text x="225" y="109" text-anchor="middle" font-size="11" fill="#97A59F">(usually BPE)</text>
     <rect x="320" y="60" width="100" height="56" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
     <text x="370" y="83" text-anchor="middle" font-weight="600">token ids</text>
     <text x="370" y="102" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" fill="#97A59F">(n,)</text>

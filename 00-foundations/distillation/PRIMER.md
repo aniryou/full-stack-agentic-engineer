@@ -63,7 +63,7 @@ term on the logits of the student is $T \cdot (q_T - p_T)$.
 
 ![What flows from the teacher to the student in the four recipes of the core: hard labels, logit KD, SeqKD and on-policy GKD.](figures/four-recipes.svg)
 
-*Four ways to train the student, and what each one takes from the teacher. Hard labels and logit KD train on given text, with one sampled token or the teacher's full distribution at every position (§1, §2). SeqKD trains on text that the teacher wrote and that the verifier kept (§3). In on-policy GKD, the student samples its own text, and the teacher scores every position of it (§4).*
+*Four ways to train the student, and what each one takes from the teacher. Hard labels and logit KD train on given text, with one sampled token or the teacher's full distribution at every position (§1, §2). SeqKD trains on text that the teacher wrote and that the verifier kept (§3). In on-policy GKD, the student samples its own text, and the teacher gives a score to every position of it (§4).*
 
 The payoff is in serving, with a 1.5B student as the example. It is ~16× cheaper per token on the roofline than a 32B
 teacher served on two H100s (the 96× you get against one H100). That 96× is a separate case: on one H100, the teacher
@@ -245,7 +245,7 @@ uncovered. With this family, the fit of the JSD flips from covering to seeking b
 
 ![A one-bump student fitted to a two-bump teacher: forward KL spreads across both modes, reverse KL selects one mode.](figures/forward-reverse-kl.svg)
 
-*The teacher of `divergences.fit_bump()` has two modes, at 2 and 8, on 11 tokens. Under each divergence, the chart shows the best one-bump student. The forward fit (μ, s = 5.0, 8.6) is nearly flat. It puts 0.454 of its mass where the teacher gives less than 1%. The reverse fit (μ, s = 2.0, 0.7) selects one mode. It leaves 0.51 of the teacher's mass uncovered.*
+*`divergences.fit_bump()` fits a one-bump student to a teacher with two modes, at 2 and 8, on 11 tokens, under forward and under reverse KL. The forward fit is nearly flat, and it puts 0.454 of its mass where the teacher gives less than 1%. The reverse fit selects one mode, and it leaves 0.51 of the teacher's mass uncovered, where the student gives less than 1%. The dashed boxes mark those tokens.*
 
 For classification, the choice has almost no effect, because you use only the argmax. For generation, every sampled
 token conditions the next token. Thus where the student puts its low-probability mass is what it writes.
@@ -319,7 +319,7 @@ There, its top token is incorrect about a quarter of the time. Thus per-position
 
 ![At train time the student sees the teacher's prefixes, at decode time its own, and one error puts it in contexts that no training example covered.](figures/exposure-bias.svg)
 
-*Exposure bias in the §3 experiment, as `seqkd.exposure_bias()` measures it. The student trains on the teacher's prefixes, where every context has a training example. When it decodes on its own prefixes, one error puts it in contexts that no training example covered. After that error, its top token is incorrect about a quarter of the time. Whole outputs become incorrect more often as the length increases.*
+*Exposure bias of the §3 KD student, as `seqkd.exposure_bias()` measures it. The student trains on the teacher's prefixes, where every context has a training example, but it decodes on its own prefixes. One error puts it in contexts that no training example covered, and there its top token is incorrect about a quarter of the time. Thus whole outputs become incorrect more often as the length increases.*
 
 What compounds with length is the output as a whole. Take the probability that the top token of the KD student is
 correct at every position so far. This probability falls to 0.650 by position 4 and 0.190 by position 12, where the
@@ -361,19 +361,19 @@ flowchart TB
   P([prompts]) --> C{"λ coin flip, per batch"}
   C -->|"with probability λ"| S["Student samples a continuation (on-policy)"]
   C -->|"otherwise, seq_kd=True"| T["Teacher generates"]
-  C -->|"otherwise"| D[("the completion from the dataset")]
+  C -->|"otherwise, seq_kd=False"| D[("the completion from the dataset")]
   S --> X["the text of the batch"]
   T --> X
   D --> X
   X --> TS["Teacher: its full next-token distribution at every position"]
   X --> SS["Student: its distribution at the same positions"]
-  TS --> J["JSD(β): β = 0 forward KL, β = 1 reverse KL"]
+  TS --> J["JSD(β)<br/>β = 0: forward KL<br/>β = 1: reverse KL"]
   SS --> J
   J -->|"gradient on the student's logits"| U[["update the student"]]
-  U -.->|"next step"| S
+  U -.->|"next batch"| C
 ```
 
-*The GKD loop of TRL's `GKDTrainer`, which `onpolicy.gkd_train()` repeats. A coin flip with probability λ selects the source of each batch. Then the teacher gives its full next-token distribution at every position of that text, and the student minimises JSD(β) there. At β = 1, the per-token reward of the policy-gradient view gives the same gradient in expectation (`onpolicy.token_pg_identity()`).*
+*The GKD loop of TRL's `GKDTrainer`, the same loop as `onpolicy.gkd_train()`. A coin flip with probability λ selects the source of each batch. Then the teacher gives its full next-token distribution at every position of that text, and the student minimises JSD(β) there. At β = 1, the per-token reward of the policy-gradient view gives the same gradient in expectation (`onpolicy.token_pg_identity()`).*
 
 **Exposure bias removed.** Continue the training of the §3 KD student with GKD at λ = 1 for 300 steps (notebook
 02):
@@ -498,8 +498,8 @@ answer is correct with probability $1 - e_0 \cdot (1 - q)^L$ ($e_0 = 0.8,\; q = 
 ```mermaid
 flowchart TB
   T["Teacher: a thinking policy from RL (reasoning.reinforce, 16,000 rollouts)"] -->|"1,000 traces: the thinking length L, correct or not"| F{"the filter (reasoning.distil)"}
-  F -->|"keep all, the correct only, or the correct with L ≤ 16 or 12"| M["LengthPolicy.fit(): the stop rule, the fraction of traces that stopped at each length"]
-  M --> S["Student: the same procedure, the same thinking length"]
+  F -->|"keep all, the correct only, or the correct with L ≤ 16 or 12"| M["LengthPolicy.fit(): the stop rule, the fraction of traces that stopped at each length, among the traces that reached it"]
+  M --> S["Student: the procedure and the thinking length<br/>of the kept traces"]
   S --> W["the serving workload: decode-heavy, heavy-tailed"]
   S --> K["its accuracy comes from its own knowledge q"]
 ```
@@ -648,7 +648,7 @@ primer.
 
 ![One round of speculative decoding: k draft steps propose k tokens, one target pass accepts or rejects them, and the round yields the accepted tokens plus one.](figures/speculative-decoding-pass.svg)
 
-*One round of speculative decoding (§7). The draft proposes $k$ tokens in $k$ small steps, each $c$ target steps long. Then one target pass accepts each token with probability $\min(1, p/q)$, stops at the first rejected token, and adds one token of its own. At $\alpha = 0.6$ and $k = 4$, a round yields 2.3056 tokens on average.*
+*One round of speculative decoding (§7). The draft proposes $k$ tokens in $k$ small steps, each $c$ target steps long. Then one target pass accepts each token with probability $\min(1, p/q)$, stops at the first rejected token, and adds one token of its own. At $\alpha = 0.6$ and $k = 4$, a round gives 2.3056 tokens on average.*
 
 A draft is good exactly when its distribution is near the distribution of the target **on the target's own text**.
 Distillation from the target optimises exactly this. By Pinsker, $\mathrm{TV} \le \sqrt{\mathrm{KL}/2}$. Thus, when

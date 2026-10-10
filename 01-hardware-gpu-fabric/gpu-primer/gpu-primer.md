@@ -23,7 +23,7 @@ The key phrase is **latency hiding by oversubscription**. A CPU tries to prevent
 
 ![A CPU core stalls while it waits for memory, and a GPU SM issues another resident warp during the wait, so its arithmetic units always have work.](figures/latency-hiding-oversubscription.svg)
 
-*One CPU core (top) has one instruction stream, and a wait for memory stalls it. One GPU SM (bottom) keeps many warps resident, and when a warp waits for memory, the warp scheduler issues another warp. Thus the arithmetic units always have work, and this is why occupancy is a GPU concept (§1).*
+*One CPU core (top) has one instruction stream, and a wait for memory stalls it. One GPU SM (bottom, §2) keeps many warps resident, and when a warp waits for memory, the warp scheduler issues another warp. Thus the arithmetic units always have work, and this is why occupancy is a GPU concept (§1).*
 
 ---
 
@@ -161,7 +161,7 @@ The other large change since the classic CUDA era is about the structure of a fa
 
 ![A classic loop loads a tile and then computes it, so the arithmetic units are idle during each load; a modern kernel lets producer warps load the next tile with TMA while consumer warps compute the current tile, with asynchronous barriers between them.](figures/pipelined-kernel.svg)
 
-*In the top row, one loop loads a tile and then computes it, so the arithmetic units are idle during each load. In the bottom row, producer warps issue the TMA load of tile ${n+1}$ while consumer warps compute tile $n$ on the Tensor Cores. Asynchronous barriers coordinate the two groups (§5).*
+*In the top panel, one loop loads a tile and then computes it, so the arithmetic units are idle during each load. In the bottom panel, producer warps issue the TMA load of tile ${n+1}$ while consumer warps compute tile $n$ on the Tensor Cores. Asynchronous barriers coordinate the two groups (§5).*
 
 **FlashAttention** is the canonical worked example of all of this. It is not a better algorithm when you count FLOPs. It does slightly more arithmetic. It is faster because it is *IO-aware*:
 
@@ -186,9 +186,9 @@ That gap defines the standard vocabulary. **Scale-up** means to make the NVLink 
 
 The main hardware trend of the last two years is that scale-up domains become much larger. GB200 NVL72 puts 72 GPUs in one liquid-cooled NVLink domain. Vera Rubin NVL144 goes further than that. AMD works toward the same idea with its Helios rack, and with the open UALink standard as an alternative to NVLink.
 
-![Inside a node, NVSwitch makes NVLink an all-to-all fabric between the GPUs, the NVLink domain; between nodes, the NICs carry about 9 times less bandwidth per direction over InfiniBand or Ethernet.](figures/scale-up-scale-out.svg)
+![Inside a node, NVSwitch makes NVLink an all-to-all fabric between the GPUs, the NVLink domain; between nodes, the NICs carry about 9 times less bandwidth per direction, within one generation, over InfiniBand or high-end Ethernet.](figures/scale-up-scale-out.svg)
 
-*Inside a node, NVSwitch makes NVLink an all-to-all fabric between the GPUs: that set of GPUs is the NVLink domain. Between nodes, the NICs carry approximately 9× less bandwidth per direction over InfiniBand or high-end Ethernet. Scale-up makes the NVLink domain larger, and scale-out adds nodes over the slower network (§6).*
+*Inside a node, NVSwitch makes NVLink an all-to-all fabric between the GPUs: that set of GPUs is the NVLink domain. Between nodes, the NICs carry approximately 9× less bandwidth per direction, within one generation, over InfiniBand or high-end Ethernet. Scale-up makes the NVLink domain larger, and scale-out adds nodes over the slower network (§6).*
 
 ### Parallelism strategies
 

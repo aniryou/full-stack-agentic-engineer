@@ -65,13 +65,13 @@
     <rect x="510" y="306" width="170" height="36" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
     <text x="595" y="322" font-size="11" fill="#97A59F" text-anchor="middle">E₂ E₄ E₅ E₇: no rows</text>
     <text x="595" y="336" font-size="11" fill="#97A59F" text-anchor="middle">no FLOPs, still in HBM</text>
-    <rect x="744" y="36" width="220" height="206" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <rect x="744" y="36" width="220" height="260" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
     <text x="854" y="56" font-size="11" fill="#97A59F" text-anchor="middle">4. scatter the weighted rows back</text>
     <text x="854" y="72" font-size="11" fill="#97A59F" text-anchor="middle">and add the k copies of each token</text>
     <text x="760" y="112" font-family="JetBrains Mono, monospace" font-size="11">y₀ = w₁·E₃(x₀) + w₂·E₆(x₀)</text>
     <text x="760" y="140" font-family="JetBrains Mono, monospace" font-size="11">y₁ = w₁·E₃(x₁) + w₂·E₀(x₁)</text>
     <text x="760" y="168" font-family="JetBrains Mono, monospace" font-size="11">y₂ = w₁·E₆(x₂) + w₂·E₁(x₂)</text>
     <text x="760" y="196" font-family="JetBrains Mono, monospace" font-size="11">y₃ = w₁·E₃(x₃) + w₂·E₆(x₃)</text>
-    <text x="854" y="226" font-size="11" fill="#97A59F" text-anchor="middle">one row per token</text>
+    <text x="854" y="280" font-size="11" fill="#97A59F" text-anchor="middle">one row per token</text>
   </g>
 </svg>
