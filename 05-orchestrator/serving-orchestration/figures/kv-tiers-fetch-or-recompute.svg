@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="390" viewBox="0 0 900 390" role="img" aria-label="The working set of agent sessions is far larger than HBM, so KV moves down the tiers HBM, host DRAM, local NVMe and a remote or shared store on eviction and comes back by a fetch, which wins over a recompute when the tier bandwidth is above the break-even rate." style="color: #E4EAE7">
+  <title>The working set of agent sessions is far larger than HBM, so KV moves down the tiers HBM, host DRAM, local NVMe and a remote or shared store on eviction and comes back by a fetch, which wins over a recompute when the tier bandwidth is above the break-even rate.</title>
+  <rect x="0" y="0" width="900" height="416" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <!-- the working set -->
+    <rect x="24" y="24" width="852" height="56" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="450" y="47" text-anchor="middle" font-weight="600">The working set of agent sessions: 200 × 30,000 × 131,072 B = 786 GB of KV</text>
+    <text x="450" y="67" text-anchor="middle" font-size="11.5" fill="#97A59F">the KV pool of 14.6 H100s (54 GB each on H100_8B), before any of the sessions generates a token</text>
+    <!-- offload, down the tiers -->
+    <path d="M122 110 L778 110" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <text x="450" y="101" text-anchor="middle" font-size="11" fill="#97A59F">offload: LRU eviction demotes a session one tier down (TieredKV)</text>
+    <!-- the tiers -->
+    <rect x="24" y="122" width="196" height="146" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="122" y="146" text-anchor="middle" font-weight="600">HBM</text>
+    <text x="122" y="168" text-anchor="middle" font-size="11.5" fill="#97A59F">requests that run</text>
+    <text x="122" y="184" text-anchor="middle" font-size="11.5" fill="#97A59F">+ hot prefixes</text>
+    <text x="122" y="206" text-anchor="middle" font-size="11.5" fill="#97A59F">the engine's prefix cache</text>
+    <text x="122" y="228" text-anchor="middle" font-size="11.5" fill="#97A59F">KV pool 54 GB (H100_8B)</text>
+    <rect x="244" y="122" width="196" height="146" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="342" y="146" text-anchor="middle" font-weight="600">host DRAM</text>
+    <text x="342" y="168" text-anchor="middle" font-size="11.5" fill="#7ADACF">the default offload tier</text>
+    <text x="342" y="184" text-anchor="middle" font-size="11.5" fill="#7ADACF">recently idle sessions</text>
+    <text x="342" y="206" text-anchor="middle" font-size="11.5" fill="#97A59F">vLLM OffloadingConnector</text>
+    <text x="342" y="228" text-anchor="middle" font-size="11.5" fill="#97A59F">50 GB/s over PCIe (assumed)</text>
+    <text x="342" y="250" text-anchor="middle" font-size="11.5" fill="#97A59F">ten thousand tokens: 27 ms</text>
+    <rect x="464" y="122" width="196" height="146" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="562" y="146" text-anchor="middle" font-weight="600">local NVMe / filesystem</text>
+    <text x="562" y="168" text-anchor="middle" font-size="11.5" fill="#97A59F">larger, slower second tier</text>
+    <text x="562" y="206" text-anchor="middle" font-size="11.5" fill="#97A59F">multi-tier offloading, KVBM</text>
+    <text x="562" y="228" text-anchor="middle" font-size="11.5" fill="#97A59F">6 GB/s (assumed)</text>
+    <rect x="684" y="122" width="196" height="146" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="782" y="146" text-anchor="middle" font-weight="600">remote / shared store</text>
+    <text x="782" y="168" text-anchor="middle" font-size="11.5" fill="#97A59F">shared across replicas,</text>
+    <text x="782" y="184" text-anchor="middle" font-size="11.5" fill="#97A59F">survives replica loss</text>
+    <text x="782" y="206" text-anchor="middle" font-size="11.5" fill="#97A59F">Mooncake Store, LMCache</text>
+    <text x="782" y="228" text-anchor="middle" font-size="11.5" fill="#97A59F">20 GB/s RDMA store (assumed)</text>
+    <text x="782" y="250" text-anchor="middle" font-size="11.5" fill="#97A59F">over 25 GbE: 439 ms</text>
+    <!-- fetch, back up -->
+    <path d="M778 292 L122 292" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <text x="450" y="311" text-anchor="middle" font-size="11" fill="#97A59F">fetch (onload): latency + tokens × KV bytes/token ÷ tier bandwidth</text>
+    <!-- recompute: the alternative, and the break-even -->
+    <rect x="24" y="324" width="852" height="50" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="450" y="344" text-anchor="middle" font-weight="600">Recompute instead: ten thousand tokens on the H100 take 324 ms of prefill</text>
+    <text x="450" y="363" text-anchor="middle" font-size="11.5">a fetch wins when tier bandwidth &gt; KV bytes/token × prefill tokens/s: 0.50 GB/s on an L4, 4.05 GB/s on an H100 (breakeven_gb_s)</text>
+  </g>
+</svg>

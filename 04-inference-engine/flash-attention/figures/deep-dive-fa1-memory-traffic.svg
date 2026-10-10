@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="416" viewBox="0 0 880 416" role="img" aria-label="FA1 keeps one K/V block in SRAM for a whole outer iteration, and every inner visit moves a Q block in and the output accumulator in and out of HBM." style="color: #E4EAE7">
+  <title>FA1 keeps one K/V block in SRAM for a whole outer iteration, and every inner visit moves a Q block in and the output accumulator in and out of HBM.</title>
+  <rect x="0" y="0" width="880" height="416" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="28" fill="#97A59F">FA1 loop order: outer over K/V blocks (T_c = N/B_c), inner over Q blocks (T_r = N/B_r) · one head, bf16</text>
+    <rect x="24" y="50" width="356" height="300" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="202" y="70" text-anchor="middle" fill="#97A59F">HBM (device memory)</text>
+    <rect x="44" y="86" width="316" height="56" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="202" y="108" text-anchor="middle" font-weight="600">K, V</text>
+    <text x="202" y="128" text-anchor="middle" font-size="11.5" fill="#97A59F">T_c = N/B_c blocks of B_c rows each</text>
+    <rect x="44" y="160" width="316" height="56" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="202" y="182" text-anchor="middle" font-weight="600">Q</text>
+    <text x="202" y="202" text-anchor="middle" font-size="11.5" fill="#97A59F">T_r = N/B_r blocks of B_r rows each</text>
+    <rect x="44" y="236" width="316" height="92" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="202" y="258" text-anchor="middle" font-weight="600">O, l, m</text>
+    <text x="202" y="278" text-anchor="middle" font-size="11.5">O is N × d, l and m are one fp32 per row</text>
+    <text x="202" y="296" text-anchor="middle" font-size="11.5">every visit (i, j) reads and writes them:</text>
+    <text x="202" y="314" text-anchor="middle" font-size="11.5">the round trip that FA2 removes</text>
+    <rect x="500" y="50" width="356" height="300" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="678" y="70" text-anchor="middle" fill="#97A59F">SRAM of one SM: M elements</text>
+    <rect x="520" y="86" width="316" height="56" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="678" y="108" text-anchor="middle" font-weight="600">K_j, V_j</text>
+    <text x="678" y="128" text-anchor="middle" font-size="11.5" fill="#7ADACF">resident for the whole outer iteration j</text>
+    <rect x="520" y="160" width="316" height="56" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="678" y="182" text-anchor="middle" font-weight="600">Q_i</text>
+    <text x="678" y="202" text-anchor="middle" font-size="11.5" fill="#97A59F">one inner visit</text>
+    <rect x="520" y="236" width="316" height="50" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="678" y="256" text-anchor="middle" font-weight="600">O_i, l_i, m_i</text>
+    <text x="678" y="274" text-anchor="middle" font-size="11.5" fill="#97A59F">updated on chip, then written back</text>
+    <rect x="520" y="300" width="316" height="36" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="678" y="323" text-anchor="middle" font-size="11">S_ij = τ Q_i K_jᵀ, P̃, m̃, l̃: never in HBM</text>
+    <path d="M360 114 L518 114" fill="none" stroke="#4CC5B7" stroke-width="1.2" marker-end="url(#arrA)"/>
+    <text x="440" y="102" text-anchor="middle" font-size="11" fill="#7ADACF">read once</text>
+    <path d="M360 188 L518 188" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <text x="440" y="176" text-anchor="middle" font-size="11" fill="#97A59F">read on every visit</text>
+    <path d="M360 261 L518 261" fill="none" stroke="#E39A62" stroke-width="1.2" marker-end="url(#arr)" marker-start="url(#arr)"/>
+    <text x="440" y="249" text-anchor="middle" font-size="11" fill="#E39A62">read and written</text>
+    <text x="440" y="280" text-anchor="middle" font-size="11" fill="#E39A62">on every visit</text>
+    <text x="24" y="374" font-size="11.5" fill="#97A59F">K and V cross once (2Nd). Each of the N/B_c outer iterations reads Q, reads O and writes O back (3Nd):</text>
+    <text x="24" y="392" font-size="11.5" fill="#97A59F">FA1 traffic ≈ 2Nd + (N/B_c)·3Nd = 2Nd + 12 N²d²/M · N = 4,096, d = 128, M = 116,736, B_c = 228: 59.9 MB against 138.4 MB naive (2.3×)</text>
+    <text x="24" y="408" fill="#97A59F" font-family="JetBrains Mono, monospace" font-size="11">fa_calculators.flash_traffic(), io_saving()</text>
+  </g>
+</svg>

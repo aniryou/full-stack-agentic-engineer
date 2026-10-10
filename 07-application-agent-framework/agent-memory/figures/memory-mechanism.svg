@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="The memory mechanism: a turn feeds the write path into one partition of the store, retrieval packs records into the prompt of the next turn, and consolidation, forgetting and deletion run on the store." style="color: #E4EAE7">
+  <title>The memory mechanism: a turn feeds the write path into one partition of the store, retrieval packs records into the prompt of the next turn, and consolidation, forgetting and deletion run on the store.</title>
+  <rect x="0" y="0" width="900" height="436" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <!-- groups -->
+    <rect x="24" y="88" width="256" height="224" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="152" y="306" text-anchor="middle" font-size="11" fill="#97A59F">the write path (§2)</text>
+    <rect x="614" y="88" width="262" height="224" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="745" y="306" text-anchor="middle" font-size="11" fill="#97A59F">the read path (§3, §5, §6)</text>
+    <rect x="24" y="322" width="852" height="100" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="450" y="417" text-anchor="middle" font-size="11" fill="#97A59F">on a schedule, and on a request to forget (§7)</text>
+
+    <!-- the turn -->
+    <rect x="355" y="24" width="190" height="56" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="450" y="48" text-anchor="middle" font-weight="600">a turn</text>
+    <text x="450" y="66" text-anchor="middle" font-size="11" fill="#97A59F">the user message, tool results</text>
+
+    <!-- the write path -->
+    <rect x="40" y="104" width="220" height="72" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="150" y="134" text-anchor="middle" font-weight="600">extract()</text>
+    <text x="150" y="154" text-anchor="middle" font-size="11" fill="#97A59F">candidate records, after the turn</text>
+    <rect x="40" y="200" width="220" height="88" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="150" y="222" text-anchor="middle" font-weight="600">the write policy, then the merge</text>
+    <text x="150" y="240" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">WritePolicy.check()</text>
+    <text x="150" y="257" text-anchor="middle" font-size="11" fill="#97A59F">ADD · UPDATE · NOOP · ADD_HISTORY</text>
+    <text x="150" y="273" text-anchor="middle" font-size="11" fill="#97A59F">QUARANTINE · REJECT</text>
+
+    <!-- the store -->
+    <rect x="345" y="200" width="210" height="88" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="450" y="236" text-anchor="middle" font-weight="600">MemoryStore</text>
+    <text x="450" y="256" text-anchor="middle" font-size="11.5" fill="#7ADACF">one partition per (tenant, user)</text>
+
+    <!-- the read path -->
+    <rect x="630" y="200" width="230" height="88" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="745" y="226" text-anchor="middle" font-weight="600">retrieve()</text>
+    <text x="745" y="246" text-anchor="middle" font-size="11" fill="#97A59F">score: similarity, recency, importance</text>
+    <text x="745" y="264" text-anchor="middle" font-size="11" fill="#97A59F">pack() into the token budget</text>
+    <rect x="630" y="104" width="230" height="72" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="745" y="126" text-anchor="middle" font-weight="600">the prompt</text>
+    <text x="745" y="144" text-anchor="middle" font-size="11" fill="#97A59F">a pinned profile in the stable prefix,</text>
+    <text x="745" y="162" text-anchor="middle" font-size="11" fill="#97A59F">recall for the rest</text>
+
+    <!-- the jobs -->
+    <rect x="40" y="346" width="260" height="60" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="44" y="350" width="252" height="52" rx="4" fill="none" stroke="currentColor" stroke-width="0.8"/>
+    <text x="170" y="370" text-anchor="middle" font-weight="600">Consolidator.run()</text>
+    <text x="170" y="390" text-anchor="middle" font-size="11" fill="#97A59F">a scheduled job: episodes become facts</text>
+    <rect x="330" y="346" width="240" height="60" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="450" y="370" text-anchor="middle" font-weight="600">forget</text>
+    <text x="450" y="390" text-anchor="middle" font-size="11" fill="#97A59F">decay, TTL, the budget, a cap</text>
+    <rect x="610" y="346" width="260" height="60" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="740" y="370" text-anchor="middle" font-weight="600">propagate()</text>
+    <text x="740" y="390" text-anchor="middle" font-size="11" fill="#97A59F">a deletion reaches every copy</text>
+
+    <!-- edges -->
+    <g stroke="#97A59F" stroke-width="1.2" fill="none">
+      <path d="M355 52 L150 52 L150 102" marker-end="url(#arr)"/>
+      <path d="M150 176 L150 198" marker-end="url(#arr)"/>
+      <path d="M260 244 L343 244" marker-end="url(#arr)"/>
+      <path d="M555 244 L628 244" marker-end="url(#arr)"/>
+      <path d="M745 200 L745 178" marker-end="url(#arr)"/>
+      <path d="M450 288 L450 344" marker-end="url(#arr)"/>
+      <path d="M400 288 L400 318 L170 318 L170 344" marker-start="url(#arr)" marker-end="url(#arr)"/>
+      <path d="M500 288 L500 318 L740 318 L740 344" marker-end="url(#arr)"/>
+    </g>
+    <text x="158" y="192" font-size="11" fill="#97A59F">candidates</text>
+    <text x="301" y="236" text-anchor="middle" font-size="11" fill="#97A59F">writes</text>
+    <text x="591" y="236" text-anchor="middle" font-size="11" fill="#97A59F">records</text>
+    <text x="752" y="192" font-size="11" fill="#97A59F">the packed records</text>
+    <text x="178" y="334" font-size="11" fill="#97A59F">episodes in, facts out</text>
+    <path d="M745 104 L745 52 L547 52" fill="none" stroke="#4CC5B7" stroke-width="1.2" marker-end="url(#arrA)"/>
+    <text x="752" y="84" font-size="11" fill="#7ADACF">the next turn</text>
+  </g>
+</svg>

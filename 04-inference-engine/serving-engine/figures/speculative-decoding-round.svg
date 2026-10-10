@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="350" viewBox="0 0 900 350" role="img" aria-label="One round of speculative decoding with four draft tokens: one target pass scores them, and the engine accepts them in order until the first rejection." style="color: #E4EAE7">
+  <title>One round of speculative decoding with four draft tokens: one target pass scores them, and the engine accepts them in order until the first rejection.</title>
+  <rect x="0" y="0" width="900" height="350" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="26" fill="#97A59F">One round of speculative decoding with k = 4 draft tokens (§7)</text>
+
+    <!-- the proposer -->
+    <text x="24" y="78" font-weight="600">proposer</text>
+    <g font-size="12">
+      <rect x="130" y="54" width="88" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="174" y="80" text-anchor="middle">draft x<tspan dy="3" font-size="9">1</tspan><tspan dy="-3"> ~ q</tspan></text>
+      <rect x="238" y="54" width="88" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="282" y="80" text-anchor="middle">draft x<tspan dy="3" font-size="9">2</tspan><tspan dy="-3"> ~ q</tspan></text>
+      <rect x="346" y="54" width="88" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="390" y="80" text-anchor="middle">draft x<tspan dy="3" font-size="9">3</tspan><tspan dy="-3"> ~ q</tspan></text>
+      <rect x="454" y="54" width="88" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="498" y="80" text-anchor="middle">draft x<tspan dy="3" font-size="9">4</tspan><tspan dy="-3"> ~ q</tspan></text>
+    </g>
+    <g stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)">
+      <path d="M218 76 L236 76"/>
+      <path d="M326 76 L344 76"/>
+      <path d="M434 76 L452 76"/>
+      <path d="M336 100 L336 124"/>
+    </g>
+    <text x="346" y="116" font-size="11" fill="#97A59F">the k drafts, in the context</text>
+
+    <!-- the target -->
+    <text x="24" y="150" font-weight="600">target</text>
+    <rect x="130" y="126" width="412" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="336" y="144" text-anchor="middle" font-weight="600">one verify pass over k + 1 positions</text>
+    <text x="336" y="160" text-anchor="middle" font-size="11" fill="#7ADACF">p at every position, in one target step</text>
+    <g stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)">
+      <path d="M174 172 L174 202"/>
+      <path d="M282 172 L282 202"/>
+      <path d="M390 172 L390 202"/>
+      <path d="M498 172 L498 202"/>
+    </g>
+
+    <!-- verify, in order -->
+    <text x="24" y="230" font-weight="600">verify, in order</text>
+    <rect x="130" y="204" width="88" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="174" y="222" text-anchor="middle" font-size="11.5" font-weight="600">x<tspan dy="3" font-size="9">1</tspan><tspan dy="-3"> accepted</tspan></text>
+    <text x="174" y="238" text-anchor="middle" font-size="11" fill="#7ADACF">min(1, p/q)</text>
+    <rect x="238" y="204" width="88" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="282" y="222" text-anchor="middle" font-size="11.5" font-weight="600">x<tspan dy="3" font-size="9">2</tspan><tspan dy="-3"> accepted</tspan></text>
+    <text x="282" y="238" text-anchor="middle" font-size="11" fill="#7ADACF">min(1, p/q)</text>
+    <rect x="346" y="204" width="88" height="44" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="390" y="222" text-anchor="middle" font-size="11.5" font-weight="600">x<tspan dy="3" font-size="9">3</tspan><tspan dy="-3"> rejected</tspan></text>
+    <text x="390" y="238" text-anchor="middle" font-size="11" fill="#E39A62">the first rejection</text>
+    <rect x="454" y="204" width="88" height="44" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="498" y="222" text-anchor="middle" font-size="11.5" fill="#97A59F">x<tspan dy="3" font-size="9">4</tspan><tspan dy="-3"> not used</tspan></text>
+    <text x="498" y="238" text-anchor="middle" font-size="11" fill="#97A59F">after the stop</text>
+    <path d="M390 250 L390 280" stroke="#E39A62" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+    <rect x="290" y="282" width="200" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="390" y="300" text-anchor="middle" font-size="11.5" font-weight="600">emit y ~ norm(max(0, p − q))</text>
+    <text x="390" y="316" text-anchor="middle" font-size="11" fill="#97A59F">the recovered token, then stop</text>
+
+    <!-- what one pass yields -->
+    <rect x="580" y="44" width="296" height="282" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="728" y="64" text-anchor="middle" fill="#97A59F">what one pass yields</text>
+    <g font-size="12">
+      <text x="598" y="92">E[tokens per pass] = (1 − α<tspan dy="-5" font-size="9">k+1</tspan><tspan dy="5">) / (1 − α)</tspan></text>
+      <text x="598" y="114" fill="#7ADACF">α = 0.8, k = 4: 3.36 tokens on average</text>
+      <text x="598" y="150">one draft step costs c target steps</text>
+      <text x="598" y="172">a round costs k c + 1 target steps</text>
+      <text x="598" y="194" fill="#7ADACF">speedup = E / (k c + 1)</text>
+      <text x="598" y="230">all k accepted: one bonus token</text>
+      <text x="598" y="248">from the next p of the target</text>
+      <text x="598" y="284">speculation changes speed,</text>
+      <text x="598" y="302">never the distribution</text>
+    </g>
+  </g>
+</svg>

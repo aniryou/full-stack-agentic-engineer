@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="330" viewBox="0 0 880 330" role="img" aria-label="A classic loop loads a tile and then computes it, so the arithmetic units are idle during each load; a modern kernel lets producer warps load the next tile with TMA while consumer warps compute the current tile, with asynchronous barriers between them." style="color: #E4EAE7">
+  <title>A classic loop loads a tile and then computes it, so the arithmetic units are idle during each load; a modern kernel lets producer warps load the next tile with TMA while consumer warps compute the current tile, with asynchronous barriers between them.</title>
+  <rect x="0" y="0" width="880" height="330" rx="8" fill="#161E1C"/>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="26" fill="#97A59F">One SM works on tiles (§5). One row is time, from left to right. Schematic, not to scale.</text>
+
+    <!-- row A: the classic loop -->
+    <rect x="24" y="42" width="832" height="112" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="40" y="60" fill="#97A59F">the classic loop: load a tile, then compute it, in turn</text>
+    <text x="128" y="94" text-anchor="end" font-size="11" fill="#97A59F">one loop</text>
+    <g>
+      <rect x="140" y="72" width="116" height="36" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="198" y="87" text-anchor="middle" font-size="11">load tile 0</text>
+      <text x="198" y="101" text-anchor="middle" font-size="10.5" fill="#97A59F">HBM to shared</text>
+      <rect x="256" y="72" width="116" height="36" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+      <text x="314" y="87" text-anchor="middle" font-size="11">compute tile 0</text>
+      <text x="314" y="101" text-anchor="middle" font-size="10.5" fill="#7ADACF">Tensor Cores</text>
+      <rect x="372" y="72" width="116" height="36" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="430" y="87" text-anchor="middle" font-size="11">load tile 1</text>
+      <text x="430" y="101" text-anchor="middle" font-size="10.5" fill="#97A59F">HBM to shared</text>
+      <rect x="488" y="72" width="116" height="36" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+      <text x="546" y="87" text-anchor="middle" font-size="11">compute tile 1</text>
+      <text x="546" y="101" text-anchor="middle" font-size="10.5" fill="#7ADACF">Tensor Cores</text>
+      <rect x="604" y="72" width="116" height="36" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="662" y="87" text-anchor="middle" font-size="11">load tile 2</text>
+      <text x="662" y="101" text-anchor="middle" font-size="10.5" fill="#97A59F">HBM to shared</text>
+      <rect x="720" y="72" width="116" height="36" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+      <text x="778" y="87" text-anchor="middle" font-size="11">compute tile 2</text>
+      <text x="778" y="101" text-anchor="middle" font-size="10.5" fill="#7ADACF">Tensor Cores</text>
+    </g>
+    <g fill="#3A2C25" stroke="#E39A62" stroke-width="1">
+      <rect x="140" y="114" width="116" height="8" rx="2"/><rect x="372" y="114" width="116" height="8" rx="2"/><rect x="604" y="114" width="116" height="8" rx="2"/>
+    </g>
+    <text x="140" y="140" font-size="11" fill="#E39A62">the arithmetic units are idle during each load</text>
+
+    <!-- row B: the modern kernel -->
+    <rect x="24" y="166" width="832" height="154" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="40" y="184" fill="#97A59F">the modern kernel: producer warps load, consumer warps compute, asynchronous barriers coordinate the two</text>
+    <text x="128" y="218" text-anchor="end" font-size="11" fill="#97A59F">producer warps</text>
+    <text x="128" y="262" text-anchor="end" font-size="11" fill="#97A59F">consumer warps</text>
+    <g>
+      <rect x="140" y="196" width="116" height="36" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="198" y="211" text-anchor="middle" font-size="11">TMA load tile 0</text>
+      <text x="198" y="225" text-anchor="middle" font-size="10.5" fill="#97A59F">HBM to shared</text>
+      <rect x="256" y="196" width="116" height="36" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="314" y="211" text-anchor="middle" font-size="11">TMA load tile 1</text>
+      <text x="314" y="225" text-anchor="middle" font-size="10.5" fill="#97A59F">HBM to shared</text>
+      <rect x="372" y="196" width="116" height="36" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="430" y="211" text-anchor="middle" font-size="11">TMA load tile 2</text>
+      <text x="430" y="225" text-anchor="middle" font-size="10.5" fill="#97A59F">HBM to shared</text>
+      <rect x="488" y="196" width="116" height="36" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="546" y="211" text-anchor="middle" font-size="11">TMA load tile 3</text>
+      <text x="546" y="225" text-anchor="middle" font-size="10.5" fill="#97A59F">HBM to shared</text>
+      <rect x="604" y="196" width="116" height="36" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="662" y="211" text-anchor="middle" font-size="11">TMA load tile 4</text>
+      <text x="662" y="225" text-anchor="middle" font-size="10.5" fill="#97A59F">HBM to shared</text>
+      <rect x="720" y="196" width="116" height="36" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="778" y="211" text-anchor="middle" font-size="11">TMA load tile 5</text>
+      <text x="778" y="225" text-anchor="middle" font-size="10.5" fill="#97A59F">HBM to shared</text>
+    </g>
+    <g>
+      <text x="198" y="262" text-anchor="middle" font-size="10.5" fill="#97A59F">waits for tile 0</text>
+      <rect x="256" y="240" width="116" height="36" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+      <text x="314" y="255" text-anchor="middle" font-size="11">compute tile 0</text>
+      <text x="314" y="269" text-anchor="middle" font-size="10.5" fill="#7ADACF">Tensor Cores</text>
+      <rect x="372" y="240" width="116" height="36" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+      <text x="430" y="255" text-anchor="middle" font-size="11">compute tile 1</text>
+      <text x="430" y="269" text-anchor="middle" font-size="10.5" fill="#7ADACF">Tensor Cores</text>
+      <rect x="488" y="240" width="116" height="36" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+      <text x="546" y="255" text-anchor="middle" font-size="11">compute tile 2</text>
+      <text x="546" y="269" text-anchor="middle" font-size="10.5" fill="#7ADACF">Tensor Cores</text>
+      <rect x="604" y="240" width="116" height="36" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+      <text x="662" y="255" text-anchor="middle" font-size="11">compute tile 3</text>
+      <text x="662" y="269" text-anchor="middle" font-size="10.5" fill="#7ADACF">Tensor Cores</text>
+      <rect x="720" y="240" width="116" height="36" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+      <text x="778" y="255" text-anchor="middle" font-size="11">compute tile 4</text>
+      <text x="778" y="269" text-anchor="middle" font-size="10.5" fill="#7ADACF">Tensor Cores</text>
+    </g>
+    <g stroke="#97A59F" stroke-width="1" fill="none" stroke-dasharray="4 3">
+      <path d="M256 192 L256 282"/><path d="M372 192 L372 282"/><path d="M488 192 L488 282"/><path d="M604 192 L604 282"/><path d="M720 192 L720 282"/>
+    </g>
+    <text x="488" y="296" text-anchor="middle" font-size="10.5" fill="#97A59F">the dashed lines are the asynchronous barriers between the two groups</text>
+    <text x="440" y="312" text-anchor="middle" font-size="10.5" fill="#7ADACF">TMA: a single thread issues a descriptor, and the hardware moves the whole tile from HBM to shared memory, not through registers</text>
+  </g>
+</svg>

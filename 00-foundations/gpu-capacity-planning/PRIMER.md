@@ -109,6 +109,34 @@ Then calculate the GPUs that *each* constraint needs, one constraint at a time. 
 maximum. The constraints are memory (sessions ÷ per-GPU), decode throughput and prefill
 throughput. Last, apply utilisation headroom (~60–70%) and add **N+1** spares.
 
+```mermaid
+flowchart TB
+  P["weights<br/>params × bytes/param<br/>weight_memory_gb()"]
+  K["KV per token<br/>2 × layers × kv_heads<br/>× head_dim × bytes<br/>kv_per_token_kb()"]
+  W(["the workload<br/>RPS, tokens in and out,<br/>TTFT and TPOT targets"])
+  S["spare after weights<br/>usable HBM − weights<br/>(the marketed size,<br/>less ~10%)<br/>usable_hbm_gb()"]
+  C["KV per session<br/>KV per token × context<br/>kv_per_session_gb()"]
+  L["concurrency<br/>RPS × request_duration<br/>request_duration ≈ TTFT<br/>+ output_tokens × TPOT<br/>concurrency()"]
+  N["sessions per GPU<br/>spare_HBM ÷ KV_per_session<br/>max_concurrent_sessions()"]
+  T["GPUs for decode and prefill<br/>tok/s needed ÷<br/>tok/s per GPU<br/>decode_aggregate()<br/>prefill_tok_s()"]
+  M["GPUs for memory<br/>concurrency ÷<br/>sessions per GPU"]
+  X{"take the maximum"}
+  R["headroom at ~60–70%,<br/>then N+1 spares<br/>provision()"]
+  P --> S
+  K --> C
+  S --> N
+  C --> N
+  W --> L
+  W --> T
+  N --> M
+  L --> M
+  M --> X
+  T --> X
+  X --> R
+```
+
+*The formula chain of `capacity.py`. The weights and the KV cache set how many sessions one GPU holds. The workload gives the live sessions: concurrency = RPS × duration. Then each constraint gives a GPU count, you take the maximum, and you add headroom and spares.*
+
 ---
 
 ## Worked example — Singapore bank, on-prem (data residency)
@@ -130,6 +158,10 @@ target is ≥25 tok/s/user (TPOT ≤ 40 ms).
   meets today's SLO. Get a full **8-GPU HGX node** for the embedding model, the
   reranker and a year of growth.
 - **Cost check**: $/M tokens = GPU-hour price ÷ tokens/hour (1,500 tok/s ≈ 5.4M/hr).
+
+![The 80 GB of one H100 in the bank example: the weights take 48 GB in bf16 or 24 GB in fp8, about 10% goes to the CUDA context and the activations, and the spare holds the KV cache of about 89 or about 355 sessions.](figures/bank-example-hbm.svg)
+
+*The memory of one H100 in the bank example. The weights take 48 GB in bf16 and 24 GB in fp8, and ~10% goes to the CUDA context and the activations. The spare holds the KV cache: ~89 sessions in bf16 and ~355 in fp8, against ~100 live sessions.*
 
 > The two paths of the size calculation are memory (~sessions/GPU) and throughput (tok/s/GPU). Expect
 > their results to be approximately the same. Show both in a design review. If the

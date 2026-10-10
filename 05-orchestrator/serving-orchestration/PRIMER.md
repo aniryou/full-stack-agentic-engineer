@@ -78,6 +78,10 @@ first.
 Thus each replica holds a different subset of the reusable state of the fleet, and this subset changes all the
 time. The router decides which subset a request can use.
 
+![A request with four full prompt blocks goes through the router to one of two replicas: the replica that holds the first three block hashes prefills only the last block, and the replica that holds other prefixes prefills every block again.](figures/replica-prefix-cache-hit-miss.svg)
+
+*The same request costs a different prefill on each replica. Replica A holds the first three block hashes and prefills only the last block. Replica B holds other prefixes, so the engine prefills every block again at 3,781 tokens/s (§1.1, `fleetsim.replica.BlockPool`).*
+
 This primer uses one engine model in all sections (`fleetsim.replica.engine_profile()`). The example is an 8B bf16
 model on one L4:
 
@@ -263,6 +267,22 @@ weight 1.0). In September 2026, the llm-d *optimized baseline* uses a different 
 with a max-score picker makes hot spots of popular prefixes. But a filter with an explicit load gate states the
 trade-off in one number, in TTFT seconds.
 
+```mermaid
+flowchart TB
+    E[("endpoints of the InferencePool")] --> S1
+    E --> F2
+    subgraph A["chart default: a weighted picker"]
+        S1["scorers: weight × score in [0, 1]<br/>prefix-cache-scorer × 3<br/>queue-scorer × 2<br/>kv-cache-utilization-scorer × 2"] --> K1["max-score-picker<br/>ties at random"]
+    end
+    subgraph B["optimized baseline: sticky until saturated"]
+        F2["prefix-cache-affinity-filter<br/>keep endpoints with prefix score ≥ 0.80<br/>keep all when the TTFT penalty gate breaks"] --> S2["token-load-scorer<br/>uncached tokens in flight<br/>+ the uncached tokens of this request"] --> K2["max-score-picker<br/>ties at random"]
+    end
+    K1 --> D["one endpoint"]
+    K2 --> D
+```
+
+*Two compositions of the EPP scheduling profile (§2.4). The chart default adds the weighted scores and takes the maximum. The optimized baseline filters first: it keeps the sticky endpoints until the TTFT penalty gate breaks, then the token-load scorer decides.*
+
 Two details are important. First, the load scorer after the filter counts the *uncached* tokens of this request on
 each endpoint. Thus a warm cache decreases the cost of a warm endpoint, in the same units as the load that the
 scorer compares. A fully warm endpoint with 2,097,152 tokens in flight gets a score of exactly 0.5. A cold endpoint
@@ -367,6 +387,10 @@ requests expire (`defaultRequestTTL`).
 If no endpoint is under its cap, it holds the request in the router, highest priority first and FCFS within a
 priority. It counts the TTL rejections and the queue-bound rejections as `shed`.
 
+![Requests from the gateway wait in the router queue by priority band, the concurrency-detector sends one to an endpoint only when that endpoint is under its cap, and the router sheds requests after their TTL or when the queue is full.](figures/flow-control-router-queue.svg)
+
+*Flow control holds a burst in the router, with the higher priority band first and FCFS within a band (§3.1). The router sends a request only to an endpoint under its cap (the concurrency-detector). The router sheds a request after its TTL, or when the queue is full, and the gateway returns 429 or 503.*
+
 Little's law gives the size of the cap:
 
 $$
@@ -430,6 +454,19 @@ The first two rows absorb a burst in milliseconds. Autoscaling (§4) restores th
 ---
 
 ## 4. Autoscaling
+
+```mermaid
+flowchart TB
+    M["metrics every 15 s<br/>engine /metrics or EPP<br/>per pod, or a pool total"] --> R["ratio = metric ÷ target<br/>10 % band: no change<br/>desired = ⌈current × ratio⌉<br/>the largest over metrics"]
+    R --> S["stabilization window<br/>scale-down: the maximum<br/>of the last 300 s"]
+    S --> P["policies, per 15 s<br/>scale-up: the larger of<br/>+4 pods and +100 %<br/>scale-down: −100 %<br/>then clamp to<br/>[minReplicas, maxReplicas]"]
+    P --> N["replica count"]
+    N -- "scale-up" --> K["cold start: node, image,<br/>weights, warm-up<br/>102 s in<br/>ColdStart.estimate()<br/>a Pending pod counts as 0"]
+    K --> M
+    N -- "scale-down" --> M
+```
+
+*The HPA loop of §4.1 to §4.3. Every 15 s the controller turns a metric into a replica count through the band, the stabilization window, the policies and the clamp. A scale-up becomes capacity only after the cold start, and the new pod counts as 0 while it is Pending.*
 
 ### 4.1 The HPA algorithm, exactly
 
@@ -633,6 +670,10 @@ that serve ~6,000-token RAG prompts, ITL p50 was 64 ms and ITL p99 545 ms (simul
 prefill to its own pool, nothing interrupts the decode steps (ITL p99 about 72 ms for every split that §5.3
 searched). Also, you can batch and parallelise each pool for its own bottleneck, or run it on different hardware.
 
+![The EPP selects the decode pod first and, above nonCachedTokens uncached tokens, a prefill pod too, and the sidecar of the decode pod runs the prefill, then the KV transfer over NIXL from the prefill pool, then the decode steps, which no prefill chunk stalls.](figures/pd-disaggregation-kv-transfer.svg)
+
+*In llm-d, the EPP selects the decode pod first and, above `nonCachedTokens` uncached tokens, a prefill pod too (§5.4). The sidecar of the decode pod runs the prefill, then the KV pull over NIXL, then the decode (§5.5). The transfer of the KV blocks is the cost of the split (§5.2).*
+
 The mechanism is in layer 01's [deployment primer §8](../../01-hardware-gpu-fabric/gpu-deployment/gpu-deployment-primer.md).
 The systems papers are DistServe and Splitwise.
 
@@ -756,6 +797,10 @@ the attention FLOPs, which add about 16 % at 10,000 tokens and 50 % at 30,000 fo
 long-context recompute is slower, and the fetch wins by more. The bandwidths are assumptions to measure: see
 layer 01 §5–6.)
 
+![The working set of agent sessions is far larger than HBM, so KV moves down the tiers HBM, host DRAM, local NVMe and a remote or shared store on eviction and comes back by a fetch, which wins over a recompute when the tier bandwidth is above the break-even rate.](figures/kv-tiers-fetch-or-recompute.svg)
+
+*The KV tiers below HBM, and the choice between a fetch and a recompute (§6.2, §6.3). The tier bandwidths are assumptions to measure. A fetch wins above the break-even bandwidth: 0.50 GB/s on an L4, 4.05 GB/s on an H100 (`breakeven_gb_s`).*
+
 ### 6.3 The tiers and the software
 
 | Tier | Typical role | Software (2026) |
@@ -865,6 +910,25 @@ combine, the slowest rank, the EPLB-style rebalance and the selection of a wide-
 
 These parts work together, and they do not compete. The Gateway API routes, the EPP selects endpoints, the engine
 batches, and autoscaling (HPA/KEDA, a planner) sets the size of the pools.
+
+```mermaid
+sequenceDiagram
+    participant C as client
+    participant G as Gateway
+    participant E as EPP
+    participant P as model-server pod
+    C->>G: request
+    Note over G: HTTPRoute to<br/>the InferencePool
+    G->>E: ext-proc: which endpoint?
+    Note over E: reads /metrics and<br/>KV events every 50 ms
+    E->>E: filters, scorers, picker
+    E-->>G: the endpoint
+    G->>P: the request
+    P-->>G: streamed tokens
+    G-->>C: streamed tokens
+```
+
+*One request through the stack of §9, in time. The Gateway asks the EPP over ext-proc for an endpoint, then sends the request to that pod, which returns the tokens through the Gateway. The EPP reads the engine metrics again every 50 ms (§2.1).*
 
 ---
 

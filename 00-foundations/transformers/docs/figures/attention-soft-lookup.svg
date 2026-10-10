@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="330" viewBox="0 0 900 330" role="img" aria-label="The toy calculation of §2.3 as a soft lookup: the query of token 3 meets the three keys, softmax changes the scores into weights, and the weighted sum of the values is the output." style="color: #E4EAE7">
+  <title>The toy calculation of §2.3 as a soft lookup: the query of token 3 meets the three keys, softmax changes the scores into weights, and the weighted sum of the values is the output.</title>
+  <rect x="0" y="0" width="900" height="330" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <rect x="190" y="22" width="140" height="40" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="260" y="39" text-anchor="middle" font-weight="600" font-size="11.5">query of token 3</text>
+    <text x="260" y="55" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" fill="#7ADACF">q = [2, 0]</text>
+    <path d="M260 62 L260 94" fill="none" stroke="#4CC5B7" stroke-width="1.2" marker-end="url(#arrA)"/>
+    <rect x="60" y="100" width="120" height="36" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="120" y="122" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">k₁ = [1, 0]</text>
+    <rect x="60" y="150" width="120" height="36" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="120" y="172" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">k₂ = [0, 1]</text>
+    <rect x="60" y="200" width="120" height="36" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="120" y="222" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">k₃ = [0, 0]</text>
+    <rect x="230" y="96" width="60" height="144" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <path d="M230 146 L290 146 M230 196 L290 196" stroke="#97A59F" stroke-width="0.6"/>
+    <text x="260" y="122" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">2</text>
+    <text x="260" y="172" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">0</text>
+    <text x="260" y="222" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">0</text>
+    <rect x="370" y="96" width="70" height="144" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <path d="M370 146 L440 146 M370 196 L440 196" stroke="#97A59F" stroke-width="0.6"/>
+    <text x="405" y="122" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">0.79</text>
+    <text x="405" y="172" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">0.11</text>
+    <text x="405" y="222" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">0.11</text>
+    <rect x="510" y="100" width="120" height="36" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="570" y="122" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">v₁ = [1, 0]</text>
+    <rect x="510" y="150" width="120" height="36" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="570" y="172" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">v₂ = [0, 1]</text>
+    <rect x="510" y="200" width="120" height="36" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="570" y="222" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">v₃ = [1, 1]</text>
+    <rect x="700" y="140" width="176" height="56" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="788" y="161" text-anchor="middle" font-weight="600">output of token 3</text>
+    <text x="788" y="181" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" fill="#7ADACF">≈ [0.89, 0.21]</text>
+    <text x="788" y="214" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" fill="#97A59F">0.79·v₁ + 0.11·v₂ + 0.11·v₃</text>
+    <g stroke="#97A59F" stroke-width="1.2" fill="none">
+      <path d="M180 118 L228 118" marker-end="url(#arr)"/>
+      <path d="M180 168 L228 168" marker-end="url(#arr)"/>
+      <path d="M180 218 L228 218" marker-end="url(#arr)"/>
+      <path d="M290 168 L368 168" marker-end="url(#arr)"/>
+      <path d="M440 118 L508 118" marker-end="url(#arr)"/>
+      <path d="M440 168 L508 168" marker-end="url(#arr)"/>
+      <path d="M440 218 L508 218" marker-end="url(#arr)"/>
+      <path d="M630 118 L698 152" marker-end="url(#arr)"/>
+      <path d="M630 168 L698 168" marker-end="url(#arr)"/>
+      <path d="M630 218 L698 184" marker-end="url(#arr)"/>
+    </g>
+    <text x="329" y="158" text-anchor="middle" font-size="11" fill="#97A59F">softmax</text>
+    <text x="329" y="184" text-anchor="middle" font-size="11" fill="#97A59F">per row</text>
+    <text x="474" y="110" text-anchor="middle" font-size="11" fill="#97A59F">× 0.79</text>
+    <text x="474" y="160" text-anchor="middle" font-size="11" fill="#97A59F">× 0.11</text>
+    <text x="474" y="210" text-anchor="middle" font-size="11" fill="#97A59F">× 0.11</text>
+    <text x="660" y="114" text-anchor="middle" font-size="11" fill="#97A59F">Σⱼ wⱼ · vⱼ</text>
+    <text x="120" y="258" text-anchor="middle" font-size="11" fill="#97A59F">keys kⱼ</text>
+    <text x="260" y="258" text-anchor="middle" font-size="11" fill="#97A59F">scores q · kⱼ</text>
+    <text x="405" y="258" text-anchor="middle" font-size="11" fill="#97A59F">weights wⱼ</text>
+    <text x="570" y="258" text-anchor="middle" font-size="11" fill="#97A59F">values vⱼ</text>
+    <text x="24" y="292" font-size="11" fill="#97A59F">The weights are positive and sum to 1: the output is an average of the values, in value space. Token 3 holds mostly the value of token 1.</text>
+    <text x="24" y="310" font-size="11" fill="#97A59F">Three tokens, two-dimensional vectors; the example omits the 1/√d_k scale.</text>
+  </g>
+</svg>

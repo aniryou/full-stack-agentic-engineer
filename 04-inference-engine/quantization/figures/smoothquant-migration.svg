@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="410" viewBox="0 0 900 410" role="img" aria-label="SmoothQuant moves an activation outlier channel into the weight column that meets it, because a W8A8 GEMM has no scale along the reduction axis." style="color: #E4EAE7">
+  <title>SmoothQuant moves an activation outlier channel into the weight column that meets it, because a W8A8 GEMM has no scale along the reduction axis.</title>
+  <rect x="0" y="0" width="900" height="410" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="26" fill="#97A59F">SmoothQuant (§5, <tspan font-family="JetBrains Mono, monospace" font-size="11">smoothquant.smooth_scales()</tspan>): the outlier channel j of X moves into column j of W, and the previous norm absorbs 1/s</text>
+
+    <!-- the previous norm -->
+    <rect x="24" y="96" width="140" height="72" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="94" y="118" text-anchor="middle" font-weight="600">previous RMSNorm</text>
+    <text x="94" y="136" text-anchor="middle" font-size="11" fill="#97A59F">gain γ</text>
+    <text x="94" y="153" text-anchor="middle" font-size="11" fill="#7ADACF">folds in 1/s: γ / s</text>
+    <path d="M164 132 L188 132" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+
+    <!-- X: tokens × in, per-token scales -->
+    <text x="280" y="74" text-anchor="middle" font-size="11.5" fill="#97A59F">X (tokens × in), one INT8 scale per token</text>
+    <rect x="190" y="84" width="180" height="96" rx="2" fill="none" stroke="currentColor" stroke-width="1"/>
+    <path d="M205 84 V180 M220 84 V180 M235 84 V180 M250 84 V180 M265 84 V180 M280 84 V180 M295 84 V180 M310 84 V180 M325 84 V180 M340 84 V180 M355 84 V180 M190 100 H370 M190 116 H370 M190 132 H370 M190 148 H370 M190 164 H370" stroke="#97A59F" stroke-width="0.5" stroke-opacity="0.45" fill="none"/>
+    <rect x="265" y="84" width="15" height="96" fill="#3A2C25" stroke="#E39A62" stroke-width="1"/>
+    <text x="280" y="198" text-anchor="middle" font-size="11" fill="#7ADACF">channel j: ÷ s_j</text>
+    <text x="280" y="212" text-anchor="middle" font-size="11" fill="#97A59F">the outlier that set the step of every token</text>
+
+    <!-- the GEMM -->
+    <path d="M370 132 L402 132" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+    <rect x="404" y="108" width="72" height="48" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="440" y="129" text-anchor="middle" font-weight="600">GEMM</text>
+    <text x="440" y="146" text-anchor="middle" font-size="11" fill="#7ADACF">INT8 W8A8</text>
+    <path d="M510 132 L478 132" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+    <path d="M440 156 L440 174" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+    <text x="440" y="190" text-anchor="middle" font-size="11" fill="#97A59F">(X / s)(W · s)ᵀ = X Wᵀ exactly</text>
+
+    <!-- W: out × in, per-channel scales -->
+    <text x="600" y="74" text-anchor="middle" font-size="11.5" fill="#97A59F">W (out × in), one INT8 scale per output row</text>
+    <rect x="510" y="84" width="180" height="96" rx="2" fill="none" stroke="currentColor" stroke-width="1"/>
+    <path d="M525 84 V180 M540 84 V180 M555 84 V180 M570 84 V180 M585 84 V180 M600 84 V180 M615 84 V180 M630 84 V180 M645 84 V180 M660 84 V180 M675 84 V180 M510 100 H690 M510 116 H690 M510 132 H690 M510 148 H690 M510 164 H690" stroke="#97A59F" stroke-width="0.5" stroke-opacity="0.45" fill="none"/>
+    <rect x="585" y="84" width="15" height="96" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <text x="600" y="198" text-anchor="middle" font-size="11" fill="#7ADACF">column j: × s_j</text>
+    <text x="600" y="212" text-anchor="middle" font-size="11" fill="#97A59F">per-channel scales absorb the larger column</text>
+
+    <!-- the measured gain -->
+    <rect x="716" y="84" width="160" height="104" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="796" y="106" text-anchor="middle" font-weight="600">tiny model, INT8 W8A8</text>
+    <text x="796" y="124" text-anchor="middle" font-size="11" fill="#97A59F">up-projection output error</text>
+    <text x="796" y="142" text-anchor="middle" font-size="11.5">1.52% → 0.57% at α = 0.5</text>
+    <text x="796" y="160" text-anchor="middle" font-size="11" fill="#97A59F">over the full model:</text>
+    <text x="796" y="175" text-anchor="middle" font-size="11" fill="#97A59F">KL falls 2.7×</text>
+
+    <text x="24" y="240" font-family="JetBrains Mono, monospace" font-size="11.5">s_j = max|X_j|^α / max|W_j|^(1−α)</text>
+    <text x="300" y="240" font-size="11.5" fill="#97A59F">α = 0.5 by default; 0.85 for Llama-3-8B and 0.8 for Mistral/Mixtral (verify)</text>
+
+    <!-- why the factor goes into the weights -->
+    <text x="24" y="276" fill="#97A59F">Why the factor goes into the weights: the W8A8 epilogue (<tspan font-family="JetBrains Mono, monospace" font-size="11">w8a8.w8a8_matmul()</tspan>) applies its scales one time per output</text>
+    <g font-family="JetBrains Mono, monospace" font-size="13">
+      <text x="24" y="306">y[t, j] =</text>
+      <text x="112" y="306" fill="#7ADACF">s_x[t]</text>
+      <text x="168" y="306">·</text>
+      <text x="184" y="306" fill="#7ADACF">s_w[j]</text>
+      <text x="240" y="306">·</text>
+      <text x="256" y="306" fill="#E39A62">Σ_k</text>
+      <text x="296" y="306">qx[t, k] · qw[j, k]</text>
+    </g>
+    <g stroke="#97A59F" stroke-width="1" fill="none">
+      <path d="M134 312 L134 360"/>
+      <path d="M206 312 L206 342"/>
+      <path d="M268 312 L268 324" stroke="#E39A62"/>
+    </g>
+    <text x="140" y="364" font-size="11" fill="#7ADACF">one scale per token, set at run time</text>
+    <text x="212" y="346" font-size="11" fill="#7ADACF">one scale per output channel</text>
+    <text x="274" y="328" font-size="11" fill="#E39A62">k is the reduction axis: no scale can change along it</text>
+    <text x="24" y="394" font-size="11.5" fill="#97A59F">Thus a per-input-channel factor cannot be a scale of the GEMM. SmoothQuant moves it into W, and the norm absorbs 1/s at no cost at run time.</text>
+  </g>
+</svg>

@@ -30,7 +30,7 @@ def present(*fragments):
 
 def test_primer_shape():
     lines = (Path(__file__).resolve().parents[2] / "PRIMER.md").read_text(encoding="utf-8").splitlines()
-    assert 600 <= len(lines) <= 900
+    assert 600 <= len(lines) <= 1100  # figures (2026-10-10) added about 100 lines; the titles and drills below are the shape
     titles = ["## 1. What an agent remembers", "## 2. The write path: extraction, provenance and write policy",
               "## 3. Retrieval: similarity, recency and importance",
               "## 4. Measuring memory: planted facts across sessions",

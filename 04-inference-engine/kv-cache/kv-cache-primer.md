@@ -60,6 +60,10 @@ In practice, you cannot turn off this optimization. Every inference engine in pr
 
 This distinction is the core of GPU inference.
 
+![Prefill runs one pass over the whole prompt and fills the cache. Decode runs one token per step, and each step reads every weight and the full cache.](figures/prefill-decode-phases.svg)
+
+*Prefill runs one forward pass over all the prompt tokens and fills the cache. Then each decode step adds one token, and it reads every model weight and the full cache. The cache grows by one token per step. The last lines compare the ~300 operations per byte that the H100 needs with the 1 or 4 that attention over a cache does.*
+
 **Prefill** is the phase that processes the input prompt. All the prompt tokens go through the model at the same time, in parallel, as large matrix multiplications. This phase fills the cache. It is **compute-bound**: the tensor cores of the GPU are the bottleneck. The latency of this phase is your *time to first token*.
 
 **Decode** is the phase that generates the output, one token per forward pass. There is only one token of new work. But to do that work, you must read every model weight and the full KV cache from memory. Decode is **memory-bandwidth-bound**: the tensor cores are idle most of the time while they wait for data. The latency of this phase is your *tokens per second*.
@@ -99,6 +103,10 @@ per token = 2 × 32 × 8 × 128 × 2 = 131,072 bytes = 128 KiB
 | 1 user, 128K (131,072-token) context | 16 GiB (17.2 GB); the notebooks' 128,000 tokens give 15.6 GiB (16.8 GB) |
 | 32 users, 8K context each | 32 GiB (34.4 GB) |
 
+![One token of Llama 3 8B keeps 128 KiB of K and V across 32 layers, and the cache grows to 1 GiB at 8K context, 16 GiB at 128K and 32 GiB for 32 users, against weights of about 16 GB.](figures/kv-cache-size.svg)
+
+*The left panel shows the K and V of one token of Llama 3 8B: 128 KiB across 32 layers of 8 KV heads. Llama 2 13B, with full multi-head attention, keeps 800 KiB per token. The right panel draws the cache at three context and batch settings next to the weights, which do not change in size. It also gives the session counts of an 80 GB H100. `kerncore.kv.kv_cache_bytes` and `sessions_per_gpu` compute each number.*
+
 The *weights* of the model are a fixed ~16 GB (15 GiB) in fp16. On an 80 GB H100, that batch of 32 users already uses more memory than the model itself. The cache is the part that scales with your traffic and your context lengths. The weights do not change in size.
 
 Now do the calculation in the other direction. After the weights, an 80 GB H100 has ~64 GB left. That memory holds at most **59** sessions of 8K tokens with an fp16 cache, or **119** with an fp8 cache (`kerncore.kv.sessions_per_gpu`). That is an upper bound: an engine also reserves memory for activations and for its allocator.
@@ -128,6 +136,10 @@ The general form of these shared blocks is **prefix caching**: the engine reuses
 ---
 
 ## 6. The techniques for shrinking it
+
+![The techniques of section 6 sorted by the factor of the per-token product that each one decreases: layers, KV heads and head dimension, sequence length, bytes per value, and where the cache lives.](figures/cache-shrink-map.svg)
+
+*The figure sorts the techniques of §6 by the factor of the §4 product that each one decreases. GQA, MQA and MLA shrink the K and V of each token. A window or an eviction policy limits the tokens in the cache. Quantization shrinks each value. Adjacent layers that share entries do not store one set for each layer. Offloading does not shrink the cache but moves cold blocks out of HBM, at a latency cost over PCIe.*
 
 The techniques are in the approximate order of how universally models use them:
 

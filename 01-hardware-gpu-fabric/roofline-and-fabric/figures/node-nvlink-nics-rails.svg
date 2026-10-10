@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="476" viewBox="0 0 960 476" role="img" aria-label="One HGX H100 node: NVSwitch joins the 8 GPUs at 450 GB/s per direction, each GPU drives its own 400 Gb/s NIC over PCIe Gen5, and NIC i connects to the rail-i leaf switch." style="color: #E4EAE7">
+  <title>One HGX H100 node: NVSwitch joins the 8 GPUs at 450 GB/s per direction, each GPU drives its own 400 Gb/s NIC over PCIe Gen5, and NIC i connects to the rail-i leaf switch.</title>
+  <rect x="0" y="0" width="960" height="476" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="32" font-weight="600">Inside the node and out to the rails</text>
+    <rect x="24" y="46" width="816" height="236" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="36" y="64" font-size="11" fill="#97A59F">HGX H100 node: one NVLink domain of 8 GPUs</text>
+    <rect x="48" y="76" width="768" height="36" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="432" y="98" text-anchor="middle" font-weight="600">NVSwitch: all-to-all, any GPU pair at the full per-GPU bandwidth</text>
+    <line x1="84.0" y1="112" x2="84.0" y2="140" stroke="#97A59F" stroke-width="1.2"/>
+    <rect x="48.0" y="140" width="72" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="84.0" y="160" text-anchor="middle" font-weight="600">GPU 0</text>
+    <text x="84.0" y="176" text-anchor="middle" font-size="11" fill="#7ADACF">H100</text>
+    <path d="M84.0 184 L84.0 218" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="48.0" y="218" width="72" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="84.0" y="238" text-anchor="middle" font-weight="600">NIC 0</text>
+    <text x="84.0" y="254" text-anchor="middle" font-size="11" fill="#97A59F">400 Gb/s</text>
+    <path d="M84.0 262 L84.0 336" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="48.0" y="336" width="72" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="84.0" y="356" text-anchor="middle" font-weight="600">rail-0</text>
+    <text x="84.0" y="372" text-anchor="middle" font-size="11" fill="#97A59F">leaf</text>
+    <line x1="180.0" y1="112" x2="180.0" y2="140" stroke="#97A59F" stroke-width="1.2"/>
+    <rect x="144.0" y="140" width="72" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="180.0" y="160" text-anchor="middle" font-weight="600">GPU 1</text>
+    <text x="180.0" y="176" text-anchor="middle" font-size="11" fill="#7ADACF">H100</text>
+    <path d="M180.0 184 L180.0 218" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="144.0" y="218" width="72" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="180.0" y="238" text-anchor="middle" font-weight="600">NIC 1</text>
+    <text x="180.0" y="254" text-anchor="middle" font-size="11" fill="#97A59F">400 Gb/s</text>
+    <path d="M180.0 262 L180.0 336" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="144.0" y="336" width="72" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="180.0" y="356" text-anchor="middle" font-weight="600">rail-1</text>
+    <text x="180.0" y="372" text-anchor="middle" font-size="11" fill="#97A59F">leaf</text>
+    <line x1="276.0" y1="112" x2="276.0" y2="140" stroke="#97A59F" stroke-width="1.2"/>
+    <rect x="240.0" y="140" width="72" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="276.0" y="160" text-anchor="middle" font-weight="600">GPU 2</text>
+    <text x="276.0" y="176" text-anchor="middle" font-size="11" fill="#7ADACF">H100</text>
+    <path d="M276.0 184 L276.0 218" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="240.0" y="218" width="72" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="276.0" y="238" text-anchor="middle" font-weight="600">NIC 2</text>
+    <text x="276.0" y="254" text-anchor="middle" font-size="11" fill="#97A59F">400 Gb/s</text>
+    <path d="M276.0 262 L276.0 336" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="240.0" y="336" width="72" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="276.0" y="356" text-anchor="middle" font-weight="600">rail-2</text>
+    <text x="276.0" y="372" text-anchor="middle" font-size="11" fill="#97A59F">leaf</text>
+    <line x1="372.0" y1="112" x2="372.0" y2="140" stroke="#97A59F" stroke-width="1.2"/>
+    <rect x="336.0" y="140" width="72" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="372.0" y="160" text-anchor="middle" font-weight="600">GPU 3</text>
+    <text x="372.0" y="176" text-anchor="middle" font-size="11" fill="#7ADACF">H100</text>
+    <path d="M372.0 184 L372.0 218" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="336.0" y="218" width="72" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="372.0" y="238" text-anchor="middle" font-weight="600">NIC 3</text>
+    <text x="372.0" y="254" text-anchor="middle" font-size="11" fill="#97A59F">400 Gb/s</text>
+    <path d="M372.0 262 L372.0 336" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="336.0" y="336" width="72" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="372.0" y="356" text-anchor="middle" font-weight="600">rail-3</text>
+    <text x="372.0" y="372" text-anchor="middle" font-size="11" fill="#97A59F">leaf</text>
+    <line x1="468.0" y1="112" x2="468.0" y2="140" stroke="#97A59F" stroke-width="1.2"/>
+    <rect x="432.0" y="140" width="72" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="468.0" y="160" text-anchor="middle" font-weight="600">GPU 4</text>
+    <text x="468.0" y="176" text-anchor="middle" font-size="11" fill="#7ADACF">H100</text>
+    <path d="M468.0 184 L468.0 218" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="432.0" y="218" width="72" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="468.0" y="238" text-anchor="middle" font-weight="600">NIC 4</text>
+    <text x="468.0" y="254" text-anchor="middle" font-size="11" fill="#97A59F">400 Gb/s</text>
+    <path d="M468.0 262 L468.0 336" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="432.0" y="336" width="72" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="468.0" y="356" text-anchor="middle" font-weight="600">rail-4</text>
+    <text x="468.0" y="372" text-anchor="middle" font-size="11" fill="#97A59F">leaf</text>
+    <line x1="564.0" y1="112" x2="564.0" y2="140" stroke="#97A59F" stroke-width="1.2"/>
+    <rect x="528.0" y="140" width="72" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="564.0" y="160" text-anchor="middle" font-weight="600">GPU 5</text>
+    <text x="564.0" y="176" text-anchor="middle" font-size="11" fill="#7ADACF">H100</text>
+    <path d="M564.0 184 L564.0 218" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="528.0" y="218" width="72" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="564.0" y="238" text-anchor="middle" font-weight="600">NIC 5</text>
+    <text x="564.0" y="254" text-anchor="middle" font-size="11" fill="#97A59F">400 Gb/s</text>
+    <path d="M564.0 262 L564.0 336" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="528.0" y="336" width="72" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="564.0" y="356" text-anchor="middle" font-weight="600">rail-5</text>
+    <text x="564.0" y="372" text-anchor="middle" font-size="11" fill="#97A59F">leaf</text>
+    <line x1="660.0" y1="112" x2="660.0" y2="140" stroke="#97A59F" stroke-width="1.2"/>
+    <rect x="624.0" y="140" width="72" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="660.0" y="160" text-anchor="middle" font-weight="600">GPU 6</text>
+    <text x="660.0" y="176" text-anchor="middle" font-size="11" fill="#7ADACF">H100</text>
+    <path d="M660.0 184 L660.0 218" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="624.0" y="218" width="72" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="660.0" y="238" text-anchor="middle" font-weight="600">NIC 6</text>
+    <text x="660.0" y="254" text-anchor="middle" font-size="11" fill="#97A59F">400 Gb/s</text>
+    <path d="M660.0 262 L660.0 336" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="624.0" y="336" width="72" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="660.0" y="356" text-anchor="middle" font-weight="600">rail-6</text>
+    <text x="660.0" y="372" text-anchor="middle" font-size="11" fill="#97A59F">leaf</text>
+    <line x1="756.0" y1="112" x2="756.0" y2="140" stroke="#97A59F" stroke-width="1.2"/>
+    <rect x="720.0" y="140" width="72" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="756.0" y="160" text-anchor="middle" font-weight="600">GPU 7</text>
+    <text x="756.0" y="176" text-anchor="middle" font-size="11" fill="#7ADACF">H100</text>
+    <path d="M756.0 184 L756.0 218" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="720.0" y="218" width="72" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="756.0" y="238" text-anchor="middle" font-weight="600">NIC 7</text>
+    <text x="756.0" y="254" text-anchor="middle" font-size="11" fill="#97A59F">400 Gb/s</text>
+    <path d="M756.0 262 L756.0 336" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="720.0" y="336" width="72" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="756.0" y="356" text-anchor="middle" font-weight="600">rail-7</text>
+    <text x="756.0" y="372" text-anchor="middle" font-size="11" fill="#97A59F">leaf</text>
+    <text x="856" y="120" font-size="11.5" font-weight="600">NVLink 4</text>
+    <text x="856" y="136" font-size="11" fill="#97A59F">450 GB/s per</text>
+    <text x="856" y="150" font-size="11" fill="#97A59F">direction, per GPU</text>
+    <text x="856" y="196" font-size="11.5" font-weight="600">PCIe Gen5 x16</text>
+    <text x="856" y="212" font-size="11" fill="#97A59F">63 GB/s per</text>
+    <text x="856" y="226" font-size="11" fill="#97A59F">direction (PIX, PXB)</text>
+    <text x="856" y="290" font-size="11.5" font-weight="600">400 Gb/s NIC</text>
+    <text x="856" y="306" font-size="11" fill="#E39A62">50 GB/s per NIC,</text>
+    <text x="856" y="320" font-size="11" fill="#E39A62">~9× below NVLink</text>
+    <rect x="24" y="300" width="816" height="134" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="36" y="402" font-size="11" fill="#97A59F">rail-optimized leaves (§5.4): NIC i of every node in the group connects to the rail-i leaf, and every leaf has uplinks to every spine</text>
+    <text x="36" y="420" font-size="11" fill="#97A59F">same-index GPUs of two nodes: one switch hop; cross-rail traffic: three hops, or one when PXN first moves it over NVLink</text>
+    <text x="24" y="462" font-size="11" fill="#7ADACF">inside the node: tensor parallelism (§5.3); across nodes: pipeline and data parallelism, one NIC per GPU so that every GPU drives its own rail</text>
+  </g>
+</svg>

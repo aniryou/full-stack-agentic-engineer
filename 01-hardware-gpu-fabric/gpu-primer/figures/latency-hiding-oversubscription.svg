@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="360" viewBox="0 0 880 360" role="img" aria-label="A CPU core stalls while it waits for memory, and a GPU SM issues another resident warp during the wait, so its arithmetic units always have work." style="color: #E4EAE7">
+  <title>A CPU core stalls while it waits for memory, and a GPU SM issues another resident warp during the wait, so its arithmetic units always have work.</title>
+  <rect x="0" y="0" width="880" height="360" rx="8" fill="#161E1C"/>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="26" fill="#97A59F">Latency hiding by oversubscription (§1). One row is time, from left to right. Schematic, not to scale.</text>
+
+    <!-- row A: one CPU core -->
+    <rect x="24" y="42" width="832" height="112" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="40" y="62" fill="#97A59F">CPU core: one instruction stream</text>
+    <text x="186" y="100" text-anchor="end" font-size="11" fill="#97A59F">the stream</text>
+    <rect x="200" y="78" width="100" height="36" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="250" y="100" text-anchor="middle" font-size="11.5">compute</text>
+    <rect x="300" y="78" width="340" height="36" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="470" y="100" text-anchor="middle" font-size="11.5" font-weight="600">wait for memory: the core stalls</text>
+    <rect x="640" y="78" width="200" height="36" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="740" y="100" text-anchor="middle" font-size="11.5">compute</text>
+    <text x="520" y="138" text-anchor="middle" font-size="11" fill="#97A59F">large caches, prefetch and out-of-order logic try to prevent the wait. That logic takes most of the area of the die.</text>
+
+    <!-- row B: one GPU SM -->
+    <rect x="24" y="166" width="832" height="178" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="40" y="186" fill="#97A59F">GPU SM: many resident warps, and a switch to another warp during a wait</text>
+    <g font-size="11" fill="#97A59F" text-anchor="end">
+      <text x="186" y="211">warp 0</text>
+      <text x="186" y="229">warp 1</text>
+      <text x="186" y="247">warp 2</text>
+      <text x="186" y="265">warp 3</text>
+      <text x="186" y="283">warp 4</text>
+      <text x="186" y="301">warp 5</text>
+    </g>
+    <!-- a warp issues for one slot (accent), then waits five slots for memory (warm), then issues again -->
+    <g stroke-width="1">
+      <!-- warp 0 -->
+      <rect x="200" y="200" width="50" height="14" rx="2" fill="#16302A" stroke="#4CC5B7"/>
+      <rect x="250" y="200" width="250" height="14" rx="2" fill="#3A2C25" stroke="#E39A62"/>
+      <rect x="500" y="200" width="50" height="14" rx="2" fill="#16302A" stroke="#4CC5B7"/>
+      <rect x="550" y="200" width="250" height="14" rx="2" fill="#3A2C25" stroke="#E39A62"/>
+      <rect x="800" y="200" width="40" height="14" rx="2" fill="#16302A" stroke="#4CC5B7"/>
+      <!-- warp 1 -->
+      <rect x="250" y="218" width="50" height="14" rx="2" fill="#16302A" stroke="#4CC5B7"/>
+      <rect x="300" y="218" width="250" height="14" rx="2" fill="#3A2C25" stroke="#E39A62"/>
+      <rect x="550" y="218" width="50" height="14" rx="2" fill="#16302A" stroke="#4CC5B7"/>
+      <rect x="600" y="218" width="240" height="14" rx="2" fill="#3A2C25" stroke="#E39A62"/>
+      <!-- warp 2 -->
+      <rect x="300" y="236" width="50" height="14" rx="2" fill="#16302A" stroke="#4CC5B7"/>
+      <rect x="350" y="236" width="250" height="14" rx="2" fill="#3A2C25" stroke="#E39A62"/>
+      <rect x="600" y="236" width="50" height="14" rx="2" fill="#16302A" stroke="#4CC5B7"/>
+      <rect x="650" y="236" width="190" height="14" rx="2" fill="#3A2C25" stroke="#E39A62"/>
+      <!-- warp 3 -->
+      <rect x="350" y="254" width="50" height="14" rx="2" fill="#16302A" stroke="#4CC5B7"/>
+      <rect x="400" y="254" width="250" height="14" rx="2" fill="#3A2C25" stroke="#E39A62"/>
+      <rect x="650" y="254" width="50" height="14" rx="2" fill="#16302A" stroke="#4CC5B7"/>
+      <rect x="700" y="254" width="140" height="14" rx="2" fill="#3A2C25" stroke="#E39A62"/>
+      <!-- warp 4 -->
+      <rect x="400" y="272" width="50" height="14" rx="2" fill="#16302A" stroke="#4CC5B7"/>
+      <rect x="450" y="272" width="250" height="14" rx="2" fill="#3A2C25" stroke="#E39A62"/>
+      <rect x="700" y="272" width="50" height="14" rx="2" fill="#16302A" stroke="#4CC5B7"/>
+      <rect x="750" y="272" width="90" height="14" rx="2" fill="#3A2C25" stroke="#E39A62"/>
+      <!-- warp 5 -->
+      <rect x="450" y="290" width="50" height="14" rx="2" fill="#16302A" stroke="#4CC5B7"/>
+      <rect x="500" y="290" width="250" height="14" rx="2" fill="#3A2C25" stroke="#E39A62"/>
+      <rect x="750" y="290" width="50" height="14" rx="2" fill="#16302A" stroke="#4CC5B7"/>
+      <rect x="800" y="290" width="40" height="14" rx="2" fill="#3A2C25" stroke="#E39A62"/>
+    </g>
+    <!-- the arithmetic units, seen over time -->
+    <rect x="200" y="312" width="640" height="5" rx="1" fill="#4CC5B7"/>
+    <text x="200" y="334" font-size="11" fill="#7ADACF">the arithmetic units always have a warp to issue</text>
+    <rect x="520" y="325" width="14" height="10" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <text x="540" y="334" font-size="11" fill="#97A59F">a warp issues instructions</text>
+    <rect x="690" y="325" width="14" height="10" rx="2" fill="#3A2C25" stroke="#E39A62" stroke-width="1"/>
+    <text x="710" y="334" font-size="11" fill="#97A59F">the warp waits for memory</text>
+  </g>
+</svg>

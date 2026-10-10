@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="450" viewBox="0 0 900 450" role="img" aria-label="The block pool after a request frees its chain: uncached blocks go to the head of the free queue, hashed blocks go to the tail in reverse, allocation pops the head, and a prefix hit removes a block from the middle." style="color: #E4EAE7">
+  <title>The block pool after a request frees its chain: uncached blocks go to the head of the free queue, hashed blocks go to the tail in reverse, allocation pops the head, and a prefix hit removes a block from the middle.</title>
+  <rect x="0" y="0" width="900" height="450" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="28" fill="#97A59F">Request X frees [b1(h1), b2(h2), b3(h3), b4(partial)]. The free queue held [f1, f2].</text>
+    <rect x="24" y="44" width="852" height="390" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="40" y="62" font-size="11" fill="#97A59F">BlockPool (vllm/v1/core/block_pool.py)</text>
+
+    <!-- row 1: the three records -->
+    <rect x="44" y="78" width="236" height="84" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="162" y="100" text-anchor="middle" font-weight="600">blocks: list[KVCacheBlock]</text>
+    <text x="162" y="118" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">block_id · ref_cnt · _block_hash</text>
+    <text x="162" y="134" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">prev_free_block · next_free_block</text>
+    <text x="162" y="151" text-anchor="middle" font-size="11" fill="#97A59F">block 0 is the null block</text>
+
+    <rect x="332" y="78" width="236" height="56" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="450" y="100" text-anchor="middle" font-weight="600">free_blocks(reversed(blocks))</text>
+    <text x="450" y="118" text-anchor="middle" font-size="11" fill="#97A59F">each block whose ref_cnt reaches 0</text>
+
+    <rect x="620" y="78" width="236" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="738" y="100" text-anchor="middle" font-weight="600">cached_block_hash_to_block</text>
+    <text x="738" y="118" text-anchor="middle" font-size="11" fill="#97A59F">BlockHashToBlockMap</text>
+    <text x="738" y="134" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">(hash bytes + group id): block</text>
+
+    <!-- the free queue -->
+    <rect x="90" y="206" width="68" height="44" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="4 3"/>
+    <text x="124" y="224" text-anchor="middle" font-size="11.5" fill="#97A59F">head</text>
+    <text x="124" y="240" text-anchor="middle" font-size="10.5" fill="#97A59F">fake</text>
+
+    <rect x="182" y="206" width="68" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="216" y="224" text-anchor="middle" font-weight="600">b4</text>
+    <text x="216" y="240" text-anchor="middle" font-size="10.5" fill="#97A59F">no hash</text>
+
+    <rect x="274" y="206" width="68" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="308" y="224" text-anchor="middle" font-weight="600">f1</text>
+    <text x="308" y="240" text-anchor="middle" font-size="10.5" fill="#97A59F">older</text>
+
+    <rect x="366" y="206" width="68" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="400" y="224" text-anchor="middle" font-weight="600">f2</text>
+    <text x="400" y="240" text-anchor="middle" font-size="10.5" fill="#97A59F">older</text>
+
+    <rect x="458" y="206" width="68" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="492" y="224" text-anchor="middle" font-weight="600">b3</text>
+    <text x="492" y="240" text-anchor="middle" font-size="10.5" fill="#7ADACF">h3</text>
+
+    <rect x="550" y="206" width="68" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="584" y="224" text-anchor="middle" font-weight="600">b2</text>
+    <text x="584" y="240" text-anchor="middle" font-size="10.5" fill="#7ADACF">h2</text>
+
+    <rect x="642" y="206" width="68" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="676" y="224" text-anchor="middle" font-weight="600">b1</text>
+    <text x="676" y="240" text-anchor="middle" font-size="10.5" fill="#7ADACF">h1</text>
+
+    <rect x="734" y="206" width="68" height="44" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="4 3"/>
+    <text x="768" y="224" text-anchor="middle" font-size="11.5" fill="#97A59F">tail</text>
+    <text x="768" y="240" text-anchor="middle" font-size="10.5" fill="#97A59F">fake</text>
+
+    <!-- prev/next links -->
+    <g stroke="#97A59F" stroke-width="1.2" fill="none">
+      <path d="M161 228 L179 228" marker-start="url(#arr)" marker-end="url(#arr)"/>
+      <path d="M253 228 L271 228" marker-start="url(#arr)" marker-end="url(#arr)"/>
+      <path d="M345 228 L363 228" marker-start="url(#arr)" marker-end="url(#arr)"/>
+      <path d="M437 228 L455 228" marker-start="url(#arr)" marker-end="url(#arr)"/>
+      <path d="M529 228 L547 228" marker-start="url(#arr)" marker-end="url(#arr)"/>
+      <path d="M621 228 L639 228" marker-start="url(#arr)" marker-end="url(#arr)"/>
+      <path d="M713 228 L731 228" marker-start="url(#arr)" marker-end="url(#arr)"/>
+    </g>
+
+    <!-- free_blocks arrows -->
+    <g stroke="#97A59F" stroke-width="1.2" fill="none">
+      <path d="M380 134 L220 204" marker-end="url(#arr)"/>
+      <path d="M520 134 L660 204" marker-end="url(#arr)"/>
+    </g>
+    <text x="262" y="186" text-anchor="end" font-size="11" fill="#97A59F">no hash: prepend_n, to the head</text>
+    <text x="598" y="182" text-anchor="end" font-size="11" fill="#97A59F">with a hash: append_n,</text>
+    <text x="598" y="196" text-anchor="end" font-size="11" fill="#97A59F">to the tail, in reverse</text>
+
+    <!-- lookup from the map -->
+    <path d="M738 150 L700 204" stroke="#97A59F" stroke-width="1.2" fill="none" stroke-dasharray="4 3" marker-end="url(#arr)"/>
+    <text x="744" y="178" font-size="11" fill="#97A59F">find_longest_cache_hit:</text>
+    <text x="744" y="192" font-size="11" fill="#97A59F">h1 names b1</text>
+
+    <!-- row 3: the two operations -->
+    <rect x="44" y="300" width="380" height="84" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="234" y="322" text-anchor="middle" font-weight="600">allocate: BlockPool.get_new_blocks</text>
+    <text x="234" y="340" text-anchor="middle" font-size="11" fill="#97A59F">popleft_n from the head: b4, then f1, f2, then b3, b2, b1</text>
+    <text x="234" y="356" text-anchor="middle" font-size="11" fill="#97A59F">a popped block with a hash: _maybe_evict_cached_block</text>
+    <text x="234" y="372" text-anchor="middle" font-size="11" fill="#97A59F">removes that hash from the map</text>
+    <path d="M216 250 L216 298" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+    <text x="224" y="278" font-size="11" fill="#97A59F">popleft_n</text>
+
+    <rect x="476" y="300" width="380" height="84" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="666" y="322" text-anchor="middle" font-weight="600">a prefix hit: BlockPool.touch</text>
+    <text x="666" y="340" text-anchor="middle" font-size="11" fill="#97A59F">ref_cnt += 1. If ref_cnt was 0, the touch also removes</text>
+    <text x="666" y="356" text-anchor="middle" font-size="11" fill="#97A59F">the block from the free queue, from the middle, in O(1):</text>
+    <text x="666" y="372" text-anchor="middle" font-size="11" fill="#97A59F">remove, with no allocation of Python objects</text>
+    <path d="M676 298 L676 252" stroke="#4CC5B7" stroke-width="1.2" fill="none" marker-end="url(#arrA)"/>
+    <text x="684" y="278" font-size="11" fill="#7ADACF">remove</text>
+
+    <!-- the order -->
+    <text x="450" y="406" text-anchor="middle" font-size="11.5" fill="#7ADACF">free_block_queue: FreeKVCacheBlockQueue, a doubly linked list with a fake head and a fake tail</text>
+    <text x="450" y="422" text-anchor="middle" font-size="11.5" fill="#7ADACF">reuse order from the head: b4, then f1, f2, then b3 before b2 before b1 (the tail of a chain first, its root last)</text>
+  </g>
+</svg>

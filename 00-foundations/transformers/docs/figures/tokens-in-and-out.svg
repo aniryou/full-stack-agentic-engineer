@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="940" height="310" viewBox="0 0 940 310" role="img" aria-label="The path in and out of the model: text to token ids, the embedding table and the position into the residual stream, then through the blocks, the final Norm, the LM head, the logits and the softmax to next-token probabilities." style="color: #E4EAE7">
+  <title>The path in and out of the model: text to token ids, the embedding table and the position into the residual stream, then through the blocks, the final Norm, the LM head, the logits and the softmax to next-token probabilities.</title>
+  <rect x="0" y="0" width="940" height="310" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="20" y="44" font-size="11" fill="#97A59F">in</text>
+    <rect x="20" y="60" width="110" height="56" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="75" y="83" text-anchor="middle" font-weight="600">text</text>
+    <text x="75" y="102" text-anchor="middle" font-size="11" fill="#97A59F">characters</text>
+    <rect x="160" y="60" width="130" height="56" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="225" y="78" text-anchor="middle" font-weight="600">tokenizer</text>
+    <text x="225" y="95" text-anchor="middle" font-size="11" fill="#97A59F">BPE, a fixed vocabulary</text>
+    <text x="225" y="109" text-anchor="middle" font-size="11" fill="#97A59F">≈ ¾ of a word per token</text>
+    <rect x="320" y="60" width="100" height="56" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="370" y="83" text-anchor="middle" font-weight="600">token ids</text>
+    <text x="370" y="102" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" fill="#97A59F">(n,)</text>
+    <rect x="450" y="60" width="160" height="56" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="530" y="83" text-anchor="middle" font-weight="600">embedding table</text>
+    <text x="530" y="102" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" fill="#7ADACF">(vocab × d_model)</text>
+    <rect x="640" y="60" width="130" height="56" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="705" y="83" text-anchor="middle" font-weight="600">+ position</text>
+    <text x="705" y="102" text-anchor="middle" font-size="11" fill="#97A59F">§4.3</text>
+    <rect x="800" y="60" width="120" height="56" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="860" y="83" text-anchor="middle" font-weight="600">x, the stream</text>
+    <text x="860" y="102" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" fill="#97A59F">(n, d_model)</text>
+    <text x="705" y="140" text-anchor="middle" font-size="11" fill="#97A59F">sinusoidal or a learned table: added here</text>
+    <text x="705" y="156" text-anchor="middle" font-size="11" fill="#97A59F">RoPE: rotates q and k inside attention</text>
+    <text x="20" y="184" font-size="11" fill="#97A59F">out</text>
+    <rect x="800" y="200" width="120" height="56" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="860" y="223" text-anchor="middle" font-weight="600">L blocks</text>
+    <text x="860" y="242" text-anchor="middle" font-size="11" fill="#97A59F">§3</text>
+    <rect x="640" y="200" width="130" height="56" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="705" y="223" text-anchor="middle" font-weight="600">final Norm</text>
+    <text x="705" y="242" text-anchor="middle" font-size="11" fill="#97A59F">§3.3</text>
+    <rect x="450" y="200" width="160" height="56" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="530" y="223" text-anchor="middle" font-weight="600">LM head</text>
+    <text x="530" y="242" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" fill="#7ADACF">(d_model × vocab)</text>
+    <rect x="320" y="200" width="100" height="56" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="370" y="223" text-anchor="middle" font-weight="600">logits</text>
+    <text x="370" y="242" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" fill="#97A59F">(n, 50257)</text>
+    <rect x="160" y="200" width="130" height="56" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="225" y="223" text-anchor="middle" font-weight="600">softmax</text>
+    <text x="225" y="242" text-anchor="middle" font-size="11" fill="#97A59F">per position</text>
+    <rect x="20" y="200" width="110" height="56" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="75" y="223" text-anchor="middle" font-weight="600">next token</text>
+    <text x="75" y="242" text-anchor="middle" font-size="11" fill="#97A59F">probabilities</text>
+    <g stroke="#97A59F" stroke-width="1.2" fill="none">
+      <path d="M130 88 L158 88" marker-end="url(#arr)"/>
+      <path d="M290 88 L318 88" marker-end="url(#arr)"/>
+      <path d="M420 88 L448 88" marker-end="url(#arr)"/>
+      <path d="M610 88 L638 88" marker-end="url(#arr)"/>
+      <path d="M770 88 L798 88" marker-end="url(#arr)"/>
+      <path d="M860 116 L860 198" marker-end="url(#arr)"/>
+      <path d="M800 228 L772 228" marker-end="url(#arr)"/>
+      <path d="M640 228 L612 228" marker-end="url(#arr)"/>
+      <path d="M450 228 L422 228" marker-end="url(#arr)"/>
+      <path d="M320 228 L292 228" marker-end="url(#arr)"/>
+      <path d="M160 228 L132 228" marker-end="url(#arr)"/>
+    </g>
+    <path d="M530 116 L530 198" fill="none" stroke="#4CC5B7" stroke-width="1.2" stroke-dasharray="4 3"/>
+    <text x="518" y="152" text-anchor="end" font-size="11" fill="#7ADACF">tied weights (GPT-2, Gemma)</text>
+    <text x="518" y="168" text-anchor="end" font-size="11" fill="#7ADACF">or separate (Llama)</text>
+    <text x="20" y="292" font-size="11" fill="#97A59F">the shapes are those of §8.3: GPT-2 small, one sequence of n tokens, vocab = 50,257</text>
+  </g>
+</svg>

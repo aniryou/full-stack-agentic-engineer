@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="496" viewBox="0 0 900 496" role="img" aria-label="The two compatibility gates on the example of section 1.2: gate 1 compares the CUDA that the host driver supports with the CUDA the app was built with, and gate 2 matches the SASS or PTX in the fatbin against the compute capability of the GPU." style="color: #E4EAE7">
+  <title>The two compatibility gates on the example of section 1.2: gate 1 compares the CUDA that the host driver supports with the CUDA the app was built with, and gate 2 matches the SASS or PTX in the fatbin against the compute capability of the GPU.</title>
+  <rect x="0" y="0" width="900" height="496" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <rect x="24" y="36" width="250" height="116" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="149" y="56" text-anchor="middle" fill="#97A59F">host</text>
+    <rect x="40" y="66" width="218" height="72" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="149" y="88" text-anchor="middle" font-weight="600">driver 535.183.01</text>
+    <text x="149" y="106" text-anchor="middle" font-size="10.5" fill="#97A59F">nvidia.ko and libcuda.so</text>
+    <text x="149" y="121" text-anchor="middle" font-size="10.5" fill="#97A59F">supports CUDA up to 12.2</text>
+    <rect x="324" y="36" width="300" height="116" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="474" y="56" text-anchor="middle" fill="#97A59F">container image: the app</text>
+    <rect x="340" y="66" width="130" height="72" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="405" y="96" text-anchor="middle" font-weight="600" font-size="12">CUDA runtime 12.4</text>
+    <text x="405" y="114" text-anchor="middle" font-size="10.5" fill="#7ADACF">libcudart</text>
+    <rect x="480" y="66" width="128" height="72" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="544" y="88" text-anchor="middle" font-weight="600" font-size="12">fatbin</text>
+    <text x="544" y="106" text-anchor="middle" font-size="10.5" fill="#7ADACF" font-family="JetBrains Mono, monospace">SASS sm_80, sm_90</text>
+    <text x="544" y="122" text-anchor="middle" font-size="10.5" fill="#7ADACF" font-family="JetBrains Mono, monospace">PTX compute_80</text>
+    <rect x="674" y="66" width="202" height="72" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="775" y="96" text-anchor="middle" font-weight="600">GPU: H100</text>
+    <text x="775" y="114" text-anchor="middle" font-size="10.5" fill="#97A59F">compute capability 9.0</text>
+    <path d="M338 108 L260 108" fill="none" stroke="#4CC5B7" stroke-width="1.2" marker-end="url(#arrA)"/>
+    <text x="299" y="98" text-anchor="middle" font-weight="600" font-size="11" fill="#7ADACF">gate 1</text>
+    <path d="M610 108 L672 108" fill="none" stroke="#4CC5B7" stroke-width="1.2" marker-end="url(#arrA)"/>
+    <text x="641" y="98" text-anchor="middle" font-weight="600" font-size="11" fill="#7ADACF">gate 2</text>
+    <text x="24" y="184" font-weight="600">gate 1: driver and runtime</text>
+    <text x="24" y="200" font-size="10.5" fill="#97A59F">the CUDA of the driver must be at least the CUDA of the app,</text>
+    <text x="24" y="214" font-size="10.5" fill="#97A59F">or the same major at or above the floor (12.x: 525.60.13)</text>
+    <rect x="24" y="226" width="420" height="60" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="34" y="246" font-weight="600" font-size="12">runs by minor-version compatibility</text>
+    <text x="34" y="262" font-size="10.5" fill="#7ADACF">12.4 on a driver that supports 12.2: the same major, and 535.183.01</text>
+    <text x="34" y="276" font-size="10.5" fill="#7ADACF">is above the floor 525.60.13; the app has SASS for the GPU</text>
+    <rect x="24" y="296" width="420" height="60" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="34" y="316" font-weight="600" font-size="12">the limits of minor-version compatibility</text>
+    <text x="34" y="332" font-size="10.5" fill="#97A59F">the driver cannot JIT-compile PTX from the newer toolkit: error 222</text>
+    <text x="34" y="346" font-size="10.5" fill="#97A59F">an API newer than the driver fails: error 36</text>
+    <rect x="24" y="366" width="420" height="90" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="34" y="386" font-weight="600" font-size="12">a CUDA 13.0 build fails with 35: a newer major</text>
+    <text x="34" y="402" font-size="10.5" fill="#97A59F">with cuda-compat 13.0 it runs on the H100, because R535 is a</text>
+    <text x="34" y="416" font-size="10.5" fill="#97A59F">kernel-driver branch that this package supports; over R560 it fails</text>
+    <text x="34" y="430" font-size="10.5" fill="#97A59F">with 803 (branch), and on an RTX 4090 with 804 (hardware)</text>
+    <text x="34" y="448" font-size="10.5" fill="#E39A62">a libcuda.so copied into the image fails with 803 (§6.4)</text>
+    <text x="476" y="184" font-weight="600">gate 2: kernel image and GPU</text>
+    <text x="476" y="200" font-size="10.5" fill="#97A59F">SASS sm_XY runs on CC X.Z with Z at least Y;</text>
+    <text x="476" y="214" font-size="10.5" fill="#97A59F">PTX compute_XY JITs to CC at least X.Y</text>
+    <rect x="476" y="226" width="400" height="60" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="486" y="246" font-weight="600" font-size="12">the driver loads the SASS</text>
+    <text x="486" y="262" font-size="10.5" fill="#7ADACF">sm_90 matches CC 9.0 (and sm_80 runs on 8.0, 8.6, 8.9, never on 9.0)</text>
+    <text x="486" y="276" font-size="10.5" fill="#7ADACF">no JIT, no slow first start</text>
+    <rect x="476" y="296" width="400" height="60" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="486" y="316" font-weight="600" font-size="12">no SASS matches: the driver JIT-compiles the PTX</text>
+    <text x="486" y="332" font-size="10.5" fill="#97A59F">compute_80 JITs to 8.x, 9.0, 10.0, 12.0 and up: the first start is slow,</text>
+    <text x="486" y="346" font-size="10.5" fill="#97A59F">and the driver caches the result in ~/.nv/ComputeCache</text>
+    <rect x="476" y="366" width="400" height="90" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="486" y="386" font-weight="600" font-size="12">no kernel image is available: error 209</text>
+    <text x="486" y="402" font-size="10.5" fill="#97A59F">no SASS for this CC and no usable PTX; for example a wheel built</text>
+    <text x="486" y="416" font-size="10.5" fill="#97A59F">for 8.0 8.6 9.0 without +PTX on an RTX 5090 (12.0), or on a T4 (7.5)</text>
+    <text x="486" y="430" font-size="10.5" fill="#97A59F">because the driver JIT-compiles PTX only upward</text>
+    <text x="486" y="448" font-size="10.5" fill="#E39A62">only compute_80 PTX under minor-version compatibility: error 222</text>
+    <text x="24" y="490" font-size="11" fill="#97A59F">gpusim.compat.check() walks both gates in this order; the error codes are the rows of §1.4 (gpusim.compat.ERRORS)</text>
+  </g>
+</svg>

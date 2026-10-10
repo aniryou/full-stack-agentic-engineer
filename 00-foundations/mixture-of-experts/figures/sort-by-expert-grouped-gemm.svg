@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="356" viewBox="0 0 980 356" role="img" aria-label="The sparse forward of an MoE layer sorts the T × k assignments by expert, runs one GEMM per expert over its slice, and adds the weighted rows back to each token." style="color: #E4EAE7">
+  <title>The sparse forward of an MoE layer sorts the T × k assignments by expert, runs one GEMM per expert over its slice, and adds the weighted rows back to each token.</title>
+  <rect x="0" y="0" width="980" height="356" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <rect x="20" y="36" width="216" height="206" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="128" y="56" font-size="11" fill="#97A59F" text-anchor="middle">1. the T × k assignments</text>
+    <text x="40" y="82" fill="#97A59F" font-family="JetBrains Mono, monospace" font-size="11">token</text>
+    <text x="88" y="82" fill="#97A59F" font-family="JetBrains Mono, monospace" font-size="11">experts, weights</text>
+    <text x="40" y="112" font-family="JetBrains Mono, monospace" font-size="11">t₀</text>
+    <text x="88" y="112" font-family="JetBrains Mono, monospace" font-size="11">E₃·w₁</text>
+    <text x="156" y="112" font-family="JetBrains Mono, monospace" font-size="11">E₆·w₂</text>
+    <text x="40" y="140" font-family="JetBrains Mono, monospace" font-size="11">t₁</text>
+    <text x="88" y="140" font-family="JetBrains Mono, monospace" font-size="11">E₃·w₁</text>
+    <text x="156" y="140" font-family="JetBrains Mono, monospace" font-size="11">E₀·w₂</text>
+    <text x="40" y="168" font-family="JetBrains Mono, monospace" font-size="11">t₂</text>
+    <text x="88" y="168" font-family="JetBrains Mono, monospace" font-size="11">E₆·w₁</text>
+    <text x="156" y="168" font-family="JetBrains Mono, monospace" font-size="11">E₁·w₂</text>
+    <text x="40" y="196" font-family="JetBrains Mono, monospace" font-size="11">t₃</text>
+    <text x="88" y="196" font-family="JetBrains Mono, monospace" font-size="11">E₃·w₁</text>
+    <text x="156" y="196" font-family="JetBrains Mono, monospace" font-size="11">E₆·w₂</text>
+    <text x="128" y="226" font-size="11" fill="#97A59F" text-anchor="middle">k = 2 of E = 8</text>
+    <path d="M238 140 L316 140" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <text x="277" y="128" font-size="11" fill="#97A59F" text-anchor="middle">2. sort</text>
+    <text x="277" y="156" font-size="11" fill="#97A59F" text-anchor="middle">by expert</text>
+    <text x="380" y="56" font-size="11" fill="#97A59F" text-anchor="middle">contiguous slices</text>
+    <rect x="320" y="66" width="120" height="22" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="380" y="81" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">E₀ · t₁</text>
+    <rect x="320" y="98" width="120" height="22" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="380" y="113" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">E₁ · t₂</text>
+    <rect x="320" y="134" width="120" height="22" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="380" y="149" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">E₃ · t₀</text>
+    <rect x="320" y="160" width="120" height="22" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="380" y="175" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">E₃ · t₁</text>
+    <rect x="320" y="186" width="120" height="22" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="380" y="201" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">E₃ · t₃</text>
+    <rect x="320" y="222" width="120" height="22" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="380" y="237" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">E₆ · t₀</text>
+    <rect x="320" y="248" width="120" height="22" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="380" y="263" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">E₆ · t₂</text>
+    <rect x="320" y="274" width="120" height="22" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="380" y="289" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">E₆ · t₃</text>
+    <text x="595" y="56" font-size="11" fill="#97A59F" text-anchor="middle">3. grouped GEMM: each expert one time</text>
+    <rect x="510" y="66" width="170" height="22" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="595" y="81" font-size="11" fill="#7ADACF" text-anchor="middle">E₀: one GEMM over its slice</text>
+    <path d="M440 77.0 L508 77.0" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <path d="M680 77.0 L742 77.0" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="510" y="98" width="170" height="22" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="595" y="113" font-size="11" fill="#7ADACF" text-anchor="middle">E₁: one GEMM over its slice</text>
+    <path d="M440 109.0 L508 109.0" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <path d="M680 109.0 L742 109.0" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="510" y="134" width="170" height="74" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="595" y="169.0" text-anchor="middle" font-weight="600">E₃</text>
+    <text x="595" y="186.0" font-size="11" fill="#7ADACF" text-anchor="middle">one GEMM over its slice</text>
+    <path d="M440 171.0 L508 171.0" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <path d="M680 171.0 L742 171.0" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="510" y="222" width="170" height="74" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="595" y="257.0" text-anchor="middle" font-weight="600">E₆</text>
+    <text x="595" y="274.0" font-size="11" fill="#7ADACF" text-anchor="middle">one GEMM over its slice</text>
+    <path d="M440 259.0 L508 259.0" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <path d="M680 259.0 L742 259.0" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="510" y="306" width="170" height="36" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="595" y="322" font-size="11" fill="#97A59F" text-anchor="middle">E₂ E₄ E₅ E₇: no rows</text>
+    <text x="595" y="336" font-size="11" fill="#97A59F" text-anchor="middle">no FLOPs, still in HBM</text>
+    <rect x="744" y="36" width="220" height="206" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="854" y="56" font-size="11" fill="#97A59F" text-anchor="middle">4. scatter the weighted rows back</text>
+    <text x="854" y="72" font-size="11" fill="#97A59F" text-anchor="middle">and add the k copies of each token</text>
+    <text x="760" y="112" font-family="JetBrains Mono, monospace" font-size="11">y₀ = w₁·E₃(x₀) + w₂·E₆(x₀)</text>
+    <text x="760" y="140" font-family="JetBrains Mono, monospace" font-size="11">y₁ = w₁·E₃(x₁) + w₂·E₀(x₁)</text>
+    <text x="760" y="168" font-family="JetBrains Mono, monospace" font-size="11">y₂ = w₁·E₆(x₂) + w₂·E₁(x₂)</text>
+    <text x="760" y="196" font-family="JetBrains Mono, monospace" font-size="11">y₃ = w₁·E₃(x₃) + w₂·E₆(x₃)</text>
+    <text x="854" y="226" font-size="11" fill="#97A59F" text-anchor="middle">one row per token</text>
+  </g>
+</svg>

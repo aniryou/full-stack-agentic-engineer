@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="356" viewBox="0 0 880 356" role="img" aria-label="Two identical 20-token prompts with block size 4: request 2 hits the four blocks that request 1 named and computes the last block itself." style="color: #E4EAE7">
+  <title>Two identical 20-token prompts with block size 4: request 2 hits the four blocks that request 1 named and computes the last block itself.</title>
+  <rect x="0" y="0" width="880" height="356" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="26" fill="#97A59F">Two identical 20-token prompts, B = 4 (§5): five full blocks, four hits</text>
+
+    <!-- request 1 -->
+    <text x="24" y="48" font-size="11.5" fill="#97A59F">request 1 computes all 20 tokens and publishes five names</text>
+    <text x="24" y="84" font-weight="600">request 1</text>
+    <g>
+      <rect x="120" y="58" width="120" height="52" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="180" y="80" text-anchor="middle" font-weight="600">block 0</text>
+      <text x="180" y="98" text-anchor="middle" font-size="11" fill="#97A59F">4 tokens</text>
+      <rect x="260" y="58" width="120" height="52" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="320" y="80" text-anchor="middle" font-weight="600">block 1</text>
+      <text x="320" y="98" text-anchor="middle" font-size="11" fill="#97A59F">4 tokens</text>
+      <rect x="400" y="58" width="120" height="52" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="460" y="80" text-anchor="middle" font-weight="600">block 2</text>
+      <text x="460" y="98" text-anchor="middle" font-size="11" fill="#97A59F">4 tokens</text>
+      <rect x="540" y="58" width="120" height="52" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="600" y="80" text-anchor="middle" font-weight="600">block 3</text>
+      <text x="600" y="98" text-anchor="middle" font-size="11" fill="#97A59F">4 tokens</text>
+      <rect x="680" y="58" width="120" height="52" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="740" y="80" text-anchor="middle" font-weight="600">block 4</text>
+      <text x="740" y="98" text-anchor="middle" font-size="11" fill="#97A59F">4 tokens</text>
+    </g>
+    <!-- the chain of names -->
+    <rect x="24" y="118" width="64" height="26" rx="13" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="56" y="135" text-anchor="middle" font-size="11.5" fill="#97A59F">root</text>
+    <g font-size="12" fill="#7ADACF" text-anchor="middle">
+      <text x="180" y="135">name<tspan dy="3" font-size="9">0</tspan></text>
+      <text x="320" y="135">name<tspan dy="3" font-size="9">1</tspan></text>
+      <text x="460" y="135">name<tspan dy="3" font-size="9">2</tspan></text>
+      <text x="600" y="135">name<tspan dy="3" font-size="9">3</tspan></text>
+      <text x="740" y="135">name<tspan dy="3" font-size="9">4</tspan></text>
+    </g>
+    <g stroke="#4CC5B7" stroke-width="1.2" fill="none" marker-end="url(#arrA)">
+      <path d="M90 131 L152 131"/>
+      <path d="M208 131 L292 131"/>
+      <path d="M348 131 L432 131"/>
+      <path d="M488 131 L572 131"/>
+      <path d="M628 131 L712 131"/>
+      <path d="M118 164 L166 144" stroke-dasharray="4 3"/>
+    </g>
+    <text x="24" y="176" font-size="11" fill="#97A59F">extra keys enter</text>
+    <text x="24" y="190" font-size="11" fill="#97A59F">the first block only</text>
+    <text x="24" y="204" font-size="11" fill="#97A59F">(LoRA id, cache_salt)</text>
+
+    <!-- request 2 -->
+    <g stroke="#4CC5B7" stroke-width="1.2" fill="none" marker-end="url(#arrA)">
+      <path d="M180 142 L180 222"/>
+      <path d="M320 142 L320 222"/>
+      <path d="M460 142 L460 222"/>
+      <path d="M600 142 L600 222"/>
+    </g>
+    <text x="740" y="166" text-anchor="middle" font-size="11" fill="#97A59F">no lookup of block 4:</text>
+    <text x="740" y="181" text-anchor="middle" font-size="11" fill="#97A59F">the hit limit is (len(prompt) − 1) // B</text>
+    <text x="740" y="196" text-anchor="middle" font-size="11" fill="#97A59F">= 4 blocks, 16 tokens of 20</text>
+    <text x="24" y="256" font-weight="600">request 2</text>
+    <g>
+      <rect x="120" y="224" width="120" height="60" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+      <text x="180" y="244" text-anchor="middle" font-weight="600">block 0</text>
+      <text x="180" y="260" text-anchor="middle" font-size="11" fill="#7ADACF">hit: adopt</text>
+      <text x="180" y="274" text-anchor="middle" font-size="11" fill="#7ADACF">refcount 2</text>
+      <rect x="260" y="224" width="120" height="60" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+      <text x="320" y="244" text-anchor="middle" font-weight="600">block 1</text>
+      <text x="320" y="260" text-anchor="middle" font-size="11" fill="#7ADACF">hit: adopt</text>
+      <text x="320" y="274" text-anchor="middle" font-size="11" fill="#7ADACF">refcount 2</text>
+      <rect x="400" y="224" width="120" height="60" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+      <text x="460" y="244" text-anchor="middle" font-weight="600">block 2</text>
+      <text x="460" y="260" text-anchor="middle" font-size="11" fill="#7ADACF">hit: adopt</text>
+      <text x="460" y="274" text-anchor="middle" font-size="11" fill="#7ADACF">refcount 2</text>
+      <rect x="540" y="224" width="120" height="60" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+      <text x="600" y="244" text-anchor="middle" font-weight="600">block 3</text>
+      <text x="600" y="260" text-anchor="middle" font-size="11" fill="#7ADACF">hit: adopt</text>
+      <text x="600" y="274" text-anchor="middle" font-size="11" fill="#7ADACF">refcount 2</text>
+      <rect x="680" y="224" width="120" height="60" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="740" y="244" text-anchor="middle" font-weight="600">block 4</text>
+      <text x="740" y="260" text-anchor="middle" font-size="11" fill="#97A59F">computed again</text>
+      <text x="740" y="274" text-anchor="middle" font-size="11" fill="#97A59F">in its own block</text>
+    </g>
+    <text x="24" y="306" font-size="11.5" fill="#97A59F">request 2, the same 20 tokens, goes along the chain until the first miss and adopts each hit: four blocks, 16 tokens</text>
+
+    <text x="24" y="328" font-size="11.5" fill="#97A59F">name(block i) = H(name(block i − 1), tokens in block i, extra keys), from a constant root: <tspan font-family="JetBrains Mono, monospace" font-size="11">kv.hash_block()</tspan></text>
+    <text x="24" y="346" font-size="11.5" fill="#97A59F"><tspan font-family="JetBrains Mono, monospace" font-size="11">KVCacheManager.lookup()</tspan> finds the hits, and <tspan font-family="JetBrains Mono, monospace" font-size="11">allocate_slots(..., hits)</tspan> adopts them: refcount + 1, no compute, no new memory</text>
+  </g>
+</svg>

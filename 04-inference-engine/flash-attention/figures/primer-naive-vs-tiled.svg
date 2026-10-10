@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="500" viewBox="0 0 880 500" role="img" aria-label="The naive schedule writes S and P to HBM and reads them back, while the fused kernel keeps one Q block and the S and P tiles in SRAM and writes only O." style="color: #E4EAE7">
+  <title>The naive schedule writes S and P to HBM and reads them back, while the fused kernel keeps one Q block and the S and P tiles in SRAM and writes only O.</title>
+  <rect x="0" y="0" width="880" height="500" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrW" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#E39A62"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="26" fill="#97A59F">One head at N = 4096, d = 64, fp16 (§3): the naive schedule against the fused, tiled kernel (§4)</text>
+
+    <!-- naive -->
+    <rect x="24" y="40" width="832" height="200" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="40" y="60" fill="#97A59F">Naive: three kernels, and the N × N matrices S and P go to HBM and come back</text>
+    <rect x="100" y="74" width="180" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="190" y="92" text-anchor="middle" font-weight="600">kernel 1: S = QKᵀ</text>
+    <text x="190" y="109" text-anchor="middle" font-size="11" fill="#97A59F">two matmuls do the useful work</text>
+    <rect x="350" y="74" width="180" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="440" y="92" text-anchor="middle" font-weight="600">kernel 2: P = softmax(S)</text>
+    <text x="440" y="109" text-anchor="middle" font-size="11" fill="#97A59F">elementwise, low intensity</text>
+    <rect x="600" y="74" width="180" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="690" y="92" text-anchor="middle" font-weight="600">kernel 3: O = PV</text>
+    <text x="690" y="109" text-anchor="middle" font-size="11" fill="#97A59F">reads P and V</text>
+    <!-- HBM -->
+    <rect x="40" y="156" width="800" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="52" y="183" font-weight="600" fill="#97A59F">HBM</text>
+    <rect x="100" y="162" width="130" height="32" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="165" y="182" text-anchor="middle" font-size="11.5">Q, K, V: 1.6 MB</text>
+    <rect x="240" y="162" width="130" height="32" rx="4" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="305" y="182" text-anchor="middle" font-size="11.5" font-weight="600">S: 33.5 MB</text>
+    <rect x="510" y="162" width="130" height="32" rx="4" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="575" y="182" text-anchor="middle" font-size="11.5" font-weight="600">P: 33.5 MB</text>
+    <rect x="700" y="162" width="100" height="32" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="750" y="182" text-anchor="middle" font-size="11.5">O</text>
+    <!-- the trips -->
+    <g fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)">
+      <path d="M140 160 L140 120"/>
+      <path d="M360 160 L360 120"/>
+      <path d="M610 160 L610 120"/>
+      <path d="M770 118 L770 158"/>
+    </g>
+    <g fill="none" stroke="#E39A62" stroke-width="1.4" marker-end="url(#arrW)">
+      <path d="M250 118 L250 158"/>
+      <path d="M520 118 L520 158"/>
+    </g>
+    <g font-size="10.5" fill="#97A59F">
+      <text x="146" y="141">read Q, K</text>
+      <text x="256" y="141" fill="#E39A62">write S</text>
+      <text x="366" y="141">read S</text>
+      <text x="526" y="141" fill="#E39A62">write P</text>
+      <text x="616" y="141">read P</text>
+      <text x="776" y="141">write O</text>
+    </g>
+    <text x="40" y="218" font-size="11.5">S and P cost 33.5 MB each, and the kernel writes and reads each of them: roughly 134 MB of HBM traffic for 4.3 GFLOP of useful work,</text>
+    <text x="40" y="233" font-size="11.5">≈ 32 FLOPs per byte, approximately one tenth of the ~300 that keeps the tensor cores busy. Peak memory is O(N²).</text>
+
+    <!-- flash -->
+    <rect x="24" y="254" width="832" height="232" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="40" y="274" fill="#97A59F">FlashAttention: one fused kernel; S and P exist only as tiles in the ~200 KB of shared memory of one SM</text>
+    <rect x="100" y="288" width="640" height="130" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="420" y="304" text-anchor="middle" font-size="11.5" fill="#97A59F">SRAM of one SM</text>
+    <rect x="116" y="318" width="104" height="56" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="168" y="338" text-anchor="middle" font-weight="600">Q block</text>
+    <text x="168" y="353" text-anchor="middle" font-size="11" fill="#7ADACF">B_r × d, stays</text>
+    <text x="168" y="366" text-anchor="middle" font-size="11" fill="#7ADACF">for the whole loop</text>
+    <rect x="232" y="318" width="96" height="56" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="280" y="338" text-anchor="middle" font-weight="600">K block j</text>
+    <text x="280" y="356" text-anchor="middle" font-size="11" fill="#97A59F">B_c × d</text>
+    <rect x="340" y="318" width="78" height="56" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="379" y="338" text-anchor="middle" font-weight="600">S tile</text>
+    <text x="379" y="356" text-anchor="middle" font-size="11" fill="#97A59F">B_r × B_c</text>
+    <rect x="430" y="318" width="78" height="56" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="469" y="338" text-anchor="middle" font-weight="600">P tile</text>
+    <text x="469" y="356" text-anchor="middle" font-size="11" fill="#97A59F">online softmax</text>
+    <rect x="520" y="318" width="78" height="56" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="559" y="338" text-anchor="middle" font-weight="600">O block</text>
+    <text x="559" y="356" text-anchor="middle" font-size="11" fill="#7ADACF">with m, ℓ</text>
+    <rect x="612" y="318" width="96" height="56" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="660" y="338" text-anchor="middle" font-weight="600">V block j</text>
+    <text x="660" y="356" text-anchor="middle" font-size="11" fill="#97A59F">B_c × d</text>
+    <g fill="none" stroke="#4CC5B7" stroke-width="1.2" marker-end="url(#arrA)">
+      <path d="M328 340 L338 340"/>
+      <path d="M418 340 L428 340"/>
+      <path d="M508 340 L518 340"/>
+      <path d="M612 352 L600 352"/>
+    </g>
+    <text x="420" y="394" text-anchor="middle" font-size="10.5" fill="#97A59F">S tile = Q block · (K block j)ᵀ · P tile from the running m and ℓ · O block += P tile · V block j · then the next j</text>
+    <text x="420" y="408" text-anchor="middle" font-size="10.5" fill="#97A59F">the kernel removes each tile immediately after it uses the tile</text>
+    <!-- HBM -->
+    <rect x="40" y="432" width="800" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="52" y="459" font-weight="600" fill="#97A59F">HBM</text>
+    <rect x="123" y="438" width="90" height="32" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="168" y="458" text-anchor="middle" font-size="11.5">Q: N × d</text>
+    <rect x="235" y="438" width="90" height="32" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="280" y="458" text-anchor="middle" font-size="11.5">K: N × d</text>
+    <rect x="514" y="438" width="90" height="32" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="559" y="458" text-anchor="middle" font-size="11.5">O: N × d</text>
+    <rect x="615" y="438" width="90" height="32" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="660" y="458" text-anchor="middle" font-size="11.5">V: N × d</text>
+    <text x="420" y="447" text-anchor="middle" font-size="10.5" fill="#97A59F">no N × N matrix in HBM:</text>
+    <text x="420" y="459" text-anchor="middle" font-size="10.5" fill="#97A59F">up to 9× fewer accesses</text>
+    <text x="420" y="471" text-anchor="middle" font-size="10.5" fill="#97A59F">on GPT-2 shapes (§7)</text>
+    <g fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)">
+      <path d="M168 436 L168 420"/>
+      <path d="M280 436 L280 420"/>
+      <path d="M660 436 L660 420"/>
+      <path d="M559 420 L559 436"/>
+    </g>
+    <g font-size="10.5" fill="#97A59F">
+      <text x="174" y="430">once</text>
+      <text x="286" y="430">for each j</text>
+      <text x="666" y="430">for each j</text>
+      <text x="565" y="430">once, at the end</text>
+    </g>
+  </g>
+</svg>

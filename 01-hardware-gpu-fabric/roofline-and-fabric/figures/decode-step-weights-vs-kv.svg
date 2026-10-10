@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="340" viewBox="0 0 900 340" role="img" aria-label="One decode step of Llama-3.1-8B on an H100 at 2K context for batches 1 to 208: the weight stream takes the same time in every row and the KV read grows with the batch, from 2% to 79% of the bytes." style="color: #E4EAE7">
+  <title>One decode step of Llama-3.1-8B on an H100 at 2K context for batches 1 to 208: the weight stream takes the same time in every row and the KV read grows with the batch, from 2% to 79% of the bytes.</title>
+  <rect x="0" y="0" width="900" height="340" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="32" font-weight="600">Llama-3.1-8B, H100, bf16, 2K context: one decode step per row (decode())</text>
+    <rect x="24" y="44" width="14" height="12" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="44" y="54" font-size="11" fill="#7ADACF">weights: 15.0 GB, streamed once per step, shared by the batch</text>
+    <rect x="400" y="44" width="14" height="12" rx="2" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="420" y="54" font-size="11" fill="#E39A62">KV cache: 128 KiB per token, read for each sequence</text>
+    <text x="140" y="88" text-anchor="end" font-size="12">batch 1</text>
+    <rect x="150" y="72" width="105.0" height="24" rx="3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="255.0" y="72" width="2.1" height="24" rx="3" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="267.2" y="88" font-size="11.5" fill="#97A59F">4.56 ms · 219 tok/s · 219 per user · KV 2%</text>
+    <text x="140" y="126" text-anchor="end" font-size="12">batch 8</text>
+    <rect x="150" y="110" width="104.7" height="24" rx="3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="254.7" y="110" width="15.6" height="24" rx="3" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="280.3" y="126" font-size="11.5" fill="#97A59F">5.12 ms · 1,562 tok/s · 195 per user · KV 13%</text>
+    <text x="140" y="164" text-anchor="end" font-size="12">batch 32</text>
+    <rect x="150" y="148" width="106.0" height="24" rx="3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="256.0" y="148" width="59.6" height="24" rx="3" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="325.7" y="164" font-size="11.5" fill="#97A59F">7.05 ms · 4,542 tok/s · 142 per user · KV 36%</text>
+    <text x="140" y="202" text-anchor="end" font-size="12">batch 64</text>
+    <rect x="150" y="186" width="106.1" height="24" rx="3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="256.1" y="186" width="119.7" height="24" rx="3" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="316.0" y="202" text-anchor="middle" font-size="11" fill="#E39A62">KV 53%</text>
+    <text x="385.8" y="202" font-size="11.5" fill="#97A59F">9.61 ms · 6,659 tok/s · 104 per user</text>
+    <text x="140" y="240" text-anchor="end" font-size="12">batch 128</text>
+    <rect x="150" y="224" width="103.9" height="24" rx="3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="253.9" y="224" width="242.5" height="24" rx="3" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="375.2" y="240" text-anchor="middle" font-size="11" fill="#E39A62">KV 70%</text>
+    <text x="506.4" y="240" font-size="11.5" fill="#97A59F">14.74 ms · 8,682 tok/s · 68 per user</text>
+    <text x="140" y="278" text-anchor="end" font-size="12">batch 208 (HBM limit)</text>
+    <rect x="150" y="262" width="104.4" height="24" rx="3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="254.4" y="262" width="392.8" height="24" rx="3" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="450.8" y="278" text-anchor="middle" font-size="11" fill="#E39A62">KV 79%</text>
+    <text x="657.3" y="278" font-size="11.5" fill="#97A59F">21.16 ms · 9,832 tok/s · 47 per user</text>
+    <text x="24" y="326" font-size="11" fill="#97A59F">bar length = step time = bytes ÷ 3.35 TB/s (every row is memory-bound); the KV share of bytes is the share of the bar</text>
+  </g>
+</svg>

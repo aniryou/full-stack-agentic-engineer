@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="512" viewBox="0 0 900 512" role="img" aria-label="A kernel launch is a grid of blocks of warps of threads; each block goes to one SM, whose four sub-partitions hold 8 warps each at 2,048 registers per warp, so 32 of 48 warps are resident: 4 blocks, 67% occupancy, limited by the registers." style="color: #E4EAE7">
+  <title>A kernel launch is a grid of blocks of warps of threads; each block goes to one SM, whose four sub-partitions hold 8 warps each at 2,048 registers per warp, so 32 of 48 warps are resident: 4 blocks, 67% occupancy, limited by the registers.</title>
+  <rect x="0" y="0" width="900" height="512" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <rect x="24" y="30" width="196" height="64" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="122.0" y="55" text-anchor="middle" font-weight="600">grid</text>
+    <text x="122.0" y="76" text-anchor="middle" font-size="11" fill="#97A59F">the blocks of one kernel launch</text>
+    <rect x="262" y="30" width="196" height="64" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="360.0" y="55" text-anchor="middle" font-weight="600">block (CTA)</text>
+    <text x="360.0" y="76" text-anchor="middle" font-size="11" fill="#7ADACF">up to 1,024 threads; here 256 = 8 warps</text>
+    <rect x="500" y="30" width="196" height="64" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="598.0" y="55" text-anchor="middle" font-weight="600">warp</text>
+    <text x="598.0" y="76" text-anchor="middle" font-size="11" fill="#97A59F">32 threads, one instruction stream</text>
+    <rect x="738" y="30" width="138" height="64" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="807.0" y="55" text-anchor="middle" font-weight="600">thread</text>
+    <text x="807.0" y="76" text-anchor="middle" font-size="11" fill="#97A59F">here 64 registers</text>
+    <path d="M220 62 L260 62" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <path d="M458 62 L498 62" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <path d="M696 62 L736 62" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <text x="241" y="54" text-anchor="middle" font-size="11" fill="#97A59F">has</text>
+    <text x="479" y="54" text-anchor="middle" font-size="11" fill="#97A59F">has</text>
+    <text x="717" y="54" text-anchor="middle" font-size="11" fill="#97A59F">has</text>
+    <path d="M360 94 L360 150" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)" stroke-dasharray="4 3"/>
+    <text x="370" y="128" font-size="11" fill="#97A59F">each block goes to one SM and stays there until it finishes</text>
+    <rect x="24" y="152" width="852" height="278" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="450" y="170" text-anchor="middle" fill="#97A59F">one SM of an L4 (CC 8.9): 4 sub-partitions, each with a warp scheduler that issues one instruction per cycle; 48 warps maximum</text>
+    <rect x="44" y="184" width="188" height="230" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="138.0" y="204" text-anchor="middle" font-weight="600">sub-partition 0</text>
+    <text x="138.0" y="220" text-anchor="middle" font-size="11" fill="#97A59F">one warp scheduler</text>
+    <text x="138.0" y="236" text-anchor="middle" font-size="11" fill="#97A59F">register-file slice: 16,384 registers</text>
+    <rect x="54" y="246" width="168" height="10" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="54" y="258" width="168" height="10" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="54" y="270" width="168" height="10" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="54" y="282" width="168" height="10" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="54" y="294" width="168" height="10" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="54" y="306" width="168" height="10" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="54" y="318" width="168" height="10" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="54" y="330" width="168" height="10" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="54" y="342" width="168" height="10" rx="2" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="3 3"/>
+    <rect x="54" y="354" width="168" height="10" rx="2" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="3 3"/>
+    <rect x="54" y="366" width="168" height="10" rx="2" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="3 3"/>
+    <rect x="54" y="378" width="168" height="10" rx="2" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="3 3"/>
+    <text x="138.0" y="404" text-anchor="middle" font-size="11" fill="#7ADACF">8 warps resident, 4 slots empty</text>
+    <rect x="254" y="184" width="188" height="230" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="348.0" y="204" text-anchor="middle" font-weight="600">sub-partition 1</text>
+    <text x="348.0" y="220" text-anchor="middle" font-size="11" fill="#97A59F">one warp scheduler</text>
+    <text x="348.0" y="236" text-anchor="middle" font-size="11" fill="#97A59F">register-file slice: 16,384 registers</text>
+    <rect x="264" y="246" width="168" height="10" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="264" y="258" width="168" height="10" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="264" y="270" width="168" height="10" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="264" y="282" width="168" height="10" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="264" y="294" width="168" height="10" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="264" y="306" width="168" height="10" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="264" y="318" width="168" height="10" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="264" y="330" width="168" height="10" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="264" y="342" width="168" height="10" rx="2" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="3 3"/>
+    <rect x="264" y="354" width="168" height="10" rx="2" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="3 3"/>
+    <rect x="264" y="366" width="168" height="10" rx="2" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="3 3"/>
+    <rect x="264" y="378" width="168" height="10" rx="2" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="3 3"/>
+    <text x="348.0" y="404" text-anchor="middle" font-size="11" fill="#7ADACF">8 warps resident, 4 slots empty</text>
+    <rect x="464" y="184" width="188" height="230" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="558.0" y="204" text-anchor="middle" font-weight="600">sub-partition 2</text>
+    <text x="558.0" y="220" text-anchor="middle" font-size="11" fill="#97A59F">one warp scheduler</text>
+    <text x="558.0" y="236" text-anchor="middle" font-size="11" fill="#97A59F">register-file slice: 16,384 registers</text>
+    <rect x="474" y="246" width="168" height="10" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="474" y="258" width="168" height="10" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="474" y="270" width="168" height="10" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="474" y="282" width="168" height="10" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="474" y="294" width="168" height="10" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="474" y="306" width="168" height="10" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="474" y="318" width="168" height="10" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="474" y="330" width="168" height="10" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="474" y="342" width="168" height="10" rx="2" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="3 3"/>
+    <rect x="474" y="354" width="168" height="10" rx="2" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="3 3"/>
+    <rect x="474" y="366" width="168" height="10" rx="2" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="3 3"/>
+    <rect x="474" y="378" width="168" height="10" rx="2" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="3 3"/>
+    <text x="558.0" y="404" text-anchor="middle" font-size="11" fill="#7ADACF">8 warps resident, 4 slots empty</text>
+    <rect x="674" y="184" width="188" height="230" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="768.0" y="204" text-anchor="middle" font-weight="600">sub-partition 3</text>
+    <text x="768.0" y="220" text-anchor="middle" font-size="11" fill="#97A59F">one warp scheduler</text>
+    <text x="768.0" y="236" text-anchor="middle" font-size="11" fill="#97A59F">register-file slice: 16,384 registers</text>
+    <rect x="684" y="246" width="168" height="10" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="684" y="258" width="168" height="10" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="684" y="270" width="168" height="10" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="684" y="282" width="168" height="10" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="684" y="294" width="168" height="10" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="684" y="306" width="168" height="10" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="684" y="318" width="168" height="10" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="684" y="330" width="168" height="10" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="684" y="342" width="168" height="10" rx="2" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="3 3"/>
+    <rect x="684" y="354" width="168" height="10" rx="2" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="3 3"/>
+    <rect x="684" y="366" width="168" height="10" rx="2" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="3 3"/>
+    <rect x="684" y="378" width="168" height="10" rx="2" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="3 3"/>
+    <text x="768.0" y="404" text-anchor="middle" font-size="11" fill="#7ADACF">8 warps resident, 4 slots empty</text>
+    <rect x="24" y="444" width="852" height="48" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="450" y="464" text-anchor="middle" font-weight="600">resident: 8 warps × 4 sub-partitions = 32 warps = 4 blocks of 8 warps · the maximum is 48 · occupancy 67%</text>
+    <text x="450" y="483" text-anchor="middle" font-size="11" fill="#97A59F">the registers set the limit: 64 registers per thread × 32 threads = 2,048 registers per warp, and 16,384 / 2,048 = 8 warps per sub-partition</text>
+  </g>
+</svg>

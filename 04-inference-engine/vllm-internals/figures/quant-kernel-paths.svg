@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="372" viewBox="0 0 880 372" role="img" aria-label="The two kernel families: a weight-only W4A16 kernel reads a quarter of the weight bytes and dequantizes in registers but does the BF16 math, and a W8A8 FP8 kernel also quantizes the activations and runs FP8 MMA at twice the BF16 rate." style="color: #E4EAE7">
+  <title>The two kernel families: a weight-only W4A16 kernel reads a quarter of the weight bytes and dequantizes in registers but does the BF16 math, and a W8A8 FP8 kernel also quantizes the activations and runs FP8 MMA at twice the BF16 rate.</title>
+  <rect x="0" y="0" width="880" height="372" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <!-- lane A: W4A16 -->
+    <rect x="24" y="24" width="832" height="150" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="40" y="42" font-size="11" fill="#97A59F">weight-only W4A16, for example Marlin (choose_mp_linear_kernel)</text>
+
+    <rect x="40" y="54" width="190" height="104" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="135" y="74" text-anchor="middle" font-weight="600">checkpoint and load</text>
+    <text x="135" y="91" text-anchor="middle" font-size="10.5" fill="#97A59F">int32-packed 4-bit weights,</text>
+    <text x="135" y="105" text-anchor="middle" font-size="10.5" fill="#97A59F">per-group FP16 scales.</text>
+    <text x="135" y="121" text-anchor="middle" font-size="10.5" fill="#97A59F">process_weights_after_loading:</text>
+    <text x="135" y="135" text-anchor="middle" font-size="10.5" fill="#97A59F">gptq_marlin_repack,</text>
+    <text x="135" y="149" text-anchor="middle" font-size="10.5" fill="#97A59F">marlin_permute_scales</text>
+
+    <rect x="244" y="54" width="190" height="104" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="339" y="74" text-anchor="middle" font-weight="600">read from HBM</text>
+    <text x="339" y="91" text-anchor="middle" font-size="10.5" fill="#97A59F">the packed 4-bit weights and</text>
+    <text x="339" y="105" text-anchor="middle" font-size="10.5" fill="#97A59F">their per-group FP16 scales:</text>
+    <text x="339" y="121" text-anchor="middle" font-size="10.5" fill="#97A59F">a quarter of the weight bytes</text>
+    <text x="339" y="135" text-anchor="middle" font-size="10.5" fill="#97A59F">(4.16 bits per weight)</text>
+
+    <rect x="448" y="54" width="190" height="104" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="543" y="74" text-anchor="middle" font-weight="600">dequantize in registers</text>
+    <text x="543" y="91" text-anchor="middle" font-size="10.5" fill="#97A59F">to FP16/BF16, before the MMA.</text>
+    <text x="543" y="105" text-anchor="middle" font-size="10.5" fill="#97A59F">The activations stay 16-bit.</text>
+    <text x="543" y="121" text-anchor="middle" font-size="10.5" fill="#97A59F">The dequantization</text>
+    <text x="543" y="135" text-anchor="middle" font-size="10.5" fill="#97A59F">adds real cost.</text>
+
+    <rect x="652" y="54" width="190" height="104" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="747" y="74" text-anchor="middle" font-weight="600">16-bit tensor-core MMA</text>
+    <text x="747" y="91" text-anchor="middle" font-size="10.5" fill="#97A59F">FP32 accumulation.</text>
+    <text x="747" y="105" text-anchor="middle" font-size="10.5" fill="#97A59F">Exactly the BF16 math, so the</text>
+    <text x="747" y="121" text-anchor="middle" font-size="10.5" fill="#97A59F">step is compute-bound past</text>
+    <text x="747" y="135" text-anchor="middle" font-size="10.5" fill="#97A59F">about 120 tokens on an L4</text>
+    <text x="747" y="149" text-anchor="middle" font-size="10.5" fill="#97A59F">(85 on an H100)</text>
+
+    <!-- lane B: W8A8 FP8 -->
+    <rect x="24" y="190" width="832" height="150" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="40" y="208" font-size="11" fill="#97A59F">W8A8 FP8 (_POSSIBLE_FP8_KERNELS: FlashInfer, CUTLASS, the torch _scaled_mm variants, then Marlin)</text>
+
+    <rect x="40" y="220" width="190" height="104" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="135" y="240" text-anchor="middle" font-weight="600">checkpoint and load</text>
+    <text x="135" y="257" text-anchor="middle" font-size="10.5" fill="#97A59F">FP8 weights, static or dynamic</text>
+    <text x="135" y="271" text-anchor="middle" font-size="10.5" fill="#97A59F">activation scales.</text>
+    <text x="135" y="287" text-anchor="middle" font-size="10.5" fill="#97A59F">process_weights_after_loading:</text>
+    <text x="135" y="301" text-anchor="middle" font-size="10.5" fill="#97A59F">three shards with three scales</text>
+    <text x="135" y="315" text-anchor="middle" font-size="10.5" fill="#97A59F">become one weight, one scale</text>
+
+    <rect x="244" y="220" width="190" height="104" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="339" y="240" text-anchor="middle" font-weight="600">quantize the activations</text>
+    <text x="339" y="257" text-anchor="middle" font-size="10.5" fill="#97A59F">to FP8, with a per-tensor or</text>
+    <text x="339" y="271" text-anchor="middle" font-size="10.5" fill="#97A59F">a per-token scale: static from</text>
+    <text x="339" y="287" text-anchor="middle" font-size="10.5" fill="#97A59F">the checkpoint, or computed</text>
+    <text x="339" y="301" text-anchor="middle" font-size="10.5" fill="#97A59F">at run time</text>
+
+    <rect x="448" y="220" width="190" height="104" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="543" y="240" text-anchor="middle" font-weight="600">FP8 MMA</text>
+    <text x="543" y="257" text-anchor="middle" font-size="10.5" fill="#7ADACF">at twice the BF16 rate.</text>
+    <text x="543" y="271" text-anchor="middle" font-size="10.5" fill="#7ADACF">It halves both ceilings,</text>
+    <text x="543" y="287" text-anchor="middle" font-size="10.5" fill="#7ADACF">the bytes and the FLOPs,</text>
+    <text x="543" y="301" text-anchor="middle" font-size="10.5" fill="#7ADACF">so it helps at every M</text>
+
+    <rect x="652" y="220" width="190" height="104" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="747" y="240" text-anchor="middle" font-weight="600">epilogue</text>
+    <text x="747" y="257" text-anchor="middle" font-size="10.5" fill="#97A59F">applies scale_a × scale_w</text>
+    <text x="747" y="271" text-anchor="middle" font-size="10.5" fill="#97A59F">to the FP32 accumulator.</text>
+    <text x="747" y="287" text-anchor="middle" font-size="10.5" fill="#97A59F">It needs FP8 tensor cores</text>
+    <text x="747" y="301" text-anchor="middle" font-size="10.5" fill="#97A59F">(Ada, Hopper, Blackwell)</text>
+
+    <g stroke="#97A59F" stroke-width="1.2" fill="none">
+      <path d="M230 106 L242 106" marker-end="url(#arr)"/>
+      <path d="M434 106 L446 106" marker-end="url(#arr)"/>
+      <path d="M638 106 L650 106" marker-end="url(#arr)"/>
+      <path d="M230 272 L242 272" marker-end="url(#arr)"/>
+      <path d="M434 272 L446 272" marker-end="url(#arr)"/>
+      <path d="M638 272 L650 272" marker-end="url(#arr)"/>
+    </g>
+
+    <text x="24" y="362" font-size="11" fill="#97A59F">The down_proj of Llama-3.1-8B on an L4, roofline time: M = 1: BF16 392 µs, W4A16 102 µs, W8A8 FP8 196 µs. M = 2,048: 1,988, 1,988 and 992 µs.</text>
+  </g>
+</svg>

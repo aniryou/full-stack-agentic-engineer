@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="344" viewBox="0 0 880 344" role="img" aria-label="Two blocks of scores, [1, 3] then [5, 2]: the running max, the running sum and the accumulator after each block, the rescale by alpha when the max rises, and the final division." style="color: #E4EAE7">
+  <title>Two blocks of scores, [1, 3] then [5, 2]: the running max, the running sum and the accumulator after each block, the rescale by alpha when the max rises, and the final division.</title>
+  <rect x="0" y="0" width="880" height="344" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrW" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#E39A62"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="26" fill="#97A59F">One row, four scores in two blocks of two (§5): the running max m, the running sum ℓ and the unnormalized O</text>
+
+    <rect x="40" y="46" width="250" height="40" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="165" y="71" text-anchor="middle">block 1 arrives: scores <tspan font-family="JetBrains Mono, monospace" font-size="11">[1, 3]</tspan></text>
+    <rect x="330" y="46" width="250" height="40" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="455" y="71" text-anchor="middle">block 2 arrives: scores <tspan font-family="JetBrains Mono, monospace" font-size="11">[5, 2]</tspan></text>
+    <rect x="620" y="46" width="220" height="40" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="730" y="71" text-anchor="middle" fill="#97A59F">after the last block</text>
+    <g fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)">
+      <path d="M165 86 L165 110"/>
+      <path d="M455 86 L455 110"/>
+      <path d="M730 86 L730 110"/>
+    </g>
+
+    <rect x="40" y="112" width="250" height="156" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="52" y="134" font-weight="600">state after block 1</text>
+    <g font-family="JetBrains Mono, monospace" font-size="10.5">
+      <text x="52" y="156">m = 3</text>
+      <text x="52" y="172">ℓ = exp(1−3) + exp(3−3)</text>
+      <text x="52" y="188">  = 0.1353 + 1 = 1.1353</text>
+      <text x="52" y="204">O = 0.1353·v₁ + 1.0·v₂</text>
+    </g>
+    <text x="52" y="230" font-size="10.5" fill="#7ADACF">the softmax of the first two elements:</text>
+    <text x="52" y="244" font-size="10.5" fill="#7ADACF">correct so far, incorrect for the full row</text>
+
+    <rect x="330" y="112" width="250" height="156" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="342" y="134" font-weight="600">a larger score: rescale by α</text>
+    <g font-family="JetBrains Mono, monospace" font-size="10.5">
+      <text x="342" y="156">m_new = 5</text>
+      <text x="342" y="172">α = exp(3−5) = 0.1353</text>
+      <text x="342" y="188">ℓ_new = 0.1353 × 1.1353 + 1.0498</text>
+      <text x="342" y="204">      = 1.2034</text>
+      <text x="342" y="220">O_new = α·O + 1.0·v₃ + 0.0498·v₄</text>
+      <text x="342" y="236">      = 0.0183·v₁ + 0.1353·v₂</text>
+      <text x="342" y="252">        + 1.0·v₃ + 0.0498·v₄</text>
+    </g>
+
+    <rect x="620" y="112" width="220" height="156" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="632" y="134" font-weight="600">divide one time</text>
+    <g font-family="JetBrains Mono, monospace" font-size="10.5">
+      <text x="632" y="156">O = O_new / ℓ_new</text>
+      <text x="632" y="172">ℓ_new = 1.2034</text>
+      <text x="632" y="196">weights =</text>
+      <text x="632" y="212">[0.0152, 0.1125,</text>
+      <text x="632" y="228"> 0.8310, 0.0414]</text>
+    </g>
+    <text x="632" y="252" font-size="10.5" fill="#7ADACF">the global softmax: max 5, sum 1.2034</text>
+
+    <g fill="none" stroke="#E39A62" stroke-width="1.4" marker-end="url(#arrW)">
+      <path d="M290 190 L328 190"/>
+    </g>
+    <text x="309" y="180" text-anchor="middle" font-size="10.5" fill="#E39A62">× α</text>
+    <path d="M580 190 L618 190" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+
+    <text x="24" y="298" font-size="11" fill="#97A59F">The rule for each new block S_j, from §5:</text>
+    <g font-family="JetBrains Mono, monospace" font-size="10.5" fill="#97A59F">
+      <text x="24" y="316">m_new = max(m_old, rowmax(S_j)) · α = exp(m_old − m_new) · ℓ_new = α·ℓ_old + rowsum(exp(S_j − m_new))</text>
+      <text x="24" y="332">O_new = α·O_old + exp(S_j − m_new)·V_j · after the last block: O = O_new / ℓ_new · kerncore.flash.online_softmax_steps</text>
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,128 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="560" viewBox="0 0 960 560" role="img" aria-label="HNSW as three layers: a greedy descent on the sparse upper layers moves to the neighbor nearest to the query, and a beam search of width efSearch on layer 0, where every vector lives with up to 2M links, returns the top-k." style="color: #E4EAE7">
+  <title>HNSW as three layers: a greedy descent on the sparse upper layers moves to the neighbor nearest to the query, and a beam search of width efSearch on layer 0, where every vector lives with up to 2M links, returns the top-k.</title>
+  <rect x="0" y="0" width="960" height="560" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="438" y="30" text-anchor="middle" font-size="11" fill="#7ADACF">one search: a greedy descent on the sparse upper layers, then a beam search on layer 0</text>
+    <!-- layer 2 -->
+    <rect x="176" y="64" width="524" height="116" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="24" y="88" font-weight="600">top layer</text>
+    <text x="24" y="105" font-size="11" fill="#97A59F">sparse: a few nodes</text>
+    <text x="24" y="122" font-size="11" fill="#97A59F">up to M links per node</text>
+    <text x="716" y="88" font-size="11.5">1. Start at the entry point.</text>
+    <text x="716" y="105" font-size="11" fill="#97A59F">Move to the neighbor that is</text>
+    <text x="716" y="122" font-size="11" fill="#97A59F">nearest to q. Repeat until</text>
+    <text x="716" y="139" font-size="11" fill="#97A59F">no neighbor is nearer</text>
+    <text x="716" y="156" font-size="11" fill="#97A59F">(_greedy_descend, ef = 1).</text>
+    <g stroke="#97A59F" stroke-width="1" stroke-opacity="0.75">
+      <path d="M200 108 L420 156"/>
+      <path d="M420 156 L652 92"/>
+      <path d="M200 108 L652 92"/>
+    </g>
+    <path d="M592 123 L599 130 L592 137 L585 130 z" fill="#161E1C" stroke="currentColor" stroke-width="1.4"/>
+    <text x="603" y="134" font-size="11.5" font-weight="600">q</text>
+    <path d="M207.0 107.8 L645.0 92.2" fill="none" stroke="#4CC5B7" stroke-width="2" marker-end="url(#arrA)"/>
+    <circle cx="200" cy="108" r="5.5" fill="#16302A" stroke="#4CC5B7" stroke-width="1.6"/>
+    <circle cx="420" cy="156" r="4.5" fill="#161E1C" stroke="currentColor" stroke-width="1.2"/>
+    <circle cx="652" cy="92" r="5.5" fill="#16302A" stroke="#4CC5B7" stroke-width="1.6"/>
+    <text x="198" y="130" font-size="11" fill="#7ADACF">entry point</text>
+    <!-- layer 1 -->
+    <rect x="176" y="214" width="524" height="116" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="24" y="238" font-weight="600">layer 1</text>
+    <text x="24" y="255" font-size="11" fill="#97A59F">up to M links per node</text>
+    <text x="716" y="238" font-size="11.5">2. Enter this layer at the node</text>
+    <text x="716" y="255" font-size="11" fill="#97A59F">where the layer above stopped.</text>
+    <text x="716" y="272" font-size="11" fill="#97A59F">Do the same greedy walk.</text>
+    <g stroke="#97A59F" stroke-width="1" stroke-opacity="0.75">
+      <path d="M200 258 L302 244"/>
+      <path d="M200 258 L354 278"/>
+      <path d="M302 244 L354 278"/>
+      <path d="M302 244 L420 306"/>
+      <path d="M354 278 L420 306"/>
+      <path d="M354 278 L468 268"/>
+      <path d="M420 306 L468 268"/>
+      <path d="M420 306 L540 244"/>
+      <path d="M468 268 L540 244"/>
+      <path d="M468 268 L652 242"/>
+      <path d="M540 244 L652 242"/>
+    </g>
+    <path d="M592 273 L599 280 L592 287 L585 280 z" fill="#161E1C" stroke="currentColor" stroke-width="1.4"/>
+    <text x="603" y="284" font-size="11.5" font-weight="600">q</text>
+    <path d="M645.0 242.1 L547.0 243.9" fill="none" stroke="#4CC5B7" stroke-width="2" marker-end="url(#arrA)"/>
+    <circle cx="200" cy="258" r="4.5" fill="#161E1C" stroke="currentColor" stroke-width="1.2"/>
+    <circle cx="302" cy="244" r="4.5" fill="#161E1C" stroke="currentColor" stroke-width="1.2"/>
+    <circle cx="354" cy="278" r="4.5" fill="#161E1C" stroke="currentColor" stroke-width="1.2"/>
+    <circle cx="420" cy="306" r="4.5" fill="#161E1C" stroke="currentColor" stroke-width="1.2"/>
+    <circle cx="468" cy="268" r="4.5" fill="#161E1C" stroke="currentColor" stroke-width="1.2"/>
+    <circle cx="540" cy="244" r="5.5" fill="#16302A" stroke="#4CC5B7" stroke-width="1.6"/>
+    <circle cx="652" cy="242" r="5.5" fill="#16302A" stroke="#4CC5B7" stroke-width="1.6"/>
+    <!-- layer 0 -->
+    <rect x="176" y="364" width="524" height="116" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="24" y="388" font-weight="600">layer 0</text>
+    <text x="24" y="405" font-size="11" fill="#97A59F">every vector</text>
+    <text x="24" y="422" font-size="11" fill="#97A59F">up to 2M links per node</text>
+    <text x="24" y="439" font-size="11" fill="#97A59F">(M0 = 2M)</text>
+    <text x="716" y="388" font-size="11.5">3. Beam search from that node</text>
+    <text x="716" y="405" font-size="11" fill="#97A59F">with efSearch candidates</text>
+    <text x="716" y="422" font-size="11" fill="#97A59F">(efSearch is at least k):</text>
+    <text x="716" y="439" font-size="11" fill="#97A59F">_search_layer. Return</text>
+    <text x="716" y="456" font-size="11" fill="#97A59F">the top-k of the beam.</text>
+    <g stroke="#97A59F" stroke-width="1" stroke-opacity="0.75">
+      <path d="M200 408 L252 448"/>
+      <path d="M200 408 L302 394"/>
+      <path d="M252 448 L354 428"/>
+      <path d="M302 394 L354 428"/>
+      <path d="M302 394 L402 392"/>
+      <path d="M354 428 L420 456"/>
+      <path d="M354 428 L468 418"/>
+      <path d="M402 392 L492 386"/>
+      <path d="M402 392 L468 418"/>
+      <path d="M492 386 L540 394"/>
+      <path d="M492 386 L468 418"/>
+      <path d="M468 418 L516 452"/>
+      <path d="M468 418 L540 394"/>
+      <path d="M420 456 L516 452"/>
+      <path d="M516 452 L578 442"/>
+      <path d="M540 394 L578 442"/>
+      <path d="M540 394 L622 422"/>
+      <path d="M540 394 L652 392"/>
+      <path d="M578 442 L622 422"/>
+      <path d="M578 442 L632 460"/>
+      <path d="M622 422 L632 460"/>
+      <path d="M622 422 L652 392"/>
+      <path d="M632 460 L652 392"/>
+      <path d="M420 456 L252 448"/>
+    </g>
+    <path d="M592 423 L599 430 L592 437 L585 430 z" fill="#161E1C" stroke="currentColor" stroke-width="1.4"/>
+    <text x="603" y="434" font-size="11.5" font-weight="600">q</text>
+    <path d="M544.3 399.5 L573.7 436.5" fill="none" stroke="#4CC5B7" stroke-width="2" marker-end="url(#arrA)"/>
+    <path d="M546.6 396.3 L615.4 419.7" fill="none" stroke="#4CC5B7" stroke-width="2" marker-end="url(#arrA)"/>
+    <path d="M584.6 444.2 L625.4 457.8" fill="none" stroke="#4CC5B7" stroke-width="2" marker-end="url(#arrA)"/>
+    <circle cx="200" cy="408" r="4.5" fill="#161E1C" stroke="currentColor" stroke-width="1.2"/>
+    <circle cx="252" cy="448" r="4.5" fill="#161E1C" stroke="currentColor" stroke-width="1.2"/>
+    <circle cx="302" cy="394" r="4.5" fill="#161E1C" stroke="currentColor" stroke-width="1.2"/>
+    <circle cx="354" cy="428" r="4.5" fill="#161E1C" stroke="currentColor" stroke-width="1.2"/>
+    <circle cx="402" cy="392" r="4.5" fill="#161E1C" stroke="currentColor" stroke-width="1.2"/>
+    <circle cx="420" cy="456" r="4.5" fill="#161E1C" stroke="currentColor" stroke-width="1.2"/>
+    <circle cx="468" cy="418" r="4.5" fill="#161E1C" stroke="currentColor" stroke-width="1.2"/>
+    <circle cx="516" cy="452" r="5.5" fill="#16302A" stroke="#4CC5B7" stroke-width="1.6"/>
+    <circle cx="540" cy="394" r="5.5" fill="#16302A" stroke="#4CC5B7" stroke-width="1.6"/>
+    <circle cx="578" cy="442" r="5.5" fill="#4CC5B7" stroke="#4CC5B7" stroke-width="1.4"/>
+    <circle cx="622" cy="422" r="5.5" fill="#4CC5B7" stroke="#4CC5B7" stroke-width="1.4"/>
+    <circle cx="632" cy="460" r="5.5" fill="#4CC5B7" stroke="#4CC5B7" stroke-width="1.4"/>
+    <circle cx="652" cy="392" r="5.5" fill="#16302A" stroke="#4CC5B7" stroke-width="1.6"/>
+    <circle cx="492" cy="386" r="4.5" fill="#161E1C" stroke="currentColor" stroke-width="1.2"/>
+    <text x="642" y="464" font-size="11" fill="#7ADACF">top-k</text>
+    <text x="444" y="468" font-size="11" fill="#7ADACF">the beam: visited nodes</text>
+    <path d="M652 99 L652 234" fill="none" stroke="#4CC5B7" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#arrA)"/>
+    <text x="643" y="171" text-anchor="end" font-size="11" fill="#7ADACF">down to the same node</text>
+    <path d="M540 251 L540 386" fill="none" stroke="#4CC5B7" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#arrA)"/>
+    <text x="531" y="323" text-anchor="end" font-size="11" fill="#7ADACF">down to the same node</text>
+    <rect x="176" y="510" width="524" height="46" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="438" y="529" text-anchor="middle" font-size="11" fill="#97A59F">the build: insert each vector with a beam of width efConstruction on each of its layers,</text>
+    <text x="438" y="546" text-anchor="middle" font-size="11" fill="#97A59F">then prune the links of a node to its budget: M on the upper layers, 2M on layer 0</text>
+  </g>
+</svg>

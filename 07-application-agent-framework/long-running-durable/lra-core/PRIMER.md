@@ -14,6 +14,26 @@ run cannot live in a process or in a conversation. It lives in a document, and a
    one document per run  <--  task = (run, step, attempt) -->  guard -> lease -> step -> checkpoint -> enqueue next
 ```
 
+```mermaid
+flowchart TB
+  T([the queue delivers a task:<br/>run, step, attempt]) --> G{"I2 guard: the<br/>expected (step, attempt)?"}
+  G -- no --> S["stale: ack the task,<br/>do nothing more"]
+  G -- yes --> L{"a live lease by<br/>another worker?"}
+  L -- yes --> B["busy: HTTP 503,<br/>the queue retries"]
+  L -- no --> TL["take the lease for<br/>lease_ttl seconds"]
+  TL --> ST["run the step on a copy of the state<br/>ctx.effect records a result under<br/>run:key before the checkpoint (I3)"]
+  ST -- next --> C["checkpoint: the<br/>state and the<br/>transition in one<br/>compare-and-set<br/>on version (I1)"]
+  ST -- exception --> R["attempt + 1: the old<br/>task is stale, save<br/>with no lease,<br/>enqueue the same<br/>step with a backoff<br/>delay, FAILED after<br/>max_attempts"]
+  ST -- wait --> W["write WAITING,<br/>enqueue nothing:<br/>a webhook with<br/>the key resumes<br/>the run at then"]
+  ST -- done --> D["SUCCEEDED"]
+  C --> E["enqueue the next task,<br/>then release the lease"]
+  C -.-> RP
+  R -.-> RP
+  RP[["the reaper, a cron: enqueue the current step again<br/>expired lease: a crash during the step or before the enqueue<br/>orphan: no lease and no write for 2 × lease_ttl<br/>the task name rejects a duplicate"]]
+```
+
+*This figure shows one call of `Engine.execute` in `core.py`, from a delivered task to the next task. The guard (I2), the effect record (I3) and the checkpoint before the enqueue (I1) are at their places in the sequence. The dotted edges go to the reaper from the two crash windows. A crash after the checkpoint and before the enqueue leaves an expired lease. A crash after the save of a retry, with no lease, leaves an orphan.*
+
 This is one step, from end to end:
 
 1. The queue delivers a task `(run_id, step, attempt)`.

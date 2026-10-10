@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="312" viewBox="0 0 1000 312" role="img" aria-label="One layer under tensor parallelism with TP = 2: column-parallel matmuls need no communication, row-parallel matmuls give partial sums, and two all-reduces restore the activation." style="color: #E4EAE7">
+  <title>One layer under tensor parallelism with TP = 2: column-parallel matmuls need no communication, row-parallel matmuls give partial sums, and two all-reduces restore the activation.</title>
+  <rect x="0" y="0" width="1000" height="312" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="26" fill="#97A59F">One transformer layer under tensor parallelism, TP = 2 (§9): the Megatron pattern</text>
+
+    <!-- lanes -->
+    <rect x="24" y="44" width="952" height="96" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="40" y="62" fill="#97A59F">GPU 0</text>
+    <rect x="24" y="152" width="952" height="96" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="40" y="170" fill="#97A59F">GPU 1</text>
+
+    <!-- lane 0 boxes, y 72 to 124 -->
+    <g>
+      <rect x="96" y="72" width="60" height="52" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="126" y="96" text-anchor="middle" font-weight="600">x</text>
+      <text x="126" y="112" text-anchor="middle" font-size="11" fill="#97A59F">input</text>
+      <rect x="172" y="72" width="112" height="52" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="228" y="90" text-anchor="middle" font-weight="600">QKV</text>
+      <text x="228" y="104" text-anchor="middle" font-size="11" fill="#97A59F">column-parallel</text>
+      <text x="228" y="117" text-anchor="middle" font-size="11" fill="#97A59F">no communication</text>
+      <rect x="300" y="72" width="104" height="52" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="352" y="90" text-anchor="middle" font-weight="600">attention</text>
+      <text x="352" y="104" text-anchor="middle" font-size="11" fill="#97A59F">own heads</text>
+      <text x="352" y="117" text-anchor="middle" font-size="11" fill="#97A59F">own KV cache</text>
+      <rect x="420" y="72" width="112" height="52" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="476" y="90" text-anchor="middle" font-weight="600">out proj</text>
+      <text x="476" y="104" text-anchor="middle" font-size="11" fill="#97A59F">row-parallel</text>
+      <text x="476" y="117" text-anchor="middle" font-size="11" fill="#97A59F">a partial sum</text>
+      <rect x="640" y="72" width="112" height="52" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="696" y="90" text-anchor="middle" font-weight="600">gate/up</text>
+      <text x="696" y="104" text-anchor="middle" font-size="11" fill="#97A59F">column-parallel</text>
+      <text x="696" y="117" text-anchor="middle" font-size="11" fill="#97A59F">no communication</text>
+      <rect x="768" y="72" width="112" height="52" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="824" y="90" text-anchor="middle" font-weight="600">down</text>
+      <text x="824" y="104" text-anchor="middle" font-size="11" fill="#97A59F">row-parallel</text>
+      <text x="824" y="117" text-anchor="middle" font-size="11" fill="#97A59F">a partial sum</text>
+    </g>
+    <!-- lane 1 boxes, y 180 to 232 -->
+    <g>
+      <rect x="96" y="180" width="60" height="52" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="126" y="204" text-anchor="middle" font-weight="600">x</text>
+      <text x="126" y="220" text-anchor="middle" font-size="11" fill="#97A59F">input</text>
+      <rect x="172" y="180" width="112" height="52" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="228" y="198" text-anchor="middle" font-weight="600">QKV</text>
+      <text x="228" y="212" text-anchor="middle" font-size="11" fill="#97A59F">column-parallel</text>
+      <text x="228" y="225" text-anchor="middle" font-size="11" fill="#97A59F">no communication</text>
+      <rect x="300" y="180" width="104" height="52" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="352" y="198" text-anchor="middle" font-weight="600">attention</text>
+      <text x="352" y="212" text-anchor="middle" font-size="11" fill="#97A59F">own heads</text>
+      <text x="352" y="225" text-anchor="middle" font-size="11" fill="#97A59F">own KV cache</text>
+      <rect x="420" y="180" width="112" height="52" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="476" y="198" text-anchor="middle" font-weight="600">out proj</text>
+      <text x="476" y="212" text-anchor="middle" font-size="11" fill="#97A59F">row-parallel</text>
+      <text x="476" y="225" text-anchor="middle" font-size="11" fill="#97A59F">a partial sum</text>
+      <rect x="640" y="180" width="112" height="52" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="696" y="198" text-anchor="middle" font-weight="600">gate/up</text>
+      <text x="696" y="212" text-anchor="middle" font-size="11" fill="#97A59F">column-parallel</text>
+      <text x="696" y="225" text-anchor="middle" font-size="11" fill="#97A59F">no communication</text>
+      <rect x="768" y="180" width="112" height="52" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="824" y="198" text-anchor="middle" font-weight="600">down</text>
+      <text x="824" y="212" text-anchor="middle" font-size="11" fill="#97A59F">row-parallel</text>
+      <text x="824" y="225" text-anchor="middle" font-size="11" fill="#97A59F">a partial sum</text>
+    </g>
+    <!-- the two all-reduces span both GPUs -->
+    <rect x="548" y="62" width="76" height="180" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="586" y="146" text-anchor="middle" font-weight="600" font-size="11.5">all-reduce</text>
+    <text x="586" y="162" text-anchor="middle" font-size="11" fill="#7ADACF">full activation</text>
+    <rect x="896" y="62" width="76" height="180" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="934" y="146" text-anchor="middle" font-weight="600" font-size="11.5">all-reduce</text>
+    <text x="934" y="162" text-anchor="middle" font-size="11" fill="#7ADACF">full activation</text>
+
+    <!-- edges -->
+    <g stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)">
+      <path d="M156 98 L170 98"/><path d="M284 98 L298 98"/><path d="M404 98 L418 98"/>
+      <path d="M532 98 L546 98"/><path d="M624 98 L638 98"/><path d="M752 98 L766 98"/><path d="M880 98 L894 98"/>
+      <path d="M156 206 L170 206"/><path d="M284 206 L298 206"/><path d="M404 206 L418 206"/>
+      <path d="M532 206 L546 206"/><path d="M624 206 L638 206"/><path d="M752 206 L766 206"/><path d="M880 206 L894 206"/>
+    </g>
+
+    <text x="24" y="274">Two all-reduces per layer per forward pass, each of tokens × d_model values (<tspan font-family="JetBrains Mono, monospace" font-size="11">perf.tp_allreduces()</tspan>).</text>
+    <text x="24" y="294" font-size="11.5" fill="#97A59F">A 70B model (80 layers, d = 8,192): 160 all-reduces per step. 64 decodes: 1 MiB each, latency-bound. A 4,096-token prefill chunk: 64 MiB each, bandwidth-bound.</text>
+  </g>
+</svg>

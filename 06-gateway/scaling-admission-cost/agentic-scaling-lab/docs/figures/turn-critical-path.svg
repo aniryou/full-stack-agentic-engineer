@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="270" viewBox="0 0 900 270" role="img" aria-label="One turn with two tool calls on a time axis: the plan call, the two tool calls in parallel, the answer call and the streaming of the answer are four sequential segments on the critical path, and the user sees the first token of the answer only after the plan and the tools." style="color: #E4EAE7">
+  <title>One turn with two tool calls on a time axis: the plan call, the two tool calls in parallel, the answer call and the streaming of the answer are four sequential segments on the critical path, and the user sees the first token of the answer only after the plan and the tools.</title>
+  <rect x="0" y="0" width="900" height="270" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="30" font-weight="600">One turn with two tool calls: four segments on the critical path</text>
+    <text x="24" y="50" font-size="11.5" fill="#97A59F">the segments are sequential, thus the p95 of the turn is approximately the sum of the tails of the segments</text>
+    <!-- notes above the lane -->
+    <text x="570" y="78" text-anchor="middle" font-size="11" fill="#97A59F">the model can add plan and tool steps at run time</text>
+    <text x="876" y="78" text-anchor="end" font-size="11" fill="#7ADACF">the first token the user sees</text>
+    <!-- 1 plan call -->
+    <rect x="40" y="96" width="140" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="110" y="113" text-anchor="middle" font-size="11" fill="#7ADACF">TTFT, thinking included</text>
+    <rect x="180" y="96" width="120" height="26" rx="2" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="240" y="113" text-anchor="middle" font-size="11">output tokens</text>
+    <!-- 2 tools, in parallel -->
+    <rect x="330" y="90" width="120" height="16" rx="2" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="390" y="102" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10.5">get_customer</text>
+    <text x="456" y="102" font-size="10.5" fill="#97A59F">the profile</text>
+    <rect x="330" y="112" width="190" height="16" rx="2" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="425" y="124" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10.5">check_network</text>
+    <path d="M330 130 L330 150" stroke="#97A59F" stroke-width="1" stroke-dasharray="3 2"/>
+    <text x="336" y="148" font-size="10.5" fill="#97A59F">a progress event to the user</text>
+    <!-- more steps -->
+    <rect x="540" y="90" width="60" height="38" rx="2" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="4 3"/>
+    <text x="570" y="113" text-anchor="middle" font-size="11" fill="#97A59F">…</text>
+    <!-- 3 answer call -->
+    <rect x="620" y="96" width="120" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="680" y="113" text-anchor="middle" font-size="11" fill="#7ADACF">TTFT again</text>
+    <!-- 4 the streaming of the answer -->
+    <rect x="740" y="96" width="136" height="26" rx="2" fill="none" stroke="#97A59F" stroke-width="1.2" stroke-dasharray="3 2"/>
+    <text x="808" y="113" text-anchor="middle" font-size="11" fill="#97A59F">output tokens</text>
+    <path d="M740 84 L740 134" stroke="#4CC5B7" stroke-width="1.4"/>
+    <!-- time axis -->
+    <path d="M40 172 L876 172" stroke="#97A59F" stroke-width="1" marker-end="url(#arr)"/>
+    <text x="876" y="188" text-anchor="end" font-size="11" fill="#97A59F">time</text>
+    <g stroke="#97A59F" stroke-width="1">
+      <path d="M40 168 L40 176"/>
+      <path d="M330 168 L330 176"/>
+      <path d="M620 168 L620 176"/>
+      <path d="M740 168 L740 176"/>
+    </g>
+    <!-- segment names under the axis -->
+    <g text-anchor="middle">
+      <text x="170" y="198" font-weight="600">1 · plan call</text>
+      <text x="170" y="214" font-size="11" fill="#97A59F">TTFT + output ÷ tokens per second</text>
+      <text x="425" y="198" font-weight="600">2 · tools, in parallel</text>
+      <text x="425" y="214" font-size="11" fill="#97A59F">the tool time is the max, not the sum</text>
+      <text x="680" y="198" font-weight="600">3 · answer call</text>
+      <text x="680" y="214" font-size="11" fill="#97A59F">to the first token</text>
+      <text x="808" y="198" font-weight="600">4 · streaming</text>
+      <text x="808" y="214" font-size="11" fill="#97A59F">output ÷ tokens per second</text>
+    </g>
+    <!-- legend -->
+    <rect x="24" y="240" width="22" height="12" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="54" y="250" font-size="11" fill="#97A59F">time-to-first-token, thinking included</text>
+    <rect x="276" y="240" width="22" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="306" y="250" font-size="11" fill="#97A59F">output tokens, at the tokens per second of the model</text>
+    <rect x="600" y="240" width="22" height="12" rx="2" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="630" y="250" font-size="11" fill="#97A59F">a tool call</text>
+    <rect x="712" y="240" width="22" height="12" rx="2" fill="none" stroke="#97A59F" stroke-width="1.2" stroke-dasharray="3 2"/>
+    <text x="742" y="250" font-size="11" fill="#97A59F">tokens stream to the user</text>
+  </g>
+</svg>

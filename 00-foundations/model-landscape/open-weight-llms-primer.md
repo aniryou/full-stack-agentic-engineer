@@ -399,6 +399,21 @@ The ladder is now standard: SFT, then RL with verifiable rewards (the GRPO linea
 4. **Full post-training and RL**: NeMo, TRL and verl-style stacks, or managed routes (Mistral Forge, Thinking Machines' Tinker). Harvey reached frontier-class legal accuracy on Nemotron at ≥10x lower cost per run. Arcee got to ~$0.90 per million output tokens.
 5. **Distillation**: compress a large open teacher into a task-specific student. Inkling-Small is the public worked example, and it also shows the factuality cost. For how it works, and when a student pays for itself, see [`distillation`](../distillation/README.md).
 
+```mermaid
+flowchart TB
+  A["1. Prompt and harness adjustment<br/>the prompts, tools and middleware change, with no new training of the model"]
+  B["2. Retrieval and tool grounding<br/>the same as for closed models, with the model in the same location as the data"]
+  C["3. PEFT: LoRA or QLoRA<br/>hours on one GPU"]
+  D["4. Full post-training and RL<br/>your own stack, or a managed route"]
+  E["5. Distillation<br/>a large open teacher into a task-specific student, with a factuality cost"]
+  A -->|"costs more"| B
+  B -->|"costs more"| C
+  C -->|"costs more"| D
+  D -->|"costs more"| E
+```
+
+*The adaptation ladder of this section, cheapest rung first. The first rung changes only the prompts, tools and middleware, and it does not train the model again. Retrieval is the same as for closed models, with the model next to the data. Then come PEFT, full post-training with RL, and distillation.*
+
 ### Operating discipline
 
 - **Governance:** in production, record the model version, the quantization format, the serving engine version and the license text. When three quants and two point releases are in use, "We run GLM-5.2" is not a complete answer. Forrester's Model Openness Framework (Apr 2026) and Gartner's AI TRiSM material are usable as a framework.
@@ -430,6 +445,17 @@ The ladder is now standard: SFT, then RL with verifiable rewards (the GRPO linea
 **What the data says:** Menlo Ventures did a survey (Dec 2025, 495 US enterprise decision-makers). It found that the open-source share of LLM API usage in enterprises decreased from 19% to 11%. The survey says that this is mostly because of Llama's stagnation, and it puts Chinese open models at ~1%. But McKinsey/QuantumBlack survey work found that ~40% of enterprise leaders prefer self-hostable models for privacy and security control. A Linux Foundation synthesis found that 63% of technology leaders use open models somewhere in their stack. The demand for control is real, but execution is the bottleneck.
 
 **The pattern that wins: routing, not replacement.** A closed frontier model plans and does the new, high-stakes reasoning. Mid-size open models do the high-volume, private, latency-sensitive 80% (extraction, classification, code review, triage, sub-agent tasks). Small open models run always-on agents at the edge. NVIDIA's own reference architecture describes exactly this orchestrator/specialist split. In it, Nemotron 3 Ultra or GPT-5.6 is the orchestrator, and Nemotron 3.5 Lightning does the execution.
+
+```mermaid
+flowchart TB
+  W(["requests"]) --> P{"route by the kind of task"}
+  P -->|"the new, high-stakes reasoning"| C["Closed frontier model: the orchestrator, it plans"]
+  P -->|"the high-volume, private, latency-sensitive 80%"| M["Mid-size open models: extraction, classification, code review, triage, sub-agent tasks"]
+  P -->|"always-on agents at the edge"| S["Small open models"]
+  C -.->|"the plan, then execution by the specialists"| M
+```
+
+*The pattern of §9: routing, not replacement. A closed frontier model plans and does the new, high-stakes reasoning. Mid-size open models do the high-volume, private, latency-sensitive work, and small open models run the always-on agents at the edge.*
 
 **A four-gate decision framework**
 

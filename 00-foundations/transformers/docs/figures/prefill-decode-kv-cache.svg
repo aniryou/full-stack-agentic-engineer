@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="410" viewBox="0 0 900 410" role="img" aria-label="Prefill and decode on a time line: prefill reads the whole prompt in one parallel pass and fills the KV cache, then each decode step makes one token, reads all cached K and V and every weight, and appends its own K and V." style="color: #E4EAE7">
+  <title>Prefill and decode on a time line: prefill reads the whole prompt in one parallel pass and fills the KV cache, then each decode step makes one token, reads all cached K and V and every weight, and appends its own K and V.</title>
+  <rect x="0" y="0" width="900" height="410" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <path d="M40 40 L860 40" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <text x="858" y="32" text-anchor="end" font-size="11" fill="#97A59F">time</text>
+    <rect x="40" y="60" width="300" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="190" y="82" text-anchor="middle" font-weight="600">Prefill</text>
+    <text x="190" y="100" text-anchor="middle" font-size="11.5" fill="#97A59F">one parallel pass over the whole prompt</text>
+    <text x="190" y="118" text-anchor="middle" font-size="11.5" fill="#97A59F">compute-bound, fast per token</text>
+    <rect x="370" y="60" width="100" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="420" y="82" text-anchor="middle" font-weight="600">Decode</text>
+    <text x="420" y="100" text-anchor="middle" font-size="11.5">step 1</text>
+    <text x="420" y="118" text-anchor="middle" font-size="11.5" fill="#97A59F">one token</text>
+    <rect x="490" y="60" width="100" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="540" y="82" text-anchor="middle" font-weight="600">Decode</text>
+    <text x="540" y="100" text-anchor="middle" font-size="11.5">step 2</text>
+    <text x="540" y="118" text-anchor="middle" font-size="11.5" fill="#97A59F">one token</text>
+    <rect x="610" y="60" width="100" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="660" y="82" text-anchor="middle" font-weight="600">Decode</text>
+    <text x="660" y="100" text-anchor="middle" font-size="11.5">step 3</text>
+    <text x="660" y="118" text-anchor="middle" font-size="11.5" fill="#97A59F">one token</text>
+    <rect x="730" y="60" width="100" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="780" y="82" text-anchor="middle" font-weight="600">Decode</text>
+    <text x="780" y="100" text-anchor="middle" font-size="11.5">step 4 …</text>
+    <text x="780" y="118" text-anchor="middle" font-size="11.5" fill="#97A59F">one token</text>
+    <g stroke="#97A59F" stroke-width="1.2" fill="none">
+      <path d="M200 130 L200 228" marker-end="url(#arr)"/>
+      <path d="M400 130 L400 228" marker-end="url(#arr)"/>
+      <path d="M440 228 L440 132" marker-end="url(#arr)"/>
+      <path d="M520 130 L520 228" marker-end="url(#arr)"/>
+      <path d="M560 228 L560 132" marker-end="url(#arr)"/>
+      <path d="M640 130 L640 228" marker-end="url(#arr)"/>
+      <path d="M680 228 L680 132" marker-end="url(#arr)"/>
+      <path d="M760 130 L760 228" marker-end="url(#arr)"/>
+      <path d="M800 228 L800 132" marker-end="url(#arr)"/>
+    </g>
+    <text x="190" y="176" text-anchor="end" font-size="11" fill="#97A59F">writes the K, V of</text>
+    <text x="190" y="190" text-anchor="end" font-size="11" fill="#97A59F">every prompt token</text>
+    <text x="392" y="176" text-anchor="end" font-size="11" fill="#97A59F">appends</text>
+    <text x="392" y="190" text-anchor="end" font-size="11" fill="#97A59F">its own K, V</text>
+    <text x="808" y="176" font-size="11" fill="#97A59F">reads all</text>
+    <text x="808" y="190" font-size="11" fill="#97A59F">cached K, V</text>
+    <text x="40" y="222" font-size="11" fill="#97A59F">KV cache, in GPU memory</text>
+    <rect x="40" y="230" width="300" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="190" y="256" text-anchor="middle" font-size="11.5" fill="#7ADACF">K, V of the prompt tokens 1 … n</text>
+    <rect x="370" y="230" width="100" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="420" y="256" text-anchor="middle" font-size="11.5" fill="#7ADACF">+ token 1</text>
+    <rect x="490" y="230" width="100" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="540" y="256" text-anchor="middle" font-size="11.5" fill="#7ADACF">+ token 2</text>
+    <rect x="610" y="230" width="100" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="660" y="256" text-anchor="middle" font-size="11.5" fill="#7ADACF">+ token 3</text>
+    <rect x="730" y="230" width="100" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="780" y="256" text-anchor="middle" font-size="11.5" fill="#7ADACF">+ token 4</text>
+    <text x="40" y="300" font-size="11" fill="#97A59F">per token the cache stores 2 × L × d_model numbers: approximately 0.5 MB per token for Llama-2 7B in 16-bit, so ~2 GB at 4k tokens and ~16 GB at 32k</text>
+    <rect x="40" y="322" width="820" height="46" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="450" y="341" text-anchor="middle" font-size="11.5" font-weight="600">Decode is memory-bandwidth-bound: each step reads every weight in the model from GPU memory</text>
+    <text x="450" y="358" text-anchor="middle" font-size="11">a 7B model in 16-bit: ~14 GB of weights, 5–7 ms per token at 2–3 TB/s, with the compute units idle most of the time</text>
+    <text x="40" y="396" font-size="11" fill="#97A59F">batching: one weight read serves dozens or hundreds of sequences at the same time · prefill fills the cache, and decode grows it by one token per step</text>
+  </g>
+</svg>

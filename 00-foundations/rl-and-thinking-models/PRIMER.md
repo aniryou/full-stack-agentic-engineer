@@ -56,6 +56,25 @@ many things, and **RL** changes which of these things it actually does.
   - Multi-turn prompts do not contain old thinking.
   - The metric is **cost per correct answer**.
 
+```mermaid
+flowchart LR
+  subgraph train ["post-training (§1 to §5)"]
+    direction TB
+    P["Pretraining:<br/>what text looks like"] --> S["SFT: a format,<br/>by imitation"]
+    S --> R["RL: sample, score, reweight,<br/>near the SFT model"]
+    R --> T["a thinking model: long chains<br/>of thought grew because<br/>they increased the reward"]
+  end
+  subgraph serve ["serving (§7)"]
+    direction TB
+    D["decode-heavy,<br/>heavy-tailed traffic"] --> C["concurrency and KV per<br/>session grow with the output"]
+    C --> G["memory and the ITL SLO<br/>set the GPU count"]
+    G --> M["the metric:<br/>cost per correct answer"]
+  end
+  train -->|"a thinking token is<br/>an output token"| serve
+```
+
+*The map of this primer. Post-training changes the signal, not the network (§1). RL reweights what the SFT model already samples. Models that got this training on math and code learned to think (§2 to §5). A thinking token is an output token. Thus the traffic is decode-heavy and heavy-tailed, and memory and the ITL SLO set the GPU count (§7).*
+
 ---
 
 ## 1. From pretraining to post-training
@@ -121,6 +140,10 @@ that prefix one time.
 everything before that position. A completion $y$ is a trajectory, and $\log \pi(y) = \sum_t \log \pi(a_t \mid s_t)$.
 This is the sum of the per-token log-probabilities that an engine returns as `logprobs` (`Policy.token_logprobs()`,
 `Policy.seq_logprob()`).
+
+![A completion is a trajectory of tokens, each sampled from the policy given everything before it; the reward arrives at the end, and one gradient step pushes every token by the same advantage.](figures/policy-gradient-trajectory.svg)
+
+*One completion of the bracket task as a trajectory. The policy samples each token from its state, everything before that position, and the verifier scores the whole string at the end. The advantage $R - b$ then gives every token of the completion the same weight in the gradient step (`pg.reinforce_grad()`).*
 
 The core replaces the network with a table of softmaxes, $\pi(a \mid s) = \operatorname{softmax}(\theta[s])_a$. This
 table keeps one fact exact (`Policy.grad_logprob()`):
@@ -259,6 +282,32 @@ In RLHF, the reward-model score sits on the last token, and $-\beta \log(\pi/\pi
 Four networks are in memory: the policy, the reference, the reward model and the value model. DPO and GRPO each
 remove part of this cost.
 
+```mermaid
+flowchart TB
+  P[("comparisons: chosen y+, rejected y−")]
+  subgraph rlhf ["RLHF with PPO: four networks in memory"]
+    RM["reward model r:<br/>logistic regression<br/>on (chosen − rejected)"]
+    ENG["sample completions<br/>from the policy"]
+    SC["score: r on the last token,<br/>−β log(π/π_ref) on every token"]
+    V["value model V(s):<br/>per-token baselines (GAE)"]
+    PPO[["PPO step: the clipped ratio<br/>ρ = π/π_old"]]
+    RM --> SC
+    ENG --> SC
+    SC --> PPO
+    V --> PPO
+    PPO -.->|"new weights"| ENG
+  end
+  subgraph dpo ["DPO: no reward model, no sampling"]
+    L["a classification loss<br/>on the policy's own<br/>log-ratios<br/>log π − log π_ref,<br/>for y+ and for y−"]
+    IR["the implicit reward<br/>β log(π/π_ref)"]
+    L --> IR
+  end
+  P --> L
+  P --> RM
+```
+
+*Two paths from the same comparisons. RLHF fits a reward model on the pairs. Then PPO samples completions and scores them with that reward model and a per-token KL penalty, with per-token baselines from a value model. DPO trains the policy on the pairs directly, as a classification loss on its own log-ratios, with no reward model and no sampling (`pref.dpo_loss()`).*
+
 **DPO: the closed form, as a classification loss.** You can invert the optimum of §2 (`pref.dpo_loss()`):
 
 $$
@@ -361,6 +410,10 @@ token that the student samples ([distillation §4](../distillation/PRIMER.md#4-o
 
 **GRPO.** For each prompt, sample a group of $G$ completions from $\pi_{\text{old}}$ and score them. Give every token
 of completion $i$ the same advantage. This is the GRPO of DeepSeekMath, which R1 adopted. TRL's `GRPOTrainer` implements the same method.
+
+![One GRPO update: a group of G completions from one prompt, a verifier score per completion, group-normalised advantages that every token of a completion shares, and the clipped surrogate with the k3 KL term.](figures/grpo-group-update.svg)
+
+*One GRPO update on one prompt (`grpo.group_advantages()`, `grpo.clipped_surrogate()`, `grpo.k3()`). The verifier scores the four completions 1, 0, 0, 1, and the group statistics turn the scores into advantages of ±0.865875. Every token of a completion carries the advantage of that completion, and the group is the baseline, so there is no value model.*
 
 DeepSeekMath writes the ratio per token and averages the tokens of each completion $(1/\lvert o_i \rvert)$. The R1
 paper's eq. 1 writes one ratio per whole completion, $\pi_\theta(o_i)/\pi_{\text{old}}(o_i)$, averaged over the group
@@ -565,6 +618,10 @@ the server (verify). The same templates drop the thinking of earlier turns from 
 | `reasoning_effort` | vLLM accepts none … max. For Qwen3, any value but `"none"` only sets `enable_thinking=True` | on Qwen3 it is a switch, not a length control (verify) |
 | gpt-oss effort | low / medium / high, written into the system prompt (Harmony format, default medium) | other values give an error (verify) |
 
+![Where three controls cut the output of a thinking model: max_tokens cuts inside the think block and leaves no answer, a thinking budget forces the end of the think block and then the model answers, and the two-call recipe continues in a second request.](figures/thinking-budget-cuts.svg)
+
+*Where three controls cut the output of a thinking model. `max_tokens` counts reasoning and answer together, so a request that still thinks at the cap returns empty content with `finish_reason="length"`. A thinking budget forces the end of the think block, and then the model answers. The two-call recipe gets the same effect with a second request, which does the prefill again.*
+
 **A thinking token is billed as an output token.** `completion_tokens` counts reasoning plus answer. vLLM fills
 `usage.completion_tokens_details.reasoning_tokens` when a reasoning parser is on. `include_reasoning: false` hides
 the reasoning, but the engine still generates it (verify).
@@ -600,6 +657,19 @@ open-ended answers with no lucky guesses.
 
 **Sequential** compute (a longer think) helps questions that are slow to crack. **Parallel** compute (more samples)
 helps questions where an attempt can come to a dead end, *if* something can select the correct sample.
+
+```mermaid
+flowchart TB
+  B{"a budget per question:<br/>n · (L + 50) ≤ B"}
+  B -->|"sequential"| L["think longer: one attempt of L tokens, and each<br/>token cracks the problem with probability q"]
+  B -->|"parallel"| N["sample more: n attempts, and each starts on<br/>a workable approach with probability a"]
+  N --> PK{"what selects the sample?"}
+  PK -->|"a verifier"| V["best-of-n:<br/>1 − (1 − p)^n"]
+  PK -->|"a reward model"| RM["best-of-n through noise:<br/>a biased scorer selects for its bias"]
+  PK -->|"a majority vote"| MV["self-consistency: the correct answer<br/>must be the most common answer"]
+```
+
+*The two budgets of test-time compute, as `rlcore.ttc` models them. A longer think helps a question that is slow to crack. More samples help a question where an attempt can come to a dead end. But the samples give accuracy only when a verifier, a reward model or a vote selects one of them (`ttc.allocate()`).*
 
 **Sequential: diminishing returns.** The accuracy of one sample against thinking length (`ttc.accuracy()`):
 
@@ -702,6 +772,10 @@ P = 1,500: L = 300 → 495,150; L = 3,000 → 9,001,500 = 18.2×; L = 1,500 → 
 Compare with a 300-token answer on a 1,500-token prompt. For 1,000–3,000 output tokens, memory × time per request
 grows 4–18× (4.0× at 1,000, 6.8× at 1,500, 18.2× at 3,000). The peak KV per request grows less (4,500 against 1,800
 tokens: 2.5×). The large increase is in the time for which the request holds that KV.
+
+![The KV a request holds at each decode step, drawn against time: a 300-token output on a 1,500-token prompt is a thin sliver, a 3,000-token output an area 18.2 times larger.](figures/kv-token-steps.svg)
+
+*The KV that one request holds at each decode step, drawn against time, with the prompt P = 1,500 in both cases (`workload.kv_token_steps()`). The 3,000-token output holds its KV ten times longer, and its peak is only 2.5 times higher. Thus its area, memory × time, is 18.2 times larger.*
 
 ### Sizing a fleet: Little's law, HBM and the ITL SLO
 
@@ -876,6 +950,10 @@ verl's one-step-off-policy trainer generates step k + 1 while it trains on step 
 runs rollouts and training on separate GPUs and reports 2.35–2.67× on Qwen2.5-7B with 128 GPUs. TRL's experimental
 `AsyncGRPOTrainer` streams completions from a vLLM server. It drops samples more than `max_staleness` (default 4)
 weight versions old (verify).
+
+![Three ways to schedule rollouts and training: a synchronous step where each side waits for the other, one-step-off-policy where generation of the next step overlaps training, and fully asynchronous rollouts on separate GPUs with stale samples.](figures/rl-step-timeline.svg)
+
+*Three schedules for the same step, with the §1 numbers for the synchronous one (`workload.rl_step_time()`). In the synchronous step each side waits for the other, and the batch waits for its longest completion. The one-step-off-policy trainer generates step k + 1 while it trains on step k. The fully asynchronous trainer runs rollouts and training on separate GPUs, at the price of staleness.*
 
 The price is staleness. Samples come from an older policy, so the ratio $\rho = \pi/\pi_{\text{old}}$ is no
 longer 1. Then the clip (§4) and the corrections by importance sampling do real work.

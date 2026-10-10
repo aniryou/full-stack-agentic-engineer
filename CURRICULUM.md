@@ -154,6 +154,38 @@ If you already build agents, skim 07.1 and 06.1 first for motivation, then start
 Hours are estimates, as above.
 *Min tier* is what the step needs; *best* is where its measurements are real.
 
+```mermaid
+flowchart TB
+  subgraph R1["Round 1 · the model and the engine, all at T0 (steps 1 to 5)"]
+    direction LR
+    S1["00.1 to 00.3<br/>transformer, capacity planning, model landscape"] --> S3["04.0<br/>kv-cache, paged-attention, flash-attention, kernel-core"] --> S4["04.1 to 04.6<br/>serving-engine PRIMER §1–8, mini-engine-core"] --> S5["04.1<br/>vllm-serving-lab 01–02"]
+  end
+  subgraph R2["Round 2 · down to the hardware for the why (steps 6 to 11)"]
+    direction LR
+    S6["01.0 to 01.5<br/>GPU primers, roofline-and-fabric, gpu-bench-lab"] --> S9["00.4<br/>mixture-of-experts"] --> S10["02.1 to 02.5<br/>cuda-and-nccl"]
+  end
+  subgraph R3["Round 3 · back to the engine with a GPU, then post-training (steps 12 to 17)"]
+    direction LR
+    S12["04.2 to 04.7<br/>serving-engine PRIMER §9–12, vllm-serving-lab 03–05"] --> S13["04.9<br/>quantization"] --> S14["04.8<br/>vllm-internals, FlashAttention deep dive"] --> S15["00.5<br/>rl-and-thinking-models"] --> S16["00.6<br/>distillation"] --> S17["04.7<br/>Cloud Run GPU, T3"]
+  end
+  subgraph R4["Round 4 · up to the fleet (steps 18 to 23)"]
+    direction LR
+    S18["03.1 to 03.6<br/>gpu-scheduling"] --> S21["05.1 to 05.6<br/>serving-orchestration"]
+  end
+  subgraph R5["Round 5 · the gateway (steps 24 to 26)"]
+    direction LR
+    S24["06.1 to 06.5<br/>scaling, admission and cost"] --> S25["06.6<br/>identity and security"] --> S26["06.7<br/>llm-gateway"]
+  end
+  subgraph R6["Round 6 · the agent, the workload that drives it all (steps 27 to 31)"]
+    direction LR
+    S27["07.1, 07.2<br/>agent loop, platform lab"] --> S28["07.5<br/>sandboxed execution"] --> S29["07.3<br/>durable execution"] --> S30["07.4<br/>retrieval"] --> S31["07.6<br/>agent memory"]
+  end
+  R1 --> R2 --> R3 --> R4 --> R5 --> R6
+```
+
+*The path at a glance: the 31 steps of the table below, grouped into the rounds of the spiral (§3.1). Each box names
+the modules and the material; the table gives the hours and the tiers.*
+
 | Step | Layer | Modules | Material | Hours | Min tier | Best |
 |---:|---|---|---|---:|---|---|
 | 1 | 00 | 00.1 | transformer primer, lessons, practice | 5 | T0 | T0 |

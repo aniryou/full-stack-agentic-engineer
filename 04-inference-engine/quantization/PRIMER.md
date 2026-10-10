@@ -32,6 +32,10 @@ and GKE deploys of the serving lab.
 Quantization stores numbers on a coarser **grid** with a **scale**: $x \approx \text{code} \times \text{scale}$. It
 makes work faster only where the bytes or the FLOPs that it removes are the limit.
 
+![One step of a quantized model and its three levers: the weight bytes, the FLOPs of the GEMM and the KV bytes.](figures/three-levers.svg)
+
+*One step of a quantized model: the linear weights stream from HBM as packed codes and scales, and the KV cache streams into attention. The GEMM dequantizes weight-only formats to 16-bit in registers, but W8A8 and W4A4 multiply the codes natively (§4, §5). The three levers are the weight bytes, the FLOPs and the KV bytes (§1, §6).*
+
 - **Decode** streams every weight in each step. Thus fewer weight bytes give faster tokens. Weight-only INT4
   (**W4A16**) decodes an 8B model ~3× faster at batch 1.
 - **Prefill** is compute-bound. Weight-only kernels do 16-bit math on dequantized weights. Thus prefill becomes
@@ -122,6 +126,10 @@ The rest of this primer shows these things:
 - how to trade it against speed and memory (§10).
 
 ## 2. Number formats
+
+![The bit layouts of the single-value formats from FP16 to INT4 and of the block formats MXFP4 and NVFP4 with their shared scales.](figures/number-formats-bits.svg)
+
+*The bit layout of each format, with the sign, exponent and mantissa fields to scale. The block formats put one shared scale on a block of E2M1 elements. MXFP4 has an E8M0 scale per 32 values, and NVFP4 has an E4M3 scale per 16 plus an FP32 scale per tensor.*
 
 ### Integer and floating-point grids
 
@@ -256,6 +264,10 @@ layout). It returns the scales in the shapes of compressed-tensors:
 | per token | (tokens, 1) | an outlier token | dynamic INT8/FP8 activations |
 | per block r × c | (out / r, in / c) | an outlier tile | DeepSeek-V3 FP8 (128 × 128) |
 
+![Who shares a scale on a weight and on an activation: per tensor, per channel, per group, per block and per token, with an outlier column.](figures/scale-granularity.svg)
+
+*Who shares a scale on a weight $W$ and on an activation $X$, in the scale shapes of compressed-tensors (`granularity.quantize()`). The warm column is an outlier input channel, and the tint marks the values whose scale it sets. Per-channel scales isolate a row and per-token scales a token, but only groups and blocks limit the damage of a column (§3, notebook 02).*
+
 The six-scheme table in serving-engine §8 (INT8 per tensor to INT4 g32 on one Gaussian weight) is the survey.
 The `quantcore` package calculates all six rows again from the same seed (`tests/test_repo_numbers.py`). It also
 calculates the outlier-row and SmoothQuant numbers of that section again. This primer does not repeat them.
@@ -352,6 +364,10 @@ $$
 & \qquad W[{:}, j{+}1{:}] \mathrel{-}= e \otimes U[j, j{+}1{:}] && \text{the Optimal Brain Surgeon update}
 \end{aligned}
 $$
+
+![One GPTQ step: the loop rounds column j, and the error goes to the columns not yet rounded, in proportion to row j of U.](figures/gptq-column-loop.svg)
+
+*One GPTQ step on the weight $W$ (`gptq.gptq()`): the loop rounds column $j$ on the grid of its group. The error goes to the columns that are not yet rounded, in proportion to row $j$ of $U$. $U$ is the upper Cholesky factor of the inverse Hessian of the calibration inputs (`gptq.hessian()`).*
 
 GPTQ pushes the rounding error of each column onto the columns that are not yet rounded, in the directions that the
 inputs actually use. These details are important in practice:
@@ -486,6 +502,10 @@ $$
 
 The default is $\alpha = 0.5$, and the adjusted values are 0.85 for Llama-3-8B and 0.8 for Mistral/Mixtral (verify).
 
+![SmoothQuant moves an activation outlier channel into the weight column that meets it, because a W8A8 GEMM has no scale along the reduction axis.](figures/smoothquant-migration.svg)
+
+*SmoothQuant divides activation channel $j$ by $s_j$ and multiplies weight column $j$ by $s_j$, so the product does not change (`smoothquant.smooth_scales()`). A W8A8 GEMM applies its scales per token and per output channel in the epilogue, and no scale can change along $k$, the reduction axis. Thus the per-channel variation must move into the weights, and the previous norm absorbs $1/s$ at no cost at run time.*
+
 On the up-projection of the tiny model, the output error of INT8 W8A8 falls from 1.52% to **0.57%** at α = 0.5. The sweep
 is U-shaped between α = 0 and 1. Over the full model, KL falls 2.7× (0.00296 → 0.00110), at no cost at run time.
 `tests/test_repo_numbers.py` calculates the serving-engine example again: one activation channel 60× larger, and
@@ -575,6 +595,10 @@ defaults, `servelab.sizing` gives BF16 weights 2,363 KV blocks, and 4,727 with a
 
 **Faster long-context decode.** Take Llama-3.1-8B with FP8 weights on an H100, at batch 32 and 8,000 tokens of
 context. FP8 KV takes a decode step from 17.5 ms to 11.3 ms (`cost.step_cost()`, SIMULATED).
+
+![KV bytes per token for Llama-3.1-8B at 16, 8, 5 and 3 bits per element, and 2,000-token sessions on an L4 with FP8 weights.](figures/kv-cache-bytes-and-sessions.svg)
+
+*What a smaller KV cache buys for Llama-3.1-8B (§6). The bytes per token are 131,072 in BF16, 65,536 in FP8, 40,960 at 4 bits with groups of 32 and 24,576 at 2 bits. The 2,000-token sessions on an L4 with FP8 weights go from 43 to 87, 140 and 234 (`cost.sessions()`).*
 
 **FP8 KV and its scale.** vLLM's `--kv-cache-dtype` accepts `fp8` (= `fp8_e4m3`) and `fp8_e5m2`, plus
 per-token-head dynamic types (`int4_per_token_head`, `int8_per_token_head`, `fp8_per_token_head`) and NVFP4 on
@@ -752,6 +776,25 @@ MoE models must also ignore their routers (`"re:.*mlp.gate$"`). Install llm-comp
 environments** (vLLM docs). The lab's notebook 01 runs these recipes at T1 on a 0.5B model. At T0, it writes the
 same layout from its own code.
 
+```mermaid
+flowchart TB
+  subgraph Q["the quantization environment"]
+    M["BF16 model"] --> O["llm-compressor oneshot(model, recipe)<br/>QuantizationModifier, GPTQModifier,<br/>AWQModifier, SmoothQuantModifier"]
+    C["calibration data<br/>(none for FP8_DYNAMIC and FP8_BLOCK)"] -.-> O
+    O --> K[("compressed-tensors checkpoint<br/>quantization_config in config.json<br/>weight_packed, weight_scale, k_scale, v_scale")]
+  end
+  subgraph S["the serving environment"]
+    V["vLLM: detection<br/>quantization_config.quant_method"] --> G{"what does this GPU<br/>run the checkpoint as?"}
+    G -->|"quantized activations, and<br/>the GPU has that datapath"| N["W8A8 or W4A4 kernel:<br/>CUTLASS, DeepGEMM, FlashInfer"]
+    G -->|"16-bit activations, or<br/>no such datapath"| W["weight-only: Marlin,<br/>or Machete on Hopper<br/>(FP8 on an A100,<br/>NVFP4 below SM100)"]
+    G -->|"outside the capability<br/>range of the method"| E["the load fails:<br/>Minimum capability: …"]
+  end
+  K --> V
+  P["other producers:<br/>GPTQModel, ModelOpt"] -.-> V
+```
+
+*From a BF16 model to a served checkpoint, in two environments: `oneshot()` applies the recipe and writes a compressed-tensors checkpoint. Then vLLM reads `quantization_config.quant_method` and selects the method, and its kernels decide what the checkpoint runs as on this GPU (§9).*
+
 **The format.** `config.json` carries a `quantization_config`:
 
 - `quant_method: "compressed-tensors"`, plus `format`.
@@ -821,6 +864,18 @@ vLLM reads GGUF only through the out-of-tree `vllm-gguf-plugin`, which is "highl
 weights, decode at batch 1 and 32, a 1,800-token prefill and the 2,000-token sessions. All of these values are
 SIMULATED with the assumptions of serving-engine §8 (80% bandwidth, 60% FLOPs, 2 ms per step). With the L4 of
 `minengine.perf`, it gives the table of that section again, to the digit.
+
+```mermaid
+flowchart TB
+  T["cost.table(gpu, model):<br/>one row per scheme<br/>and KV dtype, with<br/>what it runs as,<br/>the weights, decode,<br/>prefill and sessions<br/>(SIMULATED)"] --> A{"runs on this GPU,<br/>fits, and meets<br/>every target?"}
+  A -->|"no"| X["out: the row's note says why"]
+  A -->|"yes"| O["the rows that pass, in the order of typical accuracy cost:<br/>BF16, FP8 weight-only, FP8 W8A8, INT8 W8A8, INT4 W4A16, NVFP4<br/>(16-bit KV before 8-bit)"]
+  O --> C["cost.choose(): the first row, the least aggressive<br/>runnable scheme that meets every target"]
+  C --> M["measure the schemes for your model (§8),<br/>then change the order"]
+  M -.->|"your order"| O
+```
+
+*The rule of `cost.choose()` over the rows of `cost.table()`. A row stays if its scheme runs on the GPU, one session fits, and the sessions, prefill and decode are inside the targets. The first row that stays, in the order of typical accuracy cost, is the answer, and your measurements change the order (§8).*
 
 `cost.choose()` returns the least aggressive runnable scheme that meets every target. It uses an initial order by
 typical accuracy cost: BF16, FP8 weight-only, FP8 W8A8, INT8 W8A8, INT4 W4A16, NVFP4. Measure the schemes for your

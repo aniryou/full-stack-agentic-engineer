@@ -416,6 +416,27 @@ Always make sure that your numbers agree with the current quotas on the product 
 - **Scripted model** (`FakeLLM` routes): use it for deterministic tests of the control flow. Keep a small set of *recorded* runs with the real model as golden files.
 - **Managed path**: ADK evalsets set the session state before the test starts (`current_step = ...`). This gives a test of the resume after a simulated idle time.
 
+```mermaid
+sequenceDiagram
+    participant T as the test
+    participant K as FakeClock
+    participant E as Engine
+    participant S as in-memory store and queue
+    T->>E: deliver the task: execute_task(run, step, attempt)
+    E->>S: ctx.effect records the effect (I3)
+    Note over E,S: the chaos hook raises a simulated crash<br/>at after_step_before_commit:<br/>no checkpoint, no enqueue
+    Note over S: no release of the<br/>lease after a crash
+    T->>K: advance past the lease TTL
+    T->>E: reap()
+    E->>S: expired lease: enqueue the attempt again
+    T->>E: deliver the re-driven task: the step runs again
+    E->>S: the effect record exists: skip it (I3)
+    E->>S: the checkpoint (I1), then the next task
+    T->>T: assert one re-drive and no repeated effect
+```
+
+*This figure shows one test of `tests/test_durability.py`. A chaos hook raises a simulated crash at one crash window, after the effect record and before the checkpoint. The test advances `FakeClock` past the lease TTL, runs the reaper and delivers the re-driven task. The assertion is one re-drive and no repeated effect.*
+
 ---
 
 ## 9. Trade-offs cheat sheet

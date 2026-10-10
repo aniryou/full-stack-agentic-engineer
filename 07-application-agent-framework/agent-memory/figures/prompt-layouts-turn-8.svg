@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="310" viewBox="0 0 900 310" role="img" aria-label="The prompt at turn 8 in the four layouts, to scale, with the cached prefix and the uncached part the engine prefills again: 56 tokens with no memory or a pinned profile, 1,560 with memory before the history, 600 with memory at the tail." style="color: #E4EAE7">
+  <title>The prompt at turn 8 in the four layouts, to scale, with the cached prefix and the uncached part the engine prefills again: 56 tokens with no memory or a pinned profile, 1,560 with memory before the history, 600 with memory at the tail.</title>
+  <rect x="0" y="0" width="900" height="310" rx="8" fill="#161E1C"/>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="172" y="36" font-weight="600">the prompt at turn 8 (3,560 tokens with memory)</text>
+    <text x="876" y="36" text-anchor="end" font-size="11" fill="#97A59F">uncached tokens · hit rate over 8 turns</text>
+    <text x="706" y="52" text-anchor="middle" font-size="10.5" fill="#97A59F">user_t</text>
+    <path d="M705.5 54 L705.5 58" stroke="#97A59F" stroke-width="1"/>
+
+    <!-- none -->
+    <text x="24" y="76" font-family="JetBrains Mono, monospace" font-size="11">none</text>
+    <g stroke-width="1.2">
+      <rect x="172" y="58" width="340" height="28" rx="2" fill="none" stroke="currentColor"/>
+      <rect x="512" y="58" width="190" height="28" rx="2" fill="none" stroke="currentColor"/>
+      <rect x="702" y="58" width="7" height="28" rx="1" fill="none" stroke="currentColor"/>
+    </g>
+    <text x="342" y="76" text-anchor="middle" font-size="11.5">system (2,000)</text>
+    <text x="607" y="76" text-anchor="middle" font-size="11.5">history</text>
+    <path d="M172 94 L699.7 94" stroke="#4CC5B7" stroke-width="3"/><path d="M699.7 94 L709 94" stroke="#E39A62" stroke-width="3"/>
+    <text x="792" y="71" font-size="11.5" font-weight="600" fill="#E39A62">uncached 56</text>
+    <text x="792" y="87" font-size="11" fill="#97A59F">88.3% hit rate</text>
+
+    <!-- before_history -->
+    <text x="24" y="128" font-family="JetBrains Mono, monospace" font-size="11">before_history</text>
+    <g stroke-width="1.2">
+      <rect x="172" y="110" width="340" height="28" rx="2" fill="none" stroke="currentColor"/>
+      <rect x="512" y="110" width="68" height="28" rx="2" fill="#3A2C25" stroke="#E39A62"/>
+      <rect x="580" y="110" width="190" height="28" rx="2" fill="none" stroke="currentColor"/>
+      <rect x="770" y="110" width="7" height="28" rx="1" fill="none" stroke="currentColor"/>
+    </g>
+    <text x="342" y="128" text-anchor="middle" font-size="11.5">system (2,000)</text>
+    <text x="546" y="128" text-anchor="middle" font-size="10.5">memory_t</text>
+    <text x="675" y="128" text-anchor="middle" font-size="11.5">history</text>
+    <path d="M172 146 L512 146" stroke="#4CC5B7" stroke-width="3"/><path d="M512 146 L777 146" stroke="#E39A62" stroke-width="3"/>
+    <text x="792" y="123" font-size="11.5" font-weight="600" fill="#E39A62">uncached 1,560</text>
+    <text x="792" y="139" font-size="11" fill="#97A59F">58.3% hit rate</text>
+
+    <!-- pinned -->
+    <text x="24" y="180" font-family="JetBrains Mono, monospace" font-size="11">pinned</text>
+    <g stroke-width="1.2">
+      <rect x="172" y="162" width="340" height="28" rx="2" fill="none" stroke="currentColor"/>
+      <rect x="512" y="162" width="68" height="28" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+      <rect x="580" y="162" width="190" height="28" rx="2" fill="none" stroke="currentColor"/>
+      <rect x="770" y="162" width="7" height="28" rx="1" fill="none" stroke="currentColor"/>
+    </g>
+    <text x="342" y="180" text-anchor="middle" font-size="11.5">system (2,000)</text>
+    <text x="546" y="180" text-anchor="middle" font-size="10.5" fill="#7ADACF">profile</text>
+    <text x="675" y="180" text-anchor="middle" font-size="11.5">history</text>
+    <path d="M172 198 L767.7 198" stroke="#4CC5B7" stroke-width="3"/><path d="M767.7 198 L777 198" stroke="#E39A62" stroke-width="3"/>
+    <text x="792" y="175" font-size="11.5" font-weight="600" fill="#E39A62">uncached 56</text>
+    <text x="792" y="191" font-size="11" fill="#97A59F">88.2% hit rate</text>
+
+    <!-- tail -->
+    <text x="24" y="232" font-family="JetBrains Mono, monospace" font-size="11">tail</text>
+    <g stroke-width="1.2">
+      <rect x="172" y="214" width="340" height="28" rx="2" fill="none" stroke="currentColor"/>
+      <rect x="512" y="214" width="190" height="28" rx="2" fill="none" stroke="currentColor"/>
+      <rect x="702" y="214" width="68" height="28" rx="2" fill="#3A2C25" stroke="#E39A62"/>
+      <rect x="770" y="214" width="7" height="28" rx="1" fill="none" stroke="currentColor"/>
+    </g>
+    <text x="342" y="232" text-anchor="middle" font-size="11.5">system (2,000)</text>
+    <text x="607" y="232" text-anchor="middle" font-size="11.5">history</text>
+    <text x="736" y="232" text-anchor="middle" font-size="10.5">memory_t</text>
+    <path d="M172 250 L675.2 250" stroke="#4CC5B7" stroke-width="3"/><path d="M675.2 250 L777 250" stroke="#E39A62" stroke-width="3"/>
+    <text x="792" y="227" font-size="11.5" font-weight="600" fill="#E39A62">uncached 600</text>
+    <text x="792" y="243" font-size="11" fill="#97A59F">72.3% hit rate</text>
+
+    <!-- legend -->
+    <g font-size="11" fill="#97A59F">
+      <text x="24" y="272">system: the 2,000-token system prompt and tools · history: 40-token user messages and 120-token replies · user_t: the 40-token user message</text>
+      <text x="24" y="288">memory_t (warm): 400 tokens of memory, retrieved again at each turn · profile (teal): the same 400 tokens, retrieved once per session</text>
+      <text x="24" y="304">bracket: teal = the cached prefix, in full 16-token blocks · warm = the uncached part, which the engine prefills again</text>
+    </g>
+  </g>
+</svg>

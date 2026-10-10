@@ -75,6 +75,10 @@ Two consequences give every design its shape. First, the capacity plan is a *tok
 
 A turn with two tool calls has four segments on the critical path. They are the plan call, the tools, the answer call, and the streaming of the answer. Model latency is the time-to-first-token (which now includes *thinking* time) plus the output tokens divided by the tokens per second. The segments are sequential. Thus the p95 of the turn is approximately the sum of the tails of the segments, not the tail of their sums. A 4-second p95 target makes four things necessary: parallel tools, streaming, prefetch, and a Flash-class model on the plan step.
 
+![One turn with two tool calls on a time axis: the plan call, the two tool calls in parallel, the answer call and the streaming of the answer are four sequential segments on the critical path, and the user sees the first token of the answer only after the plan and the tools.](figures/turn-critical-path.svg)
+
+*One turn with two tool calls on a time axis. The four segments of the critical path are sequential: the plan call, the tools, the answer call and the streaming of the answer. The two tools run in parallel, thus their time is the max, not the sum (§5.6). The user sees the first token of the answer only after the plan and the tools (§5.7).*
+
 Also, because turns are long, Little's law connects latency to concurrency. At 20 turns per second, a 6-second turn means 125 turns in flight, and a 12-second turn means 250. Each turn in flight holds memory, a session lock and an open client connection. Slowdowns *are* capacity problems.
 
 ### 1.4 Cost scales with context, and context grows
@@ -205,6 +209,21 @@ $$
 The two numbers give the size of different things. In-flight turns give the size of the orchestrator memory, the session locks and the model concurrency. Concurrent sessions give the size of the open streaming connections at the gateway and of the hot session state in Redis.
 
 The token budget also puts a cap on concurrency. 10 M TPM ÷ 60 ≈ 167 k tokens/s. A turn uses 2.2 × 5,350 ≈ 11.8 k tokens over 6 s ≈ 2 k tokens/s. Thus the baseline can carry about 85 turns in flight, or 14 turns per second. That is the initial value for the in-flight cap of the admission controller. It is *below* peak demand, and that is the whole story of this scenario.
+
+```mermaid
+flowchart TB
+    C(["100,000 conversations<br/>a day ÷ 86,400 s<br/>≈ 1.16 conversations<br/>a second"]) --> T["× 6 turns ≈ 7 turns a second"]
+    T --> M["× 2.2 model calls<br/>≈ 15 calls a second"]
+    M --> TPM["× 5,000 input tokens × 60<br/>≈ 4.6 M input tokens<br/>a minute (13.75 M at peak,<br/>45.8 M in an incident)"]
+    TPM --> CMP["against the 10 M TPM<br/>baseline: 0.46× at average,<br/>1.38× at peak,<br/>4.58× in an incident"]
+    BASE["the org tier:<br/>a 10 M TPM baseline"] --> CMP
+    BASE --> B["the budget: 10 M TPM ÷ 60<br/>≈ 167 k tokens/s<br/>a turn uses 2.2 × 5,350<br/>≈ 11.8 k tokens over 6 s<br/>≈ 2 k tokens/s"]
+    B --> CAP["the baseline carries about<br/>85 turns in flight, or<br/>14 turns per second:<br/>the initial in-flight cap,<br/>below the peak demand"]
+    T -- "Little's law:<br/>× 6 s of turn duration" --> IF["in-flight turns:<br/>42 at average, 125 at peak,<br/>417 in an incident"]
+    C -- "× a conversation of<br/>6 × (6 + 60) ≈ 400 s" --> S["concurrent sessions:<br/>460 at average,<br/>4,600 in an incident"]
+```
+
+*The arithmetic of §3.2 and §3.3 as one chain, with the numbers of the anchor scenario. The rates flow down to the input tokens a minute and to the comparison with the baseline. The turn duration gives the turns in flight, and the same baseline gives the in-flight cap (`scalelab.capacity`).*
 
 ### 3.4 Cost per conversation
 
@@ -398,6 +417,21 @@ Admission control is the circuit breaker on the feedback loop of 1.6. It sits at
 3. Will this turn take the in-flight count above the cap?
 
 The cap starts at the token-budget number from 3.3. You adjust it from load tests. Priority classes (an agent-assist console, a VIP tier) bypass it.
+
+```mermaid
+flowchart TB
+    T(["a turn arrives at the gateway,<br/>before it has cost anything"]) --> Q1["1. the token bucket of<br/>the tenant: a noisy brand<br/>cannot take all of the pool"]
+    Q1 --> Q2["2. the degrade level of<br/>the system, from Redis"]
+    Q2 --> Q3{"3. above the cap?<br/>level 3: in-flight ≥ cap<br/>or queue age ≥ 30 s"}
+    Q3 -- "no, or a priority class" --> RUN["admit: the turn runs at<br/>the level, 0 to 2: the model,<br/>the thinking level, the tools<br/>and the output cap"]
+    Q3 -- "yes, and below priority 2" --> SHED["shed: 503 with a Retry-After<br/>that grows with the level"]
+    SHED -. "the client adds jitter,<br/>then comes back" .-> T
+    RUN --> SIG["the signals that every<br/>instance publishes:<br/>in-flight turns, the age<br/>of the oldest queued turn,<br/>the share of rate-limited<br/>model calls in the last<br/>minute, an open breaker"]
+    SIG --> LV["AdmissionController.compute_level()<br/>level 1: in-flight ≥ 80 % of cap,<br/>queue age ≥ 10 s or 429 ratio ≥ 5 %<br/>level 2: a breaker open,<br/>or 429 ratio ≥ 15 %<br/>a raised level is held ten to<br/>fifteen seconds before it goes down"]
+    LV -- "written to Redis: every<br/>instance degrades together" --> Q2
+```
+
+*The admission loop of §5.3. The gateway asks its three questions before a turn costs anything, and it sheds at level 3 with a 503 and a `Retry-After`. The admitted turns produce the signals, `AdmissionController.compute_level()` turns them into the level, and Redis shares the level with every instance.*
 
 The degrade level comes from signals that every instance can publish:
 
@@ -603,6 +637,16 @@ Regions:
 | Enterprise | > 200,000, multi-brand | per-tenant quotas and priorities, custom PayGo tier, multi-region, Agent Gateway/Registry for governance, cost allocation per tenant | — |
 
 The order of adoption is important. Add durability (checkpoints, idempotency) before admission control, admission control before PT, and PT before multi-region. Each stage needs a measurement that starts it. A good design names that measurement: "I will add the queue when p95 during the peak hour crosses the budget. I will buy PT when the 429 ratio stays above 5 % at peak for a week. I will add a second region when a residency or availability requirement says so, not before."
+
+```mermaid
+flowchart TB
+    P["Pilot<br/>≤ 1,000 a day<br/>one service, a synchronous<br/>loop, budgets, structured<br/>tool errors, traces"]
+    P -- "p95 in the peak hour<br/>crosses the budget:<br/>add the queue" --> V1["Production v1<br/>1,000–20,000 a day<br/>the gateway and<br/>orchestrator split, Pub/Sub,<br/>Firestore checkpoints,<br/>idempotency, the SSE relay,<br/>per-turn budgets, dashboards"]
+    V1 -- "durability before<br/>admission control" --> S["Scale<br/>20,000–200,000 a day<br/>admission control with<br/>degrade levels, client-side<br/>smoothing, sibling fallbacks,<br/>compaction and caching,<br/>capacity reviews, then PT<br/>for the base load when the<br/>429 ratio stays above 5 %<br/>at peak for a week"]
+    S -- "PT before multi-region:<br/>a second region when<br/>a residency or<br/>availability requirement<br/>says so, not before" --> E["Enterprise<br/>> 200,000 a day,<br/>multi-brand<br/>per-tenant quotas and<br/>priorities, a custom PayGo<br/>tier, multi-region, Agent<br/>Gateway and Registry,<br/>cost allocation per tenant"]
+```
+
+*The growth path of §7 as the order of adoption: durability before admission control, admission control before PT, and PT before multi-region. Each edge names the rule of order or the measurement that starts the next stage.*
 
 ---
 
