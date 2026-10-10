@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // render_figures.js: a writer's check for the figures in the Markdown documents (tools/orchestration/FIGURE-STYLE.md).
 // It renders an SVG file, or every ```mermaid block of a Markdown file, to PNG with headless Chromium, so that the
-// writer can look at each figure, and it fails on a Mermaid block that does not parse (the site and GitHub would
-// show an error box there).
+// writer can look at each figure. It fails on a Mermaid block that does not parse (the site and GitHub would show an
+// error box there) and on an SVG that is not well-formed XML (loaded as an image, as GitHub and the site load it, the
+// browser would show a broken image; tools/ci/tests/test_svg_wellformed.py guards the same in CI).
 //
 //   node tools/orchestration/render_figures.js svg <file.svg> <out.png>   screenshot one SVG at its natural size
 //   node tools/orchestration/render_figures.js md <file.md> <outdir>      parse + render every mermaid block; one PNG
@@ -26,10 +27,25 @@ async function main() {
   const page = await browser.newPage({ viewport: { width: 1400, height: 900 }, deviceScaleFactor: 2 });
   try {
     if (mode === 'svg') {
+      // Load the file the way GitHub and the site do, as an image: the browser then parses it as strict XML, so a
+      // duplicate attribute or an unclosed tag fails here instead of showing a broken image on the page.
       const svg = fs.readFileSync(src, 'utf8');
-      await page.setContent(`<html><body style="margin:0;background:#fff;display:inline-block">${svg}</body></html>`);
-      const el = await page.$('svg');
-      if (!el) throw new Error(`${src}: no <svg> element`);
+      const parseError = await page.evaluate((text) => {
+        const doc = new DOMParser().parseFromString(text, 'image/svg+xml');
+        const err = doc.querySelector('parsererror');
+        return err ? err.textContent.split('\n').slice(0, 2).join(' ') : null;
+      }, svg);
+      if (parseError) throw new Error(`${src}: not well-formed XML: ${parseError}`);
+      const dataUrl = 'data:image/svg+xml;base64,' + Buffer.from(svg, 'utf8').toString('base64');
+      await page.setContent(`<html><body style="margin:0;background:#fff"><img id="f" src="${dataUrl}"></body></html>`);
+      const ok = await page.evaluate(() => new Promise((resolve) => {
+        const img = document.getElementById('f');
+        if (img.complete) return resolve(img.naturalWidth > 0);
+        img.onload = () => resolve(img.naturalWidth > 0);
+        img.onerror = () => resolve(false);
+      }));
+      if (!ok) throw new Error(`${src}: the browser could not load it as an image`);
+      const el = await page.$('#f');
       await el.screenshot({ path: out });
       const box = await el.boundingBox();
       console.log(`wrote ${out} (${Math.round(box.width)}x${Math.round(box.height)} css px)`);
