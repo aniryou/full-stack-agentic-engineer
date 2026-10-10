@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="424" viewBox="0 0 900 424" role="img" aria-label="One FA3 CTA: a producer warpgroup issues TMA loads into an SMEM ring, two consumer warpgroups each own 64 rows and alternate on the tensor cores, and the register budget makes it fit." style="color: #E4EAE7">
+  <title>One FA3 CTA: a producer warpgroup issues TMA loads into an SMEM ring, two consumer warpgroups each own 64 rows and alternate on the tensor cores, and the register budget makes it fit.</title>
+  <rect x="0" y="0" width="900" height="424" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="28" fill="#97A59F">One FA3 CTA on Hopper, d = 128, B_r × B_c = 128 × 176 (§5.2)</text>
+    <rect x="24" y="188" width="104" height="64" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="76" y="214" text-anchor="middle" font-weight="600">HBM</text>
+    <text x="76" y="234" text-anchor="middle" font-size="11.5" fill="#97A59F">Q, K, V</text>
+    <rect x="170" y="56" width="240" height="88" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="290" y="78" text-anchor="middle" font-weight="600">WG0 producer</text>
+    <text x="290" y="96" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">warpgroup_reg_dealloc&lt;24&gt;</text>
+    <text x="290" y="116" text-anchor="middle" font-size="11" fill="#97A59F">one warp issues the TMA loads:</text>
+    <text x="290" y="132" text-anchor="middle" font-size="11" fill="#97A59F">Q once, then K_j and V_j into the ring</text>
+    <rect x="170" y="176" width="240" height="96" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="290" y="198" text-anchor="middle" font-weight="600">SMEM ring of kStages buffers</text>
+    <text x="290" y="216" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">pipeline_k, pipeline_v</text>
+    <text x="290" y="234" text-anchor="middle" font-size="11" fill="#97A59F">an mbarrier counts the bytes of each copy</text>
+    <text x="290" y="252" text-anchor="middle" fill="#97A59F" font-family="JetBrains Mono, monospace" font-size="11">consumer_wait / consumer_release</text>
+    <text x="290" y="290" text-anchor="middle" font-size="11" fill="#7ADACF">K_j, V_j tiles go to both consumers</text>
+    <rect x="460" y="56" width="236" height="90" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="578" y="78" text-anchor="middle" font-weight="600">WG1 consumer: rows 0..63</text>
+    <text x="578" y="96" text-anchor="middle" fill="#7ADACF" font-family="JetBrains Mono, monospace" font-size="11">warpgroup_reg_alloc&lt;240&gt;</text>
+    <text x="578" y="116" text-anchor="middle" font-size="11" fill="#7ADACF">S = Q Kᵀ (WGMMA), softmax, O += P V</text>
+    <text x="578" y="134" text-anchor="middle" font-size="11" fill="#97A59F">the loop has a skew of one iteration (§5.4)</text>
+    <rect x="460" y="216" width="236" height="90" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="578" y="238" text-anchor="middle" font-weight="600">WG2 consumer: rows 64..127</text>
+    <text x="578" y="256" text-anchor="middle" fill="#7ADACF" font-family="JetBrains Mono, monospace" font-size="11">warpgroup_reg_alloc&lt;240&gt;</text>
+    <text x="578" y="276" text-anchor="middle" font-size="11" fill="#7ADACF">the same, on the other half of the Q tile</text>
+    <text x="578" y="294" text-anchor="middle" font-size="11" fill="#97A59F">the loop has a skew of one iteration (§5.4)</text>
+    <path d="M484 148 L484 214" fill="none" stroke="#4CC5B7" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#arrA)" marker-start="url(#arrA)"/>
+    <text x="500" y="170" font-size="11" fill="#7ADACF">ping-pong (§5.3): named barriers,</text>
+    <text x="500" y="185" font-size="11" fill="#7ADACF">one warpgroup on the tensor cores</text>
+    <text x="500" y="200" font-size="11" fill="#7ADACF">while the other does its softmax</text>
+    <rect x="736" y="150" width="140" height="64" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="806" y="176" text-anchor="middle" font-weight="600">HBM</text>
+    <text x="806" y="196" text-anchor="middle" font-size="11.5" fill="#97A59F">O and LSE</text>
+    <path d="M128 220 L168 220" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <text x="148" y="208" text-anchor="middle" font-size="11" fill="#97A59F">TMA</text>
+    <path d="M290 144 L290 174" fill="none" stroke="#97A59F" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#arr)"/>
+    <text x="298" y="164" font-size="11" fill="#97A59F">issues the copies</text>
+    <path d="M410 200 L458 110" fill="none" stroke="#4CC5B7" stroke-width="1.2" marker-end="url(#arrA)"/>
+    <path d="M410 240 L458 250" fill="none" stroke="#4CC5B7" stroke-width="1.2" marker-end="url(#arrA)"/>
+    <path d="M696 100 L716 100 L716 182 L734 182" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <path d="M696 262 L716 262 L716 182" fill="none" stroke="#97A59F" stroke-width="1.2"/>
+    <rect x="170" y="328" width="526" height="76" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="433" y="350" text-anchor="middle" font-weight="600">65,536 registers per SM: 128 × 24 + 256 × 240 = 64,512</text>
+    <text x="433" y="370" text-anchor="middle" font-size="11">a consumer thread holds about 196: 88 for the fp32 score tile,</text>
+    <text x="433" y="386" text-anchor="middle" font-size="11">64 for the fp32 output accumulator, 44 for the bf16 probabilities</text>
+    <text x="24" y="418" fill="#97A59F" font-family="JetBrains Mono, monospace" font-size="11">fa_calculators.fa3_registers()</text>
+  </g>
+</svg>

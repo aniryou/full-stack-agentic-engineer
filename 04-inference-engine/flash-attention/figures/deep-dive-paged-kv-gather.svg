@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="470" viewBox="0 0 880 470" role="img" aria-label="A paged KV cache gives the kernel one pool per layer and a block table per sequence; the kernel translates each K/V tile through the table, inside one page in FA2 and across small pages in FA3." style="color: #E4EAE7">
+  <title>A paged KV cache gives the kernel one pool per layer and a block table per sequence; the kernel translates each K/V tile through the table, inside one page in FA2 and across small pages in FA3.</title>
+  <rect x="0" y="0" width="880" height="470" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="28" fill="#97A59F">What the kernel sees (§7.1): a pool, an indirection table, and the valid length of each sequence</text>
+    <rect x="24" y="48" width="516" height="102" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="40" y="68" fill="#97A59F" font-family="JetBrains Mono, monospace" font-size="11">block_table (batch, max_blocks_per_seq) int32</text>
+    <text x="40" y="88" font-size="10.5" fill="#97A59F" font-family="JetBrains Mono, monospace">token t of sequence b → block_table[b][t // block_size], row t % block_size</text>
+    <text x="40" y="121" font-size="11" fill="#97A59F">sequence b</text>
+    <rect x="120" y="102" width="54" height="28" rx="4" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <text x="147" y="121" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">[b][0]</text>
+    <rect x="182" y="102" width="54" height="28" rx="4" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <text x="209" y="121" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">[b][1]</text>
+    <rect x="244" y="102" width="54" height="28" rx="4" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <text x="271" y="121" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">[b][2]</text>
+    <rect x="306" y="102" width="54" height="28" rx="4" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <text x="333" y="121" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">[b][3]</text>
+    <rect x="368" y="102" width="54" height="28" rx="4" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <text x="395" y="121" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">…</text>
+    <rect x="560" y="48" width="296" height="102" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="576" y="68" fill="#97A59F" font-family="JetBrains Mono, monospace" font-size="11">seqused_k (batch,) int32</text>
+    <text x="576" y="92" font-size="11" fill="#97A59F">valid tokens per sequence:</text>
+    <text x="576" y="108" font-size="11" fill="#97A59F">the kernel stops there, and the</text>
+    <text x="576" y="124" font-size="11" fill="#97A59F">last block can be partly full</text>
+    <text x="576" y="142" font-size="10.5" fill="#97A59F" font-family="JetBrains Mono, monospace">vLLM: seq_lens → seqused_k</text>
+    <rect x="24" y="176" width="832" height="108" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <rect x="40" y="190" width="60" height="40" rx="4" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <rect x="108" y="190" width="60" height="40" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <text x="138" y="215" text-anchor="middle" font-size="11" fill="#7ADACF">logical 1</text>
+    <rect x="176" y="190" width="60" height="40" rx="4" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <rect x="244" y="190" width="60" height="40" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <text x="274" y="215" text-anchor="middle" font-size="11" fill="#7ADACF">logical 0</text>
+    <rect x="312" y="190" width="60" height="40" rx="4" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <rect x="380" y="190" width="60" height="40" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <text x="410" y="215" text-anchor="middle" font-size="11" fill="#7ADACF">logical 3</text>
+    <rect x="448" y="190" width="60" height="40" rx="4" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <rect x="516" y="190" width="60" height="40" rx="4" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <rect x="584" y="190" width="60" height="40" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <text x="614" y="215" text-anchor="middle" font-size="11" fill="#7ADACF">logical 2</text>
+    <rect x="652" y="190" width="60" height="40" rx="4" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <rect x="720" y="190" width="60" height="40" rx="4" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <rect x="788" y="190" width="60" height="40" rx="4" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <text x="40" y="252" fill="#97A59F" font-family="JetBrains Mono, monospace" font-size="11">k_cache, v_cache (num_blocks, block_size, H_kv, d): one pool per layer, shared by all sequences</text>
+    <text x="40" y="272" font-size="11" fill="#7ADACF">the blocks of sequence b are anywhere in the pool</text>
+    <text x="840" y="272" text-anchor="end" font-size="11" fill="#97A59F">the other blocks belong to other sequences</text>
+    <path d="M147 130 L274 188" fill="none" stroke="#97A59F" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#arr)"/>
+    <path d="M209 130 L138 188" fill="none" stroke="#97A59F" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#arr)"/>
+    <path d="M271 130 L614 188" fill="none" stroke="#97A59F" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#arr)"/>
+    <path d="M333 130 L410 188" fill="none" stroke="#97A59F" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#arr)"/>
+    <rect x="24" y="304" width="416" height="150" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="40" y="324" font-size="11.5">FA2 flash_attn_with_kvcache: page_block_size a multiple of 256</text>
+    <rect x="40" y="340" width="92" height="100" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="86" y="358" text-anchor="middle" font-size="11" fill="#97A59F">one page</text>
+    <rect x="48" y="370" width="76" height="40" rx="3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="86" y="394" text-anchor="middle" font-size="11" fill="#7ADACF">K tile</text>
+    <text x="148" y="358" font-size="11" fill="#97A59F">kBlockN rows: a tile never goes across two pages</text>
+    <text x="148" y="380" font-size="10.5" fill="#97A59F" font-family="JetBrains Mono, monospace">idx = n_block·kBlockN / page_block_size</text>
+    <text x="148" y="396" font-size="10.5" fill="#97A59F" font-family="JetBrains Mono, monospace">offset = n_block·kBlockN − idx·page_block_size</text>
+    <text x="148" y="412" font-size="10.5" fill="#97A59F" font-family="JetBrains Mono, monospace">ptr = k_ptr + block_table[idx]·k_batch_stride</text>
+    <text x="148" y="428" font-size="10.5" fill="#97A59F" font-family="JetBrains Mono, monospace">      + offset·k_row_stride</text>
+    <rect x="460" y="304" width="396" height="150" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="476" y="324" font-size="11.5">FA3 with 16-token pages (vLLM): the tile spans pages</text>
+    <rect x="478" y="340" width="11" height="92" rx="2" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="492" y="340" width="11" height="92" rx="2" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="506" y="340" width="11" height="92" rx="2" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="520" y="340" width="11" height="92" rx="2" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="534" y="340" width="11" height="92" rx="2" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="548" y="340" width="11" height="92" rx="2" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="562" y="340" width="11" height="92" rx="2" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="576" y="340" width="11" height="92" rx="2" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="533" y="446" text-anchor="middle" font-size="10.5" fill="#97A59F">16-token pages</text>
+    <rect x="472" y="370" width="122" height="40" rx="3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="533" y="394" text-anchor="middle" font-size="11" fill="#7ADACF">K tile, 128 wide</text>
+    <text x="612" y="358" font-size="11" fill="#97A59F">small pages break the TMA's rectangular</text>
+    <text x="612" y="374" font-size="11" fill="#97A59F">tile loads, thus FA3 changes to per-row</text>
+    <text x="612" y="390" font-size="11" fill="#97A59F">asynchronous copies (paged_kv_non_TMA)</text>
+    <text x="612" y="414" font-size="11" fill="#97A59F">the tile gets smaller (§5.5): 128 × 128,</text>
+    <text x="612" y="430" font-size="11" fill="#97A59F">not 128 × 176, at d = 128</text>
+  </g>
+</svg>

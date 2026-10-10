@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Online softmax over two blocks of keys: the state (m, l, o) after each block, the rescale by α, the final division, and the same two blocks merged as independent splits in LSE form." style="color: #E4EAE7">
+  <title>Online softmax over two blocks of keys: the state (m, l, o) after each block, the rescale by α, the final division, and the same two blocks merged as independent splits in LSE form.</title>
+  <rect x="0" y="0" width="900" height="436" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="28" fill="#97A59F">One query row, d = 4, τ = 0.5, four keys in two blocks of two (§2.6)</text>
+    <text x="24" y="46" fill="#97A59F" font-family="JetBrains Mono, monospace" font-size="11">fa_calculators.online_trace(), merge_lse()</text>
+    <rect x="24" y="86" width="130" height="80" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="89" y="114" text-anchor="middle" font-weight="600">start</text>
+    <text x="89" y="136" text-anchor="middle" font-size="11.5" fill="#97A59F">(m, l, o) =</text>
+    <text x="89" y="154" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">(−∞, 0, 0)</text>
+    <rect x="194" y="62" width="190" height="128" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="289" y="86" text-anchor="middle" font-weight="600">block 1: scores [4, 8]</text>
+    <text x="289" y="110" text-anchor="middle" fill="#7ADACF" font-family="JetBrains Mono, monospace" font-size="11">m = 8</text>
+    <text x="289" y="130" text-anchor="middle" fill="#7ADACF" font-family="JetBrains Mono, monospace" font-size="11">p = [0.135335, 1]</text>
+    <text x="289" y="150" text-anchor="middle" fill="#7ADACF" font-family="JetBrains Mono, monospace" font-size="11">l = 1.135335</text>
+    <text x="289" y="170" text-anchor="middle" fill="#7ADACF" font-family="JetBrains Mono, monospace" font-size="11">o = [0.135335, 1]</text>
+    <rect x="484" y="62" width="226" height="128" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="597" y="86" text-anchor="middle" font-weight="600">block 2: scores [6, 12]</text>
+    <text x="597" y="110" text-anchor="middle" fill="#7ADACF" font-family="JetBrains Mono, monospace" font-size="11">m' = 12</text>
+    <text x="597" y="130" text-anchor="middle" fill="#7ADACF" font-family="JetBrains Mono, monospace" font-size="11">p = [0.049787, 1]</text>
+    <text x="597" y="150" text-anchor="middle" fill="#7ADACF" font-family="JetBrains Mono, monospace" font-size="11">l' = 1.203438</text>
+    <text x="597" y="170" text-anchor="middle" fill="#7ADACF" font-family="JetBrains Mono, monospace" font-size="11">o' = [2.068103, −0.814878]</text>
+    <rect x="750" y="62" width="126" height="128" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="813" y="86" text-anchor="middle" font-weight="600">finalize</text>
+    <text x="813" y="112" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">O = o'/l'</text>
+    <text x="813" y="130" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">= [1.718495,</text>
+    <text x="813" y="148" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">  −0.677125]</text>
+    <text x="813" y="172" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">LSE = 6.185182</text>
+    <path d="M154 126 L192 126" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <path d="M384 126 L482 126" fill="none" stroke="#4CC5B7" stroke-width="1.2" marker-end="url(#arrA)"/>
+    <text x="434" y="110" text-anchor="middle" font-size="11" fill="#7ADACF">α = 0.135335</text>
+    <text x="434" y="146" text-anchor="middle" font-size="11" fill="#97A59F">rescales l and o</text>
+    <path d="M710 126 L748 126" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <text x="729" y="112" text-anchor="middle" font-size="11" fill="#97A59F">÷ l'</text>
+    <rect x="24" y="216" width="852" height="204" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="40" y="236" font-size="11.5" fill="#97A59F">the same two blocks as two independent splits, merged in LSE form (§2.3)</text>
+    <rect x="48" y="252" width="262" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="179" y="274" text-anchor="middle" font-weight="600">split 1 alone</text>
+    <text x="179" y="294" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">Ô₁ = [0.119203, 0.880797]</text>
+    <text x="179" y="312" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">L₁ = 4.126928</text>
+    <rect x="48" y="338" width="262" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="179" y="360" text-anchor="middle" font-weight="600">split 2 alone</text>
+    <text x="179" y="380" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">Ô₂ = [1.952574, −0.905148]</text>
+    <text x="179" y="398" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">L₂ = 6.048587</text>
+    <rect x="400" y="264" width="452" height="130" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="626" y="288" text-anchor="middle" font-weight="600">merge</text>
+    <text x="626" y="312" text-anchor="middle" fill="#7ADACF" font-family="JetBrains Mono, monospace" font-size="11">L = ln(e^4.126928 + e^6.048587) = 6.185182</text>
+    <text x="626" y="332" text-anchor="middle" fill="#7ADACF" font-family="JetBrains Mono, monospace" font-size="11">weights e^(L₁−L) = 0.127677 and e^(L₂−L) = 0.872323</text>
+    <text x="626" y="352" text-anchor="middle" fill="#7ADACF" font-family="JetBrains Mono, monospace" font-size="11">O = 0.127677·Ô₁ + 0.872323·Ô₂</text>
+    <text x="626" y="372" text-anchor="middle" fill="#7ADACF" font-family="JetBrains Mono, monospace" font-size="11">  = [1.718495, −0.677125]</text>
+    <path d="M310 287 L398 316" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <path d="M310 373 L398 344" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+  </g>
+</svg>
