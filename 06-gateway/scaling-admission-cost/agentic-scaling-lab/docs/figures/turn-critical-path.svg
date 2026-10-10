@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="270" viewBox="0 0 900 270" role="img" aria-label="One turn with two tool calls on a time axis: the plan call, the two tool calls in parallel, the answer call and the streaming of the answer are four sequential segments on the critical path, and the user sees the first token of the answer only after the plan and the tools." style="color: #E4EAE7">
-  <title>One turn with two tool calls on a time axis: the plan call, the two tool calls in parallel, the answer call and the streaming of the answer are four sequential segments on the critical path, and the user sees the first token of the answer only after the plan and the tools.</title>
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="270" viewBox="0 0 900 270" role="img" aria-label="One turn with two tool calls on a time axis: the plan call, the two tool calls in parallel, the answer call and the streaming of the answer are four sequential segments on the critical path, and the user sees the first token only after the plan call, the tools and the time-to-first-token of the answer call." style="color: #E4EAE7">
+  <title>One turn with two tool calls on a time axis: the plan call, the two tool calls in parallel, the answer call and the streaming of the answer are four sequential segments on the critical path, and the user sees the first token only after the plan call, the tools and the time-to-first-token of the answer call.</title>
   <rect x="0" y="0" width="900" height="270" rx="8" fill="#161E1C"/>
   <defs>
     <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
@@ -16,15 +16,15 @@
     <rect x="180" y="96" width="120" height="26" rx="2" fill="none" stroke="currentColor" stroke-width="1.2"/>
     <text x="240" y="113" text-anchor="middle" font-size="11">output tokens</text>
     <!-- 2 tools, in parallel -->
-    <rect x="330" y="90" width="120" height="16" rx="2" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
-    <text x="390" y="102" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10.5">get_customer</text>
-    <text x="456" y="102" font-size="10.5" fill="#97A59F">the profile</text>
-    <rect x="330" y="112" width="190" height="16" rx="2" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
-    <text x="425" y="124" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10.5">check_network</text>
-    <path d="M330 130 L330 150" stroke="#97A59F" stroke-width="1" stroke-dasharray="3 2"/>
-    <text x="336" y="148" font-size="10.5" fill="#97A59F">a progress event to the user</text>
+    <rect x="330" y="89" width="120" height="18" rx="2" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="390" y="102" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">get_customer</text>
+    <text x="456" y="102" font-size="11" fill="#97A59F">the profile</text>
+    <rect x="330" y="111" width="190" height="18" rx="2" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="425" y="124" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">check_network</text>
+    <path d="M330 131 L330 150" stroke="#97A59F" stroke-width="1" stroke-dasharray="3 2"/>
+    <text x="336" y="148" font-size="11" fill="#97A59F">a progress event to the user</text>
     <!-- more steps -->
-    <rect x="540" y="90" width="60" height="38" rx="2" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="4 3"/>
+    <rect x="540" y="89" width="60" height="40" rx="2" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="4 3"/>
     <text x="570" y="113" text-anchor="middle" font-size="11" fill="#97A59F">…</text>
     <!-- 3 answer call -->
     <rect x="620" y="96" width="120" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
@@ -35,7 +35,7 @@
     <path d="M740 84 L740 134" stroke="#4CC5B7" stroke-width="1.4"/>
     <!-- time axis -->
     <path d="M40 172 L876 172" stroke="#97A59F" stroke-width="1" marker-end="url(#arr)"/>
-    <text x="876" y="188" text-anchor="end" font-size="11" fill="#97A59F">time</text>
+    <text x="876" y="162" text-anchor="end" font-size="11" fill="#97A59F">time</text>
     <g stroke="#97A59F" stroke-width="1">
       <path d="M40 168 L40 176"/>
       <path d="M330 168 L330 176"/>

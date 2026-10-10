@@ -75,9 +75,9 @@ Two consequences give every design its shape. First, the capacity plan is a *tok
 
 A turn with two tool calls has four segments on the critical path. They are the plan call, the tools, the answer call, and the streaming of the answer. Model latency is the time-to-first-token (which now includes *thinking* time) plus the output tokens divided by the tokens per second. The segments are sequential. Thus the p95 of the turn is approximately the sum of the tails of the segments, not the tail of their sums. A 4-second p95 target makes four things necessary: parallel tools, streaming, prefetch, and a Flash-class model on the plan step.
 
-![One turn with two tool calls on a time axis: the plan call, the two tool calls in parallel, the answer call and the streaming of the answer are four sequential segments on the critical path, and the user sees the first token of the answer only after the plan and the tools.](figures/turn-critical-path.svg)
+![One turn with two tool calls on a time axis: the plan call, the two tool calls in parallel, the answer call and the streaming of the answer are four sequential segments on the critical path, and the user sees the first token only after the plan call, the tools and the time-to-first-token of the answer call.](figures/turn-critical-path.svg)
 
-*One turn with two tool calls on a time axis. The four segments of the critical path are sequential: the plan call, the tools, the answer call and the streaming of the answer. The two tools run in parallel, thus their time is the max, not the sum (§5.6). The user sees the first token of the answer only after the plan and the tools (§5.7).*
+*One turn with two tool calls on a time axis. The four segments of the critical path are sequential: the plan call, the tools, the answer call and the streaming of the answer. The two tools run in parallel, thus their time is the max, not the sum (§5.6). The user sees the first token only after the plan call, the tools and the time-to-first-token of the answer call (§5.7).*
 
 Also, because turns are long, Little's law connects latency to concurrency. At 20 turns per second, a 6-second turn means 125 turns in flight, and a 12-second turn means 250. Each turn in flight holds memory, a session lock and an open client connection. Slowdowns *are* capacity problems.
 
@@ -223,7 +223,7 @@ flowchart TB
     C -- "× a conversation of<br/>6 × (6 + 60) ≈ 400 s" --> S["concurrent sessions:<br/>460 at average,<br/>4,600 in an incident"]
 ```
 
-*The arithmetic of §3.2 and §3.3 as one chain, with the numbers of the anchor scenario. The rates flow down to the input tokens a minute and to the comparison with the baseline. The turn duration gives the turns in flight, and the same baseline gives the in-flight cap (`scalelab.capacity`).*
+*The arithmetic of §3.2 and §3.3 in one diagram, with the numbers of the anchor scenario. The rates flow down to the input tokens a minute and to the comparison with the baseline. The turn duration gives the turns in flight, and the same baseline gives the in-flight cap (`scalelab.capacity`).*
 
 ### 3.4 Cost per conversation
 
@@ -420,7 +420,7 @@ The cap starts at the token-budget number from 3.3. You adjust it from load test
 
 ```mermaid
 flowchart TB
-    T(["a turn arrives at the gateway,<br/>before it has cost anything"]) --> Q1["1. the token bucket of<br/>the tenant: a noisy brand<br/>cannot take all of the pool"]
+    T(["a turn arrives at<br/>the gateway, before<br/>it has cost anything"]) --> Q1["1. the token bucket of<br/>the tenant: a noisy brand<br/>cannot take all of the pool"]
     Q1 --> Q2["2. the degrade level of<br/>the system, from Redis"]
     Q2 --> Q3{"3. above the cap?<br/>level 3: in-flight ≥ cap<br/>or queue age ≥ 30 s"}
     Q3 -- "no, or a priority class" --> RUN["admit: the turn runs at<br/>the level, 0 to 2: the model,<br/>the thinking level, the tools<br/>and the output cap"]

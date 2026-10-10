@@ -31,16 +31,16 @@
     <text x="407" y="218" font-size="11" fill="#7ADACF">b</text>
     <circle cx="436.0" cy="142.0" r="4" fill="currentColor"/>
     <circle cx="461.0" cy="177.0" r="4" fill="currentColor"/>
-    <circle cx="326.0" cy="82.0" r="4" fill="currentColor"/>
     <circle cx="332.0" cy="88.0" r="4" fill="currentColor"/>
+    <circle cx="338.0" cy="94.0" r="4" fill="currentColor"/>
     <text x="443" y="138" font-size="11.5">car</text>
     <text x="468" y="182" font-size="11.5">automobile</text>
     <text x="468" y="198" font-size="11" fill="#7ADACF">near:</text>
     <text x="468" y="212" font-size="11" fill="#7ADACF">similar meaning</text>
-    <circle cx="329.0" cy="85.0" r="15" fill="none" stroke="#E39A62" stroke-width="1.2" stroke-dasharray="4 3"/>
-    <text x="349" y="79" font-size="11.5">invoice 4471</text>
-    <text x="349" y="95" font-size="11.5">invoice 4417</text>
-    <text x="349" y="112" font-size="11" fill="#E39A62">the difference is not encoded</text>
+    <circle cx="335.0" cy="91.0" r="15" fill="none" stroke="#E39A62" stroke-width="1.2" stroke-dasharray="4 3"/>
+    <text x="355" y="85" font-size="11.5">invoice 4471</text>
+    <text x="355" y="101" font-size="11.5">invoice 4417</text>
+    <text x="355" y="118" font-size="11" fill="#E39A62">the difference is not encoded</text>
     <text x="256" y="296" font-size="11" fill="#97A59F">cos(a, b) = a · b / (‖a‖ ‖b‖)</text>
     <rect x="580" y="48" width="296" height="258" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
     <text x="590" y="68" font-weight="600">ℝ<tspan font-size="9" dy="-5">d</tspan><tspan dy="5">, model B: the same objects</tspan></text>
@@ -50,15 +50,15 @@
     <path d="M846 96 L679.4 113.4" fill="none" stroke="#97A59F" stroke-width="1.4" marker-end="url(#arr)"/>
     <circle cx="682.6" cy="147.2" r="4" fill="currentColor"/>
     <circle cx="673.4" cy="114.1" r="4" fill="currentColor"/>
-    <circle cx="748.9" cy="222.4" r="4" fill="currentColor"/>
     <circle cx="746.0" cy="216.3" r="4" fill="currentColor"/>
+    <circle cx="743.2" cy="210.1" r="4" fill="currentColor"/>
     <text x="676" y="157" text-anchor="end" font-size="11.5">car</text>
     <text x="666" y="118" text-anchor="end" font-size="11.5">automobile</text>
-    <circle cx="747.5" cy="219.3" r="15" fill="none" stroke="#E39A62" stroke-width="1.2" stroke-dasharray="4 3"/>
-    <text x="747" y="249" text-anchor="middle" font-size="11.5">the two invoices</text>
+    <circle cx="744.6" cy="213.2" r="15" fill="none" stroke="#E39A62" stroke-width="1.2" stroke-dasharray="4 3"/>
+    <text x="745" y="243" text-anchor="middle" font-size="11.5">the two invoices</text>
     <text x="590" y="280" font-size="11" fill="#E39A62">the coordinates are rotated: the same geometry,</text>
     <text x="590" y="296" font-size="11" fill="#E39A62">but not comparable with model A (section 14)</text>
-    <text x="450" y="336" text-anchor="middle" font-size="11" fill="#97A59F">compression: a 50k-word one-hot vocabulary is 50,000-dimensional, and every word is orthogonal to every other word.</text>
-    <text x="450" y="352" text-anchor="middle" font-size="11" fill="#97A59F">A 300-d word vector says much, because d is much smaller than the raw dimensionality.</text>
+    <text x="450" y="336" text-anchor="middle" font-size="11" fill="#97A59F">compression: d is much smaller than the raw dimensionality. A 50k-word one-hot vocabulary is 50,000-dimensional.</text>
+    <text x="450" y="352" text-anchor="middle" font-size="11" fill="#97A59F">It says nothing about similarity, because every word is orthogonal to every other word. A 300-d word vector says much.</text>
   </g>
 </svg>

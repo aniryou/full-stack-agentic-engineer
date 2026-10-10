@@ -104,7 +104,7 @@ flowchart TB
     P ~~~ SB
 ```
 
-*The map of the attack paths: the flows of §2 that cross a trust boundary, with the OWASP risk that appears on each one. Each flow gets an identity, a policy and a log. ASI03 and ASI10 are risks of the agent itself.*
+*The arrows are the flows that cross a trust boundary, with the OWASP risks of §2 that appear on them. Each flow gets an identity, a policy and a log. ASI03 and ASI10 are risks of the agent itself.*
 
 **In one sentence:** "I use the agentic top ten of OWASP as the checklist. But the design question is always the same. Assume that an attacker hijacked the model. What is the worst thing that it can do with the credentials and tools that it holds? Which control outside the model stops it?"
 
@@ -199,20 +199,21 @@ As the agent developer, you control the runtime layer most. The resource and net
 
 ```mermaid
 flowchart TB
-    MA["Model Armor floor settings: the prompt<br/>before the model call, the response after it"] -.-> MC
-    MC["the model emits a tool call:<br/>the tool name and the arguments"] --> BT["before_tool_callback (SecurityPlugin):<br/>the authority context and the counters"]
-    BT --> EV["PolicyEngine.evaluate(ToolCallRequest):<br/>agent, user, authority mode, tool, arguments, scopes"]
-    EV --> D{"the decision"}
-    D -- "deny" --> DENY["DENY: an unknown tool, an agent not on the allowlist,<br/>the wrong authority, a missing scope, an argument outside<br/>its constraint, a blocked host, a budget. The callback<br/>returns a result and the runtime skips the tool."]
-    D -- "DESTRUCTIVE or EXTERNAL, outside<br/>the pre-approved argument envelope" --> CONF["CONFIRM: adk_request_confirmation shows<br/>the tool and the exact arguments"]
+    MA["the model call:<br/>Model Armor floor settings<br/>screen the prompt before<br/>it, the response after it"] -- "a tool call" --> EV
+    EV["before_tool_callback<br/>(SecurityPlugin) calls<br/>PolicyEngine.evaluate():<br/>agent, user, authority<br/>mode, tool, arguments,<br/>scopes, counters"] --> D{"decision"}
+    D -- "deny: the callback returns<br/>a result and the runtime<br/>skips the tool" --> DENY["DENY: an unknown tool,<br/>an agent not on the<br/>allowlist, the wrong<br/>authority, a missing scope,<br/>an argument outside its<br/>constraint, a blocked<br/>host, a budget"]
+    D -- "DESTRUCTIVE or<br/>EXTERNAL, outside the<br/>pre-approved envelope" --> CONF["CONFIRM:<br/>adk_request_confirmation<br/>shows the tool and<br/>the exact arguments"]
     CONF -- "ToolConfirmation(confirmed=True),<br/>logged with the approver" --> ALLOW
-    D -- "READ by default,<br/>WRITE on the allowlist" --> ALLOW["ALLOW"]
-    ALLOW --> BR["the broker (Auth Manager or the STS): a credential<br/>for this tool only, with the audience, a minimal scope,<br/>a short TTL and, when delegated, the user as subject"]
-    BR --> GW["Agent Gateway and VPC-SC: IAP per SPIFFE ID,<br/>conditions on mcp.toolName and mcp.tool.isReadOnly"]
-    GW --> RS["the resource server validates the audience, the scope,<br/>the expiry and the binding. IAM on the resource decides last."]
+    D -- "READ by default,<br/>WRITE on the allowlist,<br/>or inside the envelope" --> ALLOW["ALLOW"]
+    ALLOW --> BR["the broker (Auth Manager<br/>or the STS): a credential<br/>for this tool only, with<br/>the audience, a minimal<br/>scope, a short TTL and,<br/>when delegated, the user<br/>as subject"]
+    BR --> NR
+    subgraph NR ["the network and resource layers"]
+        direction LR
+        GW["Agent Gateway and<br/>VPC-SC: IAP per<br/>SPIFFE ID, conditions<br/>on mcp.toolName and<br/>mcp.tool.isReadOnly"] --> RS["the resource server<br/>validates the audience,<br/>the scope, the expiry and<br/>the binding. IAM on the<br/>resource decides last."]
+    end
 ```
 
-*One tool call through the four policy enforcement points of §4.1. The runtime layer decides first: `PolicyEngine.evaluate()` denies by default, asks for a confirmation for a destructive call, or permits. Then the broker narrows the credential to the call, the gateway and the perimeter check the destination, and IAM on the resource decides last.*
+*One tool call goes through the four policy enforcement points of §4.1. Model Armor screens the model call. The runtime layer decides on the tool call: `PolicyEngine.evaluate()` denies by default, asks for a confirmation, or permits. Then the broker narrows the credential to the call, the gateway and the perimeter check the destination, and IAM on the resource decides last.*
 
 ### 4.2 Tool tiers and deny-by-default
 
@@ -284,19 +285,19 @@ Everything that enters the context window from outside the developer's own instr
 
 ```mermaid
 flowchart TB
-    UP(["the user's prompt"]) --> SP["screen_prompt(): Model Armor floor settings, for<br/>injection, jailbreak, sensitive data, malicious URIs"]
-    SP -- "a blocked prompt never reaches the model" --> MODEL["the model: instructions and data<br/>in one context window"]
-    MODEL --> SR["screen_response(): data leakage, malicious URIs"]
+    UP(["the user's prompt"]) --> SP["screen_prompt():<br/>Model Armor or an<br/>equivalent, for injection,<br/>jailbreak, sensitive data,<br/>malicious URIs"]
+    SP -- "only a prompt that<br/>is not blocked" --> MODEL["the model: instructions<br/>and data in one<br/>context window"]
+    MODEL --> SR["screen_response(): data<br/>leakage, malicious URIs"]
     SR --> OUT(["the answer to the user"])
-    MODEL -- "a tool call" --> ARGS["tool input schemas with tight types and enums,<br/>EgressPolicy.check(url) for any tool that takes a URL"]
+    MODEL -- "a tool call" --> ARGS["tool input schemas with<br/>tight types and enums,<br/>EgressPolicy.check(url)<br/>for any tool that<br/>takes a URL"]
     ARGS --> TOOL["the tool"]
-    TOOL -- "returns" --> EXT["untrusted content: web pages, documents,<br/>tickets, emails, messages from other agents"]
-    EXT -- "a tool result" --> SAN["sanitize_tool_output(): control characters<br/>and instruction patterns removed"]
-    SAN --> WRAP["wrap_untrusted(): a Provenance tag with the source<br/>and the trust level, kept in the audit record"]
+    TOOL -- "returns" --> EXT["untrusted content: web<br/>pages, documents,<br/>tickets, emails, messages<br/>from other agents"]
+    EXT -- "a tool result" --> SAN["sanitize_tool_output()<br/>removes control<br/>characters and<br/>instruction patterns"]
+    SAN --> WRAP["wrap_untrusted(): a<br/>Provenance tag with the<br/>source and the trust level,<br/>kept in the audit record"]
     WRAP -- "data, never instructions" --> MODEL
 ```
 
-*Where untrusted text enters, and where each check sits. Model Armor screens the prompt on the way in and the response on the way out. The plugin sanitizes each tool result and tags it with its provenance before the model reads it. Schemas and the egress allowlist constrain the arguments of the next tool call (§6.1).*
+*Untrusted text enters through the user's prompt and through each tool result, and each path has a check. Model Armor screens the prompt on the way in and the response on the way out. The plugin sanitizes each tool result and tags it with its provenance before the model reads it. Schemas and the egress allowlist constrain the arguments of each tool call.*
 
 ### 6.2 Code execution and sandboxes
 

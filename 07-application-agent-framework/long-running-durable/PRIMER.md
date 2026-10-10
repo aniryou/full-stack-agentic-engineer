@@ -174,17 +174,17 @@ The flow has these steps:
 
 ```mermaid
 flowchart TB
-  PL["1. a planner LLM makes N subtasks"] --> Q["2. a Pub/Sub topic, or N Cloud Tasks"]
+  PL["1. a planner LLM<br/>makes N subtasks"] --> Q["2. a Pub/Sub topic,<br/>or N Cloud Tasks"]
   Q --> W1["3. an idempotent worker"]
   Q --> W2["3. an idempotent worker"]
-  Q --> W3["3. an idempotent worker, N of them"]
+  Q --> W3["3. an idempotent worker,<br/>N of them"]
   W1 --> C
   W2 --> C
   W3 --> C
-  C[("4. the run document: a transactional<br/>counter, the side effects outside<br/>the transaction")]
-  C -->|"5. the write that reaches N,<br/>and a late duplicate that sees all_done"| A[["the named aggregate task"]]
-  A --> S["6. a synthesis LLM combines the results"]
-  C -.->|"N > ~50 writers contend (~1 write/s)"| H["one document for each subtask<br/>and a count query, or Cloud<br/>Workflows parallel"]
+  C[("4. the run document:<br/>a transactional counter,<br/>the side effects outside<br/>the transaction")]
+  C -->|"5. the write that reaches N"| A[["the named aggregate task,<br/>also from a late duplicate<br/>that sees all_done"]]
+  A --> S["6. a synthesis LLM<br/>combines the results"]
+  C -.->|"N > ~50 writers"| H["the writes contend<br/>(~1 write/s): one document<br/>for each subtask and<br/>a count query, or<br/>Cloud Workflows parallel"]
 ```
 
 *This figure shows the six steps of P2. Each worker updates the counter in a transaction, and the side effects stay outside the transaction. The write that reaches N enqueues the named `aggregate` task. A late duplicate also sees `all_done` and enqueues the same task, and Cloud Tasks rejects the second enqueue by its name.*
@@ -263,14 +263,14 @@ The numbers are from a check on 5 Sep 2026. Do a new check before you depend on 
 
 ```mermaid
 flowchart TB
-  SCH["Cloud Scheduler: the clock<br/>at-least-once, it can send a tick two times"] --> PS["Pub/Sub: fan-out, events<br/>at-least-once, the ack deadline is 10–600 s<br/>exactly-once delivery only for pull subscriptions"]
-  EXT["webhooks, Eventarc events,<br/>a person behind IAP"] --> CR
-  PS --> CR["Cloud Run service: the trigger<br/>HTTP handlers for steps, approvals, callbacks and Pub/Sub push<br/>request timeout 5 min by default, maximum 60 min<br/>instances scale to zero"]
-  CR <--> CT[("Cloud Tasks: wake run X for step N, not before T<br/>at-least-once, named tasks de-duplicated (~1 h–24 h)<br/>schedule_time up to 30 days, 500 dispatches/s for each queue<br/>HTTP targets with OIDC tokens")]
-  CR --> FS[("Firestore: run documents, keys, leases<br/>transactions, a document is ≤ 1 MiB<br/>~1 write/s for each document at the most")]
-  CR --> GM["Gemini on Vertex AI"]
-  CR -->|"one long step"| JOB[["Cloud Run job<br/>up to 168 h (7 days) for each attempt"]]
-  WF["Cloud Workflows: managed durable orchestration<br/>an execution runs or waits up to 1 year<br/>await_callback has a default timeout of 12 h"] -.->|"calls the endpoints (§6 B)"| CR
+  SCH["Cloud Scheduler: the clock<br/>at-least-once, it can<br/>send a tick two times"] --> PS["Pub/Sub: fan-out, events<br/>at-least-once, the ack<br/>deadline is 10–600 s<br/>exactly-once delivery:<br/>pull subscriptions only"]
+  EXT["webhooks,<br/>Eventarc events,<br/>a person behind IAP"] --> CR
+  PS --> CR["Cloud Run service:<br/>the trigger<br/>HTTP handlers for steps,<br/>approvals, callbacks<br/>and Pub/Sub push<br/>request timeout:<br/>5 min by default,<br/>maximum 60 min<br/>instances scale to zero"]
+  CR <--> CT[("Cloud Tasks: wake run X<br/>for step N, not before T<br/>at-least-once, named<br/>tasks de-duplicated<br/>(~1 h–24 h)<br/>schedule_time up to<br/>30 days ahead<br/>500 dispatches/s<br/>for each queue")]
+  CR --> FS[("Firestore: run<br/>documents, keys,<br/>leases, transactions<br/>a document is ≤ 1 MiB<br/>~1 write/s for each<br/>document at the most")]
+  CR --> GM["Gemini on<br/>Vertex AI"]
+  CR --> JOB[["Cloud Run job<br/>for one long step:<br/>up to 168 h (7 days)<br/>for each attempt"]]
+  WF["Cloud Workflows: managed<br/>durable orchestration<br/>that calls the endpoints<br/>an execution runs or<br/>waits up to 1 year<br/>await_callback has a<br/>default timeout of 12 h"] -.-> CR
 ```
 
 *This figure shows the path of one wake-up through the services of the table. The boxes carry the limits that decide the design (§5.1): the 60-min request timeout, the 30-day `schedule_time`, the 1-year Workflows execution, the 1 MiB document. The dotted edge is the managed alternative, Cloud Workflows (§6 B).*

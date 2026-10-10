@@ -418,24 +418,24 @@ Always make sure that your numbers agree with the current quotas on the product 
 
 ```mermaid
 sequenceDiagram
-    participant T as the test
     participant K as FakeClock
+    participant T as the test
     participant E as Engine
-    participant S as in-memory store and queue
-    T->>E: deliver the task: execute_task(run, step, attempt)
-    E->>S: ctx.effect records the effect (I3)
-    Note over E,S: the chaos hook raises a simulated crash<br/>at after_step_before_commit:<br/>no checkpoint, no enqueue
-    Note over S: no release of the<br/>lease after a crash
-    T->>K: advance past the lease TTL
+    participant S as in-memory<br/>store and queue
+    T->>E: deliver the task:<br/>execute_task(StepTask)
+    E->>S: ctx.effect records<br/>the effect (I3)
+    Note over E,S: the chaos hook raises<br/>a simulated crash at<br/>after_step_before_commit:<br/>no checkpoint, no next task
+    Note over E,S: no release of the lease,<br/>the queue keeps the task<br/>for a redelivery
+    T->>K: advance past<br/>the lease TTL
     T->>E: reap()
-    E->>S: expired lease: enqueue the attempt again
-    T->>E: deliver the re-driven task: the step runs again
-    E->>S: the effect record exists: skip it (I3)
-    E->>S: the checkpoint (I1), then the next task
-    T->>T: assert one re-drive and no repeated effect
+    E->>S: expired lease: enqueue<br/>the same attempt, the queue<br/>rejects it as a duplicate
+    T->>E: deliver the same task:<br/>the step runs again
+    E->>S: the effect record<br/>exists: skip it (I3)
+    E->>S: the checkpoint (I1),<br/>then the next task
+    Note over T: assert one<br/>re-drive and no<br/>repeated effect
 ```
 
-*This figure shows one test of `tests/test_durability.py`. A chaos hook raises a simulated crash at one crash window, after the effect record and before the checkpoint. The test advances `FakeClock` past the lease TTL, runs the reaper and delivers the re-driven task. The assertion is one re-drive and no repeated effect.*
+*This figure shows one test of `tests/test_durability.py`. A chaos hook raises a simulated crash at one crash window, after the effect record and before the checkpoint. The test advances `FakeClock` past the lease TTL, runs the reaper and delivers the same task again. The assertion is one re-drive and no repeated effect.*
 
 ---
 

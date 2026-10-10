@@ -26,7 +26,7 @@ An **embedding** is a learned map $f\colon X \to \mathbb{R}^d$ from a space of o
 
 ![An embedding is a learned map f from objects to vectors: under model A, car and automobile are near each other and two invoice numbers land at almost the same point, and model B places the same objects at rotated coordinates, so vectors from two models are not comparable.](figures/embedding-map.svg)
 
-*An embedding is a learned map $f$ from the objects to a vector space, where similarity is geometry (section 1). In the space of model A, car and automobile are near each other, and the two invoice numbers land at almost the same point. Model B puts the same objects at rotated coordinates, so vectors from two models are not comparable (section 14).*
+*An embedding is a learned map $f$ from the objects to a vector space, where similarity is geometry (section 1). In the space of model A, car and automobile are near each other, and the two invoice numbers are at almost the same point. Model B can put the same objects at rotated coordinates, so you cannot compare vectors from two models (section 14).*
 
 That definition contains three ideas:
 
@@ -163,9 +163,9 @@ $$
 - **Symmetric against asymmetric.** For STS and duplicate detection, apply the loss in both directions. For retrieval, apply it in one direction and add a query-side prefix.
 - **Distillation variants.** Margin-MSE (Hofstätter et al., 2020) matches the score *gap* of the teacher between the positive and the negative. This is smoother than hard labels. TAS-B makes batches from queries that are similar in topic, so that the in-batch negatives are hard. A third variant is KL distillation from the scores of a listwise reranker.
 
-![The InfoNCE batch as a similarity matrix: each row is a query, the diagonal holds its positive, the other columns of the batch are free in-batch negatives, extra columns hold mined hard negatives, one cell can be a false negative, and the softmax over a row at temperature tau puts the loss on the hardest negatives.](figures/in-batch-negatives.svg)
+![The InfoNCE batch as a similarity matrix: each row is a query, the diagonal holds its positive, the other cells of the batch are free in-batch negatives, extra columns hold mined hard negatives, one cell can be a false negative, and a small temperature tau sharpens the softmax over a row so that the loss concentrates on the hardest negatives.](figures/in-batch-negatives.svg)
 
-*The InfoNCE batch of section 4 as a similarity matrix: each row is a query, and the diagonal holds its positive. The other columns of the batch are free in-batch negatives, and the extra columns hold hard negatives from BM25, an earlier checkpoint or a cross-encoder. The softmax over a row at temperature $\tau$ puts the loss on the hardest negatives, and the lab's `info_nce` applies it in both directions.*
+*This figure shows the InfoNCE batch of section 4 as a similarity matrix: each row is a query, and the diagonal holds its positive. The other cells of the batch are free in-batch negatives, and the two columns on the right hold hard negatives. A small $\tau$ sharpens the softmax over a row, so the loss concentrates on the hardest negatives.*
 
 **Alignment and uniformity (Wang and Isola, 2020).** Asymptotically, contrastive loss optimizes two things. The first is *alignment*: positives map near each other. The second is *uniformity*: features spread evenly on the hypersphere, and this maximizes the information. Anisotropy (section 3) is a failure of uniformity, and contrastive fine-tuning repairs exactly this failure. Both quantities are low-cost diagnostics for a model that you fine-tuned yourself.
 
@@ -194,7 +194,7 @@ $$
 
 ![Three representation formats side by side: a dense model pools the tokens into one vector of d dims and scores with a dot product, a learned sparse model projects them onto the vocabulary with learned term weights and expansion for an inverted index, and a late-interaction model keeps one vector per token and scores with MaxSim, the sum over query tokens of the best document token.](figures/dense-sparse-multivector.svg)
 
-*This figure shows the three representation formats of section 5 side by side. A dense model pools the tokens into one vector of $d$ dims, and the score is a dot product. A learned sparse model projects them onto the vocabulary, with learned term weights and term expansion, for an inverted index. A late-interaction model keeps one vector per token, and MaxSim adds the best document match of each query token.*
+*This figure shows three representation formats side by side: one dense vector, learned sparse and late interaction (section 5). A dense model uses pooling to make one vector of $d$ dims, and the score is a dot product. A learned sparse model projects every token onto the vocabulary, with learned term weights and term expansion, for an inverted index. A late-interaction model keeps one vector per token, and MaxSim adds the best document match of each query token.*
 
 **Learned sparse: SPLADE (Formal et al., 2021).** SPLADE uses the MLM head to project every token onto the vocabulary. Then it applies $\log(1 + \operatorname{ReLU}(\cdot))$ and does a max-pool over the positions. The result is a sparse $\lvert V \rvert$-dimensional vector with *learned term weights and term expansion*. For example, a passage about "cardiac" activates "heart". A FLOPS regularizer keeps the vector sparse.
 
@@ -467,23 +467,23 @@ In most pipelines, rerankers give a large gain in quality at the lowest cost. La
 
 ```mermaid
 flowchart TB
-  Q([a user query]) --> T["the query side: the exact prefix<br/>or instruction template, then optional<br/>rewrites: decompose, multi-query,<br/>step-back, HyDE"]
-  Q --> X["metadata extraction: dates,<br/>product names, document types"]
+  Q([a user query]) --> T["the query side:<br/>the exact prefix or<br/>instruction template,<br/>then optional rewrites:<br/>decompose, multi-query,<br/>step-back, HyDE"]
+  Q --> X["metadata extraction:<br/>dates, product names,<br/>document types"]
   X --> FL["structured filters"]
-  CH[("the index: chunks with<br/>the heading path, small chunks<br/>and their parent sections")]
-  T --> DE["dense retriever: embed the query,<br/>ANN over the chunks (dense_scores)"]
-  T --> BM["BM25 plus learned sparse<br/>(bm25_scores)"]
+  CH[("the index: chunks with<br/>the heading path,<br/>small chunks and<br/>their parent sections")]
+  T --> DE["dense retriever:<br/>embed the query, then<br/>search the chunk vectors<br/>(dense_scores)"]
+  T --> BM["BM25 (bm25_scores),<br/>optionally plus<br/>learned sparse"]
   CH -.-> DE
   CH -.-> BM
   FL -.-> DE
   FL -.-> BM
-  DE -->|"top-50–200"| RRF["Reciprocal Rank Fusion (rrf, k = 60)"]
+  DE -->|"top-50–200"| RRF["Reciprocal Rank Fusion<br/>(rrf, k = 60)"]
   BM -->|"top-50–200"| RRF
-  RRF --> RE["cross-encoder reranker, or an LLM<br/>listwise reranker for the top-20"]
+  RRF --> RE["cross-encoder reranker,<br/>or an LLM listwise<br/>reranker for the top-20"]
   RE -->|"the top 5–10,<br/>optionally MMR for diversity"| LLM([the LLM])
 ```
 
-*The query side of a hybrid pipeline (section 15): the query gets its prefix template and optional rewrites, and the extracted metadata becomes filters. A dense retriever and BM25 each return their top-50–200, and Reciprocal Rank Fusion merges the two lists. A cross-encoder reranks the merged list, and the top 5–10 go to the LLM. Notebook 05 of the lab builds this pipeline with `bm25_scores`, `dense_scores` and `rrf`.*
+*This figure shows the hybrid pipeline of section 15: the query gets its prefix template and optional rewrites, and the extracted metadata becomes filters. A dense retriever and BM25 each return their top-50–200, and Reciprocal Rank Fusion combines the two lists. A cross-encoder reranks the combined list, and the top 5–10 go to the LLM. Notebook 05 of the lab builds the BM25, dense and fusion steps with `bm25_scores`, `dense_scores` and `rrf`.*
 
 ### Known failure modes of dense retrieval — and what to do
 

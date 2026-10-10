@@ -49,7 +49,7 @@
         <text x="112" y="209">its own UID when root</text>
       </g>
       <rect x="216" y="118" width="176" height="112" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
-      <text x="304" y="140" font-weight="600">namespaces and seccomp</text>
+      <text x="304" y="140" font-weight="600">namespaces, seccomp</text>
       <g font-size="11" fill="#7ADACF">
         <text x="304" y="158">netns, PID, mount, user</text>
         <text x="304" y="175">no_new_privs</text>
@@ -76,7 +76,7 @@
       <text x="880" y="140" font-weight="600">a microVM</text>
       <g font-size="11" fill="#7ADACF">
         <text x="880" y="158">its own guest kernel</text>
-        <text x="880" y="175">VMM: Firecracker, Kata</text>
+        <text x="880" y="175">Firecracker or Kata</text>
         <text x="880" y="192">a hardware boundary</text>
         <text x="880" y="209">needs /dev/kvm</text>
       </g>
@@ -106,7 +106,7 @@
       <rect x="408" y="250" width="176" height="66" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
       <text x="496" y="270" font-weight="600">host kernel, shared</text>
       <g font-size="11" fill="#97A59F">
-        <text x="496" y="288">every syscall reaches it</text>
+        <text x="496" y="288">fewer syscalls reach it</text>
         <text x="496" y="304">a kernel bug is an escape</text>
       </g>
       <rect x="600" y="250" width="176" height="66" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>

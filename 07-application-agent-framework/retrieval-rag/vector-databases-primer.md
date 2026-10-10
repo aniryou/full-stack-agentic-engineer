@@ -120,7 +120,7 @@ Azure (Cosmos DB, Bing), pgvectorscale (StreamingDiskANN), Milvus, JVector (Cass
 
 ![An IVF-PQ index: k-means cells with nlist centroids, of which a query scans only the nprobe nearest, and product quantization, which stores one byte per sub-vector from a codebook of 256 centroids and scores codes with a lookup table.](figures/ivf-pq-index.svg)
 
-*On the left, k-means gives `nlist` centroids, and a query scans only the lists of its `nprobe` nearest centroids. On the right, product quantization divides a vector into `m` sub-vectors, one byte each: a 1536-d float vector becomes 96 bytes. The lab's `IndexIVFPQ` stores the PQ codes inside the lists and scans them with the lookup table.*
+*On the left, k-means gives `nlist` centroids, and a query scans only the lists of its `nprobe` nearest centroids. On the right, product quantization divides a vector into `m` sub-vectors and stores one byte per sub-vector: a 1536-d float vector becomes 96 bytes. `IndexIVFPQ` in `vector_stores/minifaiss/pq.py` stores the PQ codes in the lists and scans each probed list with its own lookup table.*
 
 **GPU-native indexes.** NVIDIA cuVS supplies CAGRA, a graph index whose build and search run on the GPU. Its build is usually 10–50× faster than a CPU HNSW build, and you can export its graphs to the CPU HNSW format. Milvus, OpenSearch, Faiss, and Qdrant (build-time) integrate GPU indexing. GPUs are best for bulk index builds and for batch search at very high QPS. For latency-sensitive single queries with filters, CPU graphs still dominate.
 
@@ -141,7 +141,7 @@ Azure (Cosmos DB, Bing), pgvectorscale (StreamingDiskANN), Milvus, JVector (Cass
 
 ![HNSW as three layers: a greedy descent on the sparse upper layers moves to the neighbor nearest to the query, and a beam search of width efSearch on layer 0, where every vector lives with up to 2M links, returns the top-k.](figures/hnsw-layers-search.svg)
 
-*The greedy descent of one HNSW search (§5) starts at the entry point on the top layer. On each upper layer it moves to the neighbor nearest to the query (`_greedy_descend` in the lab's `IndexHNSWFlat`). On layer 0, where every vector lives with up to $2\,M$ links, a beam search of width `efSearch` returns the top-k (`_search_layer`).*
+*The greedy descent of one HNSW search (§5) starts at the entry point on the top layer. On each upper layer, it moves to the neighbor nearest to the query until no neighbor is nearer (`IndexHNSWFlat._greedy_descend` in `vector_stores/minifaiss/hnsw.py`). On layer 0, where every vector has up to $2\,M$ links, a beam search of width `efSearch` returns the top-k (`_search_layer`).*
 
 **HNSW**
 
@@ -195,27 +195,26 @@ An ANN library (Faiss, hnswlib, USearch) gives you an in-memory index and a sear
 flowchart TB
   subgraph W["the write path (§8)"]
     U([upsert or delete]) --> L[("write-ahead log<br/>+ snapshots")]
-    L --> G["growing segment: small,<br/>mutable, searched<br/>by brute force"]
-    G -->|seal| S["immutable indexed segments<br/>(files: easy to replicate<br/>and back up)"]
-    L -->|delete| D["tombstone: filtered out<br/>at query time"]
+    L --> G["growing segment:<br/>small and mutable"]
+    G -->|seal| S["immutable indexed<br/>segments"]
+    L -->|delete| D["tombstone: filtered<br/>out at query time"]
     D -.-> S
-    S -->|"merge in the background"| C["compaction and vacuum:<br/>merge the segments,<br/>rebuild the index"]
+    S -->|"merge in the background"| C["compaction and vacuum"]
   end
   subgraph R["the read path (§9)"]
     Q([query vector + filter]) --> E{"estimated filter<br/>selectivity?"}
     E -->|"small subset"| B["brute force over<br/>the permitted ids"]
     E -->|"large subset"| T["in-traversal filtered<br/>graph search"]
     E -->|"aligned with a<br/>partition key"| P["partition-scoped<br/>search"]
-    B --> F["fan out across the segments,<br/>merge the top-k,<br/>drop the tombstones"]
+    B --> F["fan out across the<br/>segments, merge the<br/>per-segment top-k,<br/>drop the tombstones"]
     T --> F
     P --> F
     F --> O([results + payload])
   end
-  G -.->|"per-segment top-k"| F
-  S -.->|"per-segment top-k"| F
+  C ~~~ Q
 ```
 
-*This figure shows the write path and the read path of a vector database (§8, §9). A write goes through the log into a small mutable segment, which the engine seals and later merges, and a delete leaves a tombstone. A query selects its filter strategy from the estimated selectivity, then fans out across the segments and merges the top-k.*
+*This figure shows the write path and the read path of a vector database (§8, §9). A write goes through the log into a small mutable segment, which the engine seals and later merges, and a delete leaves a tombstone. For each query, the engine selects a filter strategy from the estimated filter selectivity, then fans out across the segments and merges the top-k.*
 
 ### 8. What the database layer adds
 
@@ -290,23 +289,23 @@ Dense vectors are strong on semantics and weak on exact tokens: product codes, n
 flowchart TB
   subgraph I["ingest"]
     SRC[("the raw source:<br/>the system of record")] --> PC["parse and clean"]
-    PC --> CH["chunk (§13) and attach metadata:<br/>source, tenant, ACL,<br/>timestamps, section titles"]
-    CH --> EM["embed in batches: dense,<br/>plus sparse or multi-vector,<br/>record the model name and version"]
-    EM --> UP["upsert with idempotent ids<br/>(a hash of the source + the chunk position)"]
+    PC --> CH["chunk (§13) and attach<br/>metadata: source, tenant,<br/>ACL, timestamps,<br/>section titles"]
+    CH --> EM["embed in batches, and<br/>record the model<br/>name and version"]
+    EM --> UP["upsert with idempotent ids<br/>(a hash of the source<br/>+ the chunk position)"]
   end
-  UP --> DB[("the vector database:<br/>vectors, payload, filter indexes")]
+  UP --> DB[("the vector database:<br/>vectors, payload,<br/>filter indexes")]
   subgraph Q["query"]
-    QI([a query]) --> RW["optional rewrite: LLM expansion<br/>or decomposition, HyDE, multi-query"]
-    RW --> QE["embed with the same model<br/>and its query prefix: 20–50 ms"]
-    QE --> RT["retrieve candidates with filters:<br/>dense ANN (plus sparse),<br/>k' ≈ 50–200: 5–30 ms"]
-    RT --> FU["fuse the lists (RRF), remove<br/>duplicates by source, apply<br/>business rules"]
+    QI([a query]) --> RW["optional rewrite:<br/>LLM expansion or<br/>decomposition, HyDE,<br/>multi-query"]
+    RW --> QE["embed with the same<br/>model and its query<br/>prefix, if any: 20–50 ms"]
+    QE --> RT["retrieve candidates:<br/>dense ANN (plus sparse)<br/>with filters, k' ≈ 50–200:<br/>5–30 ms"]
+    RT --> FU["fuse the lists (RRF),<br/>remove duplicates,<br/>apply business rules"]
     FU --> RR["rerank to the final<br/>k ≈ 5–20: 50–200 ms"]
-    RR --> CX["assemble the context, and log<br/>the query, the candidates and<br/>the outcomes for evaluation (§14)"]
+    RR --> CX["assemble the context, log<br/>the query, the candidates<br/>and the outcomes (§14)"]
   end
-  DB --> RT
+  RT <--> DB
 ```
 
-*This figure shows the pipeline of §12 end to end, with the p95 latency budget of each query step. The ingest path keeps the raw source as the system of record and writes vectors with the name and version of the model. The query path embeds the query with the same model, retrieves candidates with filters, fuses, reranks and logs the outcome.*
+*This figure shows the pipeline of §12 end to end, and the typical p95 latency budget of three query steps. The ingest path keeps the raw source as the system of record and writes vectors with the name and version of the model. The query path embeds the query with the same model, retrieves candidates with filters, fuses the lists, reranks the candidates and logs the outcomes.*
 
 **Ingest**
 

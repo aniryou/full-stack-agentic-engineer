@@ -272,7 +272,7 @@ chat-eu   → [google/gemini-3.5-flash (europe-west4), self/lab/llm (europe-west
 
 ```mermaid
 flowchart TB
-    AL(["an alias: chat, chat@gold or chat-eu"]) --> CH["the chain: ordered (provider, model, region) targets"]
+    AL(["an alias (chat or chat-eu)<br/>and the tenant's tier"]) --> CH["the chain: ordered (provider, model, region) targets"]
     CH --> F["filters: tools and reasoning needs, prompt + output<br/>within the context window, the tenant's residency"]
     F --> P["a policy orders the targets that passed:<br/>ordered, cheapest, ewma_ttft or canary"]
     P --> NEXT{"a target left?"}
@@ -280,13 +280,14 @@ flowchart TB
     NEXT -- "the next one" --> B{"its breaker<br/>open?"}
     B -- "yes: skip it, no wait" --> NEXT
     B -- "no, or one probe<br/>after the cooldown" --> CALL["call the provider"]
-    CALL -- "200 and the first byte" --> OK["relay the stream (§1.4):<br/>no fallback after the first byte"]
-    CALL -- "429, 5xx, 529, 408, a timeout,<br/>400 context_length_exceeded" --> NEXT
-    CALL -- "400, 401, 403, 404,<br/>a content-policy refusal" --> STOP["error to the client:<br/>the same on every target"]
+    CALL -- "200 and the first byte" --> OK["relay the stream (§1.4):<br/>no fallback after<br/>the first byte"]
+    CALL -- "429, 5xx, 529, 408,<br/>a timeout, 400<br/>context_length_exceeded" --> NEXT
+    CALL -- "400, 401, 403, 404,<br/>a content-policy refusal" --> STOP["an error to the client:<br/>no fall-through"]
 ```
 
-*The filters and the policy of §2.2 order the targets. The breaker of §2.4 skips a target that is down, with no
-wait. Only a failure that falls through (§2.3) moves the walk to the next target, and only before the first byte.*
+*The filters of §2.2 keep the targets that can serve the request, and a policy orders them. The breaker of §2.4
+skips a target that is down, with no wait. After a call, only a failure that falls through (§2.3) moves the walk to
+the next target, and only before the first byte.*
 
 `Router.candidates()` first **filters** the targets. The filters compare these items:
 
@@ -482,17 +483,17 @@ positives.
 
 ```mermaid
 flowchart TB
-    REQ(["a request on a route that declares metadata.cache_class"]) --> GATE{"class on the allowlist,<br/>and no tools?"}
-    GATE -- "exact cache" --> EX["SHA-256 of the tenant and every<br/>field that changes the answer"]
-    EX -- "the same key" --> HIT["serve the stored answer"]
+    REQ(["a request on a route<br/>that declares<br/>metadata.cache_class"]) --> GATE{"class on the allowlist,<br/>and no tools?"}
+    GATE -- "yes: exact cache" --> EX["SHA-256 of the tenant<br/>and every field that<br/>changes the answer"]
+    EX -- "the same key" --> HITX["serve the stored answer"]
     EX -- "no such key" --> MODEL["call the model"]
-    GATE -- "semantic cache" --> EMB["embed the query, find the nearest<br/>cached query in the tenant's namespace"]
+    GATE -- "no" --> NOSTORE["call the model,<br/>store nothing"]
+    GATE -- "yes: semantic cache" --> EMB["embed the query, find<br/>the nearest cached query<br/>in the tenant's namespace"]
     EMB --> TAU{"similarity at<br/>or above τ?"}
-    TAU -- "yes" --> ENT{"entities equal?<br/>numbers, dates, codes"}
-    ENT -- "yes" --> HIT
     TAU -- "no" --> MODEL
+    TAU -- "yes" --> ENT{"entities equal?<br/>numbers, dates, codes"}
     ENT -- "no" --> MODEL
-    GATE -- "no" --> MODEL
+    ENT -- "yes" --> HITS["serve the answer of<br/>the nearest cached query"]
     MODEL -- "finish_reason: stop" --> STORE["store the answer with a TTL<br/>in the tenant's namespace"]
 ```
 
@@ -948,11 +949,11 @@ illustrative 150 ms check:
 - held-back window $W$ = 50 tokens: TTFT + 0.02 × 49 + 0.15 = + 1.13 s
 - final check: TTFT + 0.02 × 299 + 0.15 = + 6.13 s
 
-![Six guardrail placements on one 300-token answer, as bars on a time axis, with the time that each adds before the first token reaches the client.](figures/guardrail-placement-timeline.svg)
+![Bars on a time axis for one 300-token answer with no check, inline and parallel input checks, held-back windows of 200 and 50 tokens and a final check, with the time that each adds before the first token reaches the client.](figures/guardrail-placement-timeline.svg)
 
-*Each row is one placement of §7.1 on the same 300-token answer. An input check costs its own time, or nothing in
-parallel. A held-back window or a final check holds a window of generation before the first token reaches the
-client (`guardrails.added_latency()`).*
+*The top row has no check, and each other row is one placement of §7.1 on the same 300-token answer. An input check
+costs its own time, or nothing in parallel. A held-back window or a final check holds a window of generation before
+the first token reaches the client (`guardrails.added_latency()`).*
 
 A held-back window keeps up only if each check finishes within $W \times \text{ITL}$ (4 s at $W$ = 200). It also puts
 $W$ tokens of generation in front of the first token of every user. NeMo Guardrails' streaming output rails have the
@@ -1084,8 +1085,8 @@ sequenceDiagram
     G->>AS: authorize again: PKCE S256, resource,<br/>scope = the held scopes plus the demanded one
     AS-->>G: code and iss
     G->>AS: token: code, verifier, resource, DPoP proof
-    AS-->>G: access token (aud = the MCP server),<br/>a rotated refresh token
-    Note over G: store under (principal, resource),<br/>with its scopes
+    AS-->>G: access token (aud = the MCP server),<br/>refresh token (rotated on every use)
+    Note over G: store under<br/>(principal, resource),<br/>with its scopes
     G->>S: POST the tool: the new token,<br/>a proof with the nonce
     S-->>G: 200 result
     G-->>A: result, and never a token

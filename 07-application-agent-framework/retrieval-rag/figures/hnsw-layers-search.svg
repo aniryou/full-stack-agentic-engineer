@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="960" height="560" viewBox="0 0 960 560" role="img" aria-label="HNSW as three layers: a greedy descent on the sparse upper layers moves to the neighbor nearest to the query, and a beam search of width efSearch on layer 0, where every vector lives with up to 2M links, returns the top-k." style="color: #E4EAE7">
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="572" viewBox="0 0 960 572" role="img" aria-label="HNSW as three layers: a greedy descent on the sparse upper layers moves to the neighbor nearest to the query, and a beam search of width efSearch on layer 0, where every vector lives with up to 2M links, returns the top-k." style="color: #E4EAE7">
   <title>HNSW as three layers: a greedy descent on the sparse upper layers moves to the neighbor nearest to the query, and a beam search of width efSearch on layer 0, where every vector lives with up to 2M links, returns the top-k.</title>
-  <rect x="0" y="0" width="960" height="560" rx="8" fill="#161E1C"/>
+  <rect x="0" y="0" width="960" height="572" rx="8" fill="#161E1C"/>
   <defs>
     <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
     <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
@@ -60,7 +60,7 @@
     <circle cx="540" cy="244" r="5.5" fill="#16302A" stroke="#4CC5B7" stroke-width="1.6"/>
     <circle cx="652" cy="242" r="5.5" fill="#16302A" stroke="#4CC5B7" stroke-width="1.6"/>
     <!-- layer 0 -->
-    <rect x="176" y="364" width="524" height="116" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="176" y="364" width="524" height="122" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
     <text x="24" y="388" font-weight="600">layer 0</text>
     <text x="24" y="405" font-size="11" fill="#97A59F">every vector</text>
     <text x="24" y="422" font-size="11" fill="#97A59F">up to 2M links per node</text>
@@ -116,7 +116,7 @@
     <circle cx="652" cy="392" r="5.5" fill="#16302A" stroke="#4CC5B7" stroke-width="1.6"/>
     <circle cx="492" cy="386" r="4.5" fill="#161E1C" stroke="currentColor" stroke-width="1.2"/>
     <text x="642" y="464" font-size="11" fill="#7ADACF">top-k</text>
-    <text x="444" y="468" font-size="11" fill="#7ADACF">the beam: visited nodes</text>
+    <text x="444" y="474" font-size="11" fill="#7ADACF">the beam: nearest nodes found</text>
     <path d="M652 99 L652 234" fill="none" stroke="#4CC5B7" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#arrA)"/>
     <text x="643" y="171" text-anchor="end" font-size="11" fill="#7ADACF">down to the same node</text>
     <path d="M540 251 L540 386" fill="none" stroke="#4CC5B7" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#arrA)"/>
