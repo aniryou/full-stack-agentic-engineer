@@ -21,6 +21,10 @@ That one trade-off explains almost everything else:
 
 The key phrase is **latency hiding by oversubscription**. A CPU tries to prevent waits for memory. A GPU accepts the wait. It keeps thousands of other threads resident, so that it always has other work to issue. This is why "occupancy" is a GPU concept and not a CPU concept.
 
+![A CPU core stalls while it waits for memory, and a GPU SM issues another resident warp during the wait, so its arithmetic units always have work.](figures/latency-hiding-oversubscription.svg)
+
+*One CPU core (top) has one instruction stream, and a wait for memory stalls it. One GPU SM (bottom) keeps many warps resident, and when a warp waits for memory, the warp scheduler issues another warp. Thus the arithmetic units always have work, and this is why occupancy is a GPU concept (§1).*
+
 ---
 
 ## 2. The execution model
@@ -39,6 +43,10 @@ grid  →  thread blocks  →  warps (32 threads)  →  threads
 - **Grid**: all the blocks in the launch.
 
 Physically, the chip is a set of **SMs** (Streaming Multiprocessors). An H100 has 132. Each SM has its own register file, scratchpad, warp schedulers, and arithmetic units. The hardware assigns a block to exactly one SM. The block stays on that SM until it finishes.
+
+![The hierarchy that you write, a grid of thread blocks made of warps of 32 threads, runs on a chip of SMs, each with its register file, scratchpad, warp schedulers and arithmetic units, in front of the L2 cache and HBM.](figures/gpu-shape.svg)
+
+*On the left is the hierarchy that you write: a grid of thread blocks, each a group of warps of 32 threads in lockstep. On the right is the chip: SMs with a register file, a scratchpad, warp schedulers and arithmetic units, then the L2 cache and the HBM. The hardware assigns a block to exactly one SM, and the blocks of a cluster are co-resident on one GPC (§2).*
 
 ### SIMT, and why divergence hurts
 
@@ -79,6 +87,10 @@ Two things are important. First, each step down is approximately an order of mag
 ### Coalescing
 
 The hardware reads HBM in transactions of a set size (usually 32 bytes). If the 32 lanes of a warp read 32 consecutive floats, the hardware merges them into a few wide transactions. If the lanes read 32 scattered addresses, you issue 32 separate transactions. Thus you waste most of the bytes that you paid for. The access pattern is more important than the instruction count.
+
+![When the 32 lanes of a warp read 32 consecutive floats, the hardware merges the reads into a few wide transactions; when they read 32 scattered addresses, the warp issues 32 transactions and wastes most of their bytes.](figures/coalesced-access.svg)
+
+*In the top panel, the 32 lanes of a warp read 32 consecutive floats, and the hardware merges the reads into a few wide transactions. In the bottom panel, the lanes read 32 scattered addresses, so the warp issues 32 separate transactions and wastes most of their bytes (§3).*
 
 ### The roofline model
 
@@ -147,6 +159,10 @@ The other large change since the classic CUDA era is about the structure of a fa
 - **TMA, the Tensor Memory Accelerator** (Hopper): a dedicated DMA engine. A single thread issues a descriptor. Then the hardware moves a full multidimensional tile, and it controls the addresses and the boundary conditions. This removes a large quantity of index arithmetic from the inner loop.
 - **Warp specialisation**: the warps do not all do the same thing. Some warps become *producers* that only issue TMA loads. Other warps become *consumers* that only issue Tensor Core instructions. Asynchronous barriers coordinate the two groups. The SM starts to look like a small dataflow machine.
 
+![A classic loop loads a tile and then computes it, so the arithmetic units are idle during each load; a modern kernel lets producer warps load the next tile with TMA while consumer warps compute the current tile, with asynchronous barriers between them.](figures/pipelined-kernel.svg)
+
+*In the top row, one loop loads a tile and then computes it, so the arithmetic units are idle during each load. In the bottom row, producer warps issue the TMA load of tile ${n+1}$ while consumer warps compute tile $n$ on the Tensor Cores. Asynchronous barriers coordinate the two groups (§5).*
+
 **FlashAttention** is the canonical worked example of all of this. It is not a better algorithm when you count FLOPs. It does slightly more arithmetic. It is faster because it is *IO-aware*:
 
 - It tiles the computation, so intermediate results stay in shared memory.
@@ -169,6 +185,10 @@ Modern frontier work does not use a GPU as the unit of compute. The unit is a ra
 That gap defines the standard vocabulary. **Scale-up** means to make the NVLink domain larger. The NVLink domain is the set of GPUs that can use the memory of each other as almost local memory. **Scale-out** means to add nodes over the slower network.
 
 The main hardware trend of the last two years is that scale-up domains become much larger. GB200 NVL72 puts 72 GPUs in one liquid-cooled NVLink domain. Vera Rubin NVL144 goes further than that. AMD works toward the same idea with its Helios rack, and with the open UALink standard as an alternative to NVLink.
+
+![Inside a node, NVSwitch makes NVLink an all-to-all fabric between the GPUs, the NVLink domain; between nodes, the NICs carry about 9 times less bandwidth per direction over InfiniBand or Ethernet.](figures/scale-up-scale-out.svg)
+
+*Inside a node, NVSwitch makes NVLink an all-to-all fabric between the GPUs: that set of GPUs is the NVLink domain. Between nodes, the NICs carry approximately 9× less bandwidth per direction over InfiniBand or high-end Ethernet. Scale-up makes the NVLink domain larger, and scale-out adds nodes over the slower network (§6).*
 
 ### Parallelism strategies
 

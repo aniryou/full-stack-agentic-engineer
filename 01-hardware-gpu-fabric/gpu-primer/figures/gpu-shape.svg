@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="480" viewBox="0 0 900 480" role="img" aria-label="The hierarchy that you write, a grid of thread blocks made of warps of 32 threads, runs on a chip of SMs, each with its register file, scratchpad, warp schedulers and arithmetic units, in front of the L2 cache and HBM." style="color: #E4EAE7">
+  <title>The hierarchy that you write, a grid of thread blocks made of warps of 32 threads, runs on a chip of SMs, each with its register file, scratchpad, warp schedulers and arithmetic units, in front of the L2 cache and HBM.</title>
+  <rect x="0" y="0" width="900" height="480" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="26" fill="#97A59F">The hierarchy that you write (left) and the chip that runs it (right). The numbers are for an H100 (§2, §3).</text>
+
+    <!-- left: what you write -->
+    <rect x="24" y="44" width="268" height="412" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="158" y="62" text-anchor="middle" fill="#97A59F">what you write</text>
+    <rect x="38" y="76" width="240" height="352" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="50" y="96" font-weight="600">grid</text>
+    <text x="50" y="110" font-size="10.5" fill="#97A59F">all the blocks in the launch</text>
+    <rect x="50" y="122" width="216" height="238" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="158" y="138" text-anchor="middle" font-size="10.5" fill="#97A59F">thread block cluster (Hopper)</text>
+    <rect x="60" y="148" width="196" height="152" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="158" y="166" text-anchor="middle" font-weight="600">thread block (CTA)</text>
+    <text x="158" y="180" text-anchor="middle" font-size="10.5" fill="#97A59F">a group of warps on one SM</text>
+    <text x="158" y="193" text-anchor="middle" font-size="10.5" fill="#97A59F">a shared scratchpad, a barrier</text>
+    <rect x="70" y="202" width="176" height="40" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="158" y="216" text-anchor="middle" font-size="10.5">warp: 32 threads in lockstep</text>
+    <g fill="#4CC5B7">
+      <rect x="76" y="224" width="3.5" height="12"/><rect x="81.25" y="224" width="3.5" height="12"/><rect x="86.5" y="224" width="3.5" height="12"/><rect x="91.75" y="224" width="3.5" height="12"/>
+      <rect x="97" y="224" width="3.5" height="12"/><rect x="102.25" y="224" width="3.5" height="12"/><rect x="107.5" y="224" width="3.5" height="12"/><rect x="112.75" y="224" width="3.5" height="12"/>
+      <rect x="118" y="224" width="3.5" height="12"/><rect x="123.25" y="224" width="3.5" height="12"/><rect x="128.5" y="224" width="3.5" height="12"/><rect x="133.75" y="224" width="3.5" height="12"/>
+      <rect x="139" y="224" width="3.5" height="12"/><rect x="144.25" y="224" width="3.5" height="12"/><rect x="149.5" y="224" width="3.5" height="12"/><rect x="154.75" y="224" width="3.5" height="12"/>
+      <rect x="160" y="224" width="3.5" height="12"/><rect x="165.25" y="224" width="3.5" height="12"/><rect x="170.5" y="224" width="3.5" height="12"/><rect x="175.75" y="224" width="3.5" height="12"/>
+      <rect x="181" y="224" width="3.5" height="12"/><rect x="186.25" y="224" width="3.5" height="12"/><rect x="191.5" y="224" width="3.5" height="12"/><rect x="196.75" y="224" width="3.5" height="12"/>
+      <rect x="202" y="224" width="3.5" height="12"/><rect x="207.25" y="224" width="3.5" height="12"/><rect x="212.5" y="224" width="3.5" height="12"/><rect x="217.75" y="224" width="3.5" height="12"/>
+      <rect x="223" y="224" width="3.5" height="12"/><rect x="228.25" y="224" width="3.5" height="12"/><rect x="233.5" y="224" width="3.5" height="12"/><rect x="238.75" y="224" width="3.5" height="12"/>
+    </g>
+    <rect x="70" y="250" width="176" height="40" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="158" y="264" text-anchor="middle" font-size="10.5">warp: 32 threads in lockstep</text>
+    <g fill="#4CC5B7">
+      <rect x="76" y="272" width="3.5" height="12"/><rect x="81.25" y="272" width="3.5" height="12"/><rect x="86.5" y="272" width="3.5" height="12"/><rect x="91.75" y="272" width="3.5" height="12"/>
+      <rect x="97" y="272" width="3.5" height="12"/><rect x="102.25" y="272" width="3.5" height="12"/><rect x="107.5" y="272" width="3.5" height="12"/><rect x="112.75" y="272" width="3.5" height="12"/>
+      <rect x="118" y="272" width="3.5" height="12"/><rect x="123.25" y="272" width="3.5" height="12"/><rect x="128.5" y="272" width="3.5" height="12"/><rect x="133.75" y="272" width="3.5" height="12"/>
+      <rect x="139" y="272" width="3.5" height="12"/><rect x="144.25" y="272" width="3.5" height="12"/><rect x="149.5" y="272" width="3.5" height="12"/><rect x="154.75" y="272" width="3.5" height="12"/>
+      <rect x="160" y="272" width="3.5" height="12"/><rect x="165.25" y="272" width="3.5" height="12"/><rect x="170.5" y="272" width="3.5" height="12"/><rect x="175.75" y="272" width="3.5" height="12"/>
+      <rect x="181" y="272" width="3.5" height="12"/><rect x="186.25" y="272" width="3.5" height="12"/><rect x="191.5" y="272" width="3.5" height="12"/><rect x="196.75" y="272" width="3.5" height="12"/>
+      <rect x="202" y="272" width="3.5" height="12"/><rect x="207.25" y="272" width="3.5" height="12"/><rect x="212.5" y="272" width="3.5" height="12"/><rect x="217.75" y="272" width="3.5" height="12"/>
+      <rect x="223" y="272" width="3.5" height="12"/><rect x="228.25" y="272" width="3.5" height="12"/><rect x="233.5" y="272" width="3.5" height="12"/><rect x="238.75" y="272" width="3.5" height="12"/>
+    </g>
+    <rect x="60" y="312" width="196" height="36" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="158" y="334" text-anchor="middle" font-weight="600">thread block (CTA)</text>
+    <rect x="60" y="372" width="196" height="36" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="158" y="394" text-anchor="middle" font-size="11.5" fill="#97A59F">more thread blocks …</text>
+    <text x="158" y="444" text-anchor="middle" font-size="10.5" fill="#97A59F">one tick is one thread, with its own registers</text>
+
+    <!-- right: the chip -->
+    <rect x="380" y="44" width="496" height="412" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="628" y="62" text-anchor="middle" fill="#97A59F">the chip: an H100 has 132 SMs</text>
+    <rect x="396" y="78" width="296" height="176" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="408" y="94" font-size="10.5" fill="#97A59F">GPC: the blocks of one cluster are co-resident here</text>
+    <rect x="704" y="78" width="156" height="176" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="716" y="94" font-size="10.5" fill="#97A59F">GPC</text>
+    <g>
+      <rect x="408" y="104" width="132" height="136" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+      <text x="474" y="122" text-anchor="middle" font-weight="600">SM</text>
+      <g font-size="10.5" fill="#7ADACF" text-anchor="middle">
+        <text x="474" y="142">registers 256 KB</text>
+        <text x="474" y="158">shared memory / L1</text>
+        <text x="474" y="172">228 KB, a scratchpad</text>
+        <text x="474" y="192">warp schedulers</text>
+        <text x="474" y="208">arithmetic units</text>
+        <text x="474" y="222">and Tensor Cores</text>
+      </g>
+      <rect x="552" y="104" width="132" height="136" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+      <text x="618" y="122" text-anchor="middle" font-weight="600">SM</text>
+      <g font-size="10.5" fill="#7ADACF" text-anchor="middle">
+        <text x="618" y="142">registers 256 KB</text>
+        <text x="618" y="158">shared memory / L1</text>
+        <text x="618" y="172">228 KB, a scratchpad</text>
+        <text x="618" y="192">warp schedulers</text>
+        <text x="618" y="208">arithmetic units</text>
+        <text x="618" y="222">and Tensor Cores</text>
+      </g>
+      <rect x="716" y="104" width="132" height="136" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+      <text x="782" y="122" text-anchor="middle" font-weight="600">SM</text>
+      <g font-size="10.5" fill="#7ADACF" text-anchor="middle">
+        <text x="782" y="142">registers 256 KB</text>
+        <text x="782" y="158">shared memory / L1</text>
+        <text x="782" y="172">228 KB, a scratchpad</text>
+        <text x="782" y="192">warp schedulers</text>
+        <text x="782" y="208">arithmetic units</text>
+        <text x="782" y="222">and Tensor Cores</text>
+      </g>
+    </g>
+    <rect x="396" y="270" width="464" height="36" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="628" y="292" text-anchor="middle" font-weight="600">L2 cache 50 MB</text>
+    <rect x="396" y="322" width="464" height="40" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="628" y="339" text-anchor="middle" font-weight="600">HBM (global) 80 GB</text>
+    <text x="628" y="355" text-anchor="middle" font-size="11" fill="#97A59F">3.35 TB/s</text>
+    <rect x="396" y="378" width="464" height="40" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="628" y="395" text-anchor="middle" font-weight="600">host RAM, over PCIe</text>
+    <text x="628" y="411" text-anchor="middle" font-size="11" fill="#97A59F">~64 GB/s</text>
+    <text x="628" y="444" text-anchor="middle" font-size="10.5" fill="#97A59F">the blocks of a cluster read the scratchpad of each other (distributed shared memory)</text>
+
+    <!-- edges: data paths between the levels, and the block-to-SM assignment -->
+    <g stroke="#97A59F" stroke-width="1.2" fill="none" marker-start="url(#arr)" marker-end="url(#arr)">
+      <path d="M474 242 L474 268"/>
+      <path d="M618 242 L618 268"/>
+      <path d="M782 242 L782 268"/>
+      <path d="M628 308 L628 320"/>
+      <path d="M628 364 L628 376"/>
+    </g>
+    <path d="M258 226 L406 226" stroke="#97A59F" stroke-width="1.2" fill="none" stroke-dasharray="4 3" marker-end="url(#arr)"/>
+    <text x="336" y="206" text-anchor="middle" font-size="10.5" fill="#97A59F">a block runs</text>
+    <text x="336" y="219" text-anchor="middle" font-size="10.5" fill="#97A59F">on one SM</text>
+  </g>
+</svg>

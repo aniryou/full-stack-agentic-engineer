@@ -39,6 +39,10 @@ Modern accelerators use **HBM** (High Bandwidth Memory). HBM is a set of DRAM st
 
 The generation of a response has two phases with **opposite** hardware characteristics. If you learn this fully, most deployment decisions become obvious.
 
+![Prefill reads the whole prompt in one forward pass and is compute-bound; decode loads the entire set of weights from HBM at each step to produce one token and is memory-bandwidth-bound, and batching lets one load serve 64 requests.](figures/prefill-vs-decode.svg)
+
+*Prefill (top) reads all the input tokens in one forward pass, and it uses each loaded weight for much arithmetic: compute-bound. Decode (bottom) loads the entire set of weights from HBM at each step to produce one token: memory-bandwidth-bound. With batching, the same loaded weights serve 64 requests in one step, which amortises the high-cost part 64× (§2).*
+
 ### Prefill (processing the prompt)
 
 The model reads all input tokens at the same time, in parallel, in a single forward pass. The model uses each weight that it loads for much arithmetic.
@@ -113,11 +117,19 @@ Activations, CUDA graphs, communication buffers, fragmentation and the framework
 
 Think about a 70B model at FP8 on one 80 GB GPU. The 70 GB of weights leaves 10 GB, minus overhead, for KV cache. That is approximately 20–25 concurrent 1K-token requests. This is satisfactory for a demo, but not for production. This is the reason that you find that you need multiple GPUs, even when the model technically "fits".
 
+![On one 80 GB GPU, a 70B model at FP8 takes 70 GB of weights and leaves 10 GB, minus overhead, of KV cache for approximately 20 to 25 concurrent 1K-token requests; the KV cache is the variable cost that grows with the sequence length and the concurrency.](figures/memory-budget-80gb.svg)
+
+*The bar is one 80 GB GPU with a 70B model at FP8 (§3.4). The weights take 70 GB, and the 10 GB that stay, minus overhead, hold the KV cache for approximately 20–25 concurrent 1K-token requests. The strip below is the variable cost. A 70B-class model at FP16 needs 320 KB of KV cache per token, about 1.3 GB for a 4,000-token request, multiplied by your concurrency target.*
+
 ---
 
 ## 4. When one GPU isn't enough: the parallelism menu
 
 There are five ways to divide work across GPUs. You can combine them. Actual deployments use two or three at the same time.
+
+![Tensor and expert parallelism divide the matrices of each layer or the experts and communicate at every layer, so they stay inside the NVLink domain; pipeline and data parallelism pass only activations or nothing, so they go across the network.](figures/parallelism-menu.svg)
+
+*Tensor parallelism gives each GPU a slice of each layer, with an all-reduce at each layer. Expert parallelism puts the experts on different GPUs, with an all-to-all shuffle of the tokens. Both stay inside the NVLink domain. Pipeline parallelism passes only the activations at each boundary, and data parallelism gives each replica a full copy, so both go across the network (§4).*
 
 ### Tensor parallelism (TP)
 Divide the matrices of each individual layer across GPUs. Each GPU holds a slice of each layer.
@@ -170,6 +182,10 @@ Note the cliff. Compare like with like. The vendor markets the NVLink figures as
 Per direction and in one generation, the NVLink of a GPU carries about **9×** the bandwidth of its NIC. For H100 with a 400 Gb/s NIC, the figures are 450 against 50 GB/s. For Blackwell with an 800 Gb/s NIC, they are 900 against 100 GB/s. The [roofline primer's link ladder, §5.1](../roofline-and-fabric/PRIMER.md#51-the-link-ladder), calculates these figures in `roofline.fabric.LINKS`.
 
 If you divide a bidirectional NVLink total by a one-way NIC rate, you get 18×. That value counts NVLink two times. The latency is also different: a hop through NVSwitch costs less than a hop through a NIC and a network switch.
+
+![Per direction, the NVLink of one GPU carries about 9 times the bandwidth of its NIC: 450 against 50 GB/s for an H100 with a 400 Gb/s NIC, 900 against 100 GB/s for Blackwell with an 800 Gb/s NIC; a division of the bidirectional NVLink total by the one-way NIC rate gives 18 times and counts NVLink two times.](figures/interconnect-cliff.svg)
+
+*Per direction and in one generation, the NVLink of a GPU carries about 9× the bandwidth of its NIC. The figures are 450 against 50 GB/s for an H100 (400 Gb/s NIC) and 900 against 100 GB/s for Blackwell (800 Gb/s NIC). The vendor markets the NVLink figures as the sum of the two directions. A division of that total by the one-way NIC rate gives 18×, and it counts NVLink two times (§5).*
 
 There are two practical consequences:
 
@@ -253,6 +269,26 @@ For a scheduler, GPUs are not like CPUs. GPUs are indivisible, high-cost and top
 This is the current frontier of architecture. It is a direct consequence of section 2.
 
 You do not run the two phases on the same GPUs. You run **separate pools**: prefill workers and decode workers. When prefill finishes, the system transfers the KV cache over the fabric to a decode worker. The decode worker starts to generate tokens immediately.
+
+```mermaid
+flowchart TB
+  Q([request]) --> R[router]
+  R --> P1
+  subgraph PP["prefill pool: compute-bound, sized on its own"]
+    direction LR
+    P1[prefill worker]
+    P2[prefill worker]
+  end
+  P1 -- "the KV cache, over the fabric (RDMA)" --> D1
+  subgraph DP["decode pool: memory-bound, sized on its own"]
+    direction LR
+    D1[decode worker]
+    D2[decode worker]
+  end
+  D1 --> U([token stream to the user])
+```
+
+*The router sends a request to a prefill worker, which processes the whole prompt in one pass. When prefill finishes, the system transfers the KV cache over the fabric to a decode worker, and the decode worker starts to generate tokens immediately. For a 4K-token request, the transfer is about 1.3 GB and must complete in a couple hundred milliseconds for a TTFT under 500 ms (§8).*
 
 **Why it helps:**
 

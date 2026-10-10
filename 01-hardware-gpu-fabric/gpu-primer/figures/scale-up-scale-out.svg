@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="400" viewBox="0 0 880 400" role="img" aria-label="Inside a node, NVSwitch makes NVLink an all-to-all fabric between the GPUs, the NVLink domain; between nodes, the NICs carry about 9 times less bandwidth per direction over InfiniBand or Ethernet." style="color: #E4EAE7">
+  <title>Inside a node, NVSwitch makes NVLink an all-to-all fabric between the GPUs, the NVLink domain; between nodes, the NICs carry about 9 times less bandwidth per direction over InfiniBand or Ethernet.</title>
+  <rect x="0" y="0" width="880" height="400" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="26" fill="#97A59F">Two tiers of interconnect (§6): NVLink inside the node, the network between nodes.</text>
+
+    <!-- node 1 -->
+    <rect x="24" y="46" width="400" height="240" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="224" y="64" text-anchor="middle" fill="#97A59F">node 1: one NVLink domain, the scale-up tier</text>
+    <rect x="40" y="78" width="368" height="40" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="224" y="95" text-anchor="middle" font-weight="600" font-size="12">NVSwitch: an all-to-all fabric, not point-to-point</text>
+    <text x="224" y="110" text-anchor="middle" font-size="10.5" fill="#7ADACF">NVLink 1.8 TB/s per GPU on Blackwell, ~14× PCIe Gen5 x16</text>
+    <g fill="none" stroke="currentColor" stroke-width="1.2">
+      <rect x="40" y="148" width="76" height="40" rx="6"/><rect x="132" y="148" width="76" height="40" rx="6"/><rect x="224" y="148" width="76" height="40" rx="6"/><rect x="316" y="148" width="76" height="40" rx="6"/>
+    </g>
+    <g font-weight="600" text-anchor="middle">
+      <text x="78" y="172">GPU</text><text x="170" y="172">GPU</text><text x="262" y="172">GPU</text><text x="354" y="172">GPU</text>
+    </g>
+    <rect x="40" y="218" width="352" height="40" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="216" y="235" text-anchor="middle" font-weight="600">NICs: 400–800 Gb/s per GPU</text>
+    <text x="216" y="251" text-anchor="middle" font-size="10.5" fill="#97A59F">50–100 GB/s each way, ~9× below NVLink per direction</text>
+    <g stroke="#4CC5B7" stroke-width="1.2" fill="none" marker-start="url(#arrA)" marker-end="url(#arrA)">
+      <path d="M78 120 L78 146"/><path d="M170 120 L170 146"/><path d="M262 120 L262 146"/><path d="M354 120 L354 146"/>
+    </g>
+    <g stroke="#97A59F" stroke-width="1.2" fill="none" marker-start="url(#arr)" marker-end="url(#arr)">
+      <path d="M78 190 L78 216"/><path d="M170 190 L170 216"/><path d="M262 190 L262 216"/><path d="M354 190 L354 216"/>
+    </g>
+
+    <!-- node 2 -->
+    <rect x="456" y="46" width="400" height="240" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="656" y="64" text-anchor="middle" fill="#97A59F">node 2: another NVLink domain</text>
+    <rect x="472" y="78" width="368" height="40" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="656" y="95" text-anchor="middle" font-weight="600" font-size="12">NVSwitch: an all-to-all fabric, not point-to-point</text>
+    <text x="656" y="110" text-anchor="middle" font-size="10.5" fill="#7ADACF">NVLink 1.8 TB/s per GPU on Blackwell, ~14× PCIe Gen5 x16</text>
+    <g fill="none" stroke="currentColor" stroke-width="1.2">
+      <rect x="472" y="148" width="76" height="40" rx="6"/><rect x="564" y="148" width="76" height="40" rx="6"/><rect x="656" y="148" width="76" height="40" rx="6"/><rect x="748" y="148" width="76" height="40" rx="6"/>
+    </g>
+    <g font-weight="600" text-anchor="middle">
+      <text x="510" y="172">GPU</text><text x="602" y="172">GPU</text><text x="694" y="172">GPU</text><text x="786" y="172">GPU</text>
+    </g>
+    <rect x="472" y="218" width="352" height="40" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="648" y="235" text-anchor="middle" font-weight="600">NICs: 400–800 Gb/s per GPU</text>
+    <text x="648" y="251" text-anchor="middle" font-size="10.5" fill="#97A59F">50–100 GB/s each way, ~9× below NVLink per direction</text>
+    <g stroke="#4CC5B7" stroke-width="1.2" fill="none" marker-start="url(#arrA)" marker-end="url(#arrA)">
+      <path d="M510 120 L510 146"/><path d="M602 120 L602 146"/><path d="M694 120 L694 146"/><path d="M786 120 L786 146"/>
+    </g>
+    <g stroke="#97A59F" stroke-width="1.2" fill="none" marker-start="url(#arr)" marker-end="url(#arr)">
+      <path d="M510 190 L510 216"/><path d="M602 190 L602 216"/><path d="M694 190 L694 216"/><path d="M786 190 L786 216"/>
+    </g>
+
+    <!-- the scale-out network -->
+    <rect x="24" y="316" width="832" height="40" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="440" y="333" text-anchor="middle" font-weight="600">scale-out network: InfiniBand or high-end Ethernet, between nodes</text>
+    <text x="440" y="349" text-anchor="middle" font-size="10.5" fill="#97A59F">the slower network, the scale-out tier</text>
+    <g stroke="#97A59F" stroke-width="1.2" fill="none" marker-start="url(#arr)" marker-end="url(#arr)">
+      <path d="M216 260 L216 314"/><path d="M648 260 L648 314"/>
+    </g>
+
+    <text x="24" y="382" font-size="11" fill="#97A59F">scale-up: make the NVLink domain larger. GB200 NVL72: 72 GPUs in one domain.</text>
+    <text x="856" y="382" text-anchor="end" font-size="11" fill="#97A59F">scale-out: add nodes over the slower network</text>
+  </g>
+</svg>
