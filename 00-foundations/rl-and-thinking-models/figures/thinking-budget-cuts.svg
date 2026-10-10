@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="330" viewBox="0 0 880 330" role="img" aria-label="Where three controls cut the output of a thinking model: max_tokens cuts inside the think block and leaves no answer, a thinking budget forces the end of the think block and then the model answers, and the two-call recipe continues in a second request." style="color: #E4EAE7">
+  <title>Where three controls cut the output of a thinking model: max_tokens cuts inside the think block and leaves no answer, a thinking budget forces the end of the think block and then the model answers, and the two-call recipe continues in a second request.</title>
+  <rect x="0" y="0" width="880" height="330" rx="8" fill="#161E1C"/>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="26" font-size="11" fill="#97A59F">the output of a thinking model, in tokens: the prompt, the think block, then the answer</text>
+    <text x="24" y="60" font-weight="600">the full output</text>
+    <rect x="180" y="40" width="80" height="32" rx="4" fill="#232C29" stroke="#97A59F" stroke-width="1"/>
+    <text x="220" y="60" font-size="11" fill="#97A59F" text-anchor="middle">prompt</text>
+    <rect x="266" y="40" width="52" height="32" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="292" y="60" font-size="10.5" text-anchor="middle" font-family="JetBrains Mono, monospace">&lt;think&gt;</text>
+    <rect x="324" y="40" width="316" height="32" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="482" y="60" font-size="11.5" fill="#7ADACF" text-anchor="middle">reasoning: thousands of tokens</text>
+    <rect x="646" y="40" width="52" height="32" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="672" y="60" font-size="10.5" text-anchor="middle" font-family="JetBrains Mono, monospace">&lt;/think&gt;</text>
+    <rect x="704" y="40" width="152" height="32" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="780" y="60" font-size="11" text-anchor="middle">answer (content)</text>
+    <path d="M266 82 L856 82 M266 78 L266 82 M856 78 L856 82" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <text x="561" y="96" font-size="10.5" fill="#97A59F" text-anchor="middle">completion_tokens counts reasoning plus answer: a thinking token is billed as an output token</text>
+    <text x="24" y="136" font-size="11" font-family="JetBrains Mono, monospace">max_tokens</text>
+    <text x="24" y="150" font-size="10.5" fill="#97A59F">caps reasoning + answer</text>
+    <rect x="180" y="122" width="80" height="32" rx="4" fill="#232C29" stroke="#97A59F" stroke-width="1"/>
+    <text x="220" y="142" font-size="11" fill="#97A59F" text-anchor="middle">prompt</text>
+    <rect x="266" y="122" width="52" height="32" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="292" y="142" font-size="10.5" text-anchor="middle" font-family="JetBrains Mono, monospace">&lt;think&gt;</text>
+    <rect x="324" y="122" width="156" height="32" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="402" y="142" font-size="11" fill="#7ADACF" text-anchor="middle">reasoning, still open</text>
+    <path d="M484 114 L484 162" fill="none" stroke="#E39A62" stroke-width="2"/>
+    <text x="494" y="136" font-size="10.5" fill="#E39A62">the cap: the output ends inside &lt;think&gt;</text>
+    <text x="494" y="150" font-size="10.5" fill="#E39A62">empty content, finish_reason="length"</text>
+    <text x="24" y="196" font-size="11" font-family="JetBrains Mono, monospace">thinking_token_budget</text>
+    <text x="24" y="210" font-size="10.5" fill="#97A59F">vLLM, per request</text>
+    <rect x="180" y="182" width="80" height="32" rx="4" fill="#232C29" stroke="#97A59F" stroke-width="1"/>
+    <text x="220" y="202" font-size="11" fill="#97A59F" text-anchor="middle">prompt</text>
+    <rect x="266" y="182" width="52" height="32" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="292" y="202" font-size="10.5" text-anchor="middle" font-family="JetBrains Mono, monospace">&lt;think&gt;</text>
+    <rect x="324" y="182" width="156" height="32" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="402" y="202" font-size="11" fill="#7ADACF" text-anchor="middle">reasoning, to the budget</text>
+    <rect x="486" y="182" width="52" height="32" rx="4" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="512" y="202" font-size="10.5" text-anchor="middle" font-family="JetBrains Mono, monospace">&lt;/think&gt;</text>
+    <text x="512" y="176" font-size="10.5" fill="#E39A62" text-anchor="middle">forced</text>
+    <rect x="544" y="182" width="152" height="32" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="620" y="202" font-size="11" text-anchor="middle">answer (content)</text>
+    <text x="706" y="190" font-size="10.5" fill="#97A59F">vLLM forces the end-of-think</text>
+    <text x="706" y="203" font-size="10.5" fill="#97A59F">string, then the model</text>
+    <text x="706" y="216" font-size="10.5" fill="#97A59F">answers (verify)</text>
+    <text x="24" y="256" font-size="11" font-weight="600">the two-call recipe</text>
+    <text x="24" y="270" font-size="10.5" fill="#97A59F">Qwen</text>
+    <text x="180" y="236" font-size="10.5" fill="#97A59F">call 1: max_tokens = the budget</text>
+    <rect x="180" y="242" width="80" height="32" rx="4" fill="#232C29" stroke="#97A59F" stroke-width="1"/>
+    <text x="220" y="262" font-size="11" fill="#97A59F" text-anchor="middle">prompt</text>
+    <rect x="266" y="242" width="52" height="32" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="292" y="262" font-size="10.5" text-anchor="middle" font-family="JetBrains Mono, monospace">&lt;think&gt;</text>
+    <rect x="324" y="242" width="156" height="32" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="402" y="262" font-size="11" fill="#7ADACF" text-anchor="middle">reasoning, still open</text>
+    <text x="500" y="236" font-size="10.5" fill="#E39A62">call 2: the second request does the prefill again</text>
+    <rect x="500" y="242" width="140" height="32" rx="4" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="570" y="262" font-size="10.5" text-anchor="middle">prompt + the think so far</text>
+    <rect x="646" y="242" width="144" height="32" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="718" y="262" font-size="10.5" text-anchor="middle">appended text + &lt;/think&gt;</text>
+    <rect x="796" y="242" width="60" height="32" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="826" y="262" font-size="11" text-anchor="middle">answer</text>
+    <text x="24" y="304" font-size="11" fill="#97A59F">usage.completion_tokens_details.reasoning_tokens counts the reasoning when a reasoning parser is on;</text>
+    <text x="24" y="318" font-size="11" fill="#97A59F">include_reasoning: false hides the reasoning, but the engine still generates it (verify)</text>
+  </g>
+</svg>

@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="420" viewBox="0 0 880 420" role="img" aria-label="One GRPO update: a group of G completions from one prompt, a verifier score per completion, group-normalised advantages that every token of a completion shares, and the clipped surrogate with the k3 KL term." style="color: #E4EAE7">
+  <title>One GRPO update: a group of G completions from one prompt, a verifier score per completion, group-normalised advantages that every token of a completion shares, and the clipped surrogate with the k3 KL term.</title>
+  <rect x="0" y="0" width="880" height="420" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <rect x="24" y="122" width="100" height="36" rx="4" fill="#232C29" stroke="#97A59F" stroke-width="1"/>
+    <text x="74" y="144" font-size="11" fill="#97A59F" text-anchor="middle">one prompt</text>
+    <path d="M124 140 L154 140" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="156" y="40" width="316" height="220" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="314" y="58" font-size="11" fill="#97A59F" text-anchor="middle">G = 4 completions, sampled from π_old</text>
+    <text x="172" y="89" font-size="11" fill="#97A59F" font-family="JetBrains Mono, monospace">o1</text>
+    <g fill="#16302A" stroke="#4CC5B7" stroke-width="1.2">
+      <rect x="196" y="72" width="20" height="26" rx="3"/><rect x="220" y="72" width="20" height="26" rx="3"/><rect x="244" y="72" width="20" height="26" rx="3"/><rect x="268" y="72" width="20" height="26" rx="3"/><rect x="292" y="72" width="20" height="26" rx="3"/><rect x="316" y="72" width="20" height="26" rx="3"/><rect x="340" y="72" width="20" height="26" rx="3"/><rect x="364" y="72" width="20" height="26" rx="3"/>
+    </g>
+    <text x="172" y="131" font-size="11" fill="#97A59F" font-family="JetBrains Mono, monospace">o2</text>
+    <g fill="none" stroke="#97A59F" stroke-width="1.1">
+      <rect x="196" y="114" width="20" height="26" rx="3"/><rect x="220" y="114" width="20" height="26" rx="3"/><rect x="244" y="114" width="20" height="26" rx="3"/><rect x="268" y="114" width="20" height="26" rx="3"/><rect x="292" y="114" width="20" height="26" rx="3"/><rect x="316" y="114" width="20" height="26" rx="3"/><rect x="340" y="114" width="20" height="26" rx="3"/><rect x="364" y="114" width="20" height="26" rx="3"/><rect x="388" y="114" width="20" height="26" rx="3"/><rect x="412" y="114" width="20" height="26" rx="3"/><rect x="436" y="114" width="20" height="26" rx="3"/>
+    </g>
+    <text x="172" y="173" font-size="11" fill="#97A59F" font-family="JetBrains Mono, monospace">o3</text>
+    <g fill="none" stroke="#97A59F" stroke-width="1.1">
+      <rect x="196" y="156" width="20" height="26" rx="3"/><rect x="220" y="156" width="20" height="26" rx="3"/><rect x="244" y="156" width="20" height="26" rx="3"/><rect x="268" y="156" width="20" height="26" rx="3"/><rect x="292" y="156" width="20" height="26" rx="3"/><rect x="316" y="156" width="20" height="26" rx="3"/>
+    </g>
+    <text x="172" y="215" font-size="11" fill="#97A59F" font-family="JetBrains Mono, monospace">o4</text>
+    <g fill="#16302A" stroke="#4CC5B7" stroke-width="1.2">
+      <rect x="196" y="198" width="20" height="26" rx="3"/><rect x="220" y="198" width="20" height="26" rx="3"/><rect x="244" y="198" width="20" height="26" rx="3"/><rect x="268" y="198" width="20" height="26" rx="3"/><rect x="292" y="198" width="20" height="26" rx="3"/><rect x="316" y="198" width="20" height="26" rx="3"/><rect x="340" y="198" width="20" height="26" rx="3"/><rect x="364" y="198" width="20" height="26" rx="3"/><rect x="388" y="198" width="20" height="26" rx="3"/>
+    </g>
+    <text x="314" y="246" font-size="10.5" fill="#97A59F" text-anchor="middle">every token of o_i gets the same A_i</text>
+    <path d="M472 140 L496 140" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="498" y="40" width="110" height="220" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="553" y="58" font-size="11" fill="#97A59F" text-anchor="middle">the verifier</text>
+    <text x="553" y="89" font-size="11.5" text-anchor="middle" font-family="JetBrains Mono, monospace">r1 = 1</text>
+    <text x="553" y="131" font-size="11.5" text-anchor="middle" font-family="JetBrains Mono, monospace">r2 = 0</text>
+    <text x="553" y="173" font-size="11.5" text-anchor="middle" font-family="JetBrains Mono, monospace">r3 = 0</text>
+    <text x="553" y="215" font-size="11.5" text-anchor="middle" font-family="JetBrains Mono, monospace">r4 = 1</text>
+    <text x="553" y="246" font-size="10.5" fill="#97A59F" text-anchor="middle">a program: 1 or 0</text>
+    <path d="M608 140 L632 140" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="634" y="40" width="222" height="220" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="745" y="58" font-size="11" fill="#97A59F" text-anchor="middle">A_i = (r_i − mean(r)) / (std(r) + 10⁻⁴)</text>
+    <text x="745" y="89" font-size="11.5" fill="#7ADACF" text-anchor="middle" font-family="JetBrains Mono, monospace">A1 = +0.865875</text>
+    <text x="745" y="131" font-size="11.5" fill="#97A59F" text-anchor="middle" font-family="JetBrains Mono, monospace">A2 = −0.865875</text>
+    <text x="745" y="173" font-size="11.5" fill="#97A59F" text-anchor="middle" font-family="JetBrains Mono, monospace">A3 = −0.865875</text>
+    <text x="745" y="215" font-size="11.5" fill="#7ADACF" text-anchor="middle" font-family="JetBrains Mono, monospace">A4 = +0.865875</text>
+    <text x="745" y="238" font-size="10.5" fill="#E39A62" text-anchor="middle">[1, 1, 1, 1] → 0: a group that is all</text>
+    <text x="745" y="251" font-size="10.5" fill="#E39A62" text-anchor="middle">correct or all incorrect teaches nothing</text>
+    <g stroke="#97A59F" stroke-width="1.2" fill="none">
+      <path d="M240 260 L240 284" marker-end="url(#arr)"/>
+      <path d="M650 260 L650 272 L560 272 L560 284" marker-end="url(#arr)"/>
+    </g>
+    <text x="248" y="276" font-size="10.5" fill="#97A59F">tokens, logprobs</text>
+    <text x="568" y="283" font-size="10.5" fill="#97A59F">A_i</text>
+    <rect x="30" y="286" width="256" height="90" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="158" y="310" text-anchor="middle" font-weight="600">per token: ρ = π_θ / π_old</text>
+    <text x="158" y="330" text-anchor="middle" font-size="11" fill="#97A59F">with μ = 1, ρ ≡ 1 and the clip never binds</text>
+    <text x="158" y="358" text-anchor="middle" font-size="11" fill="#97A59F" font-family="JetBrains Mono, monospace">grpo.clipped_surrogate()</text>
+    <rect x="310" y="286" width="300" height="90" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="460" y="308" text-anchor="middle" font-weight="600">the loss, per token</text>
+    <text x="460" y="327" text-anchor="middle" font-size="11" fill="#7ADACF">−min(ρ A_i, clip(ρ, 1 − ε_low, 1 + ε_high) A_i)</text>
+    <text x="460" y="343" text-anchor="middle" font-size="11" fill="#7ADACF">+ β · k3,  k3 = π_ref/π_θ − log(π_ref/π_θ) − 1</text>
+    <text x="460" y="364" text-anchor="middle" font-size="11" fill="#7ADACF" font-family="JetBrains Mono, monospace">grpo.k3()</text>
+    <rect x="634" y="286" width="222" height="90" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="745" y="310" text-anchor="middle" font-weight="600">one gradient step</text>
+    <text x="745" y="330" text-anchor="middle" font-size="11" fill="#97A59F">the group is the baseline:</text>
+    <text x="745" y="345" text-anchor="middle" font-size="11" fill="#97A59F">no value model, no critic</text>
+    <g stroke="#97A59F" stroke-width="1.2" fill="none">
+      <path d="M286 331 L308 331" marker-end="url(#arr)"/>
+      <path d="M610 331 L632 331" marker-end="url(#arr)"/>
+    </g>
+    <path d="M745 376 L745 396 L18 396 L18 200 L154 200" fill="none" stroke="#4CC5B7" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#arrA)"/>
+    <text x="445" y="410" text-anchor="middle" font-size="11" fill="#7ADACF">new weights: the π_old of the next group</text>
+  </g>
+</svg>

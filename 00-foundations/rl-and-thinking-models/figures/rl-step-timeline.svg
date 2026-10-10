@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="452" viewBox="0 0 880 452" role="img" aria-label="Three ways to schedule rollouts and training: a synchronous step where each side waits for the other, one-step-off-policy where generation of the next step overlaps training, and fully asynchronous rollouts on separate GPUs with stale samples." style="color: #E4EAE7">
+  <title>Three ways to schedule rollouts and training: a synchronous step where each side waits for the other, one-step-off-policy where generation of the next step overlaps training, and fully asynchronous rollouts on separate GPUs with stale samples.</title>
+  <rect x="0" y="0" width="880" height="452" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <path d="M180 28 L840 28" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <text x="838" y="20" font-size="11" fill="#97A59F" text-anchor="end">time</text>
+    <rect x="16" y="44" width="848" height="124" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="28" y="62" font-size="11" fill="#97A59F">synchronous: the trainer waits for the rollouts, and the batch waits for its longest completion</text>
+    <text x="28" y="92">rollout engine</text>
+    <text x="28" y="132">trainer</text>
+    <rect x="180" y="76" width="199" height="26" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="279" y="93" font-size="11" fill="#7ADACF" text-anchor="middle">generate step k · 142 s</text>
+    <rect x="571" y="76" width="199" height="26" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="670" y="93" font-size="11" fill="#7ADACF" text-anchor="middle">generate step k + 1</text>
+    <rect x="379" y="116" width="192" height="26" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="475" y="133" font-size="11" text-anchor="middle">train step k · 137 s</text>
+    <text x="180" y="133" font-size="10.5" fill="#97A59F">idle</text>
+    <text x="400" y="93" font-size="10.5" fill="#97A59F">idle</text>
+    <text x="28" y="160" font-size="10.5" fill="#97A59F">rollouts are 51% of the step, and the generation batch is only 25% occupied on average: the last few long completions decode almost alone</text>
+    <rect x="16" y="182" width="848" height="104" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="28" y="200" font-size="11" fill="#97A59F">one-step-off-policy (verl): generate step k + 1 while the trainer trains on step k, so the samples come from an older policy</text>
+    <text x="28" y="230">rollout engine</text>
+    <text x="28" y="270">trainer</text>
+    <rect x="180" y="214" width="199" height="26" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="279" y="231" font-size="11" fill="#7ADACF" text-anchor="middle">generate step k + 1</text>
+    <rect x="385" y="214" width="199" height="26" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="484" y="231" font-size="11" fill="#7ADACF" text-anchor="middle">generate step k + 2</text>
+    <rect x="590" y="214" width="199" height="26" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="689" y="231" font-size="11" fill="#7ADACF" text-anchor="middle">generate step k + 3</text>
+    <rect x="180" y="254" width="192" height="26" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="276" y="271" font-size="11" text-anchor="middle">train step k</text>
+    <rect x="385" y="254" width="192" height="26" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="481" y="271" font-size="11" text-anchor="middle">train step k + 1</text>
+    <rect x="590" y="254" width="192" height="26" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="686" y="271" font-size="11" text-anchor="middle">train step k + 2</text>
+    <rect x="16" y="300" width="848" height="108" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="28" y="318" font-size="11" fill="#97A59F">fully asynchronous (verl, TRL's AsyncGRPOTrainer): rollouts and training on separate GPUs</text>
+    <text x="28" y="348">rollout GPUs</text>
+    <text x="28" y="392">trainer GPUs</text>
+    <rect x="180" y="332" width="660" height="26" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="510" y="349" font-size="11" fill="#7ADACF" text-anchor="middle">a vLLM server on its own GPUs streams completions to the trainer</text>
+    <rect x="180" y="376" width="660" height="26" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="510" y="393" font-size="11" text-anchor="middle">after each optimizer step, the new weights go to the engine: an NCCL broadcast</text>
+    <g stroke="#97A59F" stroke-width="1.2" fill="none" stroke-dasharray="4 3">
+      <path d="M300 376 L300 360" marker-end="url(#arr)"/>
+      <path d="M510 376 L510 360" marker-end="url(#arr)"/>
+      <path d="M720 376 L720 360" marker-end="url(#arr)"/>
+    </g>
+    <text x="28" y="426" font-size="10.5" fill="#E39A62">the price is staleness: the samples come from an older policy, ρ = π/π_old is no longer 1, and the clip of §4 does real work</text>
+    <text x="28" y="440" font-size="10.5" fill="#E39A62">TRL drops a sample more than max_staleness (default 4, verify) weight versions old</text>
+  </g>
+</svg>
