@@ -87,6 +87,10 @@ There is a second failure, and it is more difficult: **it is possible that the m
 
 The solution is the standard solution for memory-bound problems: *fusion* and *tiling*. Do not run softmax as a separate pass over a matrix in HBM. Divide the problem into blocks that are sufficiently small to fit in SRAM. Then do the full chain of score, softmax and weighted sum on each block while the block is still on-chip. $S$ and $P$ exist only as small tiles in fast memory. The kernel removes each tile immediately after it uses the tile.
 
+![The naive schedule writes S and P to HBM and reads them back, while the fused kernel keeps one Q block and the S and P tiles in SRAM and writes only O.](figures/primer-naive-vs-tiled.svg)
+
+*The top row is the naive schedule of §3 for one head at $N$ = 4096, $d$ = 64 in fp16. Three kernels write $S$ and $P$, 33.5 MB each, to HBM and read them back. The traffic is roughly 134 MB for 4.3 GFLOP, or 32 FLOPs per byte. The bottom row is the fused kernel of §4. One $Q$ block stays in SRAM, the kernel loops over the $K$ and $V$ blocks, and $S$ and $P$ exist only as tiles. HBM holds $Q$, $K$, $V$ and $O$ only.*
+
 In detail: divide $Q$ into row blocks of size $B_r \times d$, and divide $K$, $V$ into blocks of size $B_c \times d$. Select the sizes so that some of these blocks fit in the ~200 KB of shared memory of one SM. For each $Q$ block, loop over all $K$/$V$ blocks, and accumulate the results into an output block.
 
 This is easy for the matmuls, because a matmul divides into blocks naturally. **The obstacle is softmax.**
@@ -132,6 +136,10 @@ The correction factor $\alpha$ is the full idea. If a later block contains a lar
 
 Use one row with four scores. The scores arrive in two blocks of two: `[1, 3]` then `[5, 2]`.
 
+![Two blocks of scores, 1 and 3 then 5 and 2: the max, the sum and the accumulator after each block, the rescale by alpha when the max rises, and the final division.](figures/primer-online-softmax.svg)
+
+*Block 1 gives $m$ = 3, $\ell$ = 1.1353 and an $O$ over two elements. Block 2 raises the max to 5, so the correction factor $\alpha$ = 0.1353 rescales $\ell$ and $O$ before the block adds its own terms. After the last block, one division by $\ell$ = 1.2034 gives the weights of the global softmax. `kerncore.flash.online_softmax_steps` reproduces each number.*
+
 **The target answer.** The global max is 5. The exponentials are `exp([1,3,5,2] − 5) = [0.0183, 0.1353, 1.0, 0.0498]`, summing to `1.2034`. So the true weights are `[0.0152, 0.1125, 0.8310, 0.0414]`.
 
 **Block 1.** `m = 3`, `ℓ = exp(1−3) + exp(3−3) = 0.1353 + 1 = 1.1353`, and `O = 0.1353·v₁ + 1.0·v₂`. If the kernel stops here, the result is the softmax of only the first two elements. That result is correct for the elements so far, but it is incorrect for the full row.
@@ -156,6 +164,19 @@ There is no approximation at any step. There is only a deferred normalization an
 ## 6. The backward pass: recompute instead of store
 
 Training needs gradients. The textbook backward pass for attention needs $P$, and $P$ is exactly the $N \times N$ matrix that the forward pass did not make. If the kernel stores $P$, the quadratic memory cost comes back immediately.
+
+```mermaid
+flowchart TB
+  F["forward pass<br/>Q, K, V tiles in SRAM, online softmax"] --> O["keep O: N × d"]
+  F --> L["keep L = m + log(ℓ): N numbers, not N²"]
+  F -. "never written" .-> P["P: N × N"]
+  O --> B["backward pass"]
+  L --> B
+  B --> R["load the Q, K, V tiles into SRAM again<br/>calculate each S and P tile again"]
+  R --> G["normalize with the saved L: no second reduction pass<br/>then the gradients"]
+```
+
+*The forward pass keeps only $O$ and the log-sum-exp $L$ of each row, and it never writes $P$. The backward pass loads the $Q$, $K$ and $V$ tiles again, calculates each $S$ and $P$ tile again, and normalizes with the saved $L$. This costs more FLOPs than a stored $P$, but the kernel has unused arithmetic capacity, and bandwidth is scarce.*
 
 FlashAttention **recomputes** $P$ instead. During the forward pass, it keeps only $O$ ($N \times d$) and the final softmax statistics for each row. It packs the statistics as the log-sum-exp $L = m + \log(\ell)$, that is, $N$ numbers, not $N^2$. In the backward pass, it loads the $Q$, $K$, $V$ tiles into SRAM again. Then it calculates each $S$ and $P$ tile again when it needs the tile. It uses the saved $L$ to normalize correctly without a second reduction pass.
 

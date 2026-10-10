@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="404" viewBox="0 0 880 404" role="img" aria-label="After a fork, the block tables of A and B name the same physical blocks with refcount 2. When B writes into the shared partial block, the engine allocates a new block, copies the contents, decreases the old refcount and points the block table of B to the new block." style="color: #E4EAE7">
+  <title>After a fork, the block tables of A and B name the same physical blocks with refcount 2. When B writes into the shared partial block, the engine allocates a new block, copies the contents, decreases the old refcount and points the block table of B to the new block.</title>
+  <rect x="0" y="0" width="880" height="404" rx="8" fill="#161E1C"/>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="26" fill="#97A59F">Two sequences A and B with the same prompt: blk0 is full, blk1 is the last, partial block of the prompt · <tspan font-family="JetBrains Mono, monospace" font-size="11">PagedSequence.fork</tspan>, <tspan font-family="JetBrains Mono, monospace" font-size="11">append</tspan></text>
+    
+    <rect x="24" y="40" width="406" height="350" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="40" y="60" fill="#97A59F">1 · after the fork: both block tables name the same blocks</text>
+    <text x="40" y="84" font-size="11" fill="#97A59F">block tables</text>
+    <text x="40" y="117" font-weight="600">A</text>
+    <rect x="54" y="98" width="116" height="30" rx="5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="112" y="117" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">blk0: phys 7</text>
+    <rect x="178" y="98" width="116" height="30" rx="5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="236" y="117" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">blk1: phys 1</text>
+    <text x="40" y="157" font-weight="600">B</text>
+    <rect x="54" y="138" width="116" height="30" rx="5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="112" y="157" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">blk0: phys 7</text>
+    <rect x="178" y="138" width="116" height="30" rx="5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="236" y="157" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">blk1: phys 1</text>
+    <text x="54" y="186" font-size="11" fill="#97A59F">B is a fork of A: parallel sampling, n completions from one prompt</text>
+    <text x="40" y="210" font-size="11" fill="#97A59F">physical block pool</text>
+    <rect x="54" y="218" width="116" height="56" rx="5" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="112" y="238" text-anchor="middle" font-weight="600">phys 7</text>
+    <text x="112" y="254" text-anchor="middle" font-size="10.5" fill="#7ADACF">full</text>
+    <rect x="178" y="218" width="116" height="56" rx="5" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="236" y="238" text-anchor="middle" font-weight="600">phys 1</text>
+    <text x="236" y="252" text-anchor="middle" font-size="10.5" fill="#7ADACF">the last block</text>
+    <text x="236" y="264" text-anchor="middle" font-size="10.5" fill="#7ADACF">of the prompt</text>
+    <rect x="302" y="218" width="116" height="56" rx="5" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="4 3"/>
+    <text x="360" y="238" text-anchor="middle" font-weight="600" fill="#97A59F">phys 4</text>
+    <text x="360" y="252" text-anchor="middle" font-size="10.5" fill="#97A59F">free</text>
+    <text x="360" y="264" text-anchor="middle" font-size="10.5" fill="#97A59F"></text>
+    <g font-size="11" text-anchor="middle">
+      <text x="112" y="292">refcount 2</text><text x="236" y="292">refcount 2</text><text x="360" y="292">free</text>
+    </g>
+    <g font-size="11">
+      <text x="54" y="318">The fork copies nothing: A and B share the blocks of the prompt.</text><text x="54" y="333">A and B are different only in the tokens that they generate next.</text><text x="54" y="348">A refcount counts the block tables that name the block.</text><text x="54" y="363">A write into a block with refcount 1 goes in place.</text>
+    </g>
+    
+    <rect x="450" y="40" width="406" height="350" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="466" y="60" fill="#97A59F">2 · B writes into blk1, whose refcount is 2: copy-on-write</text>
+    <text x="466" y="84" font-size="11" fill="#97A59F">block tables</text>
+    <text x="466" y="117" font-weight="600">A</text>
+    <rect x="480" y="98" width="116" height="30" rx="5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="538" y="117" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">blk0: phys 7</text>
+    <rect x="604" y="98" width="116" height="30" rx="5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="662" y="117" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">blk1: phys 1</text>
+    <text x="466" y="157" font-weight="600">B</text>
+    <rect x="480" y="138" width="116" height="30" rx="5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="538" y="157" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">blk0: phys 7</text>
+    <rect x="604" y="138" width="116" height="30" rx="5" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="662" y="157" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">blk1: phys 4</text>
+    <text x="480" y="186" font-size="11" fill="#97A59F">B is a fork of A: parallel sampling, n completions from one prompt</text>
+    <text x="466" y="210" font-size="11" fill="#97A59F">physical block pool</text>
+    <rect x="480" y="218" width="116" height="56" rx="5" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="538" y="238" text-anchor="middle" font-weight="600">phys 7</text>
+    <text x="538" y="254" text-anchor="middle" font-size="10.5" fill="#7ADACF">full</text>
+    <rect x="604" y="218" width="116" height="56" rx="5" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="662" y="238" text-anchor="middle" font-weight="600">phys 1</text>
+    <text x="662" y="252" text-anchor="middle" font-size="10.5" fill="#7ADACF">the last block</text>
+    <text x="662" y="264" text-anchor="middle" font-size="10.5" fill="#7ADACF">of the prompt</text>
+    <rect x="728" y="218" width="116" height="56" rx="5" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="786" y="238" text-anchor="middle" font-weight="600" >phys 4</text>
+    <text x="786" y="252" text-anchor="middle" font-size="10.5" fill="#7ADACF">a copy of phys 1</text>
+    <text x="786" y="264" text-anchor="middle" font-size="10.5" fill="#7ADACF">plus the new token</text>
+    <g font-size="11" text-anchor="middle">
+      <text x="538" y="292">refcount 2</text><text x="662" y="292">refcount 1</text><text x="786" y="292">refcount 1</text>
+    </g>
+    <g font-size="11">
+      <text x="480" y="318">1. Allocate a new block: phys 4.</text><text x="480" y="333">2. Copy the contents of phys 1 into phys 4.</text><text x="480" y="348">3. Decrease the refcount of phys 1: 2 becomes 1.</text><text x="480" y="363">4. Point the block table of B to phys 4.</text><text x="480" y="378">5. Write the new token into phys 4. A still reads phys 1.</text>
+    </g>
+  </g>
+</svg>

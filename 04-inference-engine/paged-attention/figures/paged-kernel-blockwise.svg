@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="324" viewBox="0 0 880 324" role="img" aria-label="The PagedAttention kernel takes the block table, visits the physical blocks of the sequence one at a time in logical order, and folds each block into a running max, denominator and weighted sum." style="color: #E4EAE7">
+  <title>The PagedAttention kernel takes the block table, visits the physical blocks of the sequence one at a time in logical order, and folds each block into a running max, denominator and weighted sum.</title>
+  <rect x="0" y="0" width="880" height="324" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="26" fill="#97A59F">One decode step of one sequence: the kernel reads K and V through the block table · <tspan font-family="JetBrains Mono, monospace" font-size="11">paged_attention_blockwise</tspan></text>
+
+    <rect x="24" y="48" width="216" height="150" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="40" y="70" font-weight="600">block table of the sequence</text>
+    <g font-family="JetBrains Mono, monospace" font-size="11">
+      <text x="40" y="96">logical 0  ·  physical 7</text>
+      <text x="40" y="118">logical 1  ·  physical 1</text>
+      <text x="40" y="140">logical 2  ·  physical 4</text>
+      <text x="40" y="162">logical 3  ·  physical 2</text>
+    </g>
+    <text x="40" y="184" font-size="10.5" fill="#97A59F">physical 2 holds 9 of 16 tokens</text>
+    <path d="M240 123 L266 123" fill="none" stroke="#97A59F" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#arr)"/>
+
+    <rect x="268" y="48" width="330" height="150" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="433" y="66" text-anchor="middle" font-size="11.5" fill="#97A59F">physical block pool: scattered, non-contiguous</text>
+    <rect x="284" y="72" width="70" height="38" rx="5" fill="none" stroke="#97A59F" stroke-width="1"/><text x="319" y="95" text-anchor="middle" font-size="11" fill="#97A59F">phys 0</text><rect x="366" y="72" width="70" height="38" rx="5" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/><text x="401" y="88" text-anchor="middle" font-weight="600" font-size="11.5">phys 1</text><text x="401" y="102" text-anchor="middle" font-size="10.5" fill="#7ADACF">2nd</text><rect x="448" y="72" width="70" height="38" rx="5" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/><text x="483" y="88" text-anchor="middle" font-weight="600" font-size="11.5">phys 2</text><text x="483" y="102" text-anchor="middle" font-size="10.5" fill="#7ADACF">4th · 9 of 16</text><rect x="530" y="72" width="70" height="38" rx="5" fill="none" stroke="#97A59F" stroke-width="1"/><text x="565" y="95" text-anchor="middle" font-size="11" fill="#97A59F">phys 3</text><rect x="284" y="120" width="70" height="38" rx="5" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/><text x="319" y="136" text-anchor="middle" font-weight="600" font-size="11.5">phys 4</text><text x="319" y="150" text-anchor="middle" font-size="10.5" fill="#7ADACF">3rd</text><rect x="366" y="120" width="70" height="38" rx="5" fill="none" stroke="#97A59F" stroke-width="1"/><text x="401" y="143" text-anchor="middle" font-size="11" fill="#97A59F">phys 5</text><rect x="448" y="120" width="70" height="38" rx="5" fill="none" stroke="#97A59F" stroke-width="1"/><text x="483" y="143" text-anchor="middle" font-size="11" fill="#97A59F">phys 6</text><rect x="530" y="120" width="70" height="38" rx="5" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/><text x="565" y="136" text-anchor="middle" font-weight="600" font-size="11.5">phys 7</text><text x="565" y="150" text-anchor="middle" font-size="10.5" fill="#7ADACF">1st</text>
+    <text x="433" y="188" text-anchor="middle" font-size="10.5" fill="#97A59F">the last block is partial: n = min(16, remaining) tokens</text>
+
+    <path d="M598 123 L662 123" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <text x="630" y="104" text-anchor="middle" font-size="10.5" fill="#97A59F">one block</text>
+    <text x="630" y="116" text-anchor="middle" font-size="10.5" fill="#97A59F">at a time</text>
+
+    <rect x="664" y="48" width="192" height="256" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="676" y="70" font-weight="600">running state, one row</text>
+    <g font-family="JetBrains Mono, monospace" font-size="10.5">
+      <text x="676" y="92">m   = running max</text>
+      <text x="676" y="108">l   = denominator</text>
+      <text x="676" y="124">acc = weighted sum</text>
+      <text x="676" y="148" font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="11" fill="#7ADACF">for each block (Kb, Vb):</text>
+      <text x="676" y="166">s = Kb @ q / sqrt(d)</text>
+      <text x="676" y="182">m_new = max(m, s.max())</text>
+      <text x="676" y="198">alpha = exp(m − m_new)</text>
+      <text x="676" y="214">p = exp(s − m_new)</text>
+      <text x="676" y="230">l = l·alpha + p.sum()</text>
+      <text x="676" y="246">acc = acc·alpha + p @ Vb</text>
+      <text x="676" y="262">m = m_new</text>
+      <text x="676" y="282" font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="11" fill="#7ADACF">after the last block:</text>
+      <text x="676" y="298">output = acc / l</text>
+    </g>
+
+    <text x="24" y="222" font-size="11.5" fill="#97A59F">Online softmax, as in FlashAttention: the kernel keeps the maximum so far and rescales</text>
+    <text x="24" y="238" font-size="11.5" fill="#97A59F">the old sums by alpha when a block raises it. The gathered K and V never exist as one</text>
+    <text x="24" y="254" font-size="11.5" fill="#97A59F">contiguous tensor: the block table changes where the bytes live, not the mathematics.</text>
+
+    <rect x="24" y="266" width="574" height="44" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="311" y="284" text-anchor="middle" font-size="11.5">the cost of the gather: approximately 20–26% more latency on the attention kernel alone,</text>
+    <text x="311" y="300" text-anchor="middle" font-size="11.5">relative to a contiguous layout (paper microbenchmarks), and attention is a fraction of the step time</text>
+  </g>
+</svg>

@@ -20,6 +20,10 @@ Before vLLM, production systems (FasterTransformer, Orca) kept the KV cache of e
 
 The PagedAttention paper measured that only about 20–40% of KV cache memory in these systems held actual token state. This memory is the most limited resource on the GPU, and most of it held only reservations and no data.
 
+![Before paging, each request reserves one contiguous tensor at the maximum length, and three kinds of waste appear. With paging, each request holds fixed-size blocks at any position in the pool, and the waste is at most one partial block per sequence.](figures/kv-waste-contiguous-vs-paged.svg)
+
+*The top row shows three requests with contiguous reservations. Each reservation holds token state, reservation waste and internal fragmentation, and the gaps between reservations are external fragmentation. The proportions are illustrative. The bottom row shows the same three requests in KV blocks of one constant size, at any position in the pool. The waste is at most one partially filled block per sequence.*
+
 ## The core idea: virtual memory, applied to attention
 
 PagedAttention (Kwon et al., SOSP 2023, the paper that introduced vLLM) applies the method of operating systems. In an operating system, each process sees a contiguous virtual address space. The operating system divides physical memory into fixed-size frames. A page table maps the virtual addresses to the frames. The observation is that nothing in attention needs the KV cache to be physically contiguous. Contiguity made the implementation easier, and it came from dense tensor frameworks.
@@ -50,11 +54,19 @@ Without contiguity, there is a cost: the attention kernel can no longer read K a
 
 This accumulation is the same numerically stable method that FlashAttention uses for tiling: it keeps the maximum so far and rescales. Here, the kernel applies it to an access pattern that gathers from blocks. In the paper's microbenchmarks, the paged layout costs approximately 20–26% more latency on the attention kernel alone, relative to a contiguous layout. But attention is only a fraction of the end-to-end step time. The batching gains that paging makes possible are larger than this cost by a wide margin.
 
+![The PagedAttention kernel takes the block table, visits the physical blocks of the sequence one at a time in logical order, and folds each block into a running max, denominator and weighted sum.](figures/paged-kernel-blockwise.svg)
+
+*The kernel takes the block table of the sketch above and visits physical blocks 7, 1, 4 and 2 in logical order. For each block, it calculates the scores, keeps the maximum so far, rescales the old sums by `alpha` and adds the block. After the last block, it divides the sum by the denominator once. `kerncore.paged.paged_attention_blockwise` is this loop in numpy, and the FlashAttention primer draws the same accumulator in its §5.*
+
 It is useful to be precise about the relation to FlashAttention, because people often confuse the two. FlashAttention is about how to *calculate* attention with efficient IO: it never puts the full score matrix in HBM. PagedAttention is about how to *store* the KV cache flexibly. The two are orthogonal, and you can use them together. Modern kernels (FlashAttention-2/3, FlashInfer) accept paged KV layouts natively. Also, "paged KV" is now the standard interface contract for attention kernels in the software stacks that serve LLMs.
 
 ## Sharing and copy-on-write
 
 The indirection of the block table makes it almost free to share the KV cache. Each physical block has a reference count. The block tables of two or more sequences can point to the same physical block. If a sequence must write into a block whose refcount is more than one, the engine does a copy-on-write at block granularity. It allocates a new block, copies the contents, decreases the old refcount and points the block table to the new block.
+
+![After a fork, the block tables of A and B name the same physical blocks with refcount 2. When B writes into the shared partial block, the engine allocates a new block, copies the contents, decreases the old refcount and points the block table of B to the new block.](figures/copy-on-write-fork.svg)
+
+*Two sequences A and B share the two blocks of one prompt after a fork, and each block has refcount 2. In the right panel, B writes into the partial block. The engine allocates a new block, copies the contents, decreases the old refcount and points the block table of B to the new block. The full block stays shared. `kerncore.paged.PagedSequence.fork` and `append` do the same steps.*
 
 Three workloads get a benefit.
 
