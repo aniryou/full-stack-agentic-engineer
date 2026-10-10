@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="300" viewBox="0 0 900 300" role="img" aria-label="KV bytes per token for Llama-3.1-8B at 16, 8, 5 and 3 bits per element, and 2,000-token sessions on an L4 with FP8 weights." style="color: #E4EAE7">
+  <title>KV bytes per token for Llama-3.1-8B at 16, 8, 5 and 3 bits per element, and 2,000-token sessions on an L4 with FP8 weights.</title>
+  <rect x="0" y="0" width="900" height="300" rx="8" fill="#161E1C"/>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="26" fill="#97A59F">What a smaller KV cache buys (§6), Llama-3.1-8B: <tspan font-family="JetBrains Mono, monospace" font-size="11">kvquant.kv_bits_per_element()</tspan>, <tspan font-family="JetBrains Mono, monospace" font-size="11">cost.Model.kv_bytes_per_token()</tspan>, <tspan font-family="JetBrains Mono, monospace" font-size="11">cost.sessions()</tspan></text>
+
+    <!-- bytes per token -->
+    <text x="24" y="58" font-weight="600">bytes per token = 2 × layers × kv_heads × head_dim × bytes</text>
+    <text x="24" y="92">BF16</text>
+    <text x="24" y="106" font-size="11" fill="#97A59F">16 bits per element</text>
+    <rect x="190" y="76" width="240" height="24" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="438" y="93" font-size="11.5">131,072 B</text>
+    <text x="24" y="126">FP8</text>
+    <text x="24" y="140" font-size="11" fill="#97A59F">8 bits per element</text>
+    <rect x="190" y="110" width="120" height="24" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="318" y="127" font-size="11.5">65,536 B</text>
+    <text x="24" y="160">4-bit, groups of 32</text>
+    <text x="24" y="174" font-size="11" fill="#97A59F">5 bits per element</text>
+    <rect x="190" y="144" width="75" height="24" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="273" y="161" font-size="11.5">40,960 B</text>
+    <text x="24" y="194">2-bit</text>
+    <text x="24" y="208" font-size="11" fill="#97A59F">3 bits per element</text>
+    <rect x="190" y="178" width="45" height="24" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="243" y="195" font-size="11.5">24,576 B</text>
+
+    <!-- sessions -->
+    <text x="520" y="58" font-weight="600">2,000-token sessions, L4 with FP8 weights</text>
+    <text x="520" y="92">BF16 KV</text>
+    <rect x="600" y="76" width="44" height="24" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="652" y="93" font-size="11.5">43</text>
+    <text x="520" y="126">FP8 KV</text>
+    <rect x="600" y="110" width="89" height="24" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="697" y="127" font-size="11.5">87</text>
+    <text x="520" y="160">4-bit KV</text>
+    <rect x="600" y="144" width="144" height="24" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="752" y="161" font-size="11.5">140</text>
+    <text x="520" y="194">2-bit KV</text>
+    <rect x="600" y="178" width="240" height="24" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="848" y="195" font-size="11.5">234</text>
+    <text x="24" y="222" font-size="11" fill="#97A59F">below 8 bits, a scale and a minimum per group</text>
+    <text x="520" y="222" font-size="11" fill="#97A59F">the core's round memory inputs (<tspan font-family="JetBrains Mono, monospace">cost.kv_blocks()</tspan>)</text>
+
+    <!-- faster long-context decode -->
+    <rect x="24" y="238" width="852" height="48" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="450" y="258" text-anchor="middle" font-weight="600">faster long-context decode (SIMULATED, <tspan font-family="JetBrains Mono, monospace" font-size="11" font-weight="400">cost.step_cost()</tspan>)</text>
+    <text x="450" y="276" text-anchor="middle" font-size="11.5" fill="#7ADACF">Llama-3.1-8B with FP8 weights on an H100, batch 32, 8,000 tokens of context: FP8 KV takes a decode step from 17.5 ms to 11.3 ms</text>
+  </g>
+</svg>
