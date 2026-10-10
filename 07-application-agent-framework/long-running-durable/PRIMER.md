@@ -77,6 +77,10 @@ The execution has a cycle: **wake, do one step, write a checkpoint, wait**. Each
 
 ## 3. The five invariants
 
+![One step of a run from one wake-up to the next, as eight stages in sequence: wake-up, lease, read the run, decide, intent, act, checkpoint and enqueue next; beside each stage, the invariant that protects it and its mechanism in code.](figures/one-step-five-invariants.svg)
+
+*This figure shows one step of a run, from one wake-up to the next wake-up. The left column is the sequence of the handler. The right column names the invariant that protects each stage, and the mechanism that §3.1 to §3.5 give for it.*
+
 ### 3.1 Durability — the store is the only memory
 Write a checkpoint after each step. Two saves for each tool step is the real minimum: one save *before* the side effect (the intent) and one save *after* it (the result). After a crash, anything that is not in the store did not occur. This includes the reasoning of the model.
 
@@ -168,6 +172,23 @@ The flow has these steps:
 5. *The write that reaches N* enqueues the named `aggregate` task.
 6. A synthesis LLM combines the results.
 
+```mermaid
+flowchart TB
+  PL["1. a planner LLM makes N subtasks"] --> Q["2. a Pub/Sub topic, or N Cloud Tasks"]
+  Q --> W1["3. an idempotent worker"]
+  Q --> W2["3. an idempotent worker"]
+  Q --> W3["3. an idempotent worker, N of them"]
+  W1 --> C
+  W2 --> C
+  W3 --> C
+  C[("4. the run document: a transactional<br/>counter, the side effects outside<br/>the transaction")]
+  C -->|"5. the write that reaches N,<br/>and a late duplicate that sees all_done"| A[["the named aggregate task"]]
+  A --> S["6. a synthesis LLM combines the results"]
+  C -.->|"N > ~50 writers contend (~1 write/s)"| H["one document for each subtask<br/>and a count query, or Cloud<br/>Workflows parallel"]
+```
+
+*This figure shows the six steps of P2. Each worker updates the counter in a transaction, and the side effects stay outside the transaction. The write that reaches N enqueues the named `aggregate` task. A late duplicate also sees `all_done` and enqueues the same task, and Cloud Tasks rejects the second enqueue by its name.*
+
 **Fan-in is the hard part**. The side effects must stay outside the transaction. A late duplicate must also see `all_done`. The enqueue of the `aggregate` task is idempotent, thus let the late duplicates enqueue it too.
 
 When N > ~50 writers use one Firestore document, the writes contend. The guidance for one document is ~1 write/s. In that case, write one document for each subtask and use a count query. Or give the join to **Cloud Workflows `parallel`** (`workflows/research_approval.yaml`).
@@ -240,6 +261,20 @@ Rigid sequences are exactly the work that probabilistic models do incorrectly af
 
 The numbers are from a check on 5 Sep 2026. Do a new check before you depend on them (see the "Verify" list at the end).
 
+```mermaid
+flowchart TB
+  SCH["Cloud Scheduler: the clock<br/>at-least-once, it can send a tick two times"] --> PS["Pub/Sub: fan-out, events<br/>at-least-once, the ack deadline is 10–600 s<br/>exactly-once delivery only for pull subscriptions"]
+  EXT["webhooks, Eventarc events,<br/>a person behind IAP"] --> CR
+  PS --> CR["Cloud Run service: the trigger<br/>HTTP handlers for steps, approvals, callbacks and Pub/Sub push<br/>request timeout 5 min by default, maximum 60 min<br/>instances scale to zero"]
+  CR <--> CT[("Cloud Tasks: wake run X for step N, not before T<br/>at-least-once, named tasks de-duplicated (~1 h–24 h)<br/>schedule_time up to 30 days, 500 dispatches/s for each queue<br/>HTTP targets with OIDC tokens")]
+  CR --> FS[("Firestore: run documents, keys, leases<br/>transactions, a document is ≤ 1 MiB<br/>~1 write/s for each document at the most")]
+  CR --> GM["Gemini on Vertex AI"]
+  CR -->|"one long step"| JOB[["Cloud Run job<br/>up to 168 h (7 days) for each attempt"]]
+  WF["Cloud Workflows: managed durable orchestration<br/>an execution runs or waits up to 1 year<br/>await_callback has a default timeout of 12 h"] -.->|"calls the endpoints (§6 B)"| CR
+```
+
+*This figure shows the path of one wake-up through the services of the table. The boxes carry the limits that decide the design (§5.1): the 60-min request timeout, the 30-day `schedule_time`, the 1-year Workflows execution, the 1 MiB document. The dotted edge is the managed alternative, Cloud Workflows (§6 B).*
+
 | Service | Role in a long-running agent | Limits and semantics to quote |
 |---|---|---|
 | **Cloud Run services** | the trigger: HTTP handlers for steps, approvals, callbacks and Pub/Sub push | The request timeout is 5 min by default, **maximum 60 min**. Instances scale to zero. There is no guarantee that an instance finishes its work after the response. For background work, use always-on CPU or Tasks. You can set the concurrency for each instance. Minimum instances prevent cold starts. |
@@ -276,6 +311,10 @@ The general rule has two parts. Put durability in the platform (Workflows callba
 ---
 
 ## 6. Three reference architectures
+
+![The three reference architectures as three panels, each read from the top: what wakes the run, who owns the orchestration, where the steps run, where the state lives and the main cost; A is a durable loop on Cloud Run, B is Cloud Workflows as the orchestrator, C is ADK 2 on Cloud Run with Cloud SQL sessions.](figures/three-reference-architectures.svg)
+
+*This figure shows the three reference architectures as three panels. Each panel reads from the top: the wake-up, the orchestrator (the accent box), the steps, the state and the main cost (the warm box). Option D keeps the agent of C and replaces the runner.*
 
 ### A. Durable loop on Cloud Run (this repo's `lra-gcp/services/`)
 The architecture has these parts:
