@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="940" height="300" viewBox="0 0 940 300" role="img" aria-label="Three parties share one tool call: the user asks, the model selects the tool and its arguments from a context window that holds instructions and untrusted data in one channel, and the agent runtime makes the call with a credential, under its own authority or on behalf of the user." style="color: #E4EAE7">
+  <title>Three parties share one tool call: the user asks, the model selects the tool and its arguments from a context window that holds instructions and untrusted data in one channel, and the agent runtime makes the call with a credential, under its own authority or on behalf of the user.</title>
+  <rect x="0" y="0" width="940" height="300" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <!-- edge labels, above the chain -->
+    <g font-size="11" fill="#97A59F" text-anchor="middle">
+      <text x="184" y="58">the ask</text>
+      <text x="424" y="58">reads</text>
+      <text x="614" y="58">a tool call</text>
+      <text x="804" y="58">the call, with a credential</text>
+    </g>
+    <!-- user -->
+    <rect x="24" y="70" width="140" height="88" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="94" y="104" text-anchor="middle" font-weight="600">User</text>
+    <text x="94" y="124" text-anchor="middle" font-size="11" fill="#97A59F">interactive,</text>
+    <text x="94" y="139" text-anchor="middle" font-size="11" fill="#97A59F">gives consent</text>
+    <!-- context window: the attack surface -->
+    <rect x="204" y="70" width="200" height="88" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="304" y="94" text-anchor="middle" font-weight="600">Context window</text>
+    <text x="304" y="114" text-anchor="middle" font-size="11">prompts, tool results,</text>
+    <text x="304" y="129" text-anchor="middle" font-size="11">web pages, documents,</text>
+    <text x="304" y="144" text-anchor="middle" font-size="11">messages from other agents</text>
+    <!-- model -->
+    <rect x="444" y="70" width="150" height="88" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="519" y="104" text-anchor="middle" font-weight="600">Model</text>
+    <text x="519" y="124" text-anchor="middle" font-size="11" fill="#97A59F">selects the tools</text>
+    <text x="519" y="139" text-anchor="middle" font-size="11" fill="#97A59F">and the arguments</text>
+    <!-- agent runtime: the subject -->
+    <rect x="634" y="70" width="150" height="88" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="709" y="104" text-anchor="middle" font-weight="600">Agent runtime</text>
+    <text x="709" y="124" text-anchor="middle" font-size="11.5" fill="#7ADACF">its own identity,</text>
+    <text x="709" y="139" text-anchor="middle" font-size="11.5" fill="#7ADACF">holds the credentials</text>
+    <!-- tool -->
+    <rect x="824" y="70" width="92" height="88" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="870" y="104" text-anchor="middle" font-weight="600">Tool / API</text>
+    <text x="870" y="124" text-anchor="middle" font-size="11" fill="#97A59F">the privileged</text>
+    <text x="870" y="139" text-anchor="middle" font-size="11" fill="#97A59F">action</text>
+    <!-- arrows -->
+    <g stroke="#97A59F" stroke-width="1.2" fill="none">
+      <path d="M164 114 L202 114" marker-end="url(#arr)"/>
+      <path d="M404 114 L442 114" marker-end="url(#arr)"/>
+      <path d="M594 114 L632 114" marker-end="url(#arr)"/>
+      <path d="M784 114 L822 114" marker-end="url(#arr)"/>
+    </g>
+    <!-- who did what, under the chain -->
+    <g font-size="11" text-anchor="middle">
+      <text x="94" y="180" fill="#97A59F">the user asked</text>
+      <text x="94" y="194" fill="#97A59F">for a different thing</text>
+      <text x="304" y="180" fill="#E39A62">anything the agent reads</text>
+      <text x="304" y="194" fill="#E39A62">is an attack surface</text>
+      <text x="519" y="180" fill="#97A59F">the model decided</text>
+      <text x="709" y="180" fill="#7ADACF">the agent runtime</text>
+      <text x="709" y="194" fill="#7ADACF">did the call</text>
+    </g>
+    <!-- classical IAM, bottom left -->
+    <g font-size="11" fill="#97A59F">
+      <text x="24" y="236">Classical IAM assumes that the caller of an API</text>
+      <text x="24" y="250">is the entity that decided to call it.</text>
+      <text x="24" y="270" fill="#E39A62">Here, three parties share one call: the confused</text>
+      <text x="24" y="284" fill="#E39A62">deputy is the default state of an agent.</text>
+    </g>
+    <!-- the two authorities, bottom right -->
+    <rect x="444" y="212" width="472" height="74" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="680" y="229" text-anchor="middle" font-size="11" fill="#97A59F">every action is under one of two authorities (tokens, policy and logs show which)</text>
+    <rect x="458" y="238" width="232" height="40" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="574" y="254" text-anchor="middle" font-size="11" font-weight="600">own authority:</text>
+    <text x="574" y="268" text-anchor="middle" font-size="11" fill="#97A59F">the agent's identity and permissions</text>
+    <rect x="702" y="238" width="204" height="40" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="804" y="254" text-anchor="middle" font-size="11" font-weight="600">on behalf of a user (delegated):</text>
+    <text x="804" y="268" text-anchor="middle" font-size="11" fill="#97A59F">the user's consent and permissions</text>
+  </g>
+</svg>
