@@ -1,0 +1,123 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="470" viewBox="0 0 960 470" role="img" aria-label="An IVF-PQ index: k-means cells with nlist centroids, of which a query scans only the nprobe nearest, and product quantization, which stores one byte per sub-vector from a codebook of 256 centroids and scores codes with a lookup table." style="color: #E4EAE7">
+  <title>An IVF-PQ index: k-means cells with nlist centroids, of which a query scans only the nprobe nearest, and product quantization, which stores one byte per sub-vector from a codebook of 256 centroids and scores codes with a lookup table.</title>
+  <rect x="0" y="0" width="960" height="470" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <!-- IVF -->
+    <text x="24" y="30" font-weight="600">IVF: nlist cells, nprobe of them scanned</text>
+    <rect x="24" y="44" width="440" height="236" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <circle cx="68" cy="136" r="2.6" fill="#97A59F"/>
+    <circle cx="108" cy="130" r="2.6" fill="#97A59F"/>
+    <circle cx="116" cy="160" r="2.6" fill="#97A59F"/>
+    <circle cx="78" cy="172" r="2.6" fill="#97A59F"/>
+    <circle cx="98" cy="178" r="2.6" fill="#97A59F"/>
+    <circle cx="60" cy="156" r="2.6" fill="#97A59F"/>
+    <circle cx="120" cy="144" r="2.6" fill="#97A59F"/>
+    <rect x="86" y="146" width="8" height="8" fill="#97A59F"/>
+    <circle cx="178" cy="226" r="2.6" fill="#97A59F"/>
+    <circle cx="218" cy="220" r="2.6" fill="#97A59F"/>
+    <circle cx="226" cy="250" r="2.6" fill="#97A59F"/>
+    <circle cx="188" cy="262" r="2.6" fill="#97A59F"/>
+    <circle cx="208" cy="268" r="2.6" fill="#97A59F"/>
+    <circle cx="170" cy="246" r="2.6" fill="#97A59F"/>
+    <circle cx="230" cy="234" r="2.6" fill="#97A59F"/>
+    <rect x="196" y="236" width="8" height="8" fill="#97A59F"/>
+    <circle cx="260" cy="120" r="44" fill="#16302A" fill-opacity="0.6" stroke="#4CC5B7" stroke-width="1.2" stroke-dasharray="4 3"/>
+    <circle cx="238" cy="106" r="2.6" fill="#4CC5B7"/>
+    <circle cx="278" cy="100" r="2.6" fill="#4CC5B7"/>
+    <circle cx="286" cy="130" r="2.6" fill="#4CC5B7"/>
+    <circle cx="248" cy="142" r="2.6" fill="#4CC5B7"/>
+    <circle cx="268" cy="148" r="2.6" fill="#4CC5B7"/>
+    <circle cx="230" cy="126" r="2.6" fill="#4CC5B7"/>
+    <circle cx="290" cy="114" r="2.6" fill="#4CC5B7"/>
+    <rect x="256" y="116" width="8" height="8" fill="#4CC5B7"/>
+    <circle cx="390" cy="215" r="44" fill="#16302A" fill-opacity="0.6" stroke="#4CC5B7" stroke-width="1.2" stroke-dasharray="4 3"/>
+    <circle cx="368" cy="201" r="2.6" fill="#4CC5B7"/>
+    <circle cx="408" cy="195" r="2.6" fill="#4CC5B7"/>
+    <circle cx="416" cy="225" r="2.6" fill="#4CC5B7"/>
+    <circle cx="378" cy="237" r="2.6" fill="#4CC5B7"/>
+    <circle cx="398" cy="243" r="2.6" fill="#4CC5B7"/>
+    <circle cx="360" cy="221" r="2.6" fill="#4CC5B7"/>
+    <circle cx="420" cy="209" r="2.6" fill="#4CC5B7"/>
+    <rect x="386" y="211" width="8" height="8" fill="#4CC5B7"/>
+    <circle cx="343" cy="56" r="2.6" fill="#97A59F"/>
+    <circle cx="383" cy="50" r="2.6" fill="#97A59F"/>
+    <circle cx="391" cy="80" r="2.6" fill="#97A59F"/>
+    <circle cx="353" cy="92" r="2.6" fill="#97A59F"/>
+    <circle cx="373" cy="98" r="2.6" fill="#97A59F"/>
+    <circle cx="335" cy="76" r="2.6" fill="#97A59F"/>
+    <circle cx="395" cy="64" r="2.6" fill="#97A59F"/>
+    <rect x="361" y="66" width="8" height="8" fill="#97A59F"/>
+    <text x="262" y="166" text-anchor="end" font-size="11" fill="#7ADACF">scanned list</text>
+    <text x="436" y="262" text-anchor="end" font-size="11" fill="#7ADACF">scanned list</text>
+    <path d="M300 170 L260 120" fill="none" stroke="#4CC5B7" stroke-width="1.2" stroke-dasharray="4 3"/>
+    <path d="M300 170 L390 215" fill="none" stroke="#4CC5B7" stroke-width="1.2" stroke-dasharray="4 3"/>
+    <path d="M300 163 L307 170 L300 177 L293 170 z" fill="#161E1C" stroke="currentColor" stroke-width="1.4"/>
+    <text x="311" y="174" font-size="11.5" font-weight="600">q</text>
+    <text x="311" y="188" font-size="11" fill="#7ADACF">to its nprobe nearest centroids</text>
+    <circle cx="262" cy="205" r="4" fill="#3A2C25" stroke="#E39A62" stroke-width="1.4"/>
+    <text x="253" y="209" text-anchor="end" font-size="11" fill="#E39A62">a true neighbor, not probed</text>
+    <text x="24" y="302" font-size="11" fill="#97A59F">build: k-means gives nlist centroids, and each vector goes</text>
+    <text x="24" y="319" font-size="11" fill="#97A59F">to the list of its nearest centroid (IndexIVFFlat.train, add).</text>
+    <text x="24" y="336" font-size="11" fill="#97A59F">query: find the nprobe nearest centroids and scan only their</text>
+    <text x="24" y="353" font-size="11" fill="#97A59F">lists (search). Recall increases with nprobe / nlist, and</text>
+    <text x="24" y="370" font-size="11" fill="#97A59F">latency increases approximately linearly with nprobe (§6).</text>
+    <!-- PQ -->
+    <text x="494" y="30" font-weight="600">PQ: m sub-vectors, one byte each</text>
+    <text x="494" y="58" font-size="11" fill="#97A59F">x: a 1536-d float vector, 6,144 bytes, cut into m sub-vectors</text>
+    <rect x="494" y="66" width="84" height="26" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="536.0" y="83" text-anchor="middle" font-size="11">sub-vector 1</text>
+    <rect x="578" y="66" width="84" height="26" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="620.0" y="83" text-anchor="middle" font-size="11">sub-vector 2</text>
+    <rect x="662" y="66" width="84" height="26" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="704.0" y="83" text-anchor="middle" font-size="11">sub-vector 3</text>
+    <rect x="746" y="66" width="84" height="26" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="788.0" y="83" text-anchor="middle" font-size="11">…</text>
+    <rect x="830" y="66" width="84" height="26" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="872.0" y="83" text-anchor="middle" font-size="11">sub-vector m</text>
+    <path d="M536.0 94 L536.0 116" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="498" y="118" width="76" height="40" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="536.0" y="134" text-anchor="middle" font-size="11">codebook 1</text>
+    <text x="536.0" y="150" text-anchor="middle" font-size="11" fill="#97A59F">256 centroids</text>
+    <path d="M536.0 160 L536.0 182" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="498" y="184" width="76" height="24" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="536.0" y="200" text-anchor="middle" font-size="11" fill="#7ADACF">1 byte</text>
+    <path d="M620.0 94 L620.0 116" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="582" y="118" width="76" height="40" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="620.0" y="134" text-anchor="middle" font-size="11">codebook 2</text>
+    <text x="620.0" y="150" text-anchor="middle" font-size="11" fill="#97A59F">256 centroids</text>
+    <path d="M620.0 160 L620.0 182" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="582" y="184" width="76" height="24" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="620.0" y="200" text-anchor="middle" font-size="11" fill="#7ADACF">1 byte</text>
+    <path d="M704.0 94 L704.0 116" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="666" y="118" width="76" height="40" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="704.0" y="134" text-anchor="middle" font-size="11">codebook 3</text>
+    <text x="704.0" y="150" text-anchor="middle" font-size="11" fill="#97A59F">256 centroids</text>
+    <path d="M704.0 160 L704.0 182" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="666" y="184" width="76" height="24" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="704.0" y="200" text-anchor="middle" font-size="11" fill="#7ADACF">1 byte</text>
+    <path d="M872.0 94 L872.0 116" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="834" y="118" width="76" height="40" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="872.0" y="134" text-anchor="middle" font-size="11">codebook m</text>
+    <text x="872.0" y="150" text-anchor="middle" font-size="11" fill="#97A59F">256 centroids</text>
+    <path d="M872.0 160 L872.0 182" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="834" y="184" width="76" height="24" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="872.0" y="200" text-anchor="middle" font-size="11" fill="#7ADACF">1 byte</text>
+    <text x="788.0" y="142" text-anchor="middle" font-size="12.5" fill="#97A59F">…</text>
+    <text x="788.0" y="200" text-anchor="middle" font-size="12.5" fill="#7ADACF">…</text>
+    <text x="494" y="230" font-size="11" fill="#7ADACF">the code: m bytes. 6,144 bytes become 96 bytes, 64× smaller.</text>
+    <text x="494" y="246" font-size="11" fill="#97A59F">k-means in each subspace gives its codebook (ProductQuantizer).</text>
+    <rect x="494" y="262" width="442" height="46" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="715" y="281" text-anchor="middle" font-size="11">query: one lookup table of m × 256 distances (distance_table),</text>
+    <text x="715" y="298" text-anchor="middle" font-size="11" fill="#97A59F">then the distance to a code is the sum of m lookups (_adc_scan)</text>
+    <rect x="494" y="322" width="442" height="46" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="715" y="341" text-anchor="middle" font-size="11" font-weight="600">lossy: retrieve 2–5× more candidates with the codes,</text>
+    <text x="715" y="358" text-anchor="middle" font-size="11">then rerank them with the exact vectors from disk (rescoring)</text>
+    <rect x="24" y="394" width="912" height="52" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="480" y="414" text-anchor="middle" font-size="11" fill="#97A59F">IVF-PQ (IndexIVFPQ): each list holds the PQ codes of the residual (the vector minus its centroid).</text>
+    <text x="480" y="432" text-anchor="middle" font-size="11" fill="#97A59F">A query builds its table per probed cell, scans the codes of the nprobe lists, and keeps the global top-k.</text>
+  </g>
+</svg>

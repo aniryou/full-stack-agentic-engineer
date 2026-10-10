@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="370" viewBox="0 0 900 370" role="img" aria-label="An embedding is a learned map f from objects to vectors: under model A, car and automobile are near each other and two invoice numbers land at almost the same point, and model B places the same objects at rotated coordinates, so vectors from two models are not comparable." style="color: #E4EAE7">
+  <title>An embedding is a learned map f from objects to vectors: under model A, car and automobile are near each other and two invoice numbers land at almost the same point, and model B places the same objects at rotated coordinates, so vectors from two models are not comparable.</title>
+  <rect x="0" y="0" width="900" height="370" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="450" y="28" text-anchor="middle" font-size="11" fill="#7ADACF">an embedding: a learned map from objects to vectors, where similarity is geometry</text>
+    <rect x="24" y="60" width="126" height="200" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="87" y="84" text-anchor="middle" font-weight="600">objects X</text>
+    <text x="87" y="106" text-anchor="middle" font-size="11.5" fill="#97A59F">tokens</text>
+    <text x="87" y="126" text-anchor="middle" font-size="11.5" fill="#97A59F">sentences</text>
+    <text x="87" y="146" text-anchor="middle" font-size="11.5" fill="#97A59F">images</text>
+    <text x="87" y="166" text-anchor="middle" font-size="11.5" fill="#97A59F">users</text>
+    <text x="87" y="186" text-anchor="middle" font-size="11.5" fill="#97A59F">graph nodes</text>
+    <text x="87" y="206" text-anchor="middle" font-size="11.5" fill="#97A59F">molecules</text>
+    <text x="87" y="226" text-anchor="middle" font-size="11.5" fill="#97A59F">audio clips</text>
+    <path d="M154 160 L240 160" fill="none" stroke="#4CC5B7" stroke-width="1.6" marker-end="url(#arrA)"/>
+    <text x="197" y="150" text-anchor="middle" font-size="12.5" fill="#7ADACF">f : X → ℝ<tspan font-size="9" dy="-5">d</tspan></text>
+    <text x="197" y="178" text-anchor="middle" font-size="11" fill="#97A59F">a learned map</text>
+    <rect x="246" y="48" width="320" height="258" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="256" y="68" font-weight="600" fill="#7ADACF">ℝ<tspan font-size="9" dy="-5">d</tspan><tspan dy="5">, model A</tspan></text>
+    <path d="M266 272 L556 272" stroke="#97A59F" stroke-width="0.8" stroke-opacity="0.6"/>
+    <path d="M266 272 L266 78" stroke="#97A59F" stroke-width="0.8" stroke-opacity="0.6"/>
+    <path d="M266 272 L431.2 145.6" fill="none" stroke="#4CC5B7" stroke-width="1.4" marker-end="url(#arrA)"/>
+    <path d="M266 272 L455.6 179.6" fill="none" stroke="#4CC5B7" stroke-width="1.4" marker-end="url(#arrA)"/>
+    <path d="M305.6 252.7 A44 44 0 0 0 301.0 245.3" fill="none" stroke="#7ADACF" stroke-width="1"/>
+    <text x="326" y="236" font-size="11" fill="#7ADACF">θ</text>
+    <text x="379" y="173" font-size="11" fill="#7ADACF">a</text>
+    <text x="407" y="218" font-size="11" fill="#7ADACF">b</text>
+    <circle cx="436.0" cy="142.0" r="4" fill="currentColor"/>
+    <circle cx="461.0" cy="177.0" r="4" fill="currentColor"/>
+    <circle cx="326.0" cy="82.0" r="4" fill="currentColor"/>
+    <circle cx="332.0" cy="88.0" r="4" fill="currentColor"/>
+    <text x="443" y="138" font-size="11.5">car</text>
+    <text x="468" y="182" font-size="11.5">automobile</text>
+    <text x="468" y="198" font-size="11" fill="#7ADACF">near:</text>
+    <text x="468" y="212" font-size="11" fill="#7ADACF">similar meaning</text>
+    <circle cx="329.0" cy="85.0" r="15" fill="none" stroke="#E39A62" stroke-width="1.2" stroke-dasharray="4 3"/>
+    <text x="349" y="79" font-size="11.5">invoice 4471</text>
+    <text x="349" y="95" font-size="11.5">invoice 4417</text>
+    <text x="349" y="112" font-size="11" fill="#E39A62">the difference is not encoded</text>
+    <text x="256" y="296" font-size="11" fill="#97A59F">cos(a, b) = a · b / (‖a‖ ‖b‖)</text>
+    <rect x="580" y="48" width="296" height="258" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="590" y="68" font-weight="600">ℝ<tspan font-size="9" dy="-5">d</tspan><tspan dy="5">, model B: the same objects</tspan></text>
+    <path d="M846 96 L600 96" stroke="#97A59F" stroke-width="0.8" stroke-opacity="0.6"/>
+    <path d="M846 96 L846 270" stroke="#97A59F" stroke-width="0.8" stroke-opacity="0.6"/>
+    <path d="M846 96 L688.4 145.4" fill="none" stroke="#97A59F" stroke-width="1.4" marker-end="url(#arr)"/>
+    <path d="M846 96 L679.4 113.4" fill="none" stroke="#97A59F" stroke-width="1.4" marker-end="url(#arr)"/>
+    <circle cx="682.6" cy="147.2" r="4" fill="currentColor"/>
+    <circle cx="673.4" cy="114.1" r="4" fill="currentColor"/>
+    <circle cx="748.9" cy="222.4" r="4" fill="currentColor"/>
+    <circle cx="746.0" cy="216.3" r="4" fill="currentColor"/>
+    <text x="676" y="157" text-anchor="end" font-size="11.5">car</text>
+    <text x="666" y="118" text-anchor="end" font-size="11.5">automobile</text>
+    <circle cx="747.5" cy="219.3" r="15" fill="none" stroke="#E39A62" stroke-width="1.2" stroke-dasharray="4 3"/>
+    <text x="747" y="249" text-anchor="middle" font-size="11.5">the two invoices</text>
+    <text x="590" y="280" font-size="11" fill="#E39A62">the coordinates are rotated: the same geometry,</text>
+    <text x="590" y="296" font-size="11" fill="#E39A62">but not comparable with model A (section 14)</text>
+    <text x="450" y="336" text-anchor="middle" font-size="11" fill="#97A59F">compression: a 50k-word one-hot vocabulary is 50,000-dimensional, and every word is orthogonal to every other word.</text>
+    <text x="450" y="352" text-anchor="middle" font-size="11" fill="#97A59F">A 300-d word vector says much, because d is much smaller than the raw dimensionality.</text>
+  </g>
+</svg>
