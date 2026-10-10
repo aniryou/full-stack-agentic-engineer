@@ -1,0 +1,152 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="992" height="460" viewBox="0 0 992 460" role="img" aria-label="The isolation ladder as stacks: at each rung the boundary between the untrusted code and the host kernel moves down, from a separate process to namespaces, a hardened container, the gVisor Sentry and a microVM with its own guest kernel, and the start cost rises." style="color: #E4EAE7">
+  <title>The isolation ladder as stacks: at each rung the boundary between the untrusted code and the host kernel moves down, from a separate process to namespaces, a hardened container, the gVisor Sentry and a microVM with its own guest kernel, and the start cost rises.</title>
+  <rect x="0" y="0" width="992" height="460" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <!-- header: the direction of the ladder -->
+    <text x="496" y="18" text-anchor="middle" font-size="11" fill="#7ADACF">each rung defends against more and costs more</text>
+    <path d="M24 30 L966 30" fill="none" stroke="#4CC5B7" stroke-width="1.2" marker-end="url(#arrA)"/>
+    <!-- rung labels -->
+    <g font-size="11.5" font-weight="600" fill="#97A59F" text-anchor="middle">
+      <text x="112" y="52">rung 1 · process</text>
+      <text x="304" y="52">rung 1b · + namespaces</text>
+      <text x="496" y="52">rung 2 · container</text>
+      <text x="688" y="52">rung 3 · gVisor</text>
+      <text x="880" y="52">rung 4 · microVM</text>
+    </g>
+    <!-- row 1: the untrusted code -->
+    <g font-weight="600" text-anchor="middle">
+      <rect x="24" y="62" width="176" height="36" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="112" y="85">untrusted code</text>
+      <rect x="216" y="62" width="176" height="36" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="304" y="85">untrusted code</text>
+      <rect x="408" y="62" width="176" height="36" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="496" y="85">untrusted code</text>
+      <rect x="600" y="62" width="176" height="36" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="688" y="85">untrusted code</text>
+      <rect x="792" y="62" width="176" height="36" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="880" y="85">untrusted code</text>
+    </g>
+    <!-- arrows: the code runs inside the boundary -->
+    <g stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)">
+      <path d="M112 98 L112 116"/>
+      <path d="M304 98 L304 116"/>
+      <path d="M496 98 L496 116"/>
+      <path d="M688 98 L688 116"/>
+      <path d="M880 98 L880 116"/>
+    </g>
+    <!-- row 2: the boundary that the rung adds (the subject) -->
+    <g text-anchor="middle">
+      <rect x="24" y="118" width="176" height="112" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+      <text x="112" y="140" font-weight="600">a separate process</text>
+      <g font-size="11" fill="#7ADACF">
+        <text x="112" y="158">clean environment</text>
+        <text x="112" y="175">0700 workspace, rlimits</text>
+        <text x="112" y="192">a wall-clock deadline</text>
+        <text x="112" y="209">its own UID when root</text>
+      </g>
+      <rect x="216" y="118" width="176" height="112" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+      <text x="304" y="140" font-weight="600">namespaces and seccomp</text>
+      <g font-size="11" fill="#7ADACF">
+        <text x="304" y="158">netns, PID, mount, user</text>
+        <text x="304" y="175">no_new_privs</text>
+        <text x="304" y="192">a seccomp syscall filter</text>
+        <text x="304" y="209">unshare, bwrap, nsjail</text>
+      </g>
+      <rect x="408" y="118" width="176" height="112" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+      <text x="496" y="140" font-weight="600">a hardened container</text>
+      <g font-size="11" fill="#7ADACF">
+        <text x="496" y="158">namespaces, cgroups</text>
+        <text x="496" y="175">caps dropped, non-root</text>
+        <text x="496" y="192">read-only rootfs, seccomp</text>
+        <text x="496" y="209">--network none</text>
+      </g>
+      <rect x="600" y="118" width="176" height="112" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+      <text x="688" y="140" font-weight="600">gVisor: the Sentry</text>
+      <g font-size="11" fill="#7ADACF">
+        <text x="688" y="158">a user-space kernel (Go)</text>
+        <text x="688" y="175">intercepts every syscall,</text>
+        <text x="688" y="192">passes none to the host</text>
+        <text x="688" y="209">Gofer owns the filesystem</text>
+      </g>
+      <rect x="792" y="118" width="176" height="112" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+      <text x="880" y="140" font-weight="600">a microVM</text>
+      <g font-size="11" fill="#7ADACF">
+        <text x="880" y="158">its own guest kernel</text>
+        <text x="880" y="175">VMM: Firecracker, Kata</text>
+        <text x="880" y="192">a hardware boundary</text>
+        <text x="880" y="209">needs /dev/kvm</text>
+      </g>
+    </g>
+    <!-- arrows: the boundary runs on the host kernel -->
+    <g stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)">
+      <path d="M112 230 L112 248"/>
+      <path d="M304 230 L304 248"/>
+      <path d="M496 230 L496 248"/>
+      <path d="M688 230 L688 248"/>
+      <path d="M880 230 L880 248"/>
+    </g>
+    <!-- row 3: the host kernel (warm where the code shares it) -->
+    <g text-anchor="middle">
+      <rect x="24" y="250" width="176" height="66" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+      <text x="112" y="270" font-weight="600">host kernel, shared</text>
+      <g font-size="11" fill="#97A59F">
+        <text x="112" y="288">every syscall reaches it</text>
+        <text x="112" y="304">a kernel exploit escapes</text>
+      </g>
+      <rect x="216" y="250" width="176" height="66" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+      <text x="304" y="270" font-weight="600">host kernel, shared</text>
+      <g font-size="11" fill="#97A59F">
+        <text x="304" y="288">fewer syscalls reach it</text>
+        <text x="304" y="304">a kernel exploit escapes</text>
+      </g>
+      <rect x="408" y="250" width="176" height="66" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+      <text x="496" y="270" font-weight="600">host kernel, shared</text>
+      <g font-size="11" fill="#97A59F">
+        <text x="496" y="288">every syscall reaches it</text>
+        <text x="496" y="304">a kernel bug is an escape</text>
+      </g>
+      <rect x="600" y="250" width="176" height="66" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="688" y="270" font-weight="600">host kernel</text>
+      <g font-size="11" fill="#97A59F">
+        <text x="688" y="288">a second kernel to break</text>
+        <text x="688" y="304">behind gVisor's seccomp</text>
+      </g>
+      <rect x="792" y="250" width="176" height="66" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="880" y="270" font-weight="600">host kernel</text>
+      <g font-size="11" fill="#97A59F">
+        <text x="880" y="288">a guest kernel exploit</text>
+        <text x="880" y="304">does not reach it</text>
+      </g>
+    </g>
+    <!-- arrows: the kernel runs on the hardware -->
+    <g stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)">
+      <path d="M112 316 L112 334"/>
+      <path d="M304 316 L304 334"/>
+      <path d="M496 316 L496 334"/>
+      <path d="M688 316 L688 334"/>
+      <path d="M880 316 L880 334"/>
+    </g>
+    <!-- row 4: the hardware -->
+    <rect x="24" y="336" width="944" height="28" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="496" y="354" text-anchor="middle" font-weight="600">hardware · the microVM rung needs KVM (/dev/kvm)</text>
+    <!-- start cost per rung -->
+    <text x="496" y="392" text-anchor="middle" font-size="11" fill="#97A59F">start cost of the rung (the §2 table; §6 has the full list)</text>
+    <g font-size="11" text-anchor="middle">
+      <text x="112" y="410">~50 ms round trip</text>
+      <text x="112" y="426" fill="#97A59F">(measured on the build host,</text>
+      <text x="112" y="442" fill="#97A59F">under shared load)</text>
+      <text x="304" y="410">+ a few ms (verify)</text>
+      <text x="496" y="410">~100–500 ms (verify),</text>
+      <text x="496" y="426" fill="#97A59F">mostly Docker</text>
+      <text x="688" y="410">container +</text>
+      <text x="688" y="426">tens–hundreds ms (verify)</text>
+      <text x="880" y="410">VMM ~12 ms + ≤125 ms to init</text>
+      <text x="880" y="426" fill="#97A59F">(Firecracker spec),</text>
+      <text x="880" y="442" fill="#97A59F">Kata ~0.5–2 s (verify)</text>
+    </g>
+  </g>
+</svg>
