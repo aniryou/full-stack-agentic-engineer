@@ -46,6 +46,12 @@ This primer links to these primers, and it does not repeat them:
 - **MoE does not change attention or the KV cache.** Prefix caching and the calculation of the KV size work exactly
   as for the dense model with the same attention. At long context, the KV cache is again the largest part.
 
+![Bytes one decode step reads against the batch for Mixtral-8x7B and for a dense model of its active size, on an H200 at 1K context.](figures/decode-step-bytes-vs-batch.svg)
+
+*This chart shows the bytes that one decode step reads against the batch, for Mixtral-8x7B on an H200 at 1K
+context (`touched.decode_step()`, simulated). At batch 1 the step reads 2.00 of 8 experts per layer, the same
+cost as a dense model of the active size. By batch 16 it reads almost all of the 93.4 GB of weights.*
+
 ---
 
 ## 1. Why sparsity
@@ -227,6 +233,12 @@ This is correct, but it costs ${E/k}$ times too much (`MoELayer.forward_dense()`
 3. Run each expert one time over its contiguous slice. This is a *grouped GEMM*.
 4. Scatter the weighted rows back, and add the k copies of each token.
 
+![The sparse forward of an MoE layer sorts the T × k assignments by expert, runs one GEMM per expert over its slice, and adds the weighted rows back to each token.](figures/sort-by-expert-grouped-gemm.svg)
+
+*`MoELayer.forward()` sorts the T × k assignments by expert and runs one GEMM per expert over its contiguous
+slice (the grouped GEMM). Then it adds the k weighted rows back to each token. An expert with no rows costs no
+FLOPs, but it stays in HBM.*
+
 A test makes sure that the two are equal to 10⁻¹² for all five router families. The sort is the central part of
 every fused MoE kernel (§6.1).
 
@@ -240,6 +252,12 @@ The task loss trains the router. The task loss rewards the router when it routes
 *already* good at that token. The expert that wins early gets the gradient, becomes better, and wins more. An expert
 that gets no tokens never trains and never gets a chance. If nothing controls this, a layer **collapses** onto a few
 experts. The other experts are dead weight in HBM, and the model becomes a smaller dense model with extra memory.
+
+![The feedback loop of router collapse and where each balance method acts: the auxiliary loss at the scores, the selection bias and expert choice at the top-k, the capacity factor at the training step.](figures/collapse-loop-and-balance.svg)
+
+*The feedback loop of §3.1 is a cycle, and each balance method acts at one point of it. The task loss rewards
+the expert that is already good, thus the early winner gets more tokens. The auxiliary loss, the selection bias
+and the capacity factor each limit the loop, and expert choice reverses the choice.*
 
 `moecore.train` shows this with gradients written by hand. A check against finite differences shows that the
 gradients are correct. The toy has these parts:
@@ -440,6 +458,12 @@ Mixtral touches 7.5 of its 8 experts per layer from batch 10, Qwen3 120 of 128 f
 Fine granularity keeps this decrease in bytes up to larger batches. But at typical decode batches, the step reads
 every expert at every step.
 
+![The share of the experts that one layer touches, against the batch, for Mixtral-8x7B, Qwen3-30B-A3B and DeepSeek-V3.](figures/experts-touched-vs-batch.svg)
+
+*This chart shows the share of the E experts that one layer touches, against the batch, for three granularities
+(`touched.experts_touched()`). Mixtral reads almost all of its 8 experts from batch 10. The fine experts of
+Qwen3-30B-A3B and DeepSeek-V3 keep the decrease in bytes up to larger batches.*
+
 **Skewed against uniform.** Skew (§3.7) touches fewer experts. Qwen3 at batch 16 under Zipf s = 1.0 reads 58.0 experts per
 layer instead of 82.4, a 1.36× faster step on one GPU. This number comes from the simulation (notebook 03, exercise
 3.6). Uniform routing is the safe assumption for bytes. Skew is the safe assumption for expert-parallel balance.
@@ -594,6 +618,13 @@ GPUs see all tokens, and an all-reduce restores the output of each layer (servin
 [§9](../../04-inference-engine/serving-engine/PRIMER.md#9-parallelism-inside-the-engine)). With EP, each GPU holds
 whole experts and ships only assignments.
 
+![What each GPU holds and what one MoE layer exchanges: on one GPU, under tensor parallelism, and under expert parallelism with data-parallel attention.](figures/expert-layouts-on-gpus.svg)
+
+*The three layouts of §6.1, §6.4 and §6.5 differ in what each GPU holds and in what one MoE layer exchanges.
+With tensor parallelism, every GPU holds a slice of every expert, and an all-reduce restores the output of the
+layer. With expert parallelism, each GPU holds whole experts, and the layer runs a dispatch and a combine
+all-to-all.*
+
 Take a Mixtral MoE layer at batch 64 on 8 GPUs (`ep.moe_comm()`, simulated). TP's ring all-reduce sends 896 KiB per
 GPU in 30.0 µs. EP with data-parallel attention and dedicated all-to-all kernels (DeepEP, NIXL-EP or FlashInfer's
 kernels, with `mode="a2a"`) sends 224 KiB per GPU in 4.5 µs. TP also divides the GEMM of each expert $p$ ways. This
@@ -742,6 +773,12 @@ The recipe (`moecore.sizing`, notebook 05):
 The budget of vLLM (0.92 × 22.49 GiB − 1.5 GiB) then leaves 2.0 GiB for KV: 21,593 tokens, five sequences of 4K
 (`sizing.kv_tokens()`). The lab's `python -m moelab fit` prints the same. The round 10%-headroom budget would say 7;
 on one small GPU, the overheads are the whole margin. The 3B active count helps only the FLOPs.
+
+![The memory of one 24 GB L4 for Qwen3-30B-A3B in bf16, FP8 and with 4.25-bit experts, and the budget of vLLM for the checkpoint that fits.](figures/memory-on-one-l4.svg)
+
+*This figure shows the memory of one 24 GB L4 for Qwen3-30B-A3B, with the budget of vLLM
+(`sizing.kv_room_gib()`). Only the checkpoint with 4.25-bit experts fits. It leaves 2.0 GiB for KV: 21,593
+tokens, five sequences of 4K.*
 
 **Prefill, worked.** An 8,192-token prompt costs a dense Llama-3.1-70B 5.48× the FLOPs it costs Mixtral-8x7B. At
 50% of an H100's bf16 peak, Mixtral prefills it in 427 ms (simulated). In prefill, you see the full decrease in
