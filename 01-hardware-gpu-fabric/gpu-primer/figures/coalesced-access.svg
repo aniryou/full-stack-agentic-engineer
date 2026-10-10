@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="330" viewBox="0 0 880 330" role="img" aria-label="When the 32 lanes of a warp read 32 consecutive floats, the hardware merges the reads into a few wide transactions; when they read 32 scattered addresses, the warp issues 32 transactions and wastes most of their bytes." style="color: #E4EAE7">
+  <title>When the 32 lanes of a warp read 32 consecutive floats, the hardware merges the reads into a few wide transactions; when they read 32 scattered addresses, the warp issues 32 transactions and wastes most of their bytes.</title>
+  <rect x="0" y="0" width="880" height="330" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="26" fill="#97A59F">One warp reads 32 floats (§3). The hardware reads HBM in transactions of a set size, usually 32 bytes.</text>
+
+    <!-- panel A: consecutive addresses. Scale: one lane box is one float of 4 bytes, so a 32-byte transaction spans 8 lanes -->
+    <rect x="24" y="42" width="832" height="132" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="40" y="60" fill="#97A59F">32 consecutive addresses: the hardware merges the reads into a few wide transactions</text>
+    <text x="106" y="88" text-anchor="end" font-size="11" fill="#97A59F">lanes 0 to 31</text>
+    <g fill="none" stroke="currentColor" stroke-width="1">
+      <rect x="116" y="72" width="18" height="24" rx="2"/><rect x="136" y="72" width="18" height="24" rx="2"/><rect x="156" y="72" width="18" height="24" rx="2"/><rect x="176" y="72" width="18" height="24" rx="2"/>
+      <rect x="196" y="72" width="18" height="24" rx="2"/><rect x="216" y="72" width="18" height="24" rx="2"/><rect x="236" y="72" width="18" height="24" rx="2"/><rect x="256" y="72" width="18" height="24" rx="2"/>
+      <rect x="276" y="72" width="18" height="24" rx="2"/><rect x="296" y="72" width="18" height="24" rx="2"/><rect x="316" y="72" width="18" height="24" rx="2"/><rect x="336" y="72" width="18" height="24" rx="2"/>
+      <rect x="356" y="72" width="18" height="24" rx="2"/><rect x="376" y="72" width="18" height="24" rx="2"/><rect x="396" y="72" width="18" height="24" rx="2"/><rect x="416" y="72" width="18" height="24" rx="2"/>
+      <rect x="436" y="72" width="18" height="24" rx="2"/><rect x="456" y="72" width="18" height="24" rx="2"/><rect x="476" y="72" width="18" height="24" rx="2"/><rect x="496" y="72" width="18" height="24" rx="2"/>
+      <rect x="516" y="72" width="18" height="24" rx="2"/><rect x="536" y="72" width="18" height="24" rx="2"/><rect x="556" y="72" width="18" height="24" rx="2"/><rect x="576" y="72" width="18" height="24" rx="2"/>
+      <rect x="596" y="72" width="18" height="24" rx="2"/><rect x="616" y="72" width="18" height="24" rx="2"/><rect x="636" y="72" width="18" height="24" rx="2"/><rect x="656" y="72" width="18" height="24" rx="2"/>
+      <rect x="676" y="72" width="18" height="24" rx="2"/><rect x="696" y="72" width="18" height="24" rx="2"/><rect x="716" y="72" width="18" height="24" rx="2"/><rect x="736" y="72" width="18" height="24" rx="2"/>
+    </g>
+    <g stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)">
+      <path d="M195 100 L195 120"/><path d="M355 100 L355 120"/><path d="M515 100 L515 120"/><path d="M675 100 L675 120"/>
+    </g>
+    <text x="106" y="140" text-anchor="end" font-size="11" fill="#97A59F">HBM</text>
+    <g fill="#16302A" stroke="#4CC5B7" stroke-width="1.2">
+      <rect x="116" y="122" width="159" height="28" rx="4"/><rect x="275" y="122" width="160" height="28" rx="4"/><rect x="435" y="122" width="160" height="28" rx="4"/><rect x="595" y="122" width="159" height="28" rx="4"/>
+    </g>
+    <g font-size="10.5" text-anchor="middle">
+      <text x="195" y="140">32-byte transaction</text><text x="355" y="140">32-byte transaction</text><text x="515" y="140">32-byte transaction</text><text x="675" y="140">32-byte transaction</text>
+    </g>
+    <text x="435" y="166" text-anchor="middle" font-size="10.5" fill="#7ADACF">a few wide transactions for 32 floats</text>
+
+    <!-- panel B: scattered addresses, on the same scale: each transaction is 32 bytes wide and serves one float -->
+    <rect x="24" y="186" width="832" height="132" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="40" y="204" fill="#97A59F">32 scattered addresses: 32 separate transactions, and you waste most of the bytes that you paid for</text>
+    <text x="106" y="232" text-anchor="end" font-size="11" fill="#97A59F">lanes 0 to 31</text>
+    <g fill="none" stroke="currentColor" stroke-width="1">
+      <rect x="116" y="216" width="18" height="24" rx="2"/><rect x="136" y="216" width="18" height="24" rx="2"/><rect x="156" y="216" width="18" height="24" rx="2"/><rect x="176" y="216" width="18" height="24" rx="2"/>
+      <rect x="196" y="216" width="18" height="24" rx="2"/><rect x="216" y="216" width="18" height="24" rx="2"/><rect x="236" y="216" width="18" height="24" rx="2"/><rect x="256" y="216" width="18" height="24" rx="2"/>
+      <rect x="276" y="216" width="18" height="24" rx="2"/><rect x="296" y="216" width="18" height="24" rx="2"/><rect x="316" y="216" width="18" height="24" rx="2"/><rect x="336" y="216" width="18" height="24" rx="2"/>
+      <rect x="356" y="216" width="18" height="24" rx="2"/><rect x="376" y="216" width="18" height="24" rx="2"/><rect x="396" y="216" width="18" height="24" rx="2"/><rect x="416" y="216" width="18" height="24" rx="2"/>
+      <rect x="436" y="216" width="18" height="24" rx="2"/><rect x="456" y="216" width="18" height="24" rx="2"/><rect x="476" y="216" width="18" height="24" rx="2"/><rect x="496" y="216" width="18" height="24" rx="2"/>
+      <rect x="516" y="216" width="18" height="24" rx="2"/><rect x="536" y="216" width="18" height="24" rx="2"/><rect x="556" y="216" width="18" height="24" rx="2"/><rect x="576" y="216" width="18" height="24" rx="2"/>
+      <rect x="596" y="216" width="18" height="24" rx="2"/><rect x="616" y="216" width="18" height="24" rx="2"/><rect x="636" y="216" width="18" height="24" rx="2"/><rect x="656" y="216" width="18" height="24" rx="2"/>
+      <rect x="676" y="216" width="18" height="24" rx="2"/><rect x="696" y="216" width="18" height="24" rx="2"/><rect x="716" y="216" width="18" height="24" rx="2"/><rect x="736" y="216" width="18" height="24" rx="2"/>
+    </g>
+    <!-- 4 of the 32 transactions: a 32-byte box (warm) with the one float that a lane asked for (accent) -->
+    <text x="106" y="284" text-anchor="end" font-size="11" fill="#97A59F">HBM</text>
+    <g fill="#3A2C25" stroke="#E39A62" stroke-width="1">
+      <rect x="116" y="266" width="160" height="28" rx="4"/><rect x="304" y="266" width="160" height="28" rx="4"/><rect x="492" y="266" width="160" height="28" rx="4"/><rect x="680" y="266" width="160" height="28" rx="4"/>
+    </g>
+    <g fill="#4CC5B7">
+      <rect x="157" y="270" width="18" height="20"/><rect x="425" y="270" width="18" height="20"/><rect x="513" y="270" width="18" height="20"/><rect x="761" y="270" width="18" height="20"/>
+    </g>
+    <g stroke="#97A59F" stroke-width="1" fill="none" marker-end="url(#arr)">
+      <path d="M125 242 L164 267"/><path d="M285 242 L432 267"/><path d="M445 242 L520 267"/><path d="M605 242 L768 267"/>
+    </g>
+    <text x="478" y="310" text-anchor="middle" font-size="10.5" fill="#E39A62">each 32-byte transaction serves one float, and you waste the rest of its bytes. 4 of the 32 transactions are drawn.</text>
+  </g>
+</svg>

@@ -1,0 +1,160 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="474" viewBox="0 0 960 474" role="img" aria-label="Three representation formats side by side: a dense model pools the tokens into one vector of d dims and scores with a dot product, a learned sparse model projects them onto the vocabulary with learned term weights and expansion for an inverted index, and a late-interaction model keeps one vector per token and scores with MaxSim, the sum over query tokens of the best document token." style="color: #E4EAE7">
+  <title>Three representation formats side by side: a dense model pools the tokens into one vector of d dims and scores with a dot product, a learned sparse model projects them onto the vocabulary with learned term weights and expansion for an inverted index, and a late-interaction model keeps one vector per token and scores with MaxSim, the sum over query tokens of the best document token.</title>
+  <rect x="0" y="0" width="960" height="474" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor" transform="translate(0 -20)">
+    <rect x="24" y="44" width="296" height="430" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="172" y="66" text-anchor="middle" font-weight="600">one dense vector (bi-encoder)</text>
+    <rect x="44" y="80" width="256" height="28" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="172" y="98" text-anchor="middle" font-size="11">a text: tokens t<tspan font-size="8" dy="3">1</tspan><tspan dy="-3"> … t</tspan><tspan font-size="8" dy="3">n</tspan></text>
+    <path d="M172 108 L172 124" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="44" y="126" width="256" height="60" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <path d="M172 186 L172 202" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="332" y="44" width="296" height="430" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="480" y="66" text-anchor="middle" font-weight="600">learned sparse (SPLADE)</text>
+    <rect x="352" y="80" width="256" height="28" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="480" y="98" text-anchor="middle" font-size="11">a text: tokens t<tspan font-size="8" dy="3">1</tspan><tspan dy="-3"> … t</tspan><tspan font-size="8" dy="3">n</tspan></text>
+    <path d="M480 108 L480 124" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="352" y="126" width="256" height="60" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <path d="M480 186 L480 202" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="640" y="44" width="296" height="430" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="788" y="66" text-anchor="middle" font-weight="600">multi-vector, late interaction (ColBERT)</text>
+    <rect x="660" y="80" width="256" height="28" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="788" y="98" text-anchor="middle" font-size="11">a text: tokens t<tspan font-size="8" dy="3">1</tspan><tspan dy="-3"> … t</tspan><tspan font-size="8" dy="3">n</tspan></text>
+    <path d="M788 108 L788 124" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="660" y="126" width="256" height="60" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <path d="M788 186 L788 202" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <text x="172" y="152" text-anchor="middle" font-size="11" fill="currentColor">encoder, then pooling</text>
+    <text x="172" y="168" text-anchor="middle" font-size="11" fill="#97A59F">mean, [CLS] or last token (section 3)</text>
+    <rect x="62" y="204" width="22" height="22" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="84" y="204" width="22" height="22" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="106" y="204" width="22" height="22" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="128" y="204" width="22" height="22" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="150" y="204" width="22" height="22" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="172" y="204" width="22" height="22" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="194" y="204" width="22" height="22" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="216" y="204" width="22" height="22" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="238" y="204" width="22" height="22" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="260" y="204" width="22" height="22" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="172" y="244" text-anchor="middle" font-size="11" fill="#7ADACF">one vector of d dims, computed in advance</text>
+    <path d="M172 250 L172 266" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="44" y="268" width="256" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="172" y="286" text-anchor="middle" font-size="11" fill="currentColor">score = f(q) · g(d), a dot product or cosine</text>
+    <text x="172" y="302" text-anchor="middle" font-size="11" fill="#97A59F">one forward pass for q, then an ANN lookup</text>
+    <text x="172" y="334" text-anchor="middle" font-size="11" fill="#97A59F">the documents are embedded and indexed</text>
+    <text x="172" y="349" text-anchor="middle" font-size="11" fill="#97A59F">in advance. The token-level interaction</text>
+    <text x="172" y="364" text-anchor="middle" font-size="11" fill="#97A59F">between the query and the document is</text>
+    <text x="172" y="379" text-anchor="middle" font-size="11" fill="#97A59F">lost, so a reranker comes after it.</text>
+    <rect x="44" y="400" width="256" height="60" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="172" y="418" text-anchor="middle" font-size="11" fill="currentColor" font-weight="600">the capacity bound of a single vector</text>
+    <text x="172" y="434" text-anchor="middle" font-size="11" fill="currentColor">of dimension d: the sign-rank bound</text>
+    <text x="172" y="450" text-anchor="middle" font-size="11" fill="currentColor">on the top-k subsets (LIMIT)</text>
+    <text x="480" y="144" text-anchor="middle" font-size="11" fill="currentColor">the MLM head projects every token</text>
+    <text x="480" y="160" text-anchor="middle" font-size="11" fill="currentColor">onto the vocabulary, log(1 + ReLU(·)),</text>
+    <text x="480" y="176" text-anchor="middle" font-size="11" fill="currentColor">then a max-pool over the positions</text>
+    <rect x="360" y="204" width="12" height="22" fill="none" stroke="#97A59F" stroke-width="0.8" stroke-opacity="0.6"/>
+    <rect x="372" y="204" width="12" height="22" fill="none" stroke="#97A59F" stroke-width="0.8" stroke-opacity="0.6"/>
+    <rect x="384" y="204" width="12" height="22" fill="none" stroke="#97A59F" stroke-width="0.8" stroke-opacity="0.6"/>
+    <rect x="396" y="204" width="12" height="22" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="408" y="204" width="12" height="22" fill="none" stroke="#97A59F" stroke-width="0.8" stroke-opacity="0.6"/>
+    <rect x="420" y="204" width="12" height="22" fill="none" stroke="#97A59F" stroke-width="0.8" stroke-opacity="0.6"/>
+    <rect x="432" y="204" width="12" height="22" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="444" y="204" width="12" height="22" fill="none" stroke="#97A59F" stroke-width="0.8" stroke-opacity="0.6"/>
+    <rect x="456" y="204" width="12" height="22" fill="none" stroke="#97A59F" stroke-width="0.8" stroke-opacity="0.6"/>
+    <rect x="468" y="204" width="12" height="22" fill="none" stroke="#97A59F" stroke-width="0.8" stroke-opacity="0.6"/>
+    <rect x="480" y="204" width="12" height="22" fill="none" stroke="#97A59F" stroke-width="0.8" stroke-opacity="0.6"/>
+    <rect x="492" y="204" width="12" height="22" fill="none" stroke="#97A59F" stroke-width="0.8" stroke-opacity="0.6"/>
+    <rect x="504" y="204" width="12" height="22" fill="none" stroke="#97A59F" stroke-width="0.8" stroke-opacity="0.6"/>
+    <rect x="516" y="204" width="12" height="22" fill="none" stroke="#97A59F" stroke-width="0.8" stroke-opacity="0.6"/>
+    <rect x="528" y="204" width="12" height="22" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="540" y="204" width="12" height="22" fill="none" stroke="#97A59F" stroke-width="0.8" stroke-opacity="0.6"/>
+    <rect x="552" y="204" width="12" height="22" fill="none" stroke="#97A59F" stroke-width="0.8" stroke-opacity="0.6"/>
+    <rect x="564" y="204" width="12" height="22" fill="none" stroke="#97A59F" stroke-width="0.8" stroke-opacity="0.6"/>
+    <rect x="576" y="204" width="12" height="22" fill="none" stroke="#97A59F" stroke-width="0.8" stroke-opacity="0.6"/>
+    <rect x="588" y="204" width="12" height="22" fill="none" stroke="#97A59F" stroke-width="0.8" stroke-opacity="0.6"/>
+    <text x="402" y="244" text-anchor="middle" font-size="11" fill="#7ADACF">heart</text>
+    <text x="438" y="260" text-anchor="middle" font-size="11" fill="#7ADACF">cardiac</text>
+    <text x="534" y="244" text-anchor="middle" font-size="11" fill="#7ADACF">…</text>
+    <text x="600" y="244" text-anchor="end" font-size="11" fill="#97A59F">|V| dims</text>
+    <path d="M480 268 L480 284" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="352" y="286" width="256" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="480" y="304" text-anchor="middle" font-size="11" fill="currentColor">learned term weights and term expansion:</text>
+    <text x="480" y="320" text-anchor="middle" font-size="11" fill="#97A59F">a passage about "cardiac" activates "heart"</text>
+    <path d="M480 330 L480 346" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="352" y="348" width="256" height="28" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="480" y="366" text-anchor="middle" font-size="11">an ordinary inverted index</text>
+    <text x="480" y="400" text-anchor="middle" font-size="11" fill="#97A59F">the exact-match strength of BM25 plus learned</text>
+    <text x="480" y="415" text-anchor="middle" font-size="11" fill="#97A59F">semantics, strong out of domain. A FLOPS</text>
+    <text x="480" y="430" text-anchor="middle" font-size="11" fill="#97A59F">regularizer keeps the vector sparse.</text>
+    <text x="788" y="144" text-anchor="middle" font-size="11" fill="currentColor">the encoder keeps one vector per token,</text>
+    <text x="788" y="160" text-anchor="middle" font-size="11" fill="#97A59F">each projected to ~128-d,</text>
+    <text x="788" y="176" text-anchor="middle" font-size="11" fill="#97A59F">computed in advance</text>
+    <rect x="676" y="204" width="10" height="16" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="686" y="204" width="10" height="16" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="696" y="204" width="10" height="16" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="706" y="204" width="10" height="16" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <text x="696" y="234" text-anchor="middle" font-size="10" fill="#7ADACF">d<tspan font-size="8" dy="3">1</tspan></text>
+    <rect x="722" y="204" width="10" height="16" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="732" y="204" width="10" height="16" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="742" y="204" width="10" height="16" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="752" y="204" width="10" height="16" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <text x="742" y="234" text-anchor="middle" font-size="10" fill="#7ADACF">d<tspan font-size="8" dy="3">2</tspan></text>
+    <rect x="768" y="204" width="10" height="16" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="778" y="204" width="10" height="16" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="788" y="204" width="10" height="16" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="798" y="204" width="10" height="16" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <text x="788" y="234" text-anchor="middle" font-size="10" fill="#7ADACF">d<tspan font-size="8" dy="3">3</tspan></text>
+    <rect x="814" y="204" width="10" height="16" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="824" y="204" width="10" height="16" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="834" y="204" width="10" height="16" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="844" y="204" width="10" height="16" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <text x="834" y="234" text-anchor="middle" font-size="10" fill="#7ADACF">d<tspan font-size="8" dy="3">4</tspan></text>
+    <rect x="860" y="204" width="10" height="16" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="870" y="204" width="10" height="16" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="880" y="204" width="10" height="16" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <rect x="890" y="204" width="10" height="16" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+    <text x="880" y="234" text-anchor="middle" font-size="10" fill="#7ADACF">d<tspan font-size="8" dy="3">5</tspan></text>
+    <text x="788" y="252" text-anchor="middle" font-size="11" fill="#E39A62">storage: tokens × 128 dims per document</text>
+    <path d="M788 258 L788 274" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <text x="698" y="290" text-anchor="end" font-size="10" fill="#97A59F">q \ d</text>
+    <text x="720" y="290" text-anchor="middle" font-size="10" fill="#97A59F">d<tspan font-size="8" dy="3">1</tspan></text>
+    <text x="748" y="290" text-anchor="middle" font-size="10" fill="#97A59F">d<tspan font-size="8" dy="3">2</tspan></text>
+    <text x="776" y="290" text-anchor="middle" font-size="10" fill="#97A59F">d<tspan font-size="8" dy="3">3</tspan></text>
+    <text x="804" y="290" text-anchor="middle" font-size="10" fill="#97A59F">d<tspan font-size="8" dy="3">4</tspan></text>
+    <text x="832" y="290" text-anchor="middle" font-size="10" fill="#97A59F">d<tspan font-size="8" dy="3">5</tspan></text>
+    <text x="698" y="313" text-anchor="end" font-size="10" fill="#97A59F">q<tspan font-size="8" dy="3">1</tspan></text>
+    <rect x="706" y="296" width="28" height="26" fill="none" stroke="#97A59F" stroke-width="0.8" stroke-opacity="0.6"/>
+    <rect x="734" y="296" width="28" height="26" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="748" y="313" text-anchor="middle" font-size="10" fill="#7ADACF">max</text>
+    <rect x="762" y="296" width="28" height="26" fill="none" stroke="#97A59F" stroke-width="0.8" stroke-opacity="0.6"/>
+    <rect x="790" y="296" width="28" height="26" fill="none" stroke="#97A59F" stroke-width="0.8" stroke-opacity="0.6"/>
+    <rect x="818" y="296" width="28" height="26" fill="none" stroke="#97A59F" stroke-width="0.8" stroke-opacity="0.6"/>
+    <path d="M850 309 L868 309" fill="none" stroke="#4CC5B7" stroke-width="1.2" marker-end="url(#arrA)"/>
+    <text x="698" y="339" text-anchor="end" font-size="10" fill="#97A59F">q<tspan font-size="8" dy="3">2</tspan></text>
+    <rect x="706" y="322" width="28" height="26" fill="none" stroke="#97A59F" stroke-width="0.8" stroke-opacity="0.6"/>
+    <rect x="734" y="322" width="28" height="26" fill="none" stroke="#97A59F" stroke-width="0.8" stroke-opacity="0.6"/>
+    <rect x="762" y="322" width="28" height="26" fill="none" stroke="#97A59F" stroke-width="0.8" stroke-opacity="0.6"/>
+    <rect x="790" y="322" width="28" height="26" fill="none" stroke="#97A59F" stroke-width="0.8" stroke-opacity="0.6"/>
+    <rect x="818" y="322" width="28" height="26" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="832" y="339" text-anchor="middle" font-size="10" fill="#7ADACF">max</text>
+    <path d="M850 335 L868 335" fill="none" stroke="#4CC5B7" stroke-width="1.2" marker-end="url(#arrA)"/>
+    <text x="698" y="365" text-anchor="end" font-size="10" fill="#97A59F">q<tspan font-size="8" dy="3">3</tspan></text>
+    <rect x="706" y="348" width="28" height="26" fill="none" stroke="#97A59F" stroke-width="0.8" stroke-opacity="0.6"/>
+    <rect x="734" y="348" width="28" height="26" fill="none" stroke="#97A59F" stroke-width="0.8" stroke-opacity="0.6"/>
+    <rect x="762" y="348" width="28" height="26" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="776" y="365" text-anchor="middle" font-size="10" fill="#7ADACF">max</text>
+    <rect x="790" y="348" width="28" height="26" fill="none" stroke="#97A59F" stroke-width="0.8" stroke-opacity="0.6"/>
+    <rect x="818" y="348" width="28" height="26" fill="none" stroke="#97A59F" stroke-width="0.8" stroke-opacity="0.6"/>
+    <path d="M850 361 L868 361" fill="none" stroke="#4CC5B7" stroke-width="1.2" marker-end="url(#arrA)"/>
+    <text x="874" y="331" font-size="11" fill="#7ADACF">Σ over</text>
+    <text x="874" y="345" font-size="11" fill="#7ADACF">the rows</text>
+    <text x="788" y="394" text-anchor="middle" font-size="11">MaxSim: score(q, d) = Σ<tspan font-size="8" dy="3">i∈q</tspan><tspan dy="-3"> max</tspan><tspan font-size="8" dy="3">j∈d</tspan><tspan dy="-3"> q</tspan><tspan font-size="8" dy="3">i</tspan><tspan dy="-3"> · d</tspan><tspan font-size="8" dy="3">j</tspan></text>
+    <text x="788" y="416" text-anchor="middle" font-size="11" fill="#97A59F">the match stays at the token level:</text>
+    <text x="788" y="431" text-anchor="middle" font-size="11" fill="#97A59F">rare terms, entities, out-of-domain robustness.</text>
+    <text x="788" y="446" text-anchor="middle" font-size="11" fill="#97A59F">PLAID prunes with centroids, ColBERTv2</text>
+    <text x="788" y="461" text-anchor="middle" font-size="11" fill="#97A59F">compresses the residuals.</text>
+  </g>
+</svg>

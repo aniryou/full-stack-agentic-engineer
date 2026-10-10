@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="420" viewBox="0 0 880 420" role="img" aria-label="Three requests through six scheduler steps: in each step the 2,048-token budget goes to the RUNNING requests first and then to a WAITING request, in chunks." style="color: #E4EAE7">
+  <title>Three requests through six scheduler steps: in each step the 2,048-token budget goes to the RUNNING requests first and then to a WAITING request, in chunks.</title>
+  <rect x="0" y="0" width="880" height="420" rx="8" fill="#161E1C"/>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="28" fill="#97A59F">max_num_batched_tokens = 2048 · block_size = 16 · A (3,000-token prompt) and B (500) arrive together, C (6,000) before step 3</text>
+
+    <!-- budget axis -->
+    <text x="100" y="58" font-size="11" fill="#97A59F">one step = one row · the budget is 2,048 tokens</text>
+    <path d="M100 66 L700 66" stroke="#97A59F" stroke-width="1" fill="none"/>
+    <path d="M100 62 L100 70 M700 62 L700 70" stroke="#97A59F" stroke-width="1" fill="none"/>
+    <text x="700" y="58" text-anchor="end" font-size="11" fill="#97A59F">budget 2,048</text>
+    <path d="M700 74 L700 356" stroke="#97A59F" stroke-width="1" stroke-dasharray="3 4" fill="none"/>
+
+    <!-- step 1 -->
+    <text x="86" y="102" text-anchor="end" font-size="11.5" fill="#97A59F">step 1</text>
+    <rect x="100" y="84" width="600" height="28" rx="4" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="5 4"/>
+    <text x="400" y="102" text-anchor="middle" font-size="11.5">A 2048 (waiting pass: the first chunk of 3,000)</text>
+    <text x="716" y="98" font-size="11" fill="#97A59F">2,048 tokens</text>
+    <text x="716" y="110" font-size="11" fill="#97A59F">A in mid-prefill, no token</text>
+
+    <!-- step 2 -->
+    <text x="86" y="148" text-anchor="end" font-size="11.5" fill="#97A59F">step 2</text>
+    <rect x="100" y="130" width="279" height="28" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="239" y="148" text-anchor="middle" font-size="11.5">A 952 (running pass)</text>
+    <rect x="383" y="130" width="146" height="28" rx="4" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="5 4"/>
+    <text x="456" y="148" text-anchor="middle" font-size="11.5">B 500</text>
+    <text x="716" y="144" font-size="11" fill="#97A59F">1,452 tokens</text>
+    <text x="716" y="156" font-size="11" fill="#7ADACF">A, B: first token (TTFT)</text>
+
+    <!-- C arrives -->
+    <text x="100" y="172" font-size="11" fill="#97A59F">C (6,000) arrives</text>
+
+    <!-- step 3 -->
+    <text x="86" y="194" text-anchor="end" font-size="11.5" fill="#97A59F">step 3</text>
+    <rect x="100" y="176" width="14" height="28" rx="3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="107" y="194" text-anchor="middle" font-size="10.5" fill="#7ADACF">A</text>
+    <rect x="116" y="176" width="14" height="28" rx="3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="123" y="194" text-anchor="middle" font-size="10.5" fill="#7ADACF">B</text>
+    <rect x="134" y="176" width="566" height="28" rx="4" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="5 4"/>
+    <text x="417" y="194" text-anchor="middle" font-size="11.5">C 2046 (waiting pass: min(6000, 2046))</text>
+    <text x="716" y="194" font-size="11" fill="#97A59F">2,048 tokens</text>
+
+    <!-- step 4 -->
+    <text x="86" y="240" text-anchor="end" font-size="11.5" fill="#97A59F">step 4</text>
+    <rect x="100" y="222" width="14" height="28" rx="3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="107" y="240" text-anchor="middle" font-size="10.5" fill="#7ADACF">A</text>
+    <rect x="116" y="222" width="14" height="28" rx="3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="123" y="240" text-anchor="middle" font-size="10.5" fill="#7ADACF">B</text>
+    <rect x="134" y="222" width="566" height="28" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="417" y="240" text-anchor="middle" font-size="11.5">C 2046 (running pass: min(3954, 2046))</text>
+    <text x="716" y="240" font-size="11" fill="#97A59F">2,048 tokens</text>
+
+    <!-- step 5 -->
+    <text x="86" y="286" text-anchor="end" font-size="11.5" fill="#97A59F">step 5</text>
+    <rect x="100" y="268" width="14" height="28" rx="3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="107" y="286" text-anchor="middle" font-size="10.5" fill="#7ADACF">A</text>
+    <rect x="116" y="268" width="14" height="28" rx="3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="123" y="286" text-anchor="middle" font-size="10.5" fill="#7ADACF">B</text>
+    <rect x="134" y="268" width="528" height="28" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="398" y="286" text-anchor="middle" font-size="11.5">C 1908 (the last chunk: 6000 − 4092)</text>
+    <text x="716" y="282" font-size="11" fill="#97A59F">1,910 tokens</text>
+    <text x="716" y="294" font-size="11" fill="#7ADACF">C: first token (TTFT: 3 steps)</text>
+
+    <!-- step 6 -->
+    <text x="86" y="332" text-anchor="end" font-size="11.5" fill="#97A59F">step 6</text>
+    <rect x="100" y="314" width="14" height="28" rx="3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="107" y="332" text-anchor="middle" font-size="10.5" fill="#7ADACF">A</text>
+    <rect x="116" y="314" width="14" height="28" rx="3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="123" y="332" text-anchor="middle" font-size="10.5" fill="#7ADACF">B</text>
+    <rect x="132" y="314" width="14" height="28" rx="3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="139" y="332" text-anchor="middle" font-size="10.5" fill="#7ADACF">C</text>
+    <text x="156" y="332" font-size="11" fill="#97A59F">pure decode: a full CUDA graph, padded to 4</text>
+    <text x="716" y="332" font-size="11" fill="#97A59F">3 tokens</text>
+
+    <!-- legend -->
+    <rect x="100" y="376" width="40" height="18" rx="4" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="5 4"/>
+    <text x="148" y="389" font-size="11" fill="#97A59F">WAITING pass: a prompt admitted this step, chunked to the budget that stays</text>
+    <rect x="100" y="398" width="40" height="18" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="148" y="411" font-size="11" fill="#97A59F">RUNNING pass: served first, before any new prefill</text>
+    <rect x="560" y="376" width="14" height="18" rx="3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="582" y="389" font-size="11" fill="#97A59F">a 1-token decode (not to scale)</text>
+  </g>
+</svg>

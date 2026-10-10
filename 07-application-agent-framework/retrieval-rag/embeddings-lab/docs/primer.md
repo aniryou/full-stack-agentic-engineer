@@ -24,6 +24,10 @@ Notation: $d$ is the embedding dimension, and $N$ is the corpus size. $q$/$d$ is
 
 An **embedding** is a learned map $f\colon X \to \mathbb{R}^d$ from a space of objects $X$ into a vector space. The objects can be tokens, sentences, images, users, graph nodes, molecules or audio clips. The construction of an embedding has one goal. The geometric relations in $\mathbb{R}^d$ (inner products, distances, directions) must encode the relations among the objects that are important for some task.
 
+![An embedding is a learned map f from objects to vectors: under model A, car and automobile are near each other and two invoice numbers land at almost the same point, and model B places the same objects at rotated coordinates, so vectors from two models are not comparable.](figures/embedding-map.svg)
+
+*An embedding is a learned map $f$ from the objects to a vector space, where similarity is geometry (section 1). In the space of model A, car and automobile are near each other, and the two invoice numbers are at almost the same point. Model B can put the same objects at rotated coordinates, so you cannot compare vectors from two models (section 14).*
+
 That definition contains three ideas:
 
 1. **Continuity.** The embedding puts discrete objects in a continuous space. In that space, "similar" is computable and, most importantly, differentiable. Gradients flow through the embedding. Thus training can learn it end-to-end with the component that uses it.
@@ -102,6 +106,10 @@ For **decoder-only (causal) models**, only the last token attends to the whole i
 
 The *logit lens* (nostalgebraist, 2020) applies $W_U$ to intermediate residuals to read the prediction of the model at each layer. It reads each layer as if that layer is the last one. This is evidence that the residual stream keeps an approximately consistent basis across depth.
 
+![Inside a transformer: the tokenizer splits the text, the embedding matrix E starts the residual stream, the blocks add to it layer by layer from lexical to semantic content, the unembedding maps the final residual to logits, the logit lens reads a prediction at each layer, and pooling collapses the token states into one embedding vector.](figures/residual-stream-pooling.svg)
+
+*This figure shows where an embedding comes from inside a transformer (section 3). The embedding matrix $E$ starts the residual stream, the blocks add to it layer by layer, and $W_U$ maps the final residual to logits. The logit lens reads a prediction at each layer, and pooling collapses the token states into one vector.*
+
 Rows of $E$ with insufficient training make *glitch tokens* (Rumbelow and Watkins, 2023, "SolidGoldMagikarp"). These are vocabulary entries that are rare in the training data. Their embeddings stay near initialization, and these tokens cause strange behavior.
 
 **Tokenization decides what the model embeds.** The tokenizer splits numbers, code identifiers, product codes and rare names into fragments. The model must then combine these fragments again. This is part of the reason why embedding models are weak on exact identifiers (section 15).
@@ -155,6 +163,10 @@ $$
 - **Symmetric against asymmetric.** For STS and duplicate detection, apply the loss in both directions. For retrieval, apply it in one direction and add a query-side prefix.
 - **Distillation variants.** Margin-MSE (Hofstätter et al., 2020) matches the score *gap* of the teacher between the positive and the negative. This is smoother than hard labels. TAS-B makes batches from queries that are similar in topic, so that the in-batch negatives are hard. A third variant is KL distillation from the scores of a listwise reranker.
 
+![The InfoNCE batch as a similarity matrix: each row is a query, the diagonal holds its positive, the other cells of the batch are free in-batch negatives, extra columns hold mined hard negatives, one cell can be a false negative, and a small temperature tau sharpens the softmax over a row so that the loss concentrates on the hardest negatives.](figures/in-batch-negatives.svg)
+
+*This figure shows the InfoNCE batch of section 4 as a similarity matrix: each row is a query, and the diagonal holds its positive. The other cells of the batch are free in-batch negatives, and the two columns on the right hold hard negatives. A small $\tau$ sharpens the softmax over a row, so the loss concentrates on the hardest negatives.*
+
 **Alignment and uniformity (Wang and Isola, 2020).** Asymptotically, contrastive loss optimizes two things. The first is *alignment*: positives map near each other. The second is *uniformity*: features spread evenly on the hypersphere, and this maximizes the information. Anisotropy (section 3) is a failure of uniformity, and contrastive fine-tuning repairs exactly this failure. Both quantities are low-cost diagnostics for a model that you fine-tuned yourself.
 
 ### Self-supervised and unsupervised recipes (text but no pairs)
@@ -179,6 +191,10 @@ $$
 5. Think about LoRA adapters: they keep one base with several task-specific heads. This is the design of jina-embeddings-v3.
 
 ## 5. Representation formats beyond one dense vector
+
+![Three representation formats side by side: a dense model pools the tokens into one vector of d dims and scores with a dot product, a learned sparse model projects them onto the vocabulary with learned term weights and expansion for an inverted index, and a late-interaction model keeps one vector per token and scores with MaxSim, the sum over query tokens of the best document token.](figures/dense-sparse-multivector.svg)
+
+*This figure shows three representation formats side by side: one dense vector, learned sparse and late interaction (section 5). A dense model uses pooling to make one vector of $d$ dims, and the score is a dot product. A learned sparse model projects every token onto the vocabulary, with learned term weights and term expansion, for an inverted index. A late-interaction model keeps one vector per token, and MaxSim adds the best document match of each query token.*
 
 **Learned sparse: SPLADE (Formal et al., 2021).** SPLADE uses the MLM head to project every token onto the vocabulary. Then it applies $\log(1 + \operatorname{ReLU}(\cdot))$ and does a max-pool over the positions. The result is a sparse $\lvert V \rvert$-dimensional vector with *learned term weights and term expansion*. For example, a passage about "cardiac" activates "heart". A FLOPS regularizer keeps the vector sparse.
 
@@ -448,6 +464,26 @@ The pipeline has these steps:
 5. Optionally, apply MMR for diversity.
 
 In most pipelines, rerankers give a large gain in quality at the lowest cost. Late interaction is the middle ground where the rerank latency is too high.
+
+```mermaid
+flowchart TB
+  Q([a user query]) --> T["the query side:<br/>the exact prefix or<br/>instruction template,<br/>then optional rewrites:<br/>decompose, multi-query,<br/>step-back, HyDE"]
+  Q --> X["metadata extraction:<br/>dates, product names,<br/>document types"]
+  X --> FL["structured filters"]
+  CH[("the index: chunks with<br/>the heading path,<br/>small chunks and<br/>their parent sections")]
+  T --> DE["dense retriever:<br/>embed the query, then<br/>search the chunk vectors<br/>(dense_scores)"]
+  T --> BM["BM25 (bm25_scores),<br/>optionally plus<br/>learned sparse"]
+  CH -.-> DE
+  CH -.-> BM
+  FL -.-> DE
+  FL -.-> BM
+  DE -->|"top-50–200"| RRF["Reciprocal Rank Fusion<br/>(rrf, k = 60)"]
+  BM -->|"top-50–200"| RRF
+  RRF --> RE["cross-encoder reranker,<br/>or an LLM listwise<br/>reranker for the top-20"]
+  RE -->|"the top 5–10,<br/>optionally MMR for diversity"| LLM([the LLM])
+```
+
+*This figure shows the hybrid pipeline of section 15: the query gets its prefix template and optional rewrites, and the extracted metadata becomes filters. A dense retriever and BM25 each return their top-50–200, and Reciprocal Rank Fusion combines the two lists. A cross-encoder reranks the combined list, and the top 5–10 go to the LLM. Notebook 05 of the lab builds the BM25, dense and fusion steps with `bm25_scores`, `dense_scores` and `rrf`.*
 
 ### Known failure modes of dense retrieval — and what to do
 

@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="430" viewBox="0 0 880 430" role="img" aria-label="Each technique of section 6 sits under the factor of the KV bytes product that it decreases: layers, KV heads and head dimension, sequence length or bytes per value, and offloading sits under where the cache lives." style="color: #E4EAE7">
+  <title>Each technique of section 6 sits under the factor of the KV bytes product that it decreases: layers, KV heads and head dimension, sequence length or bytes per value, and offloading sits under where the cache lives.</title>
+  <rect x="0" y="0" width="880" height="430" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="26" fill="#97A59F">KV bytes = 2 × layers × kv_heads × head_dim × seq_len × batch × bytes_per_value (§4): which factor each technique decreases</text>
+
+    <!-- the factors -->
+    <g font-weight="600" font-size="12" text-anchor="middle">
+      <rect x="24" y="48" width="156" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+      <text x="102" y="74">layers</text>
+      <rect x="193" y="48" width="156" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+      <text x="271" y="74">kv_heads × head_dim</text>
+      <rect x="362" y="48" width="156" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+      <text x="440" y="74">seq_len</text>
+      <rect x="531" y="48" width="156" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+      <text x="609" y="74">bytes_per_value</text>
+      <rect x="700" y="48" width="156" height="44" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+      <text x="778" y="67" fill="#97A59F" font-weight="400">where the cache lives</text>
+      <text x="778" y="83" fill="#97A59F" font-weight="400" font-size="11">(not in the product)</text>
+    </g>
+    <g font-size="14" fill="#97A59F" text-anchor="middle">
+      <text x="186" y="75">×</text><text x="355" y="75">×</text><text x="524" y="75">×</text>
+    </g>
+
+    <!-- arrows: technique up to factor -->
+    <g fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)">
+      <path d="M102 112 L102 96"/><path d="M271 112 L271 96"/><path d="M440 112 L440 96"/><path d="M609 112 L609 96"/><path d="M778 112 L778 96"/>
+    </g>
+
+    <!-- techniques -->
+    <g font-size="11">
+      <rect x="24" y="114" width="156" height="125" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="38" y="134" font-weight="600" font-size="12">Cross-layer sharing</text>
+      <text x="38" y="152">adjacent layers share</text>
+      <text x="38" y="167">cache entries: the</text>
+      <text x="38" y="182">model does not store</text>
+      <text x="38" y="197">one set for each layer</text>
+      <rect x="193" y="114" width="156" height="125" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="207" y="134" font-weight="600" font-size="12">GQA / MQA</text>
+      <text x="207" y="152">a group of query heads</text>
+      <text x="207" y="167">shares one K/V head</text>
+      <text x="207" y="182">Llama 3 8B: 32 query</text>
+      <text x="207" y="197">heads, 8 KV heads: 4×</text>
+      <text x="207" y="212">MQA: one shared head</text>
+      <rect x="193" y="251" width="156" height="125" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="207" y="271" font-weight="600" font-size="12">MLA (DeepSeek)</text>
+      <text x="207" y="289">K and V compressed</text>
+      <text x="207" y="304">into a small, shared,</text>
+      <text x="207" y="319">low-rank latent vector:</text>
+      <text x="207" y="334">a small extra compute</text>
+      <text x="207" y="349">cost, much less memory</text>
+      <rect x="362" y="114" width="156" height="125" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="376" y="134" font-weight="600" font-size="12">Sliding window</text>
+      <text x="376" y="152">each token attends</text>
+      <text x="376" y="167">only to the last W</text>
+      <text x="376" y="182">tokens, so the cache</text>
+      <text x="376" y="197">does not grow past W</text>
+      <text x="376" y="212">(plus a few</text>
+      <text x="376" y="227">attention-sink tokens)</text>
+      <rect x="362" y="251" width="156" height="125" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="376" y="271" font-weight="600" font-size="12">Eviction policies</text>
+      <text x="376" y="289">(H2O, SnapKV)</text>
+      <text x="376" y="304">attention goes mostly</text>
+      <text x="376" y="319">to a minority of</text>
+      <text x="376" y="334">tokens: evict the</text>
+      <text x="376" y="349">other tokens (lossy,</text>
+      <text x="376" y="364">workload-dependent)</text>
+      <rect x="531" y="114" width="156" height="125" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="545" y="134" font-weight="600" font-size="12">KV quantization</text>
+      <text x="545" y="152">fp8 or int8 instead of</text>
+      <text x="545" y="167">fp16: 2× smaller and</text>
+      <text x="545" y="182">2× less bandwidth per</text>
+      <text x="545" y="197">token. int4 with more</text>
+      <text x="545" y="212">care. Keys are usually</text>
+      <text x="545" y="227">more sensitive</text>
+      <rect x="700" y="114" width="156" height="125" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+      <text x="714" y="134" font-weight="600" font-size="12">Offloading</text>
+      <text x="714" y="152">move cold cache blocks</text>
+      <text x="714" y="167">to host RAM or NVMe,</text>
+      <text x="714" y="182">back on demand: more</text>
+      <text x="714" y="197">capacity, but it costs</text>
+      <text x="714" y="212">latency over PCIe</text>
+    </g>
+
+    <text x="24" y="400" font-size="11.5" fill="#97A59F">In the approximate order of how universally models use them (§6):</text>
+    <text x="24" y="416" font-size="11.5" fill="#97A59F">GQA/MQA, KV quantization, MLA, sliding window, eviction, cross-layer sharing, offloading</text>
+  </g>
+</svg>
