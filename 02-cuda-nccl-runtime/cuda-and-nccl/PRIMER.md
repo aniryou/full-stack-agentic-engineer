@@ -105,6 +105,10 @@ driver **535.183.01**. That driver supports CUDA 12.2.
   kernel-driver branch that this package supports (`compat.COMPAT_BRANCHES`, verify). Over R560, it fails with 803.
   On an RTX 4090, it fails with 804.
 
+![The two compatibility gates on the example of section 1.2: gate 1 compares the CUDA that the host driver supports with the CUDA the app was built with, and gate 2 matches the SASS or PTX in the fatbin against the compute capability of the GPU.](figures/two-gates-compatibility.svg)
+
+*The figure shows the two gates on the example of §1.2 (`gpusim.compat.check()`). The driver supports CUDA 12.2. The app, built with CUDA 12.4, has SASS for sm_90. Thus gate 1 passes by minor-version compatibility, and gate 2 passes with the SASS. The warm boxes hold the failures and their error codes.*
+
 ### 1.3 Gate 2: kernel image and GPU
 
 Each NVIDIA GPU has a **compute capability** X.Y. `nvcc` compiles device code to **PTX** (a virtual ISA,
@@ -229,6 +233,10 @@ The 16,384 registers in each sub-partition hold 8 warps. Thus an SM holds 32 war
 occupancy**, and the registers set the limit. If you add 48 KB of shared memory per block, each block needs 49 KB.
 Then 2 blocks fit in 100 KB: **33%**.
 
+![A grid of blocks of warps of threads, and one SM of an L4 whose four sub-partitions hold 8 warps each at 2,048 registers per warp: 32 of 48 warps resident, 4 blocks, 67% occupancy.](figures/launch-hierarchy-occupancy.svg)
+
+*The figure shows the launch hierarchy and one SM of an L4 (`gpusim.occupancy.occupancy()`). Each block of 256 threads is 8 warps. Each sub-partition has 16,384 registers, which hold 8 warps of 2,048 registers. Thus 32 of the 48 warps are resident: 4 blocks, 67% occupancy, and the registers set the limit.*
+
 The division into sub-partitions is important. At 80 registers, ⌊16,384 / 2,560⌋ = 6 warps per partition. Thus an
 SM holds 24 warps, not ⌊65,536 / 2,560⌋ = 25.
 
@@ -267,6 +275,10 @@ capability 6.0+, a warp request costs one transaction per **distinct sector** th
 | `a[32 * lane]` (a column of a row-major matrix) | 32 | 1,024 | 12.5% |
 | `a[0]` in every lane | 1 | 32 | one transaction (a broadcast) |
 | `double` / `float4` per lane, contiguous | 8 / 16 | 256 / 512 | 100% |
+
+![One warp request of 32 lanes of 4 bytes touches 4 sectors when contiguous and aligned, 5 when misaligned by 4 bytes, 8 at stride 2 and 32 for a column walk; each distinct 32-byte sector is one transaction.](figures/coalescing-sectors.svg)
+
+*The figure shows one warp request against global memory (`gpusim.simt.coalescing()`). The number of distinct sectors that the lanes touch is the number of transactions. A contiguous read takes 4, a read misaligned by 4 B takes 5, stride 2 takes 8, and a column walk takes 32.*
 
 This has two consequences for inference. **Layout is performance**: struct-of-arrays is faster than
 array-of-structs. Matrices have a layout in which the index that changes fastest is the index that consecutive
@@ -382,6 +394,10 @@ assumed: an eager launch costs 5 µs, launching a whole graph 10 µs
 384 kernels × 2 µs:                               eager 1,922 µs (GPU idle 60%)   graph 778 µs   → 2.5×
 384 kernels × 20 µs:                              eager 7,685 µs   graph 7,690 µs  → no gain
 ```
+
+![In eager mode each 5 µs launch precedes a 2 µs kernel, so the GPU is idle 60% of the time; a CUDA Graph costs one 10 µs launch and then runs the kernels back to back.](figures/eager-vs-graph-timeline.svg)
+
+*The figure shows the first microseconds of the model in `gpusim.tiling.step_time()`. In eager mode, each launch costs the CPU 5 µs, and the 2 µs kernels leave the GPU idle 60% of the time. A CUDA Graph costs one launch of 10 µs, and then the kernels run back to back. For 384 kernels, that is 778 µs against 1,922 µs, or 2.5×.*
 
 A decode step at small batch is exactly the first case. It has hundreds of small GEMMs, norms, rotary embeddings,
 attention and sampling kernels. Many of them are a few microseconds long.
@@ -507,6 +523,10 @@ nccl-tests (`sweep()`, `format_sweep()`):
   134217728       550.0         244.05         427.09
  1073741824      4203.7         255.43         447.00
 ```
+
+![Ring all-reduce time against message size on 8 H100s in the alpha-beta model: flat near the latency term below the 7.2 MB crossover, where the 512 KiB all-reduce of decode sits, and growing with the bandwidth term above it, where the 128 MiB all-reduce of prefill sits.](figures/ring-allreduce-regimes.svg)
+
+*The figure shows the ring sweep of §5.5 on a log-log plot (`gpusim.collectives.sweep()`). Below the crossover of 7.2 MB, the latency term sets the time, which is almost constant. The 512 KiB all-reduce of decode is in this regime. Above the crossover, the bandwidth term sets the time, which grows with the message size. The 128 MiB all-reduce of prefill is in that regime.*
 
 Below $S^{\ast}$, a ring all-reduce costs approximately $2(p-1) \cdot \alpha$ for any message size. Thus the
 algorithm that wins is the one with the fewest steps. At 512 KiB on 8 GPUs, the model gives these times: two-shot
@@ -677,6 +697,10 @@ A 70B model on 8 GPUs does not share them. Its engine batches hundreds of reques
 most efficient way to share GPUs**, because it shares the weight reads. GPU-level sharing is for many *small*
 things: small models, dev notebooks, low-QPS endpoints, CI.
 
+![Three ways to share a GPU over time: MIG partitions the SMs into fixed instances, MPS overlaps the kernels of all tenants at the same time, and time-slicing runs one context at a time with a switch between turns.](figures/sharing-mig-mps-timeslicing.svg)
+
+*The figure shows the three ways to share a GPU, with time from left to right and SM capacity from bottom to top. MIG gives each tenant its own slice of the hardware. MPS runs the kernels of all tenants at the same time. The third panel runs one context at a time, and each switch between turns costs time.*
+
 ### 7.2 MIG: partitions
 
 Multi-Instance GPU divides one GPU into up to **seven instances**. It is available on the A100, A30, H100, H200
@@ -788,6 +812,10 @@ fields instead:
 | `DCGM_FI_DEV_FB_USED` / `FB_FREE` | framebuffer memory | Near-full is *normal* for engines that pre-allocate KV. Use the KV-usage metric of the engine. |
 | `DCGM_FI_DEV_POWER_USAGE`, `DCGM_FI_DEV_GPU_TEMP`, `DCGM_FI_DEV_SM_CLOCK` | power, temperature, clocks | with the throttle reasons of §8.3 |
 | `DCGM_FI_DEV_XID_ERRORS` | last XID error | triage in §8.4 |
+
+![A kernel of 8 blocks runs all the time on a 132-SM H100: GPU util reads 100% because a kernel ran at every instant, while SM active reads 6% because only 8 SMs had a warp resident.](figures/gpu-util-vs-sm-active.svg)
+
+*The figure shows one kernel of 8 blocks on a 132-SM H100 that runs all the time (`gpusim.health.util_counters()`). GPU util is the share of time with a kernel, and it reads 100%. SM active is the share of SM-cycles with a resident warp, and it reads 6%.*
 
 **Find which fields your exporter exports.** The default counters file of stock dcgm-exporter
 (`default-counters.csv`) has `DCGM_FI_PROF_SM_ACTIVE` and `DCGM_FI_PROF_SM_OCCUPANCY` only as comments. It does not

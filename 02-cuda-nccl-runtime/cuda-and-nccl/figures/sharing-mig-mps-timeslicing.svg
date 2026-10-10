@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="376" viewBox="0 0 900 376" role="img" aria-label="Three ways to share a GPU over time: MIG partitions the SMs into fixed instances, MPS overlaps the kernels of all tenants at the same time, and time-slicing runs one context at a time with a switch between turns." style="color: #E4EAE7">
+  <title>Three ways to share a GPU over time: MIG partitions the SMs into fixed instances, MPS overlaps the kernels of all tenants at the same time, and time-slicing runs one context at a time with a switch between turns.</title>
+  <rect x="0" y="0" width="900" height="376" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="156" y="34" text-anchor="middle" font-weight="600">MIG: partitions</text>
+    <rect x="68" y="54" width="220" height="160" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <path d="M68 224 L288 224" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <text x="178.0" y="238" text-anchor="middle" font-size="10.5" fill="#97A59F">time</text>
+    <path d="M58 214 L58 54" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <text x="50" y="134.0" text-anchor="middle" font-size="10.5" fill="#97A59F" transform="rotate(-90 50 134.0)">SM capacity</text>
+    <rect x="68" y="54.0" width="220" height="91.4" fill="none" stroke="#97A59F" stroke-width="0.8"/>
+    <rect x="70" y="56" width="216" height="87.42857142857143" fill="#4CC5B7" fill-opacity="0.55" stroke="none"/>
+    <text x="76" y="103.71428571428572" font-size="11" font-family="JetBrains Mono, monospace">4g.40gb</text>
+    <rect x="68" y="145.4" width="220" height="45.7" fill="none" stroke="#97A59F" stroke-width="0.8"/>
+    <rect x="70" y="147.42857142857144" width="216" height="41.714285714285715" fill="#4CC5B7" fill-opacity="0.55" stroke="none"/>
+    <text x="76" y="172.2857142857143" font-size="11" font-family="JetBrains Mono, monospace">2g.20gb</text>
+    <rect x="68" y="191.1" width="220" height="22.9" fill="none" stroke="#97A59F" stroke-width="0.8"/>
+    <rect x="70" y="193.14285714285717" width="216" height="18.857142857142858" fill="#4CC5B7" fill-opacity="0.55" stroke="none"/>
+    <text x="76" y="206.57142857142858" font-size="11" font-family="JetBrains Mono, monospace">1g.10gb</text>
+    <text x="32" y="264" font-size="10.5" fill="#97A59F">each instance has its own SMs, L2 slice,</text>
+    <text x="32" y="280" font-size="10.5" fill="#97A59F">memory controllers and memory: isolation of</text>
+    <text x="32" y="296" font-size="10.5" fill="#97A59F">performance, memory and faults. Shapes that</text>
+    <text x="32" y="312" font-size="10.5" fill="#97A59F">do not change; up to seven instances.</text>
+    <text x="450" y="34" text-anchor="middle" font-weight="600">MPS: overlap</text>
+    <rect x="362" y="54" width="220" height="160" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <path d="M362 224 L582 224" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <text x="472.0" y="238" text-anchor="middle" font-size="10.5" fill="#97A59F">time</text>
+    <path d="M352 214 L352 54" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <text x="344" y="134.0" text-anchor="middle" font-size="10.5" fill="#97A59F" transform="rotate(-90 344 134.0)">SM capacity</text>
+    <rect x="364.0" y="152.0" width="51.0" height="60.0" fill="#4CC5B7" fill-opacity="0.55" stroke="none"/>
+    <text x="389.5" y="186.0" text-anchor="middle" font-size="11">A</text>
+    <rect x="364.0" y="104.0" width="51.0" height="44.0" fill="#4CC5B7" fill-opacity="0.55" stroke="none"/>
+    <text x="389.5" y="130.0" text-anchor="middle" font-size="11">B</text>
+    <rect x="364.0" y="56.0" width="51.0" height="44.0" fill="#4CC5B7" fill-opacity="0.55" stroke="none"/>
+    <text x="389.5" y="82.0" text-anchor="middle" font-size="11">C</text>
+    <rect x="419.0" y="136.0" width="51.0" height="76.0" fill="#4CC5B7" fill-opacity="0.55" stroke="none"/>
+    <text x="444.5" y="178.0" text-anchor="middle" font-size="11">B</text>
+    <rect x="419.0" y="104.0" width="51.0" height="28.0" fill="#4CC5B7" fill-opacity="0.55" stroke="none"/>
+    <text x="444.5" y="122.0" text-anchor="middle" font-size="11">C</text>
+    <rect x="419.0" y="72.0" width="51.0" height="28.0" fill="#4CC5B7" fill-opacity="0.55" stroke="none"/>
+    <text x="444.5" y="90.0" text-anchor="middle" font-size="11">A</text>
+    <rect x="474.0" y="168.0" width="51.0" height="44.0" fill="#4CC5B7" fill-opacity="0.55" stroke="none"/>
+    <text x="499.5" y="194.0" text-anchor="middle" font-size="11">A</text>
+    <rect x="474.0" y="104.0" width="51.0" height="60.0" fill="#4CC5B7" fill-opacity="0.55" stroke="none"/>
+    <text x="499.5" y="138.0" text-anchor="middle" font-size="11">C</text>
+    <rect x="474.0" y="56.0" width="51.0" height="44.0" fill="#4CC5B7" fill-opacity="0.55" stroke="none"/>
+    <text x="499.5" y="82.0" text-anchor="middle" font-size="11">B</text>
+    <rect x="529.0" y="120.0" width="51.0" height="92.0" fill="#4CC5B7" fill-opacity="0.55" stroke="none"/>
+    <text x="554.5" y="170.0" text-anchor="middle" font-size="11">C</text>
+    <rect x="529.0" y="72.0" width="51.0" height="44.0" fill="#4CC5B7" fill-opacity="0.55" stroke="none"/>
+    <text x="554.5" y="98.0" text-anchor="middle" font-size="11">A</text>
+    <text x="326" y="264" font-size="10.5" fill="#97A59F">the MPS server merges the kernels of many</text>
+    <text x="326" y="280" font-size="10.5" fill="#97A59F">client processes onto the GPU at the same</text>
+    <text x="326" y="296" font-size="10.5" fill="#97A59F">time, so small kernels fill the SMs together.</text>
+    <text x="326" y="312" font-size="10.5" fill="#97A59F">Weak fault isolation (one fault, all clients).</text>
+    <text x="744" y="34" text-anchor="middle" font-weight="600">Time-slicing: turns</text>
+    <rect x="656" y="54" width="220" height="160" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <path d="M656 224 L876 224" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <text x="766.0" y="238" text-anchor="middle" font-size="10.5" fill="#97A59F">time</text>
+    <path d="M646 214 L646 54" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <text x="638" y="134.0" text-anchor="middle" font-size="10.5" fill="#97A59F" transform="rotate(-90 638 134.0)">SM capacity</text>
+    <rect x="657" y="56" width="44" height="156" fill="#4CC5B7" fill-opacity="0.55" stroke="none"/>
+    <text x="679.0" y="138.0" text-anchor="middle" font-size="11">A</text>
+    <rect x="702" y="55" width="7" height="158" fill="#E39A62" fill-opacity="0.45" stroke="none"/>
+    <rect x="710" y="56" width="44" height="156" fill="#4CC5B7" fill-opacity="0.55" stroke="none"/>
+    <text x="732.0" y="138.0" text-anchor="middle" font-size="11">B</text>
+    <rect x="755" y="55" width="7" height="158" fill="#E39A62" fill-opacity="0.45" stroke="none"/>
+    <rect x="763" y="56" width="44" height="156" fill="#4CC5B7" fill-opacity="0.55" stroke="none"/>
+    <text x="785.0" y="138.0" text-anchor="middle" font-size="11">C</text>
+    <rect x="808" y="55" width="7" height="158" fill="#E39A62" fill-opacity="0.45" stroke="none"/>
+    <rect x="816" y="56" width="44" height="156" fill="#4CC5B7" fill-opacity="0.55" stroke="none"/>
+    <text x="838.0" y="138.0" text-anchor="middle" font-size="11">D</text>
+    <rect x="861" y="55" width="7" height="158" fill="#E39A62" fill-opacity="0.45" stroke="none"/>
+    <text x="679.0" y="48" text-anchor="middle" font-size="11" fill="#97A59F">q</text>
+    <text x="705.5" y="48" text-anchor="middle" font-size="11" fill="#E39A62">s</text>
+    <text x="620" y="264" font-size="10.5" fill="#97A59F">one context at a time, round-robin: quanta q,</text>
+    <text x="620" y="280" font-size="10.5" fill="#97A59F">and a switch cost s. No memory isolation and</text>
+    <text x="620" y="296" font-size="10.5" fill="#97A59F">no performance isolation. 10 ms of work with</text>
+    <text x="620" y="312" font-size="10.5" fill="#97A59F">4 busy tenants, 2 ms quanta and 50 µs</text>
+    <text x="620" y="328" font-size="10.5" fill="#97A59F">switches: 34.8 ms at best.</text>
+    <text x="24" y="360" font-size="11" fill="#97A59F">A, B, C, D: tenants. Accent: the kernels of a tenant on the SMs. Warm: a context switch. gpusim.sharing models all three.</text>
+  </g>
+</svg>

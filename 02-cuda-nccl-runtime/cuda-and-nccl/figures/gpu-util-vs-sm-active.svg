@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="330" viewBox="0 0 900 330" role="img" aria-label="A kernel of 8 blocks runs all the time on a 132-SM H100: GPU util reads 100% because a kernel ran at every instant, while SM active reads 6% because only 8 SMs had a warp resident." style="color: #E4EAE7">
+  <title>A kernel of 8 blocks runs all the time on a 132-SM H100: GPU util reads 100% because a kernel ran at every instant, while SM active reads 6% because only 8 SMs had a warp resident.</title>
+  <rect x="0" y="0" width="900" height="330" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="30" font-weight="600">one H100 (132 SMs) over one sampling window: a kernel of 8 blocks that runs all the time</text>
+    <rect x="100" y="56" width="440" height="200" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="101" y="57" width="438" height="12.121212121212121" fill="#4CC5B7" fill-opacity="0.55" stroke="none"/>
+    <text x="320.0" y="88.12121212121212" text-anchor="middle" font-size="11" fill="#7ADACF">8 SMs: one block each, busy for the whole window</text>
+    <text x="320.0" y="180.0" text-anchor="middle" font-size="11" fill="#97A59F">the other SMs: no warp resident</text>
+    <path d="M100 268 L540 268" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <text x="320.0" y="284" text-anchor="middle" font-size="10.5" fill="#97A59F">time (the whole window)</text>
+    <path d="M88 256 L88 56" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <text x="78" y="156.0" text-anchor="middle" font-size="10.5" fill="#97A59F" transform="rotate(-90 78 156.0)">132 SMs</text>
+    <text x="590" y="70" font-weight="600" font-size="11.5" font-family="JetBrains Mono, monospace">DCGM_FI_DEV_GPU_UTIL</text>
+    <text x="590" y="85" font-size="10.5" fill="#97A59F">nvidia-smi: GPU-Util</text>
+    <rect x="590" y="94" width="240" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="1"/>
+    <rect x="591" y="95" width="238.0" height="14" fill="#E39A62" fill-opacity="0.45" stroke="none"/>
+    <text x="838" y="107" font-weight="600" fill="#E39A62">100%</text>
+    <text x="590" y="128" font-size="11" fill="#97A59F">the share of time when at least</text>
+    <text x="590" y="143" font-size="11" fill="#97A59F">one kernel ran: it does not show how</text>
+    <text x="590" y="158" font-size="11" fill="#97A59F">much of the GPU the kernel used</text>
+    <text x="590" y="190" font-weight="600" font-size="11.5" font-family="JetBrains Mono, monospace">DCGM_FI_PROF_SM_ACTIVE</text>
+    <text x="590" y="205" font-size="10.5" fill="#97A59F">SM active</text>
+    <rect x="590" y="214" width="240" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="1"/>
+    <rect x="591" y="215" width="14.424242424242424" height="14" fill="#4CC5B7" fill-opacity="0.55" stroke="none"/>
+    <text x="838" y="227" font-weight="600" fill="#7ADACF">6%</text>
+    <text x="590" y="248" font-size="11" fill="#97A59F">the share of SM-cycles with at least</text>
+    <text x="590" y="263" font-size="11" fill="#97A59F">one warp resident: the real</text>
+    <text x="590" y="278" font-size="11" fill="#97A59F">"how much of the GPU"</text>
+    <text x="24" y="314" font-size="11" fill="#97A59F">gpusim.health.util_counters() computes both from the same kernel trace; alert on SM active and the engine's own metrics, not on GPU util</text>
+  </g>
+</svg>
