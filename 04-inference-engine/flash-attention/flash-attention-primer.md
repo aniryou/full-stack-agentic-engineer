@@ -87,9 +87,9 @@ There is a second failure, and it is more difficult: **it is possible that the m
 
 The solution is the standard solution for memory-bound problems: *fusion* and *tiling*. Do not run softmax as a separate pass over a matrix in HBM. Divide the problem into blocks that are sufficiently small to fit in SRAM. Then do the full chain of score, softmax and weighted sum on each block while the block is still on-chip. $S$ and $P$ exist only as small tiles in fast memory. The kernel removes each tile immediately after it uses the tile.
 
-![The naive schedule writes S and P to HBM and reads them back, while the fused kernel keeps one Q block and the S and P tiles in SRAM and writes only O.](figures/primer-naive-vs-tiled.svg)
+![The naive schedule writes S and P to HBM and reads them back, while the fused kernel keeps one Q block and the S and P tiles in SRAM and writes no N × N matrix to HBM.](figures/primer-naive-vs-tiled.svg)
 
-*The top row is the naive schedule of §3 for one head at $N$ = 4096, $d$ = 64 in fp16. Three kernels write $S$ and $P$, 33.5 MB each, to HBM and read them back. The traffic is roughly 134 MB for 4.3 GFLOP, or 32 FLOPs per byte. The bottom row is the fused kernel of §4. One $Q$ block stays in SRAM, the kernel loops over the $K$ and $V$ blocks, and $S$ and $P$ exist only as tiles. HBM holds $Q$, $K$, $V$ and $O$ only.*
+*In the naive schedule of §3 (top row), three kernels write $S$ and $P$, 33.5 MB each, to HBM and read them back. For one head at $N$ = 4096, $d$ = 64 in fp16, the traffic is roughly 134 MB for 4.3 GFLOP, or 32 FLOPs per byte. In the fused kernel of §4 (bottom row), one $Q$ block stays in SRAM while the kernel loops over the $K$ and $V$ blocks. $S$ and $P$ exist only as tiles, and HBM holds no $N \times N$ matrix.*
 
 In detail: divide $Q$ into row blocks of size $B_r \times d$, and divide $K$, $V$ into blocks of size $B_c \times d$. Select the sizes so that some of these blocks fit in the ~200 KB of shared memory of one SM. For each $Q$ block, loop over all $K$/$V$ blocks, and accumulate the results into an output block.
 
@@ -168,15 +168,15 @@ Training needs gradients. The textbook backward pass for attention needs $P$, an
 ```mermaid
 flowchart TB
   F["forward pass<br/>Q, K, V tiles in SRAM, online softmax"] --> O["keep O: N × d"]
-  F --> L["keep L = m + log(ℓ): N numbers, not N²"]
+  F --> L["keep L = m + log(ℓ):<br/>N numbers, not N²"]
   F -. "never written" .-> P["P: N × N"]
   O --> B["backward pass"]
   L --> B
-  B --> R["load the Q, K, V tiles into SRAM again<br/>calculate each S and P tile again"]
-  R --> G["normalize with the saved L: no second reduction pass<br/>then the gradients"]
+  B --> R["load the Q, K, V tiles<br/>into SRAM again"]
+  R --> G["calculate each S and P tile<br/>again with the saved L:<br/>no second reduction pass<br/>then the gradients"]
 ```
 
-*The forward pass keeps only $O$ and the log-sum-exp $L$ of each row, and it never writes $P$. The backward pass loads the $Q$, $K$ and $V$ tiles again, calculates each $S$ and $P$ tile again, and normalizes with the saved $L$. This costs more FLOPs than a stored $P$, but the kernel has unused arithmetic capacity, and bandwidth is scarce.*
+*The forward pass keeps only $O$ and the log-sum-exp $L$ of each row, and it never writes $P$. The backward pass loads the $Q$, $K$ and $V$ tiles again, calculates each $S$ and $P$ tile again, and normalizes with the saved $L$. This costs more FLOPs than a stored $P$, but the GPU has unused arithmetic capacity, and bandwidth is scarce.*
 
 FlashAttention **recomputes** $P$ instead. During the forward pass, it keeps only $O$ ($N \times d$) and the final softmax statistics for each row. It packs the statistics as the log-sum-exp $L = m + \log(\ell)$, that is, $N$ numbers, not $N^2$. In the backward pass, it loads the $Q$, $K$, $V$ tiles into SRAM again. Then it calculates each $S$ and $P$ tile again when it needs the tile. It uses the saved $L$ to normalize correctly without a second reduction pass.
 

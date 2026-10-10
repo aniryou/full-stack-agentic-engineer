@@ -11,32 +11,32 @@
     <line x1="104" y1="60" x2="104" y2="340" stroke="currentColor" stroke-width="1"/>
     <line x1="100" y1="297.8332660177329" x2="104" y2="297.8332660177329" stroke="currentColor" stroke-width="1"/>
     <line x1="104" y1="297.8332660177329" x2="850" y2="297.8332660177329" stroke="#97A59F" stroke-width="0.4"/>
-    <text x="96" y="301.8332660177329" text-anchor="end" font-size="10.5" fill="#97A59F">28.3</text>
+    <text x="96" y="301.8332660177329" text-anchor="end" font-size="11" fill="#97A59F">28.3</text>
     <line x1="100" y1="249.5211815136284" x2="104" y2="249.5211815136284" stroke="currentColor" stroke-width="1"/>
     <line x1="104" y1="249.5211815136284" x2="850" y2="249.5211815136284" stroke="#97A59F" stroke-width="0.4"/>
-    <text x="96" y="253.5211815136284" text-anchor="end" font-size="10.5" fill="#97A59F">93.2</text>
+    <text x="96" y="253.5211815136284" text-anchor="end" font-size="11" fill="#97A59F">93.2</text>
     <line x1="100" y1="177.56614898053726" x2="104" y2="177.56614898053726" stroke="currentColor" stroke-width="1"/>
     <line x1="104" y1="177.56614898053726" x2="850" y2="177.56614898053726" stroke="#97A59F" stroke-width="0.4"/>
-    <text x="96" y="181.56614898053726" text-anchor="end" font-size="10.5" fill="#97A59F">550.0</text>
+    <text x="96" y="181.56614898053726" text-anchor="end" font-size="11" fill="#97A59F">550.0</text>
     <line x1="100" y1="95.1277066250436" x2="104" y2="95.1277066250436" stroke="currentColor" stroke-width="1"/>
     <line x1="104" y1="95.1277066250436" x2="850" y2="95.1277066250436" stroke="#97A59F" stroke-width="0.4"/>
-    <text x="96" y="99.1277066250436" text-anchor="end" font-size="10.5" fill="#97A59F">4203.7</text>
+    <text x="96" y="99.1277066250436" text-anchor="end" font-size="11" fill="#97A59F">4203.7</text>
     <text x="34" y="200" text-anchor="middle" font-size="11" fill="#97A59F" transform="rotate(-90 34 200)">time in µs, the rows of the sweep (log scale)</text>
     <line x1="104.0" y1="340" x2="104.0" y2="344" stroke="currentColor" stroke-width="1"/>
-    <text x="104.0" y="358" text-anchor="start" font-size="10.5" fill="#97A59F" font-family="JetBrains Mono, monospace">65536</text>
+    <text x="104.0" y="358" text-anchor="start" font-size="11" fill="#97A59F" font-family="JetBrains Mono, monospace">65536</text>
     <line x1="317.1428571428571" y1="340" x2="317.1428571428571" y2="344" stroke="currentColor" stroke-width="1"/>
-    <text x="317.1428571428571" y="358" text-anchor="middle" font-size="10.5" fill="#97A59F" font-family="JetBrains Mono, monospace">1048576</text>
+    <text x="317.1428571428571" y="358" text-anchor="middle" font-size="11" fill="#97A59F" font-family="JetBrains Mono, monospace">1048576</text>
     <line x1="530.2857142857142" y1="340" x2="530.2857142857142" y2="344" stroke="currentColor" stroke-width="1"/>
-    <text x="530.2857142857142" y="358" text-anchor="middle" font-size="10.5" fill="#97A59F" font-family="JetBrains Mono, monospace">16777216</text>
+    <text x="530.2857142857142" y="358" text-anchor="middle" font-size="11" fill="#97A59F" font-family="JetBrains Mono, monospace">16777216</text>
     <line x1="690.1428571428571" y1="340" x2="690.1428571428571" y2="344" stroke="currentColor" stroke-width="1"/>
-    <text x="690.1428571428571" y="358" text-anchor="middle" font-size="10.5" fill="#97A59F" font-family="JetBrains Mono, monospace">134217728</text>
+    <text x="690.1428571428571" y="358" text-anchor="middle" font-size="11" fill="#97A59F" font-family="JetBrains Mono, monospace">134217728</text>
     <line x1="850.0" y1="340" x2="850.0" y2="344" stroke="currentColor" stroke-width="1"/>
-    <text x="850.0" y="358" text-anchor="end" font-size="10.5" fill="#97A59F" font-family="JetBrains Mono, monospace">1073741824</text>
+    <text x="850.0" y="358" text-anchor="end" font-size="11" fill="#97A59F" font-family="JetBrains Mono, monospace">1073741824</text>
     <text x="477.0" y="376" text-anchor="middle" font-size="11" fill="#97A59F">message size S in bytes, the sizes of the sweep in §5.5 (log scale)</text>
     <line x1="104" y1="298.26525040805956" x2="583.5714285714287" y2="298.26525040805956" stroke="#97A59F" stroke-width="1" stroke-dasharray="4 3"/>
-    <text x="591.5714285714287" y="291.26525040805956" font-size="10.5" fill="#97A59F">2(p−1)·α: the latency term, 14 steps</text>
+    <text x="591.5714285714287" y="291.26525040805956" font-size="11" fill="#97A59F">2(p−1)·α: the latency term, 14 steps</text>
     <line x1="386.1019594240589" y1="340.0" x2="850.0" y2="95.39896221583055" stroke="#97A59F" stroke-width="1" stroke-dasharray="4 3"/>
-    <text x="644.8571428571429" y="225.78349393038357" font-size="10.5" fill="#97A59F">2(p−1)/p · S/B: the bandwidth term</text>
+    <text x="644.8571428571429" y="225.78349393038357" font-size="11" fill="#97A59F">2(p−1)/p · S/B: the bandwidth term</text>
     <line x1="465.2539889289876" y1="60" x2="465.2539889289876" y2="340" stroke="#E39A62" stroke-width="1" stroke-dasharray="4 3"/>
     <text x="465.2539889289876" y="54" text-anchor="middle" font-size="11" fill="#E39A62">S* = p·α·B = 7.2 MB</text>
     <text x="455.2539889289876" y="76" text-anchor="end" font-size="11" fill="#97A59F">latency-bound</text>
@@ -47,14 +47,14 @@
     <circle cx="530.3" cy="249.5" r="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
     <circle cx="690.1" cy="177.6" r="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
     <circle cx="850.0" cy="95.1" r="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
-    <text x="325.1428571428571" y="308.7261969755453" font-size="10.5" fill="#7ADACF">32.1 µs</text>
-    <text x="842.0" y="97.1277066250436" text-anchor="end" font-size="10.5" fill="#7ADACF">busbw 447 GB/s</text>
+    <text x="325.1428571428571" y="313" font-size="11" fill="#7ADACF">32.1 µs</text>
+    <text x="842.0" y="86" text-anchor="end" font-size="11" fill="#7ADACF">busbw 447 GB/s</text>
     <rect x="258.9" y="290.5" width="10" height="10" fill="#3A2C25" stroke="#E39A62" stroke-width="1.4"/>
     <text x="263.8571428571429" y="269.4686828928315" text-anchor="middle" font-weight="600" font-size="11" fill="#E39A62">decode, batch 32</text>
-    <text x="263.8571428571429" y="283.4686828928315" text-anchor="middle" font-size="10.5" fill="#E39A62">512 KiB · 30.0 µs</text>
+    <text x="263.8571428571429" y="283.4686828928315" text-anchor="middle" font-size="11" fill="#E39A62">512 KiB · 30.0 µs</text>
     <rect x="685.1" y="172.6" width="10" height="10" fill="#3A2C25" stroke="#E39A62" stroke-width="1.4"/>
-    <text x="690.1428571428571" y="151.56614898053726" text-anchor="middle" font-weight="600" font-size="11" fill="#E39A62">prefill, 8,192 tokens</text>
-    <text x="690.1428571428571" y="165.56614898053726" text-anchor="middle" font-size="10.5" fill="#E39A62">128 MiB · 550 µs</text>
+    <text x="680" y="149" text-anchor="end" font-weight="600" font-size="11" fill="#E39A62">prefill, 8,192 tokens</text>
+    <text x="680" y="164" text-anchor="end" font-size="11" fill="#E39A62">128 MiB · 550 µs</text>
     <text x="24" y="420" font-size="11" fill="#97A59F">the five circles are the rows of the simulated sweep (gpusim.collectives.sweep()); the squares are the two steps of §5.6</text>
   </g>
 </svg>

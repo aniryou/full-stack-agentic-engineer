@@ -9,7 +9,7 @@
 
     <!-- the slots -->
     <rect x="240" y="48" width="620" height="88" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
-    <text x="256" y="66" font-size="11" fill="#97A59F">RequestState on the GPU: one slot per request, and the slot does not move</text>
+    <text x="256" y="66" font-size="11" fill="#97A59F">RequestState, the GPU-side state: one slot per request, and the slot does not move</text>
     <rect x="256" y="78" width="186" height="46" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
     <text x="349" y="96" text-anchor="middle" font-weight="600">slot s0</text>
     <text x="349" y="114" text-anchor="middle" font-size="10.5" fill="#97A59F">computed 10 · scheduled 2</text>
@@ -31,7 +31,7 @@
       <path d="M349 124 L318 180" marker-end="url(#arr)"/>
       <path d="M559 124 L528 180" marker-end="url(#arr)"/>
       <path d="M760 124 L760 180" marker-end="url(#arr)"/>
-      <path d="M236 206 L248 214" marker-end="url(#arr)"/>
+      <path d="M236 215 L248 215" marker-end="url(#arr)"/>
     </g>
     <text x="440" y="160" text-anchor="middle" font-size="11" fill="#97A59F">in idx_mapping order</text>
 

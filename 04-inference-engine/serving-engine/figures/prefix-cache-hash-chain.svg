@@ -45,9 +45,9 @@
       <path d="M628 131 L712 131"/>
       <path d="M118 164 L166 144" stroke-dasharray="4 3"/>
     </g>
-    <text x="24" y="176" font-size="11" fill="#97A59F">extra keys enter</text>
+    <text x="24" y="176" font-size="11" fill="#97A59F">the salt enters</text>
     <text x="24" y="190" font-size="11" fill="#97A59F">the first block only</text>
-    <text x="24" y="204" font-size="11" fill="#97A59F">(LoRA id, cache_salt)</text>
+    <text x="24" y="204" font-size="11" fill="#97A59F">(<tspan font-family="JetBrains Mono, monospace">cache_salt</tspan>)</text>
 
     <!-- request 2 -->
     <g stroke="#4CC5B7" stroke-width="1.2" fill="none" marker-end="url(#arrA)">
@@ -64,25 +64,25 @@
       <rect x="120" y="224" width="120" height="60" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
       <text x="180" y="244" text-anchor="middle" font-weight="600">block 0</text>
       <text x="180" y="260" text-anchor="middle" font-size="11" fill="#7ADACF">hit: adopt</text>
-      <text x="180" y="274" text-anchor="middle" font-size="11" fill="#7ADACF">refcount 2</text>
+      <text x="180" y="274" text-anchor="middle" font-size="11" fill="#7ADACF">refcount + 1</text>
       <rect x="260" y="224" width="120" height="60" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
       <text x="320" y="244" text-anchor="middle" font-weight="600">block 1</text>
       <text x="320" y="260" text-anchor="middle" font-size="11" fill="#7ADACF">hit: adopt</text>
-      <text x="320" y="274" text-anchor="middle" font-size="11" fill="#7ADACF">refcount 2</text>
+      <text x="320" y="274" text-anchor="middle" font-size="11" fill="#7ADACF">refcount + 1</text>
       <rect x="400" y="224" width="120" height="60" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
       <text x="460" y="244" text-anchor="middle" font-weight="600">block 2</text>
       <text x="460" y="260" text-anchor="middle" font-size="11" fill="#7ADACF">hit: adopt</text>
-      <text x="460" y="274" text-anchor="middle" font-size="11" fill="#7ADACF">refcount 2</text>
+      <text x="460" y="274" text-anchor="middle" font-size="11" fill="#7ADACF">refcount + 1</text>
       <rect x="540" y="224" width="120" height="60" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
       <text x="600" y="244" text-anchor="middle" font-weight="600">block 3</text>
       <text x="600" y="260" text-anchor="middle" font-size="11" fill="#7ADACF">hit: adopt</text>
-      <text x="600" y="274" text-anchor="middle" font-size="11" fill="#7ADACF">refcount 2</text>
+      <text x="600" y="274" text-anchor="middle" font-size="11" fill="#7ADACF">refcount + 1</text>
       <rect x="680" y="224" width="120" height="60" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
       <text x="740" y="244" text-anchor="middle" font-weight="600">block 4</text>
       <text x="740" y="260" text-anchor="middle" font-size="11" fill="#97A59F">computed again</text>
       <text x="740" y="274" text-anchor="middle" font-size="11" fill="#97A59F">in its own block</text>
     </g>
-    <text x="24" y="306" font-size="11.5" fill="#97A59F">request 2, the same 20 tokens, goes along the chain until the first miss and adopts each hit: four blocks, 16 tokens</text>
+    <text x="24" y="306" font-size="11.5" fill="#97A59F">request 2, the same 20 tokens, goes along the chain until a miss or the hit limit and adopts each hit: four blocks, 16 tokens</text>
 
     <text x="24" y="328" font-size="11.5" fill="#97A59F">name(block i) = H(name(block i − 1), tokens in block i, extra keys), from a constant root: <tspan font-family="JetBrains Mono, monospace" font-size="11">kv.hash_block()</tspan></text>
     <text x="24" y="346" font-size="11.5" fill="#97A59F"><tspan font-family="JetBrains Mono, monospace" font-size="11">KVCacheManager.lookup()</tspan> finds the hits, and <tspan font-family="JetBrains Mono, monospace" font-size="11">allocate_slots(..., hits)</tspan> adopts them: refcount + 1, no compute, no new memory</text>

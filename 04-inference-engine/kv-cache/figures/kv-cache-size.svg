@@ -8,7 +8,7 @@
     <rect x="24" y="40" width="330" height="374" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
     <text x="40" y="60" fill="#97A59F">per token: seq_len = 1, batch = 1</text>
     <text x="40" y="76" font-size="11">32 layers, each with a K row and a V row of 8 KV heads</text>
-    <g font-size="10.5" fill="#97A59F">
+    <g font-size="11" fill="#97A59F">
       <text x="40" y="108">layer 1</text><text x="40" y="128">layer 2</text><text x="40" y="148">layer 3</text><text x="40" y="190">layer 32</text>
       <text x="96" y="93">K</text><text x="216" y="93">V</text>
     </g>
@@ -58,13 +58,13 @@
     <text x="386" y="254" font-size="11.5">32 users, 8K context each</text>
     <text x="386" y="269" font-size="11" fill="#97A59F">more than the model itself</text>
     <rect x="546" y="244" width="296" height="28" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <text x="834" y="262" text-anchor="end" font-size="11" fill="#7ADACF">32 GiB (34.4 GB)</text>
+    <text x="828" y="262" text-anchor="end" font-size="11" fill="#7ADACF">32 GiB (34.4 GB)</text>
 
     <text x="386" y="310" font-size="11.5">An 80 GB H100 has ~64 GB left after the weights:</text>
     <text x="386" y="326" font-size="11.5">at most 59 sessions of 8K tokens with an fp16 cache,</text>
     <text x="386" y="342" font-size="11.5">or 119 with an fp8 cache (an upper bound).</text>
     <text x="386" y="372" font-size="11" fill="#97A59F">At 128K context, decode reads ~16 GB of weights plus ~17 GB of cache</text>
     <text x="386" y="387" font-size="11" fill="#97A59F">per token: roughly half the tokens per second of a short context.</text>
-    <text x="386" y="406" font-size="11" fill="#97A59F"><tspan font-family="JetBrains Mono, monospace" font-size="10.5">kerncore.kv.kv_cache_bytes</tspan>, <tspan font-family="JetBrains Mono, monospace" font-size="10.5">sessions_per_gpu</tspan></text>
+    <text x="386" y="406" font-size="11" fill="#97A59F"><tspan font-family="JetBrains Mono, monospace" font-size="11">kerncore.kv.kv_cache_bytes</tspan>, <tspan font-family="JetBrains Mono, monospace" font-size="11">sessions_per_gpu</tspan></text>
   </g>
 </svg>

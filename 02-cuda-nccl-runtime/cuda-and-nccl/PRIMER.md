@@ -107,7 +107,7 @@ driver **535.183.01**. That driver supports CUDA 12.2.
 
 ![The two compatibility gates on the example of section 1.2: gate 1 compares the CUDA that the host driver supports with the CUDA the app was built with, and gate 2 matches the SASS or PTX in the fatbin against the compute capability of the GPU.](figures/two-gates-compatibility.svg)
 
-*The figure shows the two gates on the example of §1.2 (`gpusim.compat.check()`). The driver supports CUDA 12.2. The app, built with CUDA 12.4, has SASS for sm_90. Thus gate 1 passes by minor-version compatibility, and gate 2 passes with the SASS. The warm boxes hold the failures and their error codes.*
+*The figure shows the two gates on the example of §1.2 (`gpusim.compat.check()`). The driver supports CUDA 12.2, and the app, built with CUDA 12.4, has SASS for sm_80 and sm_90. Gate 1 passes by minor-version compatibility, and gate 2 passes with the SASS for sm_90. The teal boxes show this path, and the orange boxes show the failures and their error codes.*
 
 ### 1.3 Gate 2: kernel image and GPU
 
@@ -526,7 +526,7 @@ nccl-tests (`sweep()`, `format_sweep()`):
 
 ![Ring all-reduce time against message size on 8 H100s in the alpha-beta model: flat near the latency term below the 7.2 MB crossover, where the 512 KiB all-reduce of decode sits, and growing with the bandwidth term above it, where the 128 MiB all-reduce of prefill sits.](figures/ring-allreduce-regimes.svg)
 
-*The figure shows the ring sweep of §5.5 on a log-log plot (`gpusim.collectives.sweep()`). Below the crossover of 7.2 MB, the latency term sets the time, which is almost constant. The 512 KiB all-reduce of decode is in this regime. Above the crossover, the bandwidth term sets the time, which grows with the message size. The 128 MiB all-reduce of prefill is in that regime.*
+*The figure shows the ring sweep of §5.5 on a log-log plot (`gpusim.collectives.sweep()`). Below the crossover of 7.2 MB, the latency term sets the time, which is almost constant. Above it, the bandwidth term sets the time, which grows with the message size. The 512 KiB all-reduce of decode is below the crossover, and the 128 MiB all-reduce of prefill is above it.*
 
 Below $S^{\ast}$, a ring all-reduce costs approximately $2(p-1) \cdot \alpha$ for any message size. Thus the
 algorithm that wins is the one with the fewest steps. At 512 KiB on 8 GPUs, the model gives these times: two-shot
@@ -699,7 +699,7 @@ things: small models, dev notebooks, low-QPS endpoints, CI.
 
 ![Three ways to share a GPU over time: MIG partitions the SMs into fixed instances, MPS overlaps the kernels of all tenants at the same time, and time-slicing runs one context at a time with a switch between turns.](figures/sharing-mig-mps-timeslicing.svg)
 
-*The figure shows the three ways to share a GPU, with time from left to right and SM capacity from bottom to top. MIG gives each tenant its own slice of the hardware. MPS runs the kernels of all tenants at the same time. The third panel runs one context at a time, and each switch between turns costs time.*
+*The figure shows the three ways to share a GPU, with time from left to right and SM capacity from bottom to top. MIG gives each tenant its own slice of the hardware (§7.2). MPS runs the kernels of all tenants at the same time (§7.3). In the third panel (§7.4), the GPU runs one context at a time, and each switch between turns costs time.*
 
 ### 7.2 MIG: partitions
 

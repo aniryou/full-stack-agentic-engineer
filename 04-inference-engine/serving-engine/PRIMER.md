@@ -35,16 +35,16 @@ An engine is **a loop around one forward pass**.
 
 ```mermaid
 flowchart TB
-  S["schedule()<br/>the token budget: running first, then waiting"] --> B["build_batch()<br/>one flat batch, no padding"]
+  S["schedule()<br/>the token budget: running first, then waiting"] --> B["build_batch()<br/>one flat batch, no padding,<br/>a slot per token"]
   B --> F["forward<br/>one pass, the weights read once"]
   F --> P["sample<br/>one token per complete prompt"]
   P --> U["update()<br/>append the tokens, finish, free blocks"]
   U -->|"next step"| S
   S -.->|"allocate blocks,<br/>publish full blocks"| K[("KV cache manager<br/>the block pool")]
-  K -.->|"block tables, slots"| F
+  K -.->|"block tables"| B
 ```
 
-*The engine is a loop around one forward pass, and the figure shows one step (§1). `schedule()` gives out the token budget and allocates the blocks. `build_batch()` flattens the scheduled tokens into one batch with no padding. One forward pass reads the weights once for all requests and reads each history through its block table. The sampler draws one token for each request whose prompt is complete. `update()` appends the tokens and frees the blocks of finished requests, and the next step starts.*
+*In one step (§1), `schedule()` gives out the token budget and allocates blocks from the KV cache manager. `build_batch()` reads the block tables and flattens the scheduled tokens into one batch with no padding. One forward pass reads the weights once for all requests and reads each history through its block table. `update()` appends the sampled tokens and frees the blocks of finished requests, and the next step starts.*
 
 - In each step, the **scheduler** gives out a token budget (`max_num_batched_tokens`). The requests that already run
   come first: one token each for a decode, and a chunk for a prefill that is not complete. Then the requests that
@@ -140,7 +140,7 @@ at 100%.
 
 ![Four requests with output lengths 2, 9, 3 and 4 in two slots: static batching takes 13 steps and continuous batching takes 9.](figures/continuous-batching-steps.svg)
 
-*The four requests have output lengths [2, 9, 3, 4], and there are two slots. Static batching runs each batch until its longest request finishes, and the other slot is idle: 13 steps at 69% slot utilisation. Continuous batching gives the slot of a finished request to the next request in the next step: 9 steps at 100%. Notebook 01 counts both with `static_steps` and `continuous_steps`.*
+*Four requests with output lengths [2, 9, 3, 4] share two slots. Static batching runs each batch until its longest request finishes, and the shorter request leaves its slot idle: 13 steps at 69% slot utilisation. Continuous batching gives the slot of a finished request to the next request in the next step: 9 steps at 100%. Notebook 01 counts both with `static_steps` and `continuous_steps`.*
 
 For 64 requests with lengths uniform in 10–400 and 8 slots, the counts are 2,842 against 1,812 steps. That is 1.57×
 the throughput from scheduling alone (notebook 01, `static_steps` / `continuous_steps`).
@@ -229,7 +229,7 @@ that serves Qwen2.5-1.5B to 16 users at 1K context: their 16.7 ms token gap beco
 
 ![An 8,000-token prompt in one step makes the token gap 367 ms, and 17 chunks of 496 tokens keep the worst gap at 29.6 ms.](figures/chunked-prefill-interference.svg)
 
-*An L4 serves Qwen2.5-1.5B to 16 users at 1K context (SIMULATED, notebook 02). In the top row, an 8,000-token prompt runs in one step, and the token gap of the 16 users becomes 367 ms. In the bottom row, the budget is 512. Each step runs the 16 decodes first and then a 496-token chunk, and the worst gap is 29.6 ms. The figure is not to scale.*
+*The figure (not to scale) shows an L4 that serves Qwen2.5-1.5B to 16 users at 1K context (SIMULATED, notebook 02). In the top row, an 8,000-token prompt runs in one step, and the token gap of the 16 users becomes 367 ms. In the bottom row, the budget is 512: each step runs the 16 decodes first, and the prompt gets the rest. With 17 chunks of 496, the worst gap is 29.6 ms.*
 
 **Chunked prefill** (Sarathi-Serve's "stall-free batching", OSDI 2024) keeps each step at or below the budget, and
 it schedules decodes first. The prompt gets the rest of the budget, over as many steps as necessary. With a 512-token
@@ -408,7 +408,7 @@ K/V of a token depend only on the tokens before it. Prefix caching computes that
 
 ![Two identical 20-token prompts with block size 4: request 2 hits the four blocks that request 1 named and computes the last block itself.](figures/prefix-cache-hash-chain.svg)
 
-*The figure shows two identical 20-token prompts with $B$ = 4 (§5). Request 1 computes all 20 tokens, and the engine names each full block with a hash chained through the name of its parent. Request 2 goes along the chain until the first miss and adopts each hit: four blocks, 16 tokens. The engine computes the last block again, because it must compute the last token to get logits.*
+*The figure shows two identical 20-token prompts with $B$ = 4 (§5). Request 1 computes all 20 tokens, and the engine gives each full block a name: a hash chained through the name of its parent. Request 2 goes along the chain and adopts each hit up to the hit limit: four blocks, 16 tokens. The engine computes the last block again, because it must compute the last token to get logits.*
 
 **Block names.** The engine caches only **full** blocks. The name of a full block is
 
@@ -584,7 +584,7 @@ one position. Thus let a low-cost **proposer** make $k$ draft tokens, and let th
 
 ![One round of speculative decoding with four draft tokens: one target pass scores them, and the engine accepts them in order until the first rejection.](figures/speculative-decoding-round.svg)
 
-*The figure shows one round with $k$ = 4 (§7). The proposer makes four draft tokens, one after the other. The target scores all $k$ + 1 positions in one pass. In order, the engine accepts each draft token with probability $\min(1, p(x) / q(x))$. At the first rejection, it emits a recovered token from the normalised residual and stops. With $\alpha$ = 0.8, one pass emits 3.36 tokens on average.*
+*In one round (§7), the proposer makes $k$ = 4 draft tokens, and one target pass scores all $k$ + 1 positions. In order, the engine accepts each draft token with probability $\min(1, p(x) / q(x))$. At the first rejection, it emits a recovered token from the normalised residual and stops. With $\alpha$ = 0.8, one pass emits 3.36 tokens on average.*
 
 ### Exact rejection sampling
 

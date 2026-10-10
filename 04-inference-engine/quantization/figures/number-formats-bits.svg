@@ -46,7 +46,7 @@
     <rect x="164" y="224" width="48" height="30" rx="3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
     <text x="188.0" y="243" font-size="11" fill="#7ADACF" text-anchor="middle">e 2</text>
     <rect x="212" y="224" width="24" height="30" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    <text x="224.0" y="243" font-size="11" text-anchor="middle">m 1</text>
+    <text x="224.0" y="243" font-size="11" text-anchor="middle">m</text>
     <text x="252" y="243" font-size="11" fill="#97A59F">bias 1 · the full grid {0, 0.5, 1, 1.5, 2, 3, 4, 6} · largest 6</text>
     <text x="24" y="280" font-weight="600">INT8</text>
     <text x="24" y="293" font-size="11" fill="#97A59F">8 bits</text>
@@ -61,59 +61,59 @@
     <text x="24" y="362" font-size="11.5" fill="#97A59F">Block formats: E2M1 elements that share one scale (the cells here are not at the scale of the rows above)</text>
     <text x="24" y="394" font-weight="600">MXFP4</text>
     <text x="24" y="407" font-size="11" fill="#97A59F">32 × E2M1</text>
-    <rect x="140" y="380" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="154" y="380" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="168" y="380" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="182" y="380" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="196" y="380" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="210" y="380" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="224" y="380" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="238" y="380" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="252" y="380" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="266" y="380" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="280" y="380" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="294" y="380" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="308" y="380" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="322" y="380" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="336" y="380" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="350" y="380" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="364" y="380" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="378" y="380" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="392" y="380" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="406" y="380" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="420" y="380" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="434" y="380" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="448" y="380" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="462" y="380" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="476" y="380" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="490" y="380" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="504" y="380" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="518" y="380" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="532" y="380" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="546" y="380" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="560" y="380" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="574" y="380" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="140" y="380" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="154" y="380" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="168" y="380" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="182" y="380" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="196" y="380" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="210" y="380" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="224" y="380" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="238" y="380" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="252" y="380" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="266" y="380" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="280" y="380" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="294" y="380" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="308" y="380" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="322" y="380" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="336" y="380" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="350" y="380" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="364" y="380" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="378" y="380" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="392" y="380" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="406" y="380" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="420" y="380" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="434" y="380" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="448" y="380" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="462" y="380" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="476" y="380" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="490" y="380" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="504" y="380" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="518" y="380" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="532" y="380" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="546" y="380" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="560" y="380" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="574" y="380" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
     <rect x="596" y="380" width="28" height="26" rx="2" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
     <text x="636" y="392" font-size="11" fill="#97A59F">one E8M0 scale per 32 values: a power of two</text>
     <text x="636" y="407" font-size="11" fill="#97A59F">4.25 bits per weight</text>
     <text x="24" y="438" font-weight="600">NVFP4</text>
     <text x="24" y="451" font-size="11" fill="#97A59F">16 × E2M1</text>
-    <rect x="140" y="424" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="154" y="424" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="168" y="424" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="182" y="424" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="196" y="424" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="210" y="424" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="224" y="424" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="238" y="424" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="252" y="424" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="266" y="424" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="280" y="424" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="294" y="424" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="308" y="424" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="322" y="424" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="336" y="424" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="350" y="424" width="14" height="26" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="140" y="424" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="154" y="424" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="168" y="424" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="182" y="424" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="196" y="424" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="210" y="424" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="224" y="424" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="238" y="424" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="252" y="424" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="266" y="424" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="280" y="424" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="294" y="424" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="308" y="424" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="322" y="424" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="336" y="424" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="350" y="424" width="14" height="26" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
     <rect x="372" y="424" width="28" height="26" rx="2" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
     <rect x="412" y="424" width="112" height="26" rx="2" fill="none" stroke="#E39A62" stroke-width="1.2" stroke-dasharray="4 3"/>
     <text x="468" y="441" font-size="11" fill="#97A59F" text-anchor="middle">FP32 per tensor</text>
@@ -127,5 +127,7 @@
     <text x="360" y="483" font-size="11" fill="#97A59F">mantissa bits</text>
     <rect x="460" y="472" width="14" height="14" rx="2" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
     <text x="480" y="483" font-size="11" fill="#97A59F">shared scale</text>
+    <rect x="580" y="472" width="14" height="14" rx="2" fill="none" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="600" y="483" font-size="11" fill="#97A59F">one E2M1 element (4 bits)</text>
   </g>
 </svg>
