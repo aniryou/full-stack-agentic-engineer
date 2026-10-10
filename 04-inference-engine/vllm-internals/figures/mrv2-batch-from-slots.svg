@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="380" viewBox="0 0 880 380" role="img" aria-label="Model Runner V2 builds the flat batch of one step from three GPU slots: idx_mapping and query_start_loc come from the host, and Triton kernels write the positions, the sequence lengths and the logits indices." style="color: #E4EAE7">
+  <title>Model Runner V2 builds the flat batch of one step from three GPU slots: idx_mapping and query_start_loc come from the host, and Triton kernels write the positions, the sequence lengths and the logits indices.</title>
+  <rect x="0" y="0" width="880" height="380" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="28" fill="#97A59F">Three requests, scheduled for [2, 5, 3] tokens, with num_computed_tokens = [10, 0, 40]</text>
+
+    <!-- the slots -->
+    <rect x="240" y="48" width="620" height="88" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="256" y="66" font-size="11" fill="#97A59F">RequestState on the GPU: one slot per request, and the slot does not move</text>
+    <rect x="256" y="78" width="186" height="46" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="349" y="96" text-anchor="middle" font-weight="600">slot s0</text>
+    <text x="349" y="114" text-anchor="middle" font-size="10.5" fill="#97A59F">computed 10 · scheduled 2</text>
+    <rect x="466" y="78" width="186" height="46" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="559" y="96" text-anchor="middle" font-weight="600">slot s1</text>
+    <text x="559" y="114" text-anchor="middle" font-size="10.5" fill="#97A59F">computed 0 · scheduled 5</text>
+    <rect x="676" y="78" width="168" height="46" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="760" y="96" text-anchor="middle" font-weight="600">slot s2</text>
+    <text x="760" y="114" text-anchor="middle" font-size="10.5" fill="#97A59F">computed 40 · scheduled 3</text>
+
+    <!-- from the host -->
+    <rect x="20" y="160" width="216" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="128" y="182" text-anchor="middle" font-weight="600">from the host (CPU)</text>
+    <text x="128" y="200" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10">idx_mapping = [s0, s1, s2]</text>
+    <text x="128" y="217" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10">query_start_loc = [0, 2, 7, 10]</text>
+
+    <!-- slot to rows -->
+    <g stroke="#97A59F" stroke-width="1.2" fill="none">
+      <path d="M349 124 L318 180" marker-end="url(#arr)"/>
+      <path d="M559 124 L528 180" marker-end="url(#arr)"/>
+      <path d="M760 124 L760 180" marker-end="url(#arr)"/>
+      <path d="M236 206 L248 214" marker-end="url(#arr)"/>
+    </g>
+    <text x="440" y="160" text-anchor="middle" font-size="11" fill="#97A59F">in idx_mapping order</text>
+
+    <!-- row numbers -->
+    <g font-size="10.5" fill="#97A59F" text-anchor="middle">
+      <text x="280" y="192">row 0</text><text x="340" y="192">1</text><text x="400" y="192">2</text><text x="460" y="192">3</text><text x="520" y="192">4</text>
+      <text x="580" y="192">5</text><text x="640" y="192">6</text><text x="700" y="192">7</text><text x="760" y="192">8</text><text x="820" y="192">9</text>
+    </g>
+    <!-- the flat batch: positions -->
+    <rect x="250" y="200" width="60" height="30" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="310" y="200" width="60" height="30" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <rect x="370" y="200" width="60" height="30" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="430" y="200" width="60" height="30" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="490" y="200" width="60" height="30" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="550" y="200" width="60" height="30" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="610" y="200" width="60" height="30" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <rect x="670" y="200" width="60" height="30" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="730" y="200" width="60" height="30" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="790" y="200" width="60" height="30" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <g font-family="JetBrains Mono, monospace" font-size="11.5" text-anchor="middle">
+      <text x="280" y="220">10</text><text x="340" y="220" fill="#7ADACF">11</text><text x="400" y="220">0</text><text x="460" y="220">1</text><text x="520" y="220">2</text>
+      <text x="580" y="220">3</text><text x="640" y="220" fill="#7ADACF">4</text><text x="700" y="220">40</text><text x="760" y="220">41</text><text x="820" y="220" fill="#7ADACF">42</text>
+    </g>
+
+    <!-- query_start_loc ticks and the groups -->
+    <g stroke="#97A59F" stroke-width="1" fill="none">
+      <path d="M250 232 L250 246 M370 232 L370 246 M550 232 L550 246 M850 232 L850 246"/>
+      <path d="M252 246 L368 246 M372 246 L548 246 M552 246 L848 246"/>
+    </g>
+    <g font-size="10.5" fill="#97A59F" text-anchor="middle">
+      <text x="250" y="260">0</text><text x="370" y="260">2</text><text x="550" y="260">7</text><text x="850" y="260">10</text>
+      <text x="310" y="276">s0 · seq_len 12</text><text x="460" y="276">s1 · seq_len 5</text><text x="700" y="276">s2 · seq_len 43</text>
+    </g>
+
+    <!-- what the kernels wrote -->
+    <text x="24" y="306" font-size="11" fill="#97A59F">in the cells: positions = computed[row] + offset in row, written by prepare_pos_seq_lens with seq_lens = computed + scheduled = [12, 5, 43]</text>
+    <text x="24" y="324" font-size="11" fill="#7ADACF">teal: logits_indices = [1, 6, 9], the last row of each request, the rows the engine will sample (combine_sampled_and_draft_tokens)</text>
+    <text x="24" y="342" font-size="11" fill="#97A59F">prepare_prefill_inputs gathers prompt tokens from all_token_ids. combine_sampled_and_draft_tokens writes the last sampled token</text>
+    <text x="24" y="358" font-size="11" fill="#97A59F">and the drafts of each request in decode into input_ids. query_start_loc is the CPU cumulative sum of [2, 5, 3].</text>
+  </g>
+</svg>

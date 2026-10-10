@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="400" viewBox="0 0 880 400" role="img" aria-label="One step with structured output: EngineCore fills the grammar bitmask on the CPU while the GPU runs the forward, the worker applies the bitmask to the logits before sampling, and a row of the bitmask is 4,008 int32 words." style="color: #E4EAE7">
+  <title>One step with structured output: EngineCore fills the grammar bitmask on the CPU while the GPU runs the forward, the worker applies the bitmask to the logits before sampling, and a row of the bitmask is 4,008 int32 words.</title>
+  <rect x="0" y="0" width="880" height="400" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="28" fill="#97A59F">StructuredOutputManager lives in EngineCore. One step, in time, and the shape of the mask it sends to the worker.</text>
+
+    <!-- before the first step -->
+    <rect x="24" y="56" width="256" height="118" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="152" y="78" text-anchor="middle" font-weight="600">before the first step: compile</text>
+    <text x="152" y="96" text-anchor="middle" font-size="11" fill="#97A59F">preprocess_add_request calls grammar_init.</text>
+    <text x="152" y="112" text-anchor="middle" font-size="11" fill="#97A59F">A thread pool compiles the grammar.</text>
+    <text x="152" y="128" text-anchor="middle" font-size="11" fill="#97A59F">The request waits in</text>
+    <text x="152" y="144" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10">WAITING_FOR_STRUCTURED_OUTPUT_GRAMMAR</text>
+    <text x="152" y="162" text-anchor="middle" font-size="11" fill="#97A59F">and the scheduler skips it.</text>
+
+    <!-- lane 1: EngineCore -->
+    <text x="300" y="66" font-size="11" fill="#97A59F">EngineCore, on the CPU</text>
+    <rect x="300" y="72" width="92" height="36" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="346" y="94" text-anchor="middle" font-size="11.5">schedule()</text>
+    <rect x="402" y="72" width="240" height="36" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="522" y="88" text-anchor="middle" font-weight="600">get_grammar_bitmask</text>
+    <text x="522" y="102" text-anchor="middle" font-size="10.5" fill="#7ADACF">fills the packed int32 bitmask</text>
+    <rect x="742" y="72" width="114" height="36" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="799" y="88" text-anchor="middle" font-size="11">update_from_output</text>
+    <text x="799" y="102" text-anchor="middle" font-size="10.5" fill="#97A59F">accept_tokens</text>
+
+    <!-- lane 2: GPU worker -->
+    <text x="300" y="126" font-size="11" fill="#97A59F">GPU worker</text>
+    <rect x="402" y="132" width="240" height="36" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="522" y="154" text-anchor="middle" font-size="11.5">execute_model: the forward</text>
+    <rect x="652" y="132" width="204" height="36" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="754" y="148" text-anchor="middle" font-size="11">sample_tokens: logits,</text>
+    <text x="754" y="162" text-anchor="middle" font-size="10.5" fill="#97A59F">apply_grammar_bitmask, sampler</text>
+
+    <path d="M600 108 L680 132" stroke="#4CC5B7" stroke-width="1.2" fill="none" marker-end="url(#arrA)"/>
+    <text x="690" y="124" font-size="10.5" fill="#7ADACF">grammar_output</text>
+    <path d="M300 184 L856 184" stroke="#97A59F" stroke-width="1" fill="none" marker-end="url(#arr)"/>
+    <text x="300" y="200" font-size="10.5" fill="#97A59F">time, one step. The fill of the bitmask and the forward overlap (EngineCore.step).</text>
+
+    <!-- the mask -->
+    <text x="24" y="228" font-size="11" fill="#97A59F">the bitmask: a row for each structured request and for each speculative position, one bit per vocabulary entry</text>
+    <text x="24" y="256" font-size="11" fill="#97A59F">row 0</text>
+    <g fill="none" stroke="currentColor" stroke-width="1.2">
+      <rect x="80" y="238" width="52" height="26" rx="4"/><rect x="132" y="238" width="52" height="26" rx="4"/><rect x="184" y="238" width="52" height="26" rx="4"/>
+      <rect x="236" y="238" width="52" height="26" rx="4"/><rect x="288" y="238" width="52" height="26" rx="4"/><rect x="340" y="238" width="52" height="26" rx="4"/>
+      <rect x="392" y="238" width="52" height="26" rx="4"/><rect x="444" y="238" width="52" height="26" rx="4"/>
+    </g>
+    <g font-family="JetBrains Mono, monospace" font-size="10.5" text-anchor="middle">
+      <text x="106" y="255">0</text><text x="158" y="255">1</text><text x="210" y="255">2</text><text x="262" y="255">3</text>
+      <text x="314" y="255">4</text><text x="366" y="255">…</text><text x="418" y="255">4,006</text><text x="470" y="255">4,007</text>
+    </g>
+    <text x="512" y="255" font-size="11" fill="#97A59F">int32 words: ceil(128256 / 32) = 4,008, that is 16,032 B per row</text>
+    <text x="24" y="292" font-size="11" fill="#97A59F">row 1</text>
+    <g fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="4 3">
+      <rect x="80" y="274" width="52" height="26" rx="4"/><rect x="132" y="274" width="52" height="26" rx="4"/><rect x="184" y="274" width="52" height="26" rx="4"/>
+      <rect x="236" y="274" width="52" height="26" rx="4"/><rect x="288" y="274" width="52" height="26" rx="4"/><rect x="340" y="274" width="52" height="26" rx="4"/>
+      <rect x="392" y="274" width="52" height="26" rx="4"/><rect x="444" y="274" width="52" height="26" rx="4"/>
+    </g>
+    <text x="512" y="291" font-size="11" fill="#97A59F">256 rows are 4.1 MB, and 1,024 rows are 16.4 MB</text>
+    <text x="24" y="322" font-size="11" fill="#97A59F">…</text>
+
+    <rect x="512" y="306" width="344" height="44" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="684" y="324" text-anchor="middle" font-size="11.5" font-weight="600">the shared-memory chunk of the executor: 24 MiB</text>
+    <text x="684" y="340" text-anchor="middle" font-size="10.5" fill="#97A59F">large enough for the bitmask of a 1,024-request batch (5.1)</text>
+
+    <text x="24" y="372" font-size="11" fill="#97A59F">advance: update_from_output calls accept_tokens. validate_tokens validates the drafts in advance, and an invalid draft</text>
+    <text x="24" y="388" font-size="11" fill="#97A59F">becomes −1, which the rejection sampler always rejects. The backend (xgrammar, guidance, outlines, lm-format-enforcer) is one per engine.</text>
+  </g>
+</svg>
