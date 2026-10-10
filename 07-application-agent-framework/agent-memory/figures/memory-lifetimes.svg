@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="364" viewBox="0 0 880 364" role="img" aria-label="Working memory is the context window of one session and ends with it; long-term memory is typed records that survive across sessions until a TTL or a deletion." style="color: #E4EAE7">
+  <title>Working memory is the context window of one session and ends with it; long-term memory is typed records that survive across sessions until a TTL or a deletion.</title>
+  <rect x="0" y="0" width="880" height="364" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <!-- the time axis and the sessions -->
+    <text x="271" y="24" text-anchor="middle" font-weight="600">session 1</text>
+    <text x="497" y="24" text-anchor="middle" font-weight="600">session 2</text>
+    <text x="622" y="24" text-anchor="middle" fill="#97A59F">…</text>
+    <text x="747" y="24" text-anchor="middle" font-weight="600">session n</text>
+    <text x="858" y="24" text-anchor="end" font-size="11" fill="#97A59F">time</text>
+    <path d="M170 36 L862 36" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <g stroke="#97A59F" stroke-width="1">
+      <path d="M170 31 L170 41"/><path d="M372 31 L372 41"/><path d="M396 31 L396 41"/><path d="M598 31 L598 41"/><path d="M646 31 L646 41"/><path d="M848 31 L848 41"/>
+    </g>
+
+    <!-- row 1: working memory, the transcript of one session -->
+    <text x="24" y="100" font-weight="600">Working memory</text>
+    <text x="24" y="118" font-size="11.5" fill="#97A59F">the context window</text>
+    <text x="24" y="134" font-size="11.5" fill="#97A59F">the transcript, sent again</text>
+    <text x="24" y="150" font-size="11.5" fill="#97A59F">at each turn</text>
+    <g fill="none" stroke="currentColor" stroke-width="1.2">
+      <rect x="186" y="138" width="26" height="14" rx="2"/><rect x="222" y="126" width="26" height="26" rx="2"/><rect x="258" y="114" width="26" height="38" rx="2"/><rect x="294" y="102" width="26" height="50" rx="2"/><rect x="330" y="90" width="26" height="62" rx="2"/>
+      <rect x="412" y="138" width="26" height="14" rx="2"/><rect x="448" y="126" width="26" height="26" rx="2"/><rect x="484" y="114" width="26" height="38" rx="2"/><rect x="520" y="102" width="26" height="50" rx="2"/><rect x="556" y="90" width="26" height="62" rx="2"/>
+      <rect x="662" y="138" width="26" height="14" rx="2"/><rect x="698" y="126" width="26" height="26" rx="2"/><rect x="734" y="114" width="26" height="38" rx="2"/><rect x="770" y="102" width="26" height="50" rx="2"/><rect x="806" y="90" width="26" height="62" rx="2"/>
+    </g>
+    <g stroke="#97A59F" stroke-width="1" stroke-dasharray="4 3" fill="none">
+      <path d="M372 84 L372 160"/><path d="M598 84 L598 160"/><path d="M848 84 L848 160"/>
+    </g>
+    <text x="378" y="94" font-size="11" fill="#97A59F">ends with the session</text>
+
+    <!-- row 2: long-term memory, typed records across sessions -->
+    <rect x="160" y="190" width="704" height="146" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="512" y="204" text-anchor="middle" fill="#97A59F">long-term memory: one typed record per memory, <tspan font-family="JetBrains Mono, monospace" font-size="11">MemoryRecord</tspan></text>
+
+    <text x="24" y="224" font-weight="600">episodic</text>
+    <text x="24" y="238" font-size="11" fill="#97A59F">a timestamped turn</text>
+    <g fill="none" stroke="currentColor" stroke-width="1.2">
+      <rect x="186" y="212" width="26" height="22" rx="2"/><rect x="222" y="212" width="26" height="22" rx="2"/><rect x="258" y="212" width="26" height="22" rx="2"/><rect x="294" y="212" width="26" height="22" rx="2"/><rect x="330" y="212" width="26" height="22" rx="2"/>
+      <rect x="412" y="212" width="26" height="22" rx="2"/><rect x="448" y="212" width="26" height="22" rx="2"/><rect x="484" y="212" width="26" height="22" rx="2"/><rect x="520" y="212" width="26" height="22" rx="2"/><rect x="556" y="212" width="26" height="22" rx="2"/>
+      <rect x="662" y="212" width="26" height="22" rx="2"/><rect x="698" y="212" width="26" height="22" rx="2"/><rect x="734" y="212" width="26" height="22" rx="2"/><rect x="770" y="212" width="26" height="22" rx="2"/><rect x="806" y="212" width="26" height="22" rx="2"/>
+    </g>
+
+    <text x="24" y="262" font-weight="600">semantic</text>
+    <text x="24" y="276" font-size="11" fill="#97A59F">a distilled fact</text>
+    <rect x="222" y="250" width="262" height="24" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4" stroke-dasharray="4 3"/>
+    <text x="353" y="266" text-anchor="middle" font-size="11.5" fill="#7ADACF">The user's home city is Lisbon.</text>
+    <rect x="484" y="250" width="364" height="24" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="666" y="266" text-anchor="middle" font-size="11.5" fill="#7ADACF">The user's home city is Porto.</text>
+    <text x="484" y="289" text-anchor="middle" font-size="11" fill="#97A59F">a new value closes the old fact (valid_to), and the store keeps it</text>
+
+    <text x="24" y="312" font-weight="600">procedural</text>
+    <text x="24" y="326" font-size="11" fill="#97A59F">how to act for this user</text>
+    <rect x="258" y="300" width="590" height="24" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="553" y="316" text-anchor="middle" font-size="11.5" fill="#97A59F">a standing preference</text>
+
+    <path d="M848 206 L848 330" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="4 3"/>
+    <text x="848" y="353" text-anchor="end" font-size="11" fill="#97A59F">each record ends at its TTL (<tspan font-family="JetBrains Mono, monospace">ttl_s</tspan>) or at a deletion (<tspan font-family="JetBrains Mono, monospace">deletion_key</tspan>)</text>
+
+    <!-- the two paths between the rows -->
+    <path d="M235 156 L235 208" fill="none" stroke="#97A59F" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#arr)"/>
+    <text x="243" y="186" font-size="11" fill="#97A59F">written after the turn (§2)</text>
+    <path d="M840 248 L840 158" fill="none" stroke="#4CC5B7" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#arrA)"/>
+    <text x="832" y="186" text-anchor="end" font-size="11" fill="#7ADACF">retrieved per turn, in a token budget (§3)</text>
+  </g>
+</svg>
