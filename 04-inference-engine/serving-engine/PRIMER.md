@@ -33,6 +33,19 @@ server on Cloud Run or GKE (T3).
 
 An engine is **a loop around one forward pass**.
 
+```mermaid
+flowchart TB
+  S["schedule()<br/>the token budget: running first, then waiting"] --> B["build_batch()<br/>one flat batch, no padding"]
+  B --> F["forward<br/>one pass, the weights read once"]
+  F --> P["sample<br/>one token per complete prompt"]
+  P --> U["update()<br/>append the tokens, finish, free blocks"]
+  U -->|"next step"| S
+  S -.->|"allocate blocks,<br/>publish full blocks"| K[("KV cache manager<br/>the block pool")]
+  K -.->|"block tables, slots"| F
+```
+
+*The engine is a loop around one forward pass, and the figure shows one step (§1). `schedule()` gives out the token budget and allocates the blocks. `build_batch()` flattens the scheduled tokens into one batch with no padding. One forward pass reads the weights once for all requests and reads each history through its block table. The sampler draws one token for each request whose prompt is complete. `update()` appends the tokens and frees the blocks of finished requests, and the next step starts.*
+
 - In each step, the **scheduler** gives out a token budget (`max_num_batched_tokens`). The requests that already run
   come first: one token each for a decode, and a chunk for a prefill that is not complete. Then the requests that
   wait get tokens, while budget, sequence slots and **KV blocks** are available.
@@ -125,6 +138,10 @@ step. A finished request leaves immediately, and a request that waits takes its 
 [2, 9, 3, 4] and two slots, static batching takes 13 steps at 69% slot utilisation. Continuous batching takes 9 steps
 at 100%.
 
+![Four requests with output lengths 2, 9, 3 and 4 in two slots: static batching takes 13 steps and continuous batching takes 9.](figures/continuous-batching-steps.svg)
+
+*The four requests have output lengths [2, 9, 3, 4], and there are two slots. Static batching runs each batch until its longest request finishes, and the other slot is idle: 13 steps at 69% slot utilisation. Continuous batching gives the slot of a finished request to the next request in the next step: 9 steps at 100%. Notebook 01 counts both with `static_steps` and `continuous_steps`.*
+
 For 64 requests with lengths uniform in 10–400 and 8 slots, the counts are 2,842 against 1,812 steps. That is 1.57×
 the throughput from scheduling alone (notebook 01, `static_steps` / `continuous_steps`).
 
@@ -210,6 +227,10 @@ an 8,000-token prompt runs in one step, each request that decodes in the same st
 that serves Qwen2.5-1.5B to 16 users at 1K context: their 16.7 ms token gap becomes **367 ms** (SIMULATED, notebook
 02). That stutter is prefill/decode interference.
 
+![An 8,000-token prompt in one step makes the token gap 367 ms, and 17 chunks of 496 tokens keep the worst gap at 29.6 ms.](figures/chunked-prefill-interference.svg)
+
+*An L4 serves Qwen2.5-1.5B to 16 users at 1K context (SIMULATED, notebook 02). In the top row, an 8,000-token prompt runs in one step, and the token gap of the 16 users becomes 367 ms. In the bottom row, the budget is 512. Each step runs the 16 decodes first and then a 496-token chunk, and the worst gap is 29.6 ms. The figure is not to scale.*
+
 **Chunked prefill** (Sarathi-Serve's "stall-free batching", OSDI 2024) keeps each step at or below the budget, and
 it schedules decodes first. The prompt gets the rest of the budget, over as many steps as necessary. With a 512-token
 budget, the same prompt runs in 17 chunks of 496, and the worst gap is **29.6 ms**. The TTFT of the prompt itself
@@ -293,6 +314,10 @@ $$
 
 - L4 (24 GB) × 0.9 − 16.06 GB (Llama-3.1-8B bf16) − 1 GB = 4.54 GB / (16 × 128 KiB = 2 MiB) = 2,164 blocks
 - H100 (80 GB), same model = 26,197 blocks
+
+![The 24 GB of an L4 for Llama-3.1-8B in bf16: the weights, a flat 1 GB, and a 4.54 GB KV cache of 2,164 blocks.](figures/kv-pool-sizing.svg)
+
+*The figure shows where the 24 GB of an L4 go for Llama-3.1-8B in bf16, with the core's inputs (`perf.kv_cache_blocks()`). The weights take 16.06 GB, and a flat 1 GB goes to activations and workspace. The rest under `gpu_memory_utilization` = 0.9 is the KV cache: 4.54 GB, or 2,164 blocks of 16 tokens. The blocks set the limit on concurrency (§2).*
 
 Those are the core's round inputs (`perf.kv_cache_blocks()`), and each simulated number in this primer uses them.
 vLLM v0.30.0 starts from different inputs. The lab's `sizing.size()` models them from a real `config.json`:
@@ -380,6 +405,10 @@ KV, a smaller model, higher utilisation), fewer concurrent sequences, or more re
 
 Two requests whose prompts start with the same tokens compute identical K/V for that prefix. The cause is that the
 K/V of a token depend only on the tokens before it. Prefix caching computes that K/V only once.
+
+![Two identical 20-token prompts with block size 4: request 2 hits the four blocks that request 1 named and computes the last block itself.](figures/prefix-cache-hash-chain.svg)
+
+*The figure shows two identical 20-token prompts with $B$ = 4 (§5). Request 1 computes all 20 tokens, and the engine names each full block with a hash chained through the name of its parent. Request 2 goes along the chain until the first miss and adopts each hit: four blocks, 16 tokens. The engine computes the last block again, because it must compute the last token to get logits.*
 
 **Block names.** The engine caches only **full** blocks. The name of a full block is
 
@@ -552,6 +581,10 @@ Validate the values downstream. Monitor the logprobs of constrained fields.
 
 Because decode is memory-bound (§3), the score of $k$ + 1 positions costs approximately the same as the score of
 one position. Thus let a low-cost **proposer** make $k$ draft tokens, and let the target examine them all in one pass.
+
+![One round of speculative decoding with four draft tokens: one target pass scores them, and the engine accepts them in order until the first rejection.](figures/speculative-decoding-round.svg)
+
+*The figure shows one round with $k$ = 4 (§7). The proposer makes four draft tokens, one after the other. The target scores all $k$ + 1 positions in one pass. In order, the engine accepts each draft token with probability $\min(1, p(x) / q(x))$. At the first rejection, it emits a recovered token from the normalised residual and stops. With $\alpha$ = 0.8, one pass emits 3.36 tokens on average.*
 
 ### Exact rejection sampling
 
@@ -762,6 +795,10 @@ tensor and expert parallelism inside the NVLink domain, and pipeline and data pa
 each collective is in [cuda-and-nccl §5](../../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md) and in
 [roofline-and-fabric §5](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md). This section tells what the
 engine does.
+
+![One layer under tensor parallelism with TP = 2: column-parallel matmuls need no communication, row-parallel matmuls give partial sums, and two all-reduces restore the activation.](figures/tensor-parallel-layer.svg)
+
+*The figure shows one layer under tensor parallelism with TP = 2 (§9). A column-parallel matmul (QKV, gate/up) gives each GPU a slice of the output features with no communication. A row-parallel matmul (the output projection, the down projection) gives a partial sum, and one all-reduce restores the full activation. Thus each layer does two all-reduces per forward pass (`perf.tp_allreduces()`).*
 
 **Tensor parallelism (TP)** divides every layer. The Megatron pattern pairs a *column-parallel* matmul with a
 *row-parallel* one:
