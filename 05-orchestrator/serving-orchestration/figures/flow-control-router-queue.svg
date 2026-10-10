@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="410" viewBox="0 0 900 410" role="img" aria-label="Requests from the gateway wait in the router queue by priority band, the concurrency-detector sends one to an endpoint only when that endpoint is under its cap, and the router sheds requests after their TTL or when the queue is full." style="color: #E4EAE7">
+  <title>Requests from the gateway wait in the router queue by priority band, the concurrency-detector sends one to an endpoint only when that endpoint is under its cap, and the router sheds requests after their TTL or when the queue is full.</title>
+  <rect x="0" y="0" width="900" height="410" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <!-- the gateway -->
+    <rect x="24" y="130" width="150" height="76" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="99" y="156" text-anchor="middle" font-weight="600">Gateway (06)</text>
+    <text x="99" y="174" text-anchor="middle" font-size="11.5" fill="#97A59F">requests with a fairness id</text>
+    <text x="99" y="190" text-anchor="middle" font-size="11.5" fill="#97A59F">and a priority</text>
+    <!-- the router group -->
+    <rect x="204" y="40" width="400" height="338" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="404" y="62" text-anchor="middle" fill="#97A59F">llm-d EPP flow control (the router)</text>
+    <!-- the queue -->
+    <rect x="228" y="78" width="352" height="140" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="404" y="100" text-anchor="middle" font-weight="600">Router queue</text>
+    <text x="404" y="117" text-anchor="middle" font-size="11.5" fill="#7ADACF">highest priority first, FCFS within a band</text>
+    <rect x="244" y="128" width="320" height="28" rx="4" fill="none" stroke="#7ADACF" stroke-width="1"/>
+    <text x="404" y="146" text-anchor="middle" font-size="11.5">priority 1 band: interactive chat, served first</text>
+    <rect x="244" y="162" width="320" height="28" rx="4" fill="none" stroke="#7ADACF" stroke-width="1"/>
+    <text x="404" y="180" text-anchor="middle" font-size="11.5">priority 0 band: batch RAG burst, waits</text>
+    <text x="404" y="207" text-anchor="middle" font-size="11" fill="#97A59F">bounds: maxRequests, maxBytes · expiry: defaultRequestTTL</text>
+    <!-- the saturation detector -->
+    <rect x="306" y="244" width="274" height="72" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="443" y="266" text-anchor="middle" font-weight="600">Saturation detector</text>
+    <text x="443" y="284" text-anchor="middle" font-size="11" fill="#97A59F">concurrency-detector: maxConcurrency,</text>
+    <text x="443" y="300" text-anchor="middle" font-size="11" fill="#97A59F">a cap per endpoint on requests in flight</text>
+    <!-- shed -->
+    <rect x="228" y="332" width="352" height="36" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="404" y="354" text-anchor="middle" font-weight="600">shed: TTL expired, or the queue is full</text>
+    <!-- the endpoints -->
+    <rect x="660" y="40" width="216" height="338" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="768" y="62" text-anchor="middle" fill="#97A59F">endpoints (model-server pods)</text>
+    <rect x="680" y="84" width="176" height="46" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="768" y="103" text-anchor="middle" font-weight="600">endpoint 1</text>
+    <text x="768" y="121" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">in flight &lt; cap</text>
+    <rect x="680" y="146" width="176" height="46" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="768" y="165" text-anchor="middle" font-weight="600">endpoint 2</text>
+    <text x="768" y="183" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">in flight &lt; cap</text>
+    <rect x="680" y="208" width="176" height="46" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="768" y="227" text-anchor="middle" font-weight="600">endpoint 3</text>
+    <text x="768" y="245" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">in flight &lt; cap</text>
+    <rect x="680" y="270" width="176" height="46" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="768" y="289" text-anchor="middle" font-weight="600">endpoint 4</text>
+    <text x="768" y="307" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">in flight &lt; cap</text>
+    <!-- edges -->
+    <g stroke="#97A59F" stroke-width="1.2" fill="none">
+      <path d="M174 168 L226 168" marker-end="url(#arr)"/>
+      <path d="M443 218 L443 242" marker-end="url(#arr)"/>
+      <path d="M580 302 L658 302" marker-end="url(#arr)"/>
+      <path d="M658 278 L582 278" marker-end="url(#arr)" stroke-dasharray="4 3"/>
+      <path d="M244 218 L244 330" marker-end="url(#arr)" stroke-dasharray="4 3"/>
+      <path d="M228 350 L99 350 L99 208" marker-end="url(#arr)"/>
+    </g>
+    <text x="200" y="160" text-anchor="middle" font-size="11" fill="#97A59F">arrive</text>
+    <text x="451" y="236" font-size="11" fill="#97A59F">head of the queue</text>
+    <text x="620" y="252" text-anchor="middle" font-size="11" fill="#97A59F">in flight</text>
+    <text x="620" y="265" text-anchor="middle" font-size="11" fill="#97A59F">per endpoint</text>
+    <text x="620" y="318" text-anchor="middle" font-size="11" fill="#97A59F">dispatch</text>
+    <text x="262" y="268" font-size="11" fill="#97A59F">TTL expired,</text>
+    <text x="262" y="282" font-size="11" fill="#97A59F">queue full</text>
+    <text x="108" y="286" font-size="11" fill="#97A59F">429 or 503,</text>
+    <text x="108" y="302" font-size="11" fill="#97A59F">Retry-After</text>
+    <text x="450" y="398" text-anchor="middle" font-size="11" fill="#97A59F">Four endpoints with a cap of 8 hold 32 requests. Little's law gives the size of the cap (§3.1).</text>
+  </g>
+</svg>
