@@ -161,8 +161,9 @@ print("✅ the bucket admits", f"{pred:.1f}x", "the tokens it thinks it admits -
 # %% [markdown]
 # ## Worked example: the noisy neighbour
 #
-# Two tenants share a provider that permits 6,000 tokens per minute. The global bucket of the gateway has a size that
-# matches the provider: 3,000 per minute. Thus the burst plus the refill over one window equals 6,000.
+# Two tenants share a provider that permits 6,000 tokens per minute. The global bucket of the gateway has a size of
+# 3,000 per minute. Thus the burst plus the refill over one window equals 6,000, and the bucket matches the limit of
+# the provider.
 #
 # `team-a` sends a flood at several times its share. `team-b` sends a small, steady flow. With only the global
 # bucket, team-a empties it, and the gateway refuses the requests of team-b too. With a bucket for each tenant
@@ -183,7 +184,8 @@ for label, tenant_tpm in (("one shared bucket", 10**9), ("a bucket per tenant", 
 #
 # A client that walks away during the stream never gets the usage chunk. The spec of OpenAI says so. The
 # gateway stops the upstream and writes the row from what it relayed. It counts one token for each content chunk,
-# and it marks the row as an estimate. A bill of 0 for this row makes "disconnect just before the end" a free lunch.
+# and it marks the row as an estimate. A bill of 0 for this row makes "disconnect just before the end" a way to get
+# the tokens at no cost.
 
 # %%
 s_r = runs["reserve"][0]
@@ -207,7 +209,7 @@ print("rows billed from an estimate:", sum(r["usage_source"] == "estimate" for r
 # The check calculates the price of every row of the earlier runs with the model that served the row. It compares
 # each price with the ledger. Then it prices the §3.4 call of the scaling primer (5,000 in, 2,700 cached, 350 out on
 # `gemini-3.5-flash`: $0.007005). After that, it prices the §1.5 call of the primer. This is the same call plus
-# 1,200 thinking tokens, reported in the shape of Anthropic (normalise it first).
+# 1,200 thinking tokens, reported in the shape of Anthropic. Normalise this usage first.
 
 # %% exercise
 def price(row: dict, p) -> float:

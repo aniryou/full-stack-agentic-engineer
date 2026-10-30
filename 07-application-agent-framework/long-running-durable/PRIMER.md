@@ -49,9 +49,10 @@ If you ask Gemini the same question two times, it is possible that you get diffe
 
 ```mermaid
 stateDiagram-v2
+    direction LR
     [*] --> PENDING
     PENDING --> RUNNING: first wake-up
-    RUNNING --> RUNNING: step (LLM → tool → checkpoint)
+    RUNNING --> RUNNING: step
     RUNNING --> WAITING_HUMAN: tool requires approval
     RUNNING --> WAITING_EVENT: async tool returned a ticket
     WAITING_HUMAN --> RUNNING: approve / reject
@@ -61,6 +62,8 @@ stateDiagram-v2
     RUNNING --> SUCCEEDED: final answer
     RUNNING --> FAILED: budget / unrecoverable error
 ```
+
+*This figure shows the states of a run. In `RUNNING`, one step is an LLM call, then a tool call, then a checkpoint. A run in `WAITING_HUMAN` or `WAITING_EVENT` goes back to `RUNNING`, or it goes to `FAILED` after a timeout or a deadline.*
 
 A **run** is a document with these fields:
 
@@ -142,17 +145,26 @@ For each pattern, this section gives the problem, the shape, the mapping to GCP,
 
 ```mermaid
 flowchart LR
-  Q[(Cloud Tasks<br/>task run-step-N)] -->|POST /internal/tasks/step<br/>OIDC token| H[Cloud Run]
+  Q[(Cloud Tasks<br/>task run-step-N)] -->|POST<br/>/internal/tasks/step<br/>OIDC token| H[Cloud Run]
   H --> L[lease]
   L --> R{pending<br/>STARTED?}
   R -- yes --> X[execute under<br/>same key]
   R -- no --> M[Gemini decides]
-  M -- tool --> I[journal intent<br/>save #1]
-  I --> X
+```
+
+*This figure shows the start of one wake-up in P1. Cloud Tasks sends the named task to Cloud Run, and the handler takes the lease. If the journal has a STARTED intent with no result, the handler executes that call under the same key (next figure).*
+
+```mermaid
+flowchart LR
+  M[Gemini decides] -- tool --> I[journal intent<br/>save #1]
+  I --> X[execute under<br/>same key]
   X --> C[save #2]
-  C --> N[enqueue run-step-N+1]
+  C --> N[enqueue<br/>run-step-N+1]
   M -- final --> D[SUCCEEDED]
 ```
+
+*This figure shows the rest of the wake-up when the journal has no STARTED intent. For a tool call, the handler writes the intent to the journal (save #1), executes the call and saves the result (save #2). For a final answer, the run goes to `SUCCEEDED`.*
+
 **Failure modes and their mitigations:**
 
 - A crash after the side effect: the effect record and the idempotency key.
@@ -172,20 +184,7 @@ The flow has these steps:
 5. *The write that reaches N* enqueues the named `aggregate` task.
 6. A synthesis LLM combines the results.
 
-```mermaid
-flowchart TB
-  PL["1. a planner LLM<br/>makes N subtasks"] --> Q["2. a Pub/Sub topic,<br/>or N Cloud Tasks"]
-  Q --> W1["3. an idempotent worker"]
-  Q --> W2["3. an idempotent worker"]
-  Q --> W3["3. an idempotent worker,<br/>N of them"]
-  W1 --> C
-  W2 --> C
-  W3 --> C
-  C[("4. the run document:<br/>a transactional counter,<br/>the side effects outside<br/>the transaction")]
-  C -->|"5. the write that reaches N"| A[["the named aggregate task,<br/>also from a late duplicate<br/>that sees all_done"]]
-  A --> S["6. a synthesis LLM<br/>combines the results"]
-  C -.->|"N > ~50 writers"| H["the writes contend<br/>(~1 write/s): one document<br/>for each subtask and<br/>a count query, or<br/>Cloud Workflows parallel"]
-```
+![The six steps of P2: a planner LLM, a Pub/Sub topic, N idempotent workers, the counter on the run document, the named aggregate task and a synthesis LLM.](figures/fan-out-fan-in.svg)
 
 *This figure shows the six steps of P2. Each worker updates the counter in a transaction, and the side effects stay outside the transaction. The write that reaches N enqueues the named `aggregate` task. A late duplicate also sees `all_done` and enqueues the same task, and Cloud Tasks rejects the second enqueue by its name.*
 
@@ -262,15 +261,15 @@ Rigid sequences are exactly the work that probabilistic models do incorrectly af
 The numbers are from a check on 5 Sep 2026. Do a new check before you depend on them (see the "Verify" list at the end).
 
 ```mermaid
-flowchart TB
-  SCH["Cloud Scheduler: the clock<br/>at-least-once, it can<br/>send a tick two times"] --> PS["Pub/Sub: fan-out, events<br/>at-least-once, the ack<br/>deadline is 10–600 s<br/>exactly-once delivery:<br/>pull subscriptions only"]
+flowchart LR
+  SCH["Cloud Scheduler:<br/>the clock"] --> PS["Pub/Sub:<br/>fan-out, events"]
   EXT["webhooks,<br/>Eventarc events,<br/>a person behind IAP"] --> CR
-  PS --> CR["Cloud Run service:<br/>the trigger<br/>HTTP handlers for steps,<br/>approvals, callbacks<br/>and Pub/Sub push<br/>request timeout:<br/>5 min by default,<br/>maximum 60 min<br/>instances scale to zero"]
-  CR <--> CT[("Cloud Tasks: wake run X<br/>for step N, not before T<br/>at-least-once, named<br/>tasks de-duplicated<br/>(~1 h–24 h)<br/>schedule_time up to<br/>30 days ahead<br/>500 dispatches/s<br/>for each queue")]
-  CR --> FS[("Firestore: run<br/>documents, keys,<br/>leases, transactions<br/>a document is ≤ 1 MiB<br/>~1 write/s for each<br/>document at the most")]
+  PS --> CR["Cloud Run service:<br/>the trigger,<br/>60-min request timeout"]
+  CR <--> CT[("Cloud Tasks:<br/>wake run X for step N,<br/>up to 30 days ahead")]
+  CR --> FS[("Firestore:<br/>run documents, leases,<br/>a document is ≤ 1 MiB")]
   CR --> GM["Gemini on<br/>Vertex AI"]
-  CR --> JOB[["Cloud Run job<br/>for one long step:<br/>up to 168 h (7 days)<br/>for each attempt"]]
-  WF["Cloud Workflows: managed<br/>durable orchestration<br/>that calls the endpoints<br/>an execution runs or<br/>waits up to 1 year<br/>await_callback has a<br/>default timeout of 12 h"] -.-> CR
+  CR --> JOB[["Cloud Run job:<br/>one long step,<br/>up to 168 h"]]
+  WF["Cloud Workflows:<br/>managed orchestration,<br/>execution up to 1 year"] -.-> CR
 ```
 
 *This figure shows the path of one wake-up through the services of the table. The boxes carry the limits that decide the design (§5.1): the 60-min request timeout, the 30-day `schedule_time`, the 1-year Workflows execution, the 1 MiB document. The dotted edge is the managed alternative, Cloud Workflows (§6 B).*

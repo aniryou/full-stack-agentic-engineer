@@ -9,9 +9,10 @@
 # ## The one-minute version
 #
 # **Guardrails** (PRIMER §7). The position of a check decides its cost and what it can stop. An input check adds
-# latency before the first token (inline), or only when it is slower than the TTFT of the model (parallel). In the
-# parallel placement, the gateway holds the first byte until the check passes. An output check on a stream trades
-# latency against leakage. It has four placements:
+# latency before the first token (inline). In the parallel placement, the input check adds latency only when it is
+# slower than the TTFT of the model. In this placement, the gateway holds the first byte until the check passes.
+#
+# An output check on a stream trades latency against leakage. It has four placements:
 #
 # - Hold the whole answer (`full`).
 # - Hold windows of $W$ tokens (`window`: adds about $(W - 1) \times \text{ITL} + \text{check}$ to TTFT).
@@ -26,18 +27,18 @@
 #
 # PRIMER §6.5 and the identity primer §3.3–3.5 cover the workload identity of the gateway itself. This identity is
 # a SPIFFE SVID from the Workload API. The SVID rotates at half its lifetime, ±10 % of the half-life. This rule
-# gives 27–33 minutes left on a 1-hour SVID, and about 32 in practice, because each check draws the jitter again. The fake
-# Workload API for this identity lives in the core.
+# gives 27–33 minutes left on a 1-hour SVID, and about 32 in practice, because each check draws the jitter again.
+# The fake Workload API for this identity lives in the core.
 #
 # **MCP** (PRIMER §8). When agents reach MCP servers through the gateway, the gateway is the OAuth client. The
 # gateway does these things:
 #
-# - It finds the authorization server from the 401 of the MCP server.
+# - It does discovery of the authorization server from the 401 of the MCP server.
 # - It registers with a Client ID Metadata Document.
 # - It runs PKCE S256 with `resource` in both requests.
 # - It keeps a token per (principal, resource, scopes).
 # - It does a step-up on a 403 `insufficient_scope`.
-# - It rotates refresh tokens (a replayed refresh token revokes the whole grant).
+# - It rotates refresh tokens. A replayed refresh token revokes the whole grant.
 # - It answers DPoP nonce challenges (RFC 9449 §8 at the authorization server, §9 at the resource server). These
 #   challenges are not part of the MCP spec.
 

@@ -70,7 +70,7 @@ print("(arrivals stop at t = 600 s; each run goes on until its admitted streams 
 # and it still meets the tail.
 #
 # If you reserve the cap, the result is exact, but it wastes three quarters of the budget. If you reserve an estimate and
-# reconcile, the limiter serves 70 % with no second over the limit *in this run*. All of the experiment models a provider that
+# reconcile, the limiter serves 70 % with no second over the limit *in this run*. The full experiment models a provider that
 # counts tokens when it processes them. A hosted API that charges the requested `max_tokens` at admission needs a
 # reservation that matches what the gateway sends upstream (PRIMER §4.2, verify).
 #
@@ -94,7 +94,7 @@ print(f"self-hosted H100 Spot, 6,846.5 tok/s: ${metering.self_hosted_per_million
 # The prompts of a route are 800 tokens. The outputs of today are lognormal, median 200, $\sigma = 1.2$, and they set
 # the size of the constant estimate that the bucket charges. The outputs of a new model are lognormal with median 2,000
 # and $\sigma = 1.2$. When the bucket binds, it lets through more tokens than the
-# estimate that set its size. Set `ratio` to the tokens that it lets through, divided by the tokens of that estimate.
+# estimate that sets the size of the bucket. Set `ratio` to the tokens that it lets through, divided by the tokens of that estimate.
 # Use the lognormal mean $\text{median} \cdot \exp(\sigma^2/2)$.
 
 # %% exercise

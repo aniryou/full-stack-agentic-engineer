@@ -36,7 +36,7 @@ aliases:
 ```
 
 The service of the 04 lab is private. From a laptop, `gcloud run services proxy` adds your identity to each request.
-The gateway then talks to `127.0.0.1`. The alternative for a gateway that runs on Google Cloud is a Google-signed
+If you use the proxy, the gateway talks to `127.0.0.1`. The alternative for a gateway that runs on Google Cloud is a Google-signed
 ID token whose audience is the service URL (verify). The provider credential of this lab is a static key. Thus the ID-token
 path is a follow-up, and the lab does not implement it.
 

@@ -466,24 +466,30 @@ The pipeline has these steps:
 In most pipelines, rerankers give a large gain in quality at the lowest cost. Late interaction is the middle ground where the rerank latency is too high.
 
 ```mermaid
-flowchart TB
-  Q([a user query]) --> T["the query side:<br/>the exact prefix or<br/>instruction template,<br/>then optional rewrites:<br/>decompose, multi-query,<br/>step-back, HyDE"]
-  Q --> X["metadata extraction:<br/>dates, product names,<br/>document types"]
-  X --> FL["structured filters"]
-  CH[("the index: chunks with<br/>the heading path,<br/>small chunks and<br/>their parent sections")]
-  T --> DE["dense retriever:<br/>embed the query, then<br/>search the chunk vectors<br/>(dense_scores)"]
-  T --> BM["BM25 (bm25_scores),<br/>optionally plus<br/>learned sparse"]
+flowchart LR
+  Q([a user query]) --> T["the query side:<br/>prefix template,<br/>optional rewrites"]
+  Q --> X["metadata<br/>extraction"]
+  X --> FL["structured<br/>filters"]
+  CH[("the index:<br/>chunks")]
+  T --> DE["dense<br/>retriever"]
+  T --> BM["BM25, optionally<br/>learned sparse"]
   CH -.-> DE
   CH -.-> BM
   FL -.-> DE
   FL -.-> BM
-  DE -->|"top-50–200"| RRF["Reciprocal Rank Fusion<br/>(rrf, k = 60)"]
-  BM -->|"top-50–200"| RRF
-  RRF --> RE["cross-encoder reranker,<br/>or an LLM listwise<br/>reranker for the top-20"]
-  RE -->|"the top 5–10,<br/>optionally MMR for diversity"| LLM([the LLM])
 ```
 
-*This figure shows the hybrid pipeline of section 15: the query gets its prefix template and optional rewrites, and the extracted metadata becomes filters. A dense retriever and BM25 each return their top-50–200, and Reciprocal Rank Fusion combines the two lists. A cross-encoder reranks the combined list, and the top 5–10 go to the LLM. Notebook 05 of the lab builds the BM25, dense and fusion steps with `bm25_scores`, `dense_scores` and `rrf`.*
+*This figure shows the first half of the hybrid pipeline of section 15. The query gets its prefix template and optional rewrites, and the extracted metadata becomes filters. A dense retriever and BM25 use the query, the filters and the index of chunks.*
+
+```mermaid
+flowchart LR
+  DE["dense<br/>retriever"] -->|"top-50–200"| RRF["Reciprocal<br/>Rank Fusion"]
+  BM["BM25, optionally<br/>learned sparse"] -->|"top-50–200"| RRF
+  RRF --> RE["cross-encoder reranker,<br/>or an LLM listwise<br/>reranker for the top-20"]
+  RE -->|"top 5–10,<br/>optional MMR"| LLM([the LLM])
+```
+
+*In the second half of the pipeline, a dense retriever and BM25 each return their top-50–200, and Reciprocal Rank Fusion combines the two lists. A cross-encoder reranks the combined list, and the top 5–10 go to the LLM. Notebook 05 of the lab builds the BM25, dense and fusion steps with `bm25_scores`, `dense_scores` and `rrf`.*
 
 ### Known failure modes of dense retrieval — and what to do
 

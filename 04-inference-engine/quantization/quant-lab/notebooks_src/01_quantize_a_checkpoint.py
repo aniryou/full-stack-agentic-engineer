@@ -202,7 +202,7 @@ for key in ("W4A16 (rtn)", "W4A16-g32 (rtn)"):
 # At g32, a few of the small weights are just above half a step of their (smaller) group scale. These
 # weights round *up* to one step instead of down to zero. Each of them is still ~90% incorrect, and now its sign
 # is opposite to the sign of the deleted weights around it. Each of them multiplies an input ~24x the typical one
-# inside q/k. The error of q/k goes through the softmax. If you force those few codes back to zero, g32
+# inside q/k, and the error of q/k goes through the softmax. If you force those few codes back to zero, g32
 # matches g128 exactly.
 #
 # Thus the ranking comes from the planted construction only. The massive-activation columns of a real model are
@@ -337,8 +337,8 @@ else:
 # "For INT4 we use GPTQ with calibration data from our own traffic. The reason is that round-to-nearest loses
 # the weight columns that meet our largest activations. On the lab's model, RTN leaves 11% error on the q
 # projection, and GPTQ leaves under 2%. The LM head and the embeddings stay bf16. Thus the checkpoint is ~3x
-# smaller, not 4x. Before we start, we make sure that the input width of every projection divides the group
-# size."
+# smaller, not 4x. Before we start, we make sure that the group size divides the input width of every
+# projection."
 #
 # **Drill 1.** *Why does `FP8_DYNAMIC` need no calibration data but `W4A16` with GPTQ does?* FP8 dynamic
 # calculates the weight scales from the weights, and it calculates the activation scales per token at run time.

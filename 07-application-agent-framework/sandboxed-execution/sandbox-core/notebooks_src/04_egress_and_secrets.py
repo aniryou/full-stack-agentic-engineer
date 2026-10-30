@@ -11,7 +11,7 @@
 # allowlist, it **injects the credential** on the way out.
 #
 # The secret lives only in the proxy. This is the same "gateway path" that the identity primer describes, one layer
-# down. On that path, the agent never sees the raw credential. The proxy is also the header-injection pattern that managed services like
+# down. On that path, the agent never sees the raw credential. This design is also the header-injection pattern that managed services like
 # E2B use on the host side.
 #
 # To keep the secret there, the proxy must also do these things:

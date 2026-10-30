@@ -68,7 +68,7 @@ for task in tm.TASKS:
 #
 # The model is also easy to compensate. Its inputs come from a 16-token vocabulary through 128-wide layers. Thus
 # they are low-rank, and GPTQ can move almost all of the rounding error of each column onto the other columns.
-# Thus INT4 GPTQ looks as near to BF16 as FP8 or W8A8 here.
+# For these reasons, INT4 GPTQ looks as near to BF16 as FP8 or W8A8 here.
 #
 # On a real LLM, expect FP8 W8A8 and INT8 W8A8 with SmoothQuant at most a fraction of a point from the reference. Expect INT4
 # GPTQ/AWQ behind them, and INT4 RTN last. This is the order from which `cost.choose()` in PRIMER §10 starts.
@@ -259,8 +259,8 @@ for e in (1 - e_rtn, 1e-3, 1e-4):
 # The next cell gives the command lines for the three backends (lm-eval 0.4.13, verify):
 #
 # * `vllm` runs the engine in process.
-# * `local-completions` runs the eval against a server that you already started. You use the same server for the
-#   benchmark.
+# * `local-completions` runs the eval against a server that you already started. This server is the same one that
+#   you use for the benchmark.
 # * `hf` uses transformers.
 #
 # The commands set `add_bos_token=True`, because quantized models can be sensitive to it (the vLLM docs).

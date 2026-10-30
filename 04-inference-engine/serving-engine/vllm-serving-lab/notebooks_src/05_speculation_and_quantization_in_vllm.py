@@ -12,7 +12,7 @@
 # weights to make one token per sequence.
 #
 # * **Speculative decoding** proposes $k$ tokens at a low cost: an n-gram lookup in the prompt, a small draft
-#   model, or EAGLE/MTP heads. Then it examines all of them in *one* forward pass of the target. With a
+#   model, or EAGLE/MTP heads. Then it verifies all of them in *one* forward pass of the target. With a
 #   per-token acceptance $\alpha$, a step gives $(1 - \alpha^{k+1})/(1 - \alpha)$ tokens on average. The
 #   rule of rejection sampling keeps the output distribution *exactly* the distribution of the target model.
 #   Speculation pays while the step is memory-bound (small batches). The gain decreases when larger batches
@@ -262,8 +262,8 @@ print(f"   AWQ decode is {res['bf16'][0] / res['awq (W4A16)'][0]:.1f}x faster, n
 # - Expect that FP8 options are not available there, or that they are weight-only (verify for your vLLM
 #   version).
 #
-# Attention on a T4 runs on the Triton backend of vLLM. v0.30.0 selects this backend automatically. The
-# FlashAttention backend of vLLM must have sm_80+. No flag is necessary.
+# Attention on a T4 runs on the Triton backend of vLLM. v0.30.0 selects this backend automatically,
+# because the FlashAttention backend of vLLM must have sm_80+. No flag is necessary.
 #
 # The quantized sizes in this notebook keep the embeddings and `lm_head` in 16-bit. Real checkpoints do
 # the same (5.73 GB for AWQ Llama-3.1-8B, 9.08 GB for FP8). Thus AWQ decode is ~2.8x faster than bf16. It is not

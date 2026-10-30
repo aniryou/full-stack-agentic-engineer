@@ -14,7 +14,7 @@
 # against the same weights. Thus the FLOP/s set the speed of prefill.
 #
 # * **Weight-only INT4 (W4A16)** reads a quarter of the weight bytes, and it still multiplies in 16-bit. Decode
-#   is ~3x faster. Prefill is not faster, because the dequantization is more work. It runs on everything from a T4
+#   is ~3x faster. Prefill is not faster, because the dequantization is more work. W4A16 runs on everything from a T4
 #   (Marlin, and Machete on Hopper).
 # * **FP8 W8A8** halves the bytes *and* doubles the tensor-core FLOP/s. But it does this only where FP8 tensor
 #   cores exist (sm_89+: L4, RTX 4090, H100, B200). On a T4 or A100, vLLM runs the same checkpoint as

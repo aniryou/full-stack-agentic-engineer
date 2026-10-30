@@ -11,7 +11,7 @@
 # ## The one-minute version
 # Round-to-nearest (RTN) treats every weight alone. Calibration methods use a few hundred sample inputs to decide
 # *which* errors are important. They still produce an ordinary quantized checkpoint:
-# - **GPTQ** minimises the output error of the layer, $\lVert XW^\top - XQ^\top \rVert^2$. It rounds one input
+# - **GPTQ** makes the output error of the layer, $\lVert XW^\top - XQ^\top \rVert^2$, as small as possible. It rounds one input
 #   column at a time. It pushes the rounding error of each column onto the columns that are not yet rounded,
 #   weighted by the inverse Hessian $H = \frac{2}{n} X^\top X$. This is the Optimal Brain Surgeon update. It wins
 #   where inputs are **correlated**.
@@ -161,7 +161,7 @@ for label, logits in (("INT8 W8A8", w8a8_logits(m)), ("INT8 W8A8 + SmoothQuant 0
 
 # %% [markdown]
 # SmoothQuant cuts the output error of the up-projection 2.7× and the KL of the model 2.7×, at no cost at run
-# time. Accuracy changes only by a small quantity either way, because W8A8 causes only a small loss on this model.
+# time. Accuracy changes only by a small quantity either way, because W8A8 makes only small changes to this model.
 # This small change in accuracy is exactly why the eval must look at KL too (notebook 04 and primer §8). FP8 without SmoothQuant keeps accuracy, but here it has 6× the
 # INT8 KL. Its per-token scale handles the outliers. But for well-scaled values, 3 mantissa bits are coarser than
 # the 7 of INT8.
@@ -187,7 +187,7 @@ print("GPTQ INT3 g32, three other 256-sample draws: acc " + ", ".join(f"{a:.1%}"
 # 128–512 sequences of 512–2,048 tokens. After that point, *which* samples you drew is about as important as how many. Three other
 # 256-sample draws spread over about a point. This is more than the 0.6 points between 256 and 1,024 samples.
 #
-# A narrow or even random calibration set does surprisingly well on this toy. The reason is that GPTQ and AWQ need
+# A narrow or even random calibration set does well on this toy. This result is a surprise. The reason is that GPTQ and AWQ need
 # to know which channels are large and how inputs correlate. This information comes mostly from the weights and
 # norm gains of the model itself, and any input shows it. Calibration data does not teach the model anything. It
 # cannot correct a format that is too coarse.
@@ -330,7 +330,7 @@ print(f"✅ {n_enough} samples ({res[n_enough]:.1%} vs {res[1024]:.1%} at 1,024,
 # few hundred calibration samples. They produce the same checkpoint format and kernels as RTN, and only select
 # better codes.
 #
-# "GPTQ minimises the output error of each layer. It rounds column by column, and lets the columns
+# "GPTQ makes the output error of each layer as small as possible. It rounds column by column, and lets the columns
 # that are not yet rounded compensate through the inverse Hessian of the calibration inputs. Thus it is strongest
 # where inputs are correlated.
 #
@@ -344,7 +344,7 @@ print(f"✅ {n_enough} samples ({res[n_enough]:.1%} vs {res[1024]:.1%} at 1,024,
 #
 # **Drills**
 # 1. *What does GPTQ need from calibration data, and why a few hundred samples?* Only $H = \frac{2}{n} X^\top X$
-#    per layer. It must be well conditioned in the input dimension. The damp term (1% of the mean diagonal) covers
+#    per layer. It must be well conditioned in the input dimension. Damping (1% of the mean diagonal) covers
 #    the rest.
 # 2. *AWQ multiplies weight columns by $s$. Why is the model unchanged?* AWQ divides the activations by $s$. It
 #    folds that division into the previous RMSNorm gain (or the rows of the previous linear):

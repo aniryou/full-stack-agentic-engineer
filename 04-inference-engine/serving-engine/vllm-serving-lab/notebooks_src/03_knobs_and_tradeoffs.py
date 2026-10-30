@@ -258,8 +258,8 @@ print(f"✅ with --max-num-seqs 8 this engine sustains about {cap:.1f} req/s at 
 # Write `blocks_needed(n_concurrent, prompt_len, max_tokens, block_size)`. It returns the blocks that $n$
 # requests need to *finish* together. The check runs 12 requests at the same time with exactly that number of
 # blocks (`--num-gpu-blocks-override`, the vLLM flag for this experiment). The check also runs them with a
-# third of that number (`--max-model-len 1024`). The check sets this cap because vLLM does not start unless one
-# full-length request fits.
+# third of that number. For that run, the check sets `--max-model-len 1024`, because vLLM does not start unless
+# one full-length request fits.
 #
 # The prompt lengths are exact only on the fake server. Its toy tokenizer makes one token for each
 # word. A real tokenizer makes ~1.1-1.5 tokens from each of the same words. Also, vLLM keeps one block
@@ -394,7 +394,7 @@ else:
 #
 # **Drill 2.** *Why not set `max-num-seqs` to 1,024 everywhere?* After the point where KV reads or
 # compute become the largest term, each sequence that you add makes every step slower. TPOT rises. With too few KV
-# blocks, preemptions also start. The correct cap is the largest cap that keeps TPOT inside the SLO.
+# blocks, preemptions also start. The correct cap is the largest cap at which TPOT still meets the SLO.
 #
 # **Drill 3.** *`vllm:num_preemptions_total` increases. What are three solutions?* More KV blocks (higher
 # `gpu-memory-utilization`, FP8 KV, smaller or quantized weights, TP), fewer concurrent sequences

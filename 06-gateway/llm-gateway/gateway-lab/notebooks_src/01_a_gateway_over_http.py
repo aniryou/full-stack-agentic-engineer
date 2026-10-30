@@ -57,8 +57,8 @@ print("gateway:", stack.url, "| providers:", {n: f.url for n, f in stack.fakes.i
 # ## Worked example: a virtual key, and what the gateway stores
 #
 # An operator issues keys through the admin API. The admin API returns the secret **once**. The gateway stores the
-# SHA-256 of the secret (as LiteLLM's `hash_token` does) and a display prefix. Each key belongs to one tenant. A caller
-# can put any value in a header, but the gateway bills and limits the tenant of the key.
+# SHA-256 of the secret and a display prefix. LiteLLM's `hash_token` calculates the same hash. Each key belongs to one
+# tenant. A caller can put any value in a header, but the gateway bills and limits the tenant of the key.
 
 # %%
 key_a = stack.issue_key("team-a")
@@ -126,9 +126,11 @@ print("served by", via.header("x-gwlab-target"))
 # counts arrive in pieces, and the pieces are the trap.
 #
 # Anthropic's `message_start` has `message.usage` with the input side and an `output_tokens` of 1. The input side is
-# `input_tokens` (which **excludes** the cache), `cache_read_input_tokens` and `cache_creation_input_tokens`. The final
-# `message_delta` has `usage` again, **cumulative**. It has the full `output_tokens` and, when the API sends it,
-# `output_tokens_details.thinking_tokens`. A later value replaces an earlier value. No count is a sum across events.
+# `input_tokens`, `cache_read_input_tokens` and `cache_creation_input_tokens`. The value of `input_tokens` **excludes**
+# the cache.
+#
+# The final `message_delta` has `usage` again, **cumulative**. It has the full `output_tokens` and, when the API sends
+# it, `output_tokens_details.thinking_tokens`. A later value replaces an earlier value. No count is a sum across events.
 #
 # Write `usage_from_events(events)`. Its input is a list of `(event_name, data_dict)` pairs that you read from the
 # wire. Return the canonical `{"prompt_tokens", "completion_tokens", "cached_tokens", "reasoning_tokens"}`. The prompt
@@ -427,7 +429,7 @@ stack.stop()
 #
 # **Two minutes:** "Every model call goes through one gateway. Callers hold virtual keys. The gateway keeps only a
 # hash of each key, and each key has a scope of aliases and a budget. One call revokes a key. The tenant comes from the
-# authenticated key, never from a header. The provider keys are only in the gateway.
+# verified key, never from a header. The provider keys are only in the gateway.
 #
 # "A request gives an alias. The gateway decides if the request runs (budget, limits) and which provider, model, region
 # or pool serves it. In a self-hosted pool, the endpoint picker selects the replica. Everything uses chat completions

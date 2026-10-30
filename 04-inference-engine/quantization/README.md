@@ -2,8 +2,8 @@
 
 After this topic, you can say what INT4, FP8, NVFP4 or an FP8 KV cache will give for a given model on a given
 GPU. The gain can be decode speed, prefill speed or concurrency. You can say what each format runs as on that GPU
-generation. You can also say how to use GPTQ, AWQ or SmoothQuant to make 4 bits accurate. Then you can produce,
-serve and examine a real quantized checkpoint.
+generation. You can also say how to use GPTQ, AWQ or SmoothQuant to make 4 bits accurate. Then you can produce
+and serve a real quantized checkpoint, and measure its accuracy.
 
 ## Start here
 
@@ -89,7 +89,7 @@ For prices, free tiers and how to get GPUs on GCP and elsewhere, see [`COMPUTE.m
   assumed efficiencies. They have the label SIMULATED. Only the lab's T1 paths measure. The accuracy numbers in the
   core come from a small synthetic model. They show the mechanisms and their direction, not the losses of a real
   model.
-- **Kernel rules move fast.** What a scheme runs as on each GPU generation comes from the rules of vLLM 0.30.0 and `main` as of
+- **Kernel rules move fast.** What a scheme runs as on each GPU generation comes from vLLM 0.30.0 and `main` as of
   September 2026. These rules cover FP8 below Ada, NVFP4 below Blackwell, INT8 W8A8 on Blackwell and FP8 KV on a T4.
   `--quantization fp8` on a BF16 checkpoint works at 0.30.0 and raises an exception at `main` (use
   `fp8_per_tensor`). Examine the `Selected <kernel>` log line on your version. The primer's

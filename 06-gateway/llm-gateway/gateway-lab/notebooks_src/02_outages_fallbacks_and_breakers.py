@@ -301,10 +301,11 @@ stack.stop()
 # targets give 99.99 %. A common-mode failure puts a limit on that. Thus the fallback is in another region or provider,
 # and we plan its capacity and price before the day that we need it."
 #
-# **Drill 1.** *A provider outage lasted five minutes, but our incident lasted forty and the bill doubled. Why?* Retries
-# without a budget continued after the outage ended. Streams that failed in the middle ran again from the start and
-# paid two times. The chain fell through to a model with a higher price at full traffic, until that model reached the
-# end of its quota.
+# **Drill 1.** *A provider outage lasted five minutes. Our incident lasted forty, and the bill doubled. Why?*
+#
+# Retries without a budget continued after the outage ended. Streams that failed in the middle ran again from the
+# start and paid two times. The chain fell through to a model with a higher price at full traffic, until that model
+# reached the end of its quota.
 #
 # Use retry budgets with jitter and a breaker per target. Fall back only before the first byte. Set
 # the size and the price of the fallback capacity in advance, and put a cost alert on each tenant (CURRICULUM

@@ -99,7 +99,7 @@ for name, other in (("(a) different final question", q2), ("(b) one word changed
 # - vLLM always recomputes at least one token of `new` to get logits. Thus, at most
 #   `(len(new) - 1) // block_size` blocks can hit.
 #
-# In those limits, the hits are the full blocks of the common prefix.
+# The hits are the full blocks of the common prefix, but never more than those limits.
 
 # %% exercise
 def expected_cached_tokens(prev: list, new: list, block_size: int = 16) -> int:

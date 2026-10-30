@@ -17,8 +17,8 @@
     <text x="342" y="76" text-anchor="middle" font-size="11.5">system (2,000)</text>
     <text x="607" y="76" text-anchor="middle" font-size="11.5">history</text>
     <path d="M172 94 L699.7 94" stroke="#4CC5B7" stroke-width="3"/><path d="M699.7 94 L709 94" stroke="#E39A62" stroke-width="3"/>
-    <text x="792" y="71" font-size="11.5" font-weight="600" fill="#E39A62">uncached 56</text>
-    <text x="792" y="87" font-size="11" fill="#97A59F">88.3% hit rate</text>
+    <text x="784" y="71" font-size="11.5" font-weight="600" fill="#E39A62">uncached 56</text>
+    <text x="784" y="87" font-size="11" fill="#97A59F">88.3% hit rate</text>
 
     <!-- before_history -->
     <text x="24" y="128" font-family="JetBrains Mono, monospace" font-size="11">before_history</text>
@@ -32,8 +32,8 @@
     <text x="546" y="128" text-anchor="middle" font-size="10.5">memory_t</text>
     <text x="675" y="128" text-anchor="middle" font-size="11.5">history</text>
     <path d="M172 146 L512 146" stroke="#4CC5B7" stroke-width="3"/><path d="M512 146 L777 146" stroke="#E39A62" stroke-width="3"/>
-    <text x="792" y="123" font-size="11.5" font-weight="600" fill="#E39A62">uncached 1,560</text>
-    <text x="792" y="139" font-size="11" fill="#97A59F">58.3% hit rate</text>
+    <text x="784" y="123" font-size="11.5" font-weight="600" fill="#E39A62">uncached 1,560</text>
+    <text x="784" y="139" font-size="11" fill="#97A59F">58.3% hit rate</text>
 
     <!-- pinned -->
     <text x="24" y="180" font-family="JetBrains Mono, monospace" font-size="11">pinned</text>
@@ -47,8 +47,8 @@
     <text x="546" y="180" text-anchor="middle" font-size="10.5" fill="#7ADACF">profile</text>
     <text x="675" y="180" text-anchor="middle" font-size="11.5">history</text>
     <path d="M172 198 L767.7 198" stroke="#4CC5B7" stroke-width="3"/><path d="M767.7 198 L777 198" stroke="#E39A62" stroke-width="3"/>
-    <text x="792" y="175" font-size="11.5" font-weight="600" fill="#E39A62">uncached 56</text>
-    <text x="792" y="191" font-size="11" fill="#97A59F">88.2% hit rate</text>
+    <text x="784" y="175" font-size="11.5" font-weight="600" fill="#E39A62">uncached 56</text>
+    <text x="784" y="191" font-size="11" fill="#97A59F">88.2% hit rate</text>
 
     <!-- tail -->
     <text x="24" y="232" font-family="JetBrains Mono, monospace" font-size="11">tail</text>
@@ -62,8 +62,8 @@
     <text x="607" y="232" text-anchor="middle" font-size="11.5">history</text>
     <text x="736" y="232" text-anchor="middle" font-size="10.5">memory_t</text>
     <path d="M172 250 L675.2 250" stroke="#4CC5B7" stroke-width="3"/><path d="M675.2 250 L777 250" stroke="#E39A62" stroke-width="3"/>
-    <text x="792" y="227" font-size="11.5" font-weight="600" fill="#E39A62">uncached 600</text>
-    <text x="792" y="243" font-size="11" fill="#97A59F">72.3% hit rate</text>
+    <text x="784" y="227" font-size="11.5" font-weight="600" fill="#E39A62">uncached 600</text>
+    <text x="784" y="243" font-size="11" fill="#97A59F">72.3% hit rate</text>
 
     <!-- legend -->
     <g font-size="11" fill="#97A59F">

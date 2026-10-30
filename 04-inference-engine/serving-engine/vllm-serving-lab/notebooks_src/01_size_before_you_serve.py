@@ -303,7 +303,8 @@ print(f"✅ at max_model_len=8192 vLLM would report {at_8k:.2f}x (half of {same:
 # ```
 #
 # If you start vLLM with a different utilization, the calibration reads it from the log line
-# `The current --gpu-memory-utilization=...`. The Colab recipe uses 0.85. You can also set `GPU_MEM_UTIL`. On a T4
+# `The current --gpu-memory-utilization=...`. The Colab recipe, for example, uses a utilization of 0.85. You can also
+# set `GPU_MEM_UTIL`. On a T4
 # (compute capability 7.5), the log also names the attention backend. vLLM v0.30.0 selects
 # `TRITON_ATTN` automatically, because its FlashAttention backend needs sm_80+. No flag or environment
 # variable is necessary. `VLLM_ATTENTION_BACKEND` no longer exists (see `deploy/any-gpu/`).

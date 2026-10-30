@@ -197,6 +197,26 @@ The approval link must be impossible to guess, and valid for one use only. Treat
 
 Each completion of a child increases the counter of the parent in one atomic operation. The completion that gets to `expected` does the transition of the parent. A partial failure is **data** (`state.children.failures`). The aggregator decides if 3/5 is sufficient. The planner sets the maximum N. The model does not decide the budget.
 
+```mermaid
+flowchart LR
+    P(["planner step<br/>FanOut"]) --> F[("parent run<br/>fan_in")]
+    subgraph CH["child runs"]
+        C1["child 1"]
+        C2["child 2"]
+        C3["child N"]
+    end
+    F --> C1
+    F --> C2
+    F --> C3
+    C1 --> N
+    C2 --> N
+    C3 --> N
+    N["parent counter<br/>completed + 1"] --> D{"completed =<br/>expected?"}
+    D -->|yes| T["parent goes<br/>to then"]
+```
+
+*The parent writes `fan_in` in a checkpoint before it spawns the child runs. Each child completion increases the counter of the parent in one atomic operation. The completion that gets to `expected` moves the parent to `then`.*
+
 **GCP.** The children are only runs (Firestore docs and Cloud Tasks). Thus a 40-way fan-out runs across the Cloud Run replicas, and it costs nothing during the wait.
 
 For a fan-out that does not change, Cloud Workflows `parallel` and `concurrency_limit` are the declarative equivalent. ADK 2 `parallel_worker` does the fan-out with asyncio *inside one invocation*. The `parallel_worker` fan-out is simpler. But the fan-out is not distributed, and each branch is not durable on its own.
@@ -422,17 +442,16 @@ sequenceDiagram
     participant T as the test
     participant E as Engine
     participant S as in-memory<br/>store and queue
-    T->>E: deliver the task:<br/>execute_task(StepTask)
-    E->>S: ctx.effect records<br/>the effect (I3)
-    Note over E,S: the chaos hook raises<br/>a simulated crash at<br/>after_step_before_commit:<br/>no checkpoint, no next task
-    Note over E,S: no release of the lease,<br/>the queue keeps the task<br/>for a redelivery
-    T->>K: advance past<br/>the lease TTL
+    T->>E: execute_task(StepTask)
+    E->>S: effect record (I3)
+    Note over E,S: crash at after_step_before_commit<br/>no checkpoint, the lease stays<br/>the queue keeps the task
+    T->>K: advance past the lease TTL
     T->>E: reap()
-    E->>S: expired lease: enqueue<br/>the same attempt, the queue<br/>rejects it as a duplicate
-    T->>E: deliver the same task:<br/>the step runs again
-    E->>S: the effect record<br/>exists: skip it (I3)
-    E->>S: the checkpoint (I1),<br/>then the next task
-    Note over T: assert one<br/>re-drive and no<br/>repeated effect
+    E->>S: enqueue the same attempt<br/>(a duplicate)
+    T->>E: the same task again
+    E->>S: effect exists: skip (I3)
+    E->>S: checkpoint (I1), next task
+    Note over T: assert one re-drive,<br/>no repeated effect
 ```
 
 *This figure shows one test of `tests/test_durability.py`. A chaos hook raises a simulated crash at one crash window, after the effect record and before the checkpoint. The test advances `FakeClock` past the lease TTL, runs the reaper and delivers the same task again. The assertion is one re-drive and no repeated effect.*

@@ -102,7 +102,7 @@ print("anthropic, cut before message_delta: usage", acc.usage, "| estimate from 
 # ## Worked example 3 — the whole front door
 # `Gateway.handle()` runs the path of §1.3:
 #
-# 1. authenticate a **virtual key**, the source of the tenant,
+# 1. authenticate a **virtual key**, which gives the tenant,
 # 2. screen,
 # 3. cache,
 # 4. reserve tokens,

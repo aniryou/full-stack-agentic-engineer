@@ -116,11 +116,11 @@ The feedback loop has these steps:
 5. More turns in flight use more memory, and cause more queued model calls and more retries.
 6. These cause more `429`s.
 
-Without a circuit breaker on that loop, an agent system under overload does not fail fast. It slows down for everyone until the turn deadlines expire and the users go away. By then, the users used the tokens all the same. This is the failure mode with the highest cost of all, because you pay for all of it and you satisfy nobody.
-
-![The feedback loop of 1.6: more load causes more 429s, then retries and longer model calls, longer turns, more turns in flight, and more memory, queued model calls and retries, which cause more 429s again.](figures/overload-feedback-loop.svg)
+![The six steps of the feedback loop of 1.6 make a cycle that starts and ends with more 429s.](figures/overload-feedback-loop.svg)
 
 *This is the feedback loop of 1.6. Each step causes the next step, and the last step causes more `429`s again. Little's law connects the longer turns to more turns in flight.*
+
+Without a circuit breaker on that loop, an agent system under overload does not fail fast. It slows down for everyone until the turn deadlines expire and the users go away. By then, the users used the tokens all the same. This is the failure mode with the highest cost of all, because you pay for all of it and you satisfy nobody.
 
 A simulated load test shows this failure in seconds (`scalelab.sim`, the lab's notebook 04, simulated numbers). The test puts 120 virtual users against a simulated 3 M TPM pool:
 
@@ -228,8 +228,8 @@ The token budget also puts a cap on concurrency, and this is the most important 
 flowchart LR
   T(["turns a second"]) -- "× 6 s" --> IF["in-flight turns<br/>42 at average<br/>125 at peak"]
   IF -- "set the size of" --> IFS["orchestrator memory<br/>session locks<br/>model concurrency"]
-  C(["conversations<br/>a second"]) -- "× 400 s" --> S["concurrent sessions<br/>460 at average"]
-  S -- "set the size of" --> SS["gateway streams<br/>Redis session state"]
+  C(["conversations<br/>a second"]) -- "× 400 seconds" --> S["concurrent sessions<br/>460 at average"]
+  S -- "set the size of" --> SS["streaming connections<br/>at the gateway<br/>session state in Redis"]
   B(["10 M TPM ÷ 60"]) --> BT["≈ 167,000 tokens<br/>per second"]
   BT -- "÷ 2,000 tokens<br/>per second a turn" --> CAP["≈ 85 turns in flight:<br/>the in-flight cap,<br/>below peak demand"]
 ```
@@ -318,7 +318,7 @@ The whole Cloud Run fleet for this system is a few dozen vCPUs. That is approxim
 
 ## 4. The reference architecture
 
-![The reference architecture of Part 4: the client, the load balancer, the gateway, Pub/Sub, the orchestrator with the model gateway and the tool executor, Gemini, the tool services and the two stores.](figures/google-cloud-reference-architecture.svg)
+![The reference architecture of Part 4: the gateway and the orchestrator on Cloud Run, Pub/Sub between them, and the parts and stores they use.](figures/google-cloud-reference-architecture.svg)
 
 *In the reference architecture, the gateway and the orchestrator are two Cloud Run services, with a Pub/Sub queue between them. Both services use Firestore for durable state and Redis for hot state.*
 
@@ -411,12 +411,12 @@ The cap starts at the token-budget figure from 3.3. Then you adjust it from load
 
 ```mermaid
 flowchart LR
-  T(["a turn arrives<br/>at the gateway"]) --> Q1["1. tenant<br/>token bucket"]
+  T(["a turn<br/>arrives"]) --> Q1["1. tenant<br/>token bucket"]
   Q1 --> Q2["2. degradation<br/>level"]
   Q2 --> Q3{"3. over the<br/>in-flight cap?"}
-  Q3 -- "no, or a<br/>priority class" --> A["admit"]
-  Q3 -- "yes" --> SH["shed: 503 and<br/>Retry-After"]
-  SIG["signals from<br/>every instance"] --> L[("level<br/>in Redis")]
+  Q3 -- "no, or a<br/>priority<br/>class" --> A["admit"]
+  Q3 -- "yes" --> SH["shed: 503,<br/>Retry-After"]
+  SIG["signals"] --> L[("level<br/>in Redis")]
   L --> Q2
 ```
 

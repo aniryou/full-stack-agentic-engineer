@@ -17,7 +17,7 @@ you sent yourself:
 2. Read the primer's [§1 One front door, one API](../PRIMER.md). It gives the concepts that every notebook uses.
    Then open [`notebooks/01_a_gateway_over_http.ipynb`](notebooks/01_a_gateway_over_http.ipynb).
 3. When you have a GPU of any type, use [`deploy/any-gpu/`](deploy/any-gpu/README.md). A free Colab T4 is sufficient.
-   This deploy puts a real vLLM behind the same gateway, and notebooks 01–04 measure it.
+   This deploy target puts a real vLLM behind the same gateway, and notebooks 01–04 measure it.
 
 ## What you get
 
@@ -27,7 +27,7 @@ multi-GPU box, rented for an hour (not used here). T3 is the Google Cloud deploy
 Every notebook runs at T0. The gateway is real. Its upstreams are fake providers. Their timings and token counts are **simulated**,
 and a label says so.
 
-Each notebook opens with *the one-minute version* and gives worked examples over HTTP. Then it gives 4–5 exercises:
+Each notebook opens with *the one-minute version* and gives worked examples over HTTP. Then it gives 4–5 exercises of these kinds:
 write the key function, predict a number, select a setting. A check that prints ✅ comes after each exercise. The
 notebook closes with *in a design review*. The answers are in [`solutions/`](solutions/). The times are for the lab
 notebook alone: about 6 hours for all five.
@@ -35,7 +35,7 @@ notebook alone: about 6 hours for all five.
 | # | Notebook | You will be able to… | Primer | Time | Tier |
 |---|---|---|---|---|---|
 | 01 | [`a_gateway_over_http`](notebooks/01_a_gateway_over_http.ipynb) | Issue a hashed, scoped virtual key. Trace one request through the pipeline. Read the usage of Anthropic from live stream events, and know when a cut stream has no usage. Rebuild tool calls from deltas, and see an error after the first byte. Translate a body that `bolt` accepts. See why the gateway injects `include_usage` and strips it. Measure the time of the gateway's own hop from its spans. | §1, §5, §6 | ~1.25 h | T0, T0 + Docker, T1 |
-| 02 | [`outages_fallbacks_and_breakers`](notebooks/02_outages_fallbacks_and_breakers.ipynb) | Predict what a client sees for seven live faults (fall through, an error in the stream, or a 502). Read the failure rate of each target and the availability of the chain from the decision log. Predict the latency cost of a fallback. Predict how many requests a breaker lets reach a dead target. | §2 | ~1 h | T0, T1 (opt-in). At T1, the notebook stops vLLM during the run. |
+| 02 | [`outages_fallbacks_and_breakers`](notebooks/02_outages_fallbacks_and_breakers.ipynb) | Predict what a client sees for seven live faults (fall through, an error in the stream, or a 502). Read the failure rate of each target and the availability of the chain from the decision log. Predict the latency cost of a fallback. Predict how many requests a breaker lets reach a dead target. | §2 | ~1 h | T0, T1. At T1, the notebook stops vLLM during the run only if you opt in. |
 | 03 | [`semantic_cache_vs_the_prefix_cache`](notebooks/03_semantic_cache_vs_the_prefix_cache.ipynb) | Make the cache key from the classes that the route declares (per-user classes per user), with a regex only as a veto. Do a sweep of a semantic threshold. Then make sure that the live gateway serves exactly what the sweep predicted. Do the prefix-cache timing attack that `cache_salt` closes. Predict `cached_tokens` from the block rule of vLLM. | §3 | ~1.25 h | T0 emulated, T1 measured |
 | 04 | [`streaming_limits_metering_and_chargeback`](notebooks/04_streaming_limits_metering_and_chargeback.ipynb) | Show how far a per-request bucket over-admits the TPM of a provider. Repair the over-admission with reserve, then stream, then reconcile. Protect a tenant from a noisy neighbour. Calculate the price of requests from `usage`. Divide a shared GPU by tokens or by GPU-seconds. Reconcile the ledger with the counters of the provider. | §4, §5 | ~1.25 h | T0, T1 (vLLM's `/metrics`) |
 | 05 | [`guardrails_and_mcp_authorization_over_http`](notebooks/05_guardrails_and_mcp_authorization_over_http.ipynb) | Measure what each guardrail placement adds to TTFT and what it lets leak. Rotate a provider key under load, and fail no request. Run the MCP client flow: discovery, CIMD, PKCE, step-up. Show that a second MCP server refuses a token minted for a different MCP server. Do a refresh rotation with reuse detection. Use DPoP nonces. | §6, §7, §8 | ~1.25 h | T0 |
@@ -83,7 +83,7 @@ curl -s localhost:8080/debug/state -H 'Authorization: Bearer dev-admin-token'   
 | `gateway/otel.py` | ~210 | Spans with the GenAI names pinned (v1.41.0 ∩ genai main), OTLP/JSON lines and read-back, OTLP/HTTP export when installed. |
 | `fakes.py` | ~560 | Fake providers over HTTP in two dialects, with the special behaviours of vLLM. They have their own RPM/TPM windows, a 16-token-block prefix cache with `cache_salt`, heavy-tailed outputs, tool calls, reasoning tokens and switchable faults. Their `/metrics` use the names of vLLM. |
 | `mcp/` | ~830 | A fake authorization server and a fake MCP server. The MCP client of the gateway (discovery, CIMD, PKCE S256 with `resource`, per-principal tokens, step-up, rotation with reuse detection). DPoP proofs and nonces (ES256 with `cryptography`, or, without it, a labelled HMAC stand-in). |
-| `t1.py` | ~160 | The T1 cells of notebooks 01–04 as functions. The functions run a gateway in front of a real vLLM. They give a result the label `MEASURED` only when vLLM served it. A function stops vLLM during the run. Assertions on measured rows hold the prefix-cache rule and the salt. The `/metrics` reconciliation skips when vLLM is gone. A test runs it offline against a stand-in. |
+| `t1.py` | ~160 | The T1 cells of notebooks 01–04 as functions. The functions run a gateway in front of a real vLLM. They give a result the label `MEASURED` only when vLLM served it. A function stops vLLM during the run. Assertions on measured rows hold the prefix-cache rule and the salt. The `/metrics` reconciliation skips when vLLM is gone. A test runs the reconciliation and the skip offline against a stand-in. |
 | `sse.py`, `tokens.py`, `promtext.py`, `client.py`, `bench.py`, `report.py`, `stack.py`, `env.py`, `__main__.py` | ~1,100 | An SSE parser and stream accumulation, the labelled token estimate, Prometheus text, a client that measures time, scripted tenants (open loop) and tables. Also the in-process stack, tier detection (T1 only if vLLM answers `/health`) and the CLI. |
 
 This lab never imports the core package next to it (`gateway-core`, `gwcore`). Instead, its tests pin its numbers to

@@ -17,10 +17,10 @@
 # | provider prompt cache | hosted API | ~90 % of the price of the cached input (scaling primer §3.4) | no risk to correctness |
 # | engine prefix cache | vLLM | prefill compute, thus TTFT (serving-engine PRIMER §5) | a timing side channel between tenants: `cache_salt` |
 #
-# The response caches are safe only for answers that do not depend on who asks or when. A gateway cannot find this dependency from
-# the text. Thus the **route declares** the class of each request in `metadata.cache_class` (PRIMER §3.2). The gateway
-# caches only the classes on the allowlist. Shared classes (`faq`) go in a namespace per tenant, alias and system
-# prompt. Per-user classes (`account`) also have the user in the namespace.
+# The response caches are safe only for answers that do not depend on who asks or when. A gateway cannot find this
+# dependency from the text. Thus the **route declares** the class of each request in `metadata.cache_class`
+# (PRIMER §3.2). The gateway caches only the classes on the allowlist. Shared classes (`faq`) go in a namespace per
+# tenant, alias and system prompt. Per-user classes (`account`) also have the user in the namespace.
 #
 # The gateway caches only deterministic requests (`temperature: 0`) with no tools. A regex can still *veto* a declared
 # shared class that looks personal. The regex never makes anything cacheable.
@@ -276,7 +276,7 @@ print(f"✅ live: {got['served']} served from the cache, {got['false']} of them 
 # full 16-token blocks of the prompt in the prefix cache of the engine (`usage.prompt_tokens_details.cached_tokens`).
 # Its TTFT decreases by the prefill that it skipped (0.5 ms per token here, simulated).
 #
-# The gateway sends the `cache_salt` of each tenant. The salt is an HMAC of the *authenticated* tenant under the secret of
+# The gateway sends the `cache_salt` of each tenant. The salt is an HMAC of the *verified* tenant under the secret of
 # the gateway. The salt has 43 characters. The gateway never takes it from the request. Thus another tenant with the
 # same prompt starts cold.
 
@@ -419,7 +419,7 @@ stack.stop()
 #
 # **Two minutes:** "We cache at two places for two reasons. The prefix cache of the engine, and also the prompt cache
 # of a hosted provider, is exact and safe. We put the stable part of each prompt first. We add a salt per tenant to the
-# cache of the engine: an HMAC of the authenticated tenant. The reason is that the speed of the cache is observable. A prefix
+# cache of the engine: an HMAC of the verified tenant. The reason is that the speed of the cache is observable. A prefix
 # cache with no salt lets one tenant measure the time of the prompts of another tenant.
 #
 # "The response cache of the gateway is for answers that do not depend on who asks or when. The route declares which

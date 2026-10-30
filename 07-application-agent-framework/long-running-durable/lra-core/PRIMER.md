@@ -15,23 +15,30 @@ run cannot live in a process or in a conversation. It lives in a document, and a
 ```
 
 ```mermaid
-flowchart TB
-  T(["the queue delivers a task:<br/>run, step, attempt"]) --> G{"I2 guard: the<br/>expected (step,<br/>attempt)?"}
-  G -- no --> S["stale: ack the task,<br/>do nothing more"]
+flowchart LR
+  T(["task:<br/>run, step, attempt"]) --> G{"I2 guard:<br/>the expected<br/>step, attempt?"}
+  G -- no --> S["stale: ack,<br/>do nothing more"]
   G -- yes --> L{"a live lease<br/>by another<br/>worker?"}
-  L -- no --> ST["take the lease for<br/>lease_ttl seconds, run<br/>the step on a copy of<br/>the state: ctx.effect<br/>records a result under<br/>run:key before the<br/>checkpoint (I3)"]
   L -- yes --> B["busy: HTTP 503,<br/>the queue retries"]
-  ST -- next --> C["checkpoint: the<br/>state and the<br/>transition in one<br/>compare-and-set<br/>on version (I1)"]
-  ST -- exception --> R["attempt + 1: the<br/>old task is stale,<br/>save with no lease,<br/>enqueue the same<br/>step with a backoff<br/>delay, FAILED after<br/>max_attempts"]
-  ST -- wait --> W["write WAITING,<br/>enqueue nothing:<br/>a webhook with<br/>the key resumes<br/>the run at then"]
-  ST -- done --> D["SUCCEEDED"]
-  C --> E["enqueue the next task,<br/>then release the lease"]
-  C -.-> RP
-  R -.-> RP
-  RP[["the reaper, a cron:<br/>enqueue the current step<br/>again, the task name<br/>rejects a duplicate<br/>expired lease: a crash<br/>during the step or<br/>before the enqueue<br/>orphan: no lease and no<br/>write for 2 × lease_ttl"]]
+  L -- no --> ST["take the lease,<br/>run the step<br/>on a copy"]
 ```
 
-*This figure shows one call of `Engine.execute` in `core.py`, from a delivered task to the next task. The guard (I2), the effect record (I3) and the checkpoint before the enqueue (I1) are at their places in the sequence. The dotted edges go to the reaper from two crash windows. A crash between the checkpoint and the enqueue leaves an expired lease, and a crash after the save of a retry leaves an orphan.*
+*This figure shows the first half of one call of `Engine.execute` in `core.py`, from the task of the queue to the step. The guard (I2) and the lease come before the step.*
+
+```mermaid
+flowchart LR
+  ST["the step on a copy:<br/>ctx.effect records<br/>a result (I3)"]
+  ST -- next --> C["checkpoint:<br/>compare-and-set<br/>on version (I1)"]
+  ST -- exception --> R["attempt + 1,<br/>enqueue with backoff,<br/>FAILED at max_attempts"]
+  ST -- wait --> W["WAITING:<br/>enqueue nothing"]
+  ST -- done --> D["SUCCEEDED"]
+  C --> E["enqueue the next task,<br/>release the lease"]
+  C -. expired lease .-> RP
+  R -. orphan .-> RP
+  RP[["the reaper, a cron:<br/>enqueue the<br/>current step again"]]
+```
+
+*This figure shows the second half of the call, from the step to the next task. The effect record (I3) and the checkpoint (I1) come before the enqueue. The dotted edges go to the reaper from two crash windows: an expired lease and an orphan.*
 
 This is one step, from end to end:
 

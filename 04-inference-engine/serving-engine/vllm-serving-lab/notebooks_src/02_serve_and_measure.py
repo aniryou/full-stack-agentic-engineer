@@ -348,7 +348,7 @@ print(f"✅ Little's law: predicted {predicted:.2f} in flight, engine gauges ave
 # The check samples the gaps. Then it runs the same mean rate four ways:
 #
 # - Poisson arrivals against bursty arrivals,
-# - constant 512-token prompts against a lognormal with the same median (most prompts short, a few 5x longer).
+# - fixed 512-token prompts against a lognormal with the same median (most prompts short, a few 5x longer).
 #
 # After that, it compares the medians with the tails.
 
@@ -416,7 +416,7 @@ target.stop()
 #
 # - an open or a closed loop,
 # - the arrival process (Poisson, burstiness),
-# - the prompt and output length distributions (constant 512 or long-tailed),
+# - the prompt and output length distributions (fixed 512 or long-tailed),
 # - the warm-up,
 # - if they measured TTFT at the client.
 #

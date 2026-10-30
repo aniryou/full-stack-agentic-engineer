@@ -102,8 +102,8 @@ about 30 s. The tests that carry the correctness claims are these:
   mid-block takes its scale from weights that the reference has not updated yet, and the test shows that difference
   too. When the inputs have no correlation, GPTQ becomes RTN exactly. On correlated inputs, GPTQ is better than RTN out of
   sample (`test_gptq.py`).
-- **Reparameterisations are exact.** SmoothQuant and AWQ folds keep the model's output the same, to
-  1e-9. Also, α = 0 in AWQ's search is RTN (`test_awq_smoothquant.py`).
+- **Reparameterisations are exact.** SmoothQuant and AWQ folds keep the model's output the same, with a difference of
+  not more than 1e-9. Also, α = 0 in AWQ's search is RTN (`test_awq_smoothquant.py`).
 - **The W8A8 epilogue is exact.** Integer-accumulated INT8 GEMMs and per-block FP8 GEMMs equal the fake-quantized
   products (`test_w8a8_kv.py`).
 - **The primer says what the code computes.** The test calculates again every number that `../PRIMER.md`

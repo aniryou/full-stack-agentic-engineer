@@ -261,7 +261,7 @@ print("NVFP4 KV cache (--kv-cache-dtype nvfp4):", {g: kv.attention_backend(g, "n
 #
 # "On our H100s and L4s, the same checkpoint runs weight-only through Marlin. The weight-only path gives
 # a memory win only. Also, a kernel that dequantizes can run below the efficiency of the BF16 GEMM.
-# In that case, the kernel is slower than BF16 from approximately two hundred tokens per step. Every prefill
+# In that case, the kernel is slower than BF16 from a few hundred tokens per step. Every prefill
 # is in that range of step sizes.
 #
 # "The accuracy risk is the activations. In the lab's model, FP4 activations decrease task accuracy

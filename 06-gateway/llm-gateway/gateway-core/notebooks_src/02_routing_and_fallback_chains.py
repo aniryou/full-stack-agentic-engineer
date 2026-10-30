@@ -277,8 +277,10 @@ print("✅ before the first byte: fall through; after it: surface the error and 
 
 # %% [markdown]
 # ## Exercise 2.6 — pick a first-byte deadline from a latency budget
-# The primary fails 5 % of requests because it hangs. On the steps of worked example 2, the gateway stops the wait after `t_fail` seconds and falls
-# through. The budget of the route is a **mean** time to first token of 0.70 s.
+# The primary fails 5 % of requests because it hangs. The gateway stops the wait after `t_fail` seconds and falls
+# through. The steps of the chain are as in worked example 2. The budget of the route is a **mean** time to first
+# token of 0.70 s.
+#
 # Set `deadline` to the largest `t_fail`, to 0.01 s, that meets the budget. Calculate it. Do not try values at random.
 #
 # Then show why a whole-response timeout cannot do the job. A healthy answer on this route is 350 tokens at 20 ms each,
@@ -331,7 +333,7 @@ print(f"✅ a {deadline:.2f} s first-byte deadline keeps the mean at {routing.ch
 # 2. *We added a third provider and availability did not move. Why?* A common-mode failure (the gateway, a region, one
 #    provider behind two aliases) already put a cap on the chain. Independent targets only decrease the part that was
 #    already small.
-# 3. *We configured the breaker, yet the first ten seconds of an outage were terrible. Why?* The requests overlap. The
+# 3. *We configured the breaker, but the first ten seconds of an outage were terrible. Why?* The requests overlap. The
 #    breaker opens only after failures *complete*. Thus every request in flight during the first timeout pays it:
 #    about 500 at 50 requests a second (Exercise 2.4). A first-byte deadline and fast failure signals (connect errors,
 #    503s) make that window shorter.

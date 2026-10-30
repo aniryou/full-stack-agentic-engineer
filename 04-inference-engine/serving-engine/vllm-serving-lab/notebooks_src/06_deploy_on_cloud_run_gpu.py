@@ -128,7 +128,7 @@ print(f"✅ cold start under these assumptions: {hf:.0f} s with Hugging Face, {g
 # %% [markdown]
 # ## Exercise 6.2 — choose Cloud Run `concurrency` from a measurement
 #
-# One instance is one engine. On the L4 profile, do a sweep of the number of parallel requests in the
+# One instance is one engine. On the L4 profile, do a sweep of the number of requests in flight per
 # instance (closed loop, with the users spread over one second). Keep the largest level at which at
 # least 90% of the requests meet the SLO. Write `pick_concurrency(summaries, min_attainment)` over a dict
 # `{concurrency: Summary}`.
