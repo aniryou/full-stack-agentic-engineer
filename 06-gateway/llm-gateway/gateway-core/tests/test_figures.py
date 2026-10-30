@@ -28,16 +28,17 @@ mf = _load_generator()
 svgchart = mf.svgchart
 
 
-def test_chain_availability_chart():
-    svgchart.check_figure(mf.FIGURES_DIR / "chain-availability-common-mode.svg", mf.spec_chain_availability)
+def test_the_chart_table():
+    assert set(mf.FIGURES) == {
+        "chain-availability-common-mode.svg",
+        "semantic-cache-threshold-sweep.svg",
+        "token-reservation-sweep.svg",
+    }
 
 
-def test_semantic_cache_threshold_chart():
-    svgchart.check_figure(mf.FIGURES_DIR / "semantic-cache-threshold-sweep.svg", mf.spec_cache_threshold_sweep)
-
-
-def test_token_reservation_chart():
-    svgchart.check_figure(mf.FIGURES_DIR / "token-reservation-sweep.svg", mf.spec_token_reservation_sweep)
+@pytest.mark.parametrize("name, build", sorted(mf.FIGURES.items()), ids=sorted(mf.FIGURES))
+def test_chart(name, build):
+    svgchart.check_figure(mf.FIGURES_DIR / name, build)
 
 
 def test_every_chart_is_referenced_by_the_primer():

@@ -388,10 +388,10 @@ The common-mode term has the largest effect on the result. A third independent t
 99.99995 %, but the chain stays at 99.9 %. Put fallbacks in *different* failure domains. Give them a quota that is
 sufficient for the traffic that they will take.
 
-![Failed requests of a fallback chain against its number of targets, with no common-mode failure and with one of 0.05 % or 0.1 %.](figures/chain-availability-common-mode.svg)
+![Failed requests of a fallback chain against its number of targets, with no common-mode failure, with a gateway at 99.95 %, and with a 0.1 % common-mode failure.](figures/chain-availability-common-mode.svg)
 
-*The y axis is the share of failed requests, on a log scale. Each fallback at 99.0 % divides the independent failures
-by 100, but a common-mode failure stays as a floor. `routing.chain_availability()` in the core computes each point,
+*The y axis is the share of failed requests, on a log scale. The labels give the availability, as the prose prints
+it. Each fallback at 99.0 % divides the independent failures by 100, but a common-mode failure stays as a floor. `routing.chain_availability()` in the core computes each point,
 and `tests/test_figures.py` pins the chart.*
 
 The expected latency and cost come from a walk along the chain (`routing.chain_cost(steps)`). Each step succeeds with
@@ -693,8 +693,8 @@ smallest with none.
 ![Tokens served and the peak window, as a share of the limit, against the output reservation of the token limiter.](figures/token-reservation-sweep.svg)
 
 *A smaller reservation serves more of the limit, but its peak window also increases. At 1,024 and 2,048 tokens, the
-peak window goes above the limit. `ratelimit.simulate()` computes each point on the §4.3 workload, and
-`tests/test_figures.py` pins the chart.*
+peak window goes above the limit. The labels on the peak line give the seconds over the limit.
+`ratelimit.simulate()` computes each point on the §4.3 workload, and `tests/test_figures.py` pins the chart.*
 
 Find the size of the reservation by simulation on your own output distribution. Where a provider 429 is not
 acceptable, reserve the cap. Never charge a per-request constant.

@@ -223,7 +223,7 @@ flowchart LR
     B -- "÷ 2 k tokens/s<br/>a turn" --> CAP["about 85 turns<br/>in flight: the<br/>in-flight cap,<br/>below peak demand"]
 ```
 
-*The concurrency of §3.3. In the upper part, Little's law multiplies a rate by a duration: the turn duration gives the turns in flight, and the length of a conversation gives the concurrent sessions. In the lower row, the 10 M TPM baseline gives about 85 turns in flight, the initial in-flight cap, below the 125 turns of the peak (`scalelab.capacity`).*
+*The concurrency of §3.3. In the upper part, the turn duration gives the turns in flight, and the length of a conversation gives the concurrent sessions (Little's law). In the lower row, the 10 M TPM baseline gives the initial in-flight cap of about 85 turns. This cap is below the 125 turns of the peak (`scalelab.capacity`).*
 
 ### 3.4 Cost per conversation
 

@@ -61,8 +61,8 @@ def spec_chain_availability() -> dict:
     a = {cm: [R.chain_availability(c, cm) for c in chains] for cm in (0.0, GATEWAY_COMMON_MODE, SHARED_COMMON_MODE)}
     return {
         "kind": "line",
-        "title": "Failed requests of a fallback chain against its number of targets, with no common-mode failure "
-                 "and with one of 0.05 % or 0.1 %.",
+        "title": "Failed requests of a fallback chain against its number of targets, with no common-mode failure, "
+                 "with a gateway at 99.95 %, and with a 0.1 % common-mode failure.",
         "height": 400,
         "x": {"label": "targets in the chain (99.5 %, then 99.0 % each)", "ticks": n, "tick_labels": ["1", "2", "3"],
               "min": 0.9, "max": 3.1},
@@ -71,12 +71,13 @@ def spec_chain_availability() -> dict:
               "tick_labels": ["0.00001", "0.0001", "0.001", "0.01", "0.1", "1"]},
         "series": [
             {"name": "independent failures", "x": n, "y": failed(0.0), "style": "accent", "markers": True},
-            {"name": "0.05 % common-mode (the §1.6 gateway)", "x": n, "y": failed(GATEWAY_COMMON_MODE),
+            {"name": "a gateway at 99.95 % (§1.6)", "x": n, "y": failed(GATEWAY_COMMON_MODE),
              "style": "yellow", "markers": True},
             {"name": "0.1 % common-mode", "x": n, "y": failed(SHARED_COMMON_MODE), "style": "warm", "markers": True},
         ],
         "marks": [
-            {"kind": "hline", "y": 100 * SHARED_COMMON_MODE,
+            # the floor: a chain whose target never fails keeps only the common-mode term
+            {"kind": "hline", "y": 100 * (1 - R.chain_availability([1.0], SHARED_COMMON_MODE)),
              "label": f"common-mode floor: {_pct(a[SHARED_COMMON_MODE][2], 1)}", "style": "warm"},
             {"kind": "point", "x": 2, "y": failed(0.0)[1], "label": f"2 targets: {_pct(a[0.0][1], 3)}",
              "style": "accent"},
@@ -112,14 +113,15 @@ def spec_cache_threshold_sweep() -> dict:
         "height": 380,
         "x": {"label": "threshold τ (cosine similarity)", "min": 0.5, "max": 1.0,
               "ticks": [0.5, 0.6, 0.7, 0.8, 0.9, 1.0], "tick_labels": ["0.50", "0.60", "0.70", "0.80", "0.90", "1.00"]},
-        "y": {"label": "share of lookups (%)", "min": 0, "max": 105, "ticks": [0, 20, 40, 60, 80, 100]},
+        # hits are a share of the 23 paraphrases, false hits a share of the 44 cacheable lookups (§3.3)
+        "y": {"label": "rate (%)", "min": 0, "max": 105, "ticks": [0, 20, 40, 60, 80, 100]},
         "series": [
-            {"name": "Hits, no guard", "x": THRESHOLDS, "y": [100 * r["hit_rate"] for r in off], "style": "accent"},
-            {"name": "Hits, entity guard", "x": THRESHOLDS, "y": [100 * r["hit_rate"] for r in on], "style": "accent",
+            {"name": "Hits (of paraphrases), no guard", "x": THRESHOLDS, "y": [100 * r["hit_rate"] for r in off], "style": "accent"},
+            {"name": "Hits (of paraphrases), entity guard", "x": THRESHOLDS, "y": [100 * r["hit_rate"] for r in on], "style": "accent",
              "dash": True},
-            {"name": "False hits, no guard", "x": THRESHOLDS, "y": [100 * r["false_hit_rate"] for r in off],
+            {"name": "False hits (of lookups), no guard", "x": THRESHOLDS, "y": [100 * r["false_hit_rate"] for r in off],
              "style": "warm"},
-            {"name": "False hits, entity guard", "x": THRESHOLDS, "y": [100 * r["false_hit_rate"] for r in on],
+            {"name": "False hits (of lookups), entity guard", "x": THRESHOLDS, "y": [100 * r["false_hit_rate"] for r in on],
              "style": "warm", "dash": True},
         ],
         "marks": [
@@ -143,7 +145,10 @@ RESERVATIONS = [1024, 2048, 4096, 8192, 16384]   # the sweep of §4.3 (1,024, 2,
 def spec_token_reservation_sweep() -> dict:
     kw = RL.compare_buckets.__kwdefaults__            # the §4.3 experiment's workload and limit, as the core runs it
     work = RL.workload(kw["seconds"], kw["rate"], kw["prompt"], kw["new_median"], kw["sigma"], seed=kw["seed"])
-    runs = [RL.simulate(work, "reserve", limit=kw["limit"], reserve_out=ro) for ro in RESERVATIONS]
+    # The 16,384 point is the table's "reserve prompt + the 16,384 cap" row: like compare_buckets(), it forwards the
+    # cap to the provider, so its outputs are truncated at the cap. The smaller reservations forward no cap.
+    runs = [RL.simulate(work, "reserve", limit=kw["limit"], reserve_out=ro, cap=kw["cap"] if ro == kw["cap"] else None)
+            for ro in RESERVATIONS]
     served = [100 * r["utilisation"] for r in runs]
     peak = [100 * r["peak_ratio"] for r in runs]
 
