@@ -430,6 +430,18 @@ find . -maxdepth 5 -name '*.ipynb' ! -path '*/.ipynb_checkpoints/*' | wc -l
   primer's pinned numbers instead, which the tests already hold). The linter's totals are unchanged on every document.
   **Baseline unchanged: 385 notebooks.**
 
+- **2026-10-30 — distillation: the dated facts checked again.** The product facts of `00-foundations/distillation/`
+  (dated 2026-09-27) were checked against the current releases: TRL 1.17.0 (2026-10-29) keeps the GKD and Distillation
+  defaults, logs a hint from `GKDTrainer` to `DistillationTrainer` at `lmbda=1.0` and `temperature=1.0`, removed the
+  experimental MiniLLM trainer in 1.15.0 and gave GOLD the X-Token cross-tokenizer loss; vLLM 0.32.0 (2026-10-18) keeps
+  the spec-decode counters, the log line, the `greedy` default and `use_heterogeneous_vocab`, and adds the `suffix`,
+  `ngram_gpu`, `dflash` and `dspark` methods, more `*_mtp` types and a draft `kv_cache_dtype`; the tinker-cookbook
+  numbers and the Gemini 3.5 Flash price are unchanged (the price pages also list newer, cheaper Flash models). The
+  primer, the topic and lab READMEs, the deploy README, the price comments and the Verify list say so, with the dates;
+  the §3 worked example gains the cost at a $3.75 output price, pinned by `test_primer_numbers.py`. The lab keeps its
+  pins (TRL 1.14.0, vLLM 0.30.0): the T1 paths were not re-run on a GPU. Google's price page was not reachable from
+  the session (aggregator pages were), so the price lines keep `(verify)`. **Baseline unchanged: 385 notebooks.**
+
 ## Housekeeping
 - Deduped 2026-09-26: `07-.../long-running-durable/PRIMER.md` is the only copy of the durable-execution primer, and
   `long-running-durable/lra-gcp/docs/primer.md` the only lra primer (the byte-identical twins were removed).

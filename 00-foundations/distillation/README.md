@@ -94,4 +94,5 @@ For prices, free tiers and how to get GPUs on GCP and elsewhere, see [`COMPUTE.m
 - **Dated facts.** The facts that follow are as of September 2026, and each one has the mark `(verify)`. They are
   the distillation trainers and defaults of TRL 1.14.0, and the speculative-decoding flags and metrics of vLLM
   0.30.0. They are also the Qwen3, DeepSeek-R1, Minitron and EAGLE results, the licences and all prices. The
-  [Verify list](PRIMER.md#verify-list) of the primer collects them.
+  [Verify list](PRIMER.md#verify-list) of the primer collects them. A second check on 2026-10-30, against TRL 1.17.0
+  and vLLM 0.32.0, found the same defaults, counters, results and prices, and the list names the additions.

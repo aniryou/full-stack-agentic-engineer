@@ -181,6 +181,8 @@ def test_s3_and_s9_the_fixed_cost():
     api = K.fixed_cost(100_000, 1, 2000, 9.00, s.params(), H100, 11, mfu=0.4)
     t_cost = K.serving(K.SHAPES["qwen2.5-32b"], H100, 11, 2048, 0.030, n_gpus=2)["usd_per_m"]
     own = K.fixed_cost(100_000, 1, 2000, t_cost, s.params(), H100, 11, mfu=0.4)
+    cheaper = K.fixed_cost(100_000, 1, 2000, 3.75, s.params(), H100, 11, mfu=0.4)   # a newer Flash price, 2026-10-30 (verify)
+    present(f"At $3.75 per million output tokens, the teacher's tokens cost ${cheaper['generation_usd']:,.0f}.")
     present(f"that is ${api['generation_usd']:,.0f}", f"at §9's roofline cost, makes it ${own['generation_usd']:,.2f}",
             f"6·N·D = {api['train_flops'] / 1e18:.2f} × 10¹⁸ FLOPs", f"{api['gpu_hours']:.3f} GPU-hours on an H100 at 40% MFU, "
             f"${api['train_usd']:.2f} at $11/GPU-hour", f"{own['gpu_hours']:.3f} GPU-hours (${own['train_usd']:.2f})",

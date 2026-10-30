@@ -1,7 +1,7 @@
 # Distillation: teaching a small model what a large one knows, and what the student saves in serving
 
-*A primer for 00-foundations (module 00.6). Snapshot: September 2026. Each product fact has a date and the tag
-(verify). Each formula has a worked number and names the function in [`distill-core/`](distill-core/) (package
+*A primer for 00-foundations (module 00.6). Snapshot: September 2026, with a second check of the versions, the results
+and the prices on 2026-10-30. Each product fact has a date and the tag (verify). Each formula has a worked number and names the function in [`distill-core/`](distill-core/) (package
 `distillcore`) that calculates it.*
 
 *Toy numbers are exact (the core enumerates the output space), or they come from seeded runs of small numpy models,
@@ -333,8 +333,10 @@ $\text{loss} = \alpha \cdot \text{label} + (1 - \alpha) \cdot \text{rationale}$,
 (verify). Reasoning traces (§5) are the generative version of the same idea.
 
 **Worked: the fixed cost of a SeqKD run.** 100,000 prompts × one 2,000-token completion = 2 × 10⁸ teacher tokens. At
-$9.00 per million output tokens (the 06 lab's Gemini 3.5 Flash price, dated 2026-09-05 there, verify) that is
-$1,800. Generation on the 32B, self-hosted on two H100s, at §9's roofline cost, makes it $177.91.
+$9.00 per million output tokens (the 06 lab's Gemini 3.5 Flash price, dated 2026-09-05 there and the same on 2026-10-30, verify) that is
+$1,800. Generation on the 32B, self-hosted on two H100s, at §9's roofline cost, makes it $177.91. The price pages of
+2026-10-30 also list newer Flash models at lower prices (verify). At $3.75 per million output tokens, the teacher's
+tokens cost $750.
 
 SFT of the 1.5B student for one epoch is
 6·N·D = 1.85 × 10¹⁸ FLOPs ([transformer primer §6.2](../transformers/docs/transformer-primer.md#62-what-scale-means)).
@@ -475,10 +477,11 @@ GKD raises an error if the `vocab_size` of the two configs is different (verify)
 against 151,936 for the small Qwen2.5 and all Qwen3 models (verify). Thus you cannot use GKD to distil a 0.5B from a
 7B, although the token ids match. The cross-tokenizer methods are in §6.
 
-**TRL, concretely (1.14.0, verify).** `GKDConfig`/`GKDTrainer` are experimental:
-`from trl.experimental.gkd import GKDConfig, GKDTrainer`. Their defaults are `lmbda=0.5`, `beta=0.5`,
-`temperature=0.9` (sampling only: the loss runs at T = 1), `max_new_tokens=128` and `seq_kd=False`. $\lambda$ is a
-per-batch coin flip.
+**TRL, concretely (1.14.0, the version that the lab pins; the same on 1.17.0 of 2026-10-29, verify).**
+`GKDConfig`/`GKDTrainer` are experimental: `from trl.experimental.gkd import GKDConfig, GKDTrainer`. Their defaults
+are `lmbda=0.5`, `beta=0.5`, `temperature=0.9` (sampling only: the loss runs at T = 1), `max_new_tokens=128` and
+`seq_kd=False`. $\lambda$ is a per-batch coin flip. Since 1.17.0, `GKDTrainer` logs a hint to move to
+`DistillationTrainer` when `lmbda=1.0` and `temperature=1.0`, because that configuration is the stable trainer (verify).
 
 `DistillationTrainer` / `DistillationConfig` are stable API (`from trl import …`). They are always on-policy, with
 `beta=1.0` (reverse KL) by default, `max_completion_length=512`, and `temperature=1.0` applied to both logits. Their
@@ -613,7 +616,8 @@ the Qwen3-235B-A22B MoE (verify).
 methods work across tokenizers (all verify):
 
 - Universal Logit Distillation compares sorted probability vectors instead of aligned tokens.
-- TRL's experimental GOLD trainer aligns text spans and merges their logits (`use_uld_loss`).
+- TRL's experimental GOLD trainer aligns text spans and merges their logits (`use_uld_loss`). Since TRL 1.17.0 it also
+  has X-Token, an off-policy cross-tokenizer loss with a precomputed projection matrix (`xtoken_loss_type`, verify).
 - The `use_heterogeneous_vocab` of vLLM lets a draft of another vocabulary propose greedily.
 
 Sequence-level distillation goes around the problem fully, because text is text. This is one reason why it is the
@@ -705,9 +709,14 @@ target. The EAGLE README reports 3× (EAGLE) and 5.6× (EAGLE-3) over vanilla de
 Medusa adds decoding heads to the target itself, and it reports 2.2–3.6× (verify). Medusa-1 trains only the heads.
 When the original data is not available, Medusa uses "self-distillation".
 
-With vLLM 0.30.0 (verify), you serve these designs through `--speculative-config`. Its `"method"` is one of
-`draft_model`, `eagle`, `eagle3`, `medusa`, `mtp`, `ngram` and others. For `draft_model`, the `vocab_size` of the
-draft must be equal to the `vocab_size` of the target. Thus Qwen2.5-0.5B cannot be a draft for Qwen2.5-7B.
+With vLLM 0.30.0 (the version that the lab pins, verify), you serve these designs through `--speculative-config`. Its
+`"method"` is one of `draft_model`, `eagle`, `eagle3`, `medusa`, `mtp`, `ngram` and others. Version 0.32.0
+(2026-10-18) adds the methods `suffix`, `ngram_gpu`, `dflash` and `dspark`, more `*_mtp` model types and a
+`kv_cache_dtype` for the draft (verify). It keeps the counters and the log line below.
+
+For `draft_model`, the `vocab_size` of the draft must be equal to the `vocab_size` of the target, unless you set `use_heterogeneous_vocab`. That option limits the
+draft to the tokens that the two vocabularies share (verify). Thus, by default, Qwen2.5-0.5B cannot be a draft for
+Qwen2.5-7B.
 
 **The counters of vLLM** (`vllm:spec_decode_num_drafts`, `…_num_draft_tokens`, `…_num_accepted_tokens`,
 `…_num_accepted_tokens_per_pos`, verify). "Mean acceptance length" =
@@ -1017,7 +1026,7 @@ Papers:
 - DeepSeek-AI, *DeepSeek-R1* (arXiv:2501.12948). Qwen Team, *Qwen3 Technical Report* (arXiv:2505.09388).
 - Shumailov et al., *AI models collapse when trained on recursively generated data*, Nature 631, 2024.
 
-Code and documentation (read 2026-09-27):
+Code and documentation (read 2026-09-27; TRL v1.17.0 and vLLM v0.32.0 read again on 2026-10-30):
 
 - TRL `github.com/huggingface/trl` v1.14.0: `trl/experimental/gkd/gkd_trainer.py`, `gkd_config.py`,
   `trl/trainer/distillation_trainer.py`, `distillation_config.py`, `sft_config.py`, `docs/source/gkd_trainer.md`,
@@ -1053,8 +1062,10 @@ Code and documentation (read 2026-09-27):
 
 ## Verify list
 
-This list has the product facts in this primer, in `distillcore/cost.py` and in the notebooks, as of 2026-09-27. Do
-the check again against the versions that you pin.
+This list has the product facts in this primer, in `distillcore/cost.py` and in the notebooks, as of 2026-09-27. A
+second check on 2026-10-30, against TRL 1.17.0 and vLLM 0.32.0, found the same defaults, counters, results and
+prices. The additions are in the items below. The lab keeps its pins, TRL 1.14.0 and vLLM 0.30.0. Do the check again
+against the versions that you pin.
 
 - **TRL 1.14.0**, with transformers 5.x, which pip resolves for it (`warmup_ratio` is gone, and `warmup_steps` < 1
   is a ratio):
@@ -1065,7 +1076,10 @@ the check again against the versions that you pin.
     - `DistillationTrainer`/`DistillationConfig` stable and always on-policy: `beta` 1.0, `temperature` 1.0 on both
       logits, `max_completion_length` 512, 256-position loss chunks,
     - its quick start, Qwen2.5-0.5B from 1.5B,
-    - GOLD (`use_uld_loss`) and MiniLLM experimental,
+    - GOLD (`use_uld_loss`) experimental, with X-Token since 1.17.0; the MiniLLM trainer, experimental in 1.14.0, is
+      gone since 1.15.0,
+    - on 1.17.0 (2026-10-29): the same GKD and Distillation defaults, the hint from `GKDTrainer` at `lmbda=1.0` and
+      `temperature=1.0`, transformers 5.22.1 and peft 0.21.2 when checked,
     - `SFTConfig` and the other configs with bf16 as the default, unless you set `fp16`.
 - **vLLM 0.30.0:**
     - `--speculative-config` and its `method` values,
@@ -1074,7 +1088,12 @@ the check again against the versions that you pin.
     - the equal-vocab-size check of `draft_model`, and `use_heterogeneous_vocab`,
     - the `vllm:spec_decode_*` counters, and the logged "draft acceptance rate" = $\text{accepted} \div \text{drafted}$,
     - `prompt_logprobs`, `--max-logprobs` default 20, `--logprobs-mode` default `raw_logprobs`,
-    - `--dtype half` on a T4.
+    - `--dtype half` on a T4,
+    - on 0.32.0 (2026-10-18): the same four counters and log line,
+    - `draft_sample_method` with `greedy` as the default and `probabilistic` as the other value,
+    - `use_heterogeneous_vocab` for `draft_model` only,
+    - the new `method` values `suffix`, `ngram_gpu`, `dflash`, `dspark` and more `*_mtp` types, and `kv_cache_dtype`
+      for the draft.
 - **Models:**
     - the Qwen2.5-0.5B/1.5B/32B, Qwen3-0.6B/4B and Llama-3.1-8B shapes in `cost.SHAPES`,
     - config `vocab_size` 151,936 for small Qwen2.5 and all Qwen3, and 152,064 for Qwen2.5-7B and larger,
@@ -1083,7 +1102,7 @@ the check again against the versions that you pin.
 - **Results quoted:**
     - Qwen3 Table 21 (8B: RL 67.6 at 17,920 GPU-hours, on-policy distillation 74.4 at 1,800),
     - tinker-cookbook (Qwen3.5-9B-Base from Qwen3.5-9B, rank-128 LoRA: ~65% to ~76.7% AIME'24, 200 steps × 512
-      groups, 16K-token rollouts),
+      groups, 16K-token rollouts; the same on 2026-10-30),
     - the on-policy stage of Qwen3 and of the tinker-cookbook, which starts from an SFT checkpoint,
     - Minitron (40× fewer tokens, 1.8×, up to 16% MMLU),
     - the Llama 3.2 and Gemma 2/3 distillation statements,
@@ -1094,6 +1113,7 @@ the check again against the versions that you pin.
     - TinyBERT and MiniLM, described but not quantified,
     - the lm-eval gsm8k defaults (greedy, 256 tokens).
 - **Prices and hardware:** H100 ~$11/GPU-hour on demand (Spot ~$3.7), Gemini 3.5 Flash $9.00/M output (06 lab,
-  2026-09-05), and the device figures in `cost.GPUS` (roofline.specs'). The T4 fits (16 bytes per parameter for
+  2026-09-05), and the device figures in `cost.GPUS` (roofline.specs'). The Flash price was the same on the price pages
+  on 2026-10-30, which also list newer and cheaper Flash models (verify). The T4 fits (16 bytes per parameter for
   AdamW with an fp32 master, 2.49 GB of fp32 logits per 4,096 tokens) are predictions.
   [`COMPUTE.md`](../../COMPUTE.md) and the lab keep them current.

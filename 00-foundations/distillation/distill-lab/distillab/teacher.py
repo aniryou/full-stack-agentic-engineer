@@ -14,7 +14,7 @@ reads (TRL 1.14.0 ``docs/source/dataset_formats.md``, verify): *conversational* 
 [assistant message]}`` (loss on the completion only). A thinking teacher's reasoning goes in the assistant
 message's ``reasoning_content`` field or inline as ``<think>…</think>`` — the two ways TRL's Qwen3 training
 template accepts it. :func:`api_cost` re-implements the 06 scaling lab's ``cost_per_call`` (USD per million
-tokens in / out / cached; its price table was checked on 5 Sep 2026 — verify before quoting).
+tokens in / out / cached; its price table was checked on 5 Sep 2026 and again on 30 Oct 2026 — verify before quoting).
 """
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ from pathlib import Path
 from . import data as D
 
 # USD per 1M tokens (input, output, cached input), as the 06 scaling lab's scalelab.capacity.PRICES lists them
-# ("checked 5 Sep 2026"; verify before quoting). Re-implemented here: labs are standalone.
+# ("checked 5 Sep 2026, unchanged 30 Oct 2026"; verify before quoting). Re-implemented here: labs are standalone.
 PRICES = {
     "gemini-3.5-flash": (1.50, 9.00, 0.15),
     "gemini-3.5-flash-lite": (0.30, 2.50, 0.03),

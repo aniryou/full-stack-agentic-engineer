@@ -103,8 +103,7 @@ def test_scoring_a_students_text_gives_the_on_policy_reward(servers):
         s = servers["student"].chat(p.messages(), temperature=1.0, seed=i, top_logprobs=0)[0]
         scored = servers["teacher"].score(p.messages(), s.content)
         assert [t for t, _ in scored] == tokens(s.content)             # aligned token by token (shared tokenizer)
-        assert scored == pytest.approx([(t, v) for t, v in zip(tokens(s.content), score_text(
-            {"on_path": 0.9}, p.prompt, s.content))])
+        assert [v for _, v in scored] == pytest.approx(score_text({"on_path": 0.9}, p.prompt, s.content))
         rewards = [lt - ls for (_, lt), (_, ls) in zip(scored, s.logprobs)]
         if D.verify(p, s.content):
             seen_clean = True
