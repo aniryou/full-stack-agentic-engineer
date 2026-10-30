@@ -83,7 +83,7 @@ Also, because turns are long, Little's law connects latency to concurrency. At 2
 
 ### 1.4 Cost scales with context, and context grows
 
-The bill is tokens, and input is the largest part of it. A support turn sends 4–6 k tokens of system prompt, tool schemas, customer context and history. It gets 300–400 tokens back. Without compaction, the input grows by several hundred tokens each turn. Thus the cost of the tenth turn is several times the cost of the first turn.
+The bill is tokens, and input is the largest part of it. A support turn sends 4–6 k tokens of system prompt, tool schemas, customer context and history. It gets 300–400 tokens back. Without compaction, the input grows by several hundred tokens each turn. Thus the cost of the tenth turn is a multiple of the cost of the first turn.
 
 Three levers change the cost by integer factors:
 
@@ -208,7 +208,7 @@ $$
 
 The two numbers give the size of different things. In-flight turns give the size of the orchestrator memory, the session locks and the model concurrency. Concurrent sessions give the size of the open streaming connections at the gateway and of the hot session state in Redis.
 
-The token budget also puts a cap on concurrency. 10 M TPM ÷ 60 ≈ 167 k tokens/s. A turn uses 2.2 × 5,350 ≈ 11.8 k tokens over 6 s ≈ 2 k tokens/s. Thus the baseline can carry about 85 turns in flight, or 14 turns per second. That number is the initial value for the in-flight cap of the admission controller. It is *below* peak demand, and that is the whole story of this scenario.
+The token budget also puts a cap on concurrency. 10 M TPM ÷ 60 ≈ 167 k tokens/s. A turn uses 2.2 × 5,350 ≈ 11.8 k tokens over 6 s ≈ 2 k tokens/s. Thus the baseline can carry about 85 turns in flight, or 14 turns per second. This value of about 85 turns in flight is the initial value for the in-flight cap of the admission controller. It is *below* peak demand, and that is the whole story of this scenario.
 
 ```mermaid
 flowchart LR
@@ -248,7 +248,7 @@ The calculation for one 3.5 Flash call:
 
 The call costs $0.00345 + $0.0004 + $0.00315 ≈ $0.0070. Thirteen calls in a conversation come to ≈ $0.092. When you route a third of them to Flash-Lite at $0.00165, the cost goes down to $0.068. With self-hosted models, the same lever is a distilled student behind a cascade. The price of that student, with its break-even, is in [distillation §9](../../../../00-foundations/distillation/PRIMER.md#9-the-economics-of-a-student).
 
-Compared with a contact that a person handles, at several dollars, all three rows are low-cost. Compared with each other, they are different by 2×. At this volume, the difference is $220 k a month. Output tokens are the largest single line, but there are fourteen times fewer of them. The reason is that, on this model, the price of output is six times the price of input. Thus output caps and thinking levels are cost levers, not only latency levers.
+Compared with a contact that a person handles, at several dollars, all three rows are low-cost. Compared with each other, the highest cost per conversation is 2× the lowest. At this volume, the difference is $220 k a month. Output tokens are the largest single line, but there are fourteen times fewer of them. The reason is that, on this model, the price of output is six times the price of input. Thus output caps and thinking levels are cost levers, not only latency levers.
 
 > **Verify.** The prices are for the global endpoint on 5 September 2026:
 >
@@ -335,7 +335,7 @@ Then the orchestrator writes the transcript, publishes the terminal event, decre
 
 Also, a different per-instance limit of Cloud Run is relevant to each service. The 1,000-connection and 800 requests-per-second caps set the limit of a gateway instance. The memory per in-flight turn sets the limit of an orchestrator instance.
 
-*The user waits, but a queue sits between them*, for three reasons:
+*A queue sits between the gateway and the orchestrator, but the user waits*, for three reasons:
 
 - A queue changes a burst into a backlog with one number that you can measure, not into a pile of failed requests. That number is the age of the oldest turn that has not started.
 - It gives at-least-once execution with redelivery. This at-least-once execution is what makes the loop durable.
@@ -377,7 +377,7 @@ You must shape the demand for the model before it gets to the pool. There are th
 
 The *capacity* of the bucket is the burst that you tolerate. Its *rate* is the sustained tokens per second. A six-second burst allowance is a good default. A smaller allowance gives smoother traffic and fewer 429s, but more waits in the client-side queue.
 
-If the bucket cannot admit a call in a bounded wait, the gateway treats that as a rate-limit signal too. That signal counts toward the degrade level. Then the gateway tries a sibling model with its own pool before the call fails. When there is more than one orchestrator instance, the bucket must be in Redis. A Lua-scripted Redis bucket is atomic and costs one round-trip per call.
+If the bucket cannot admit a call before a bounded wait ends, the gateway treats that as a rate-limit signal too. That signal counts toward the degrade level. Then the gateway tries a sibling model with its own pool before the call fails. When there is more than one orchestrator instance, the bucket must be in Redis. A Lua-scripted Redis bucket is atomic and costs one round-trip per call.
 
 Provisioned Throughput connects at the same place. For each request, you select one of three modes:
 
@@ -484,7 +484,7 @@ Each task has its own output cap and its own thinking level. Thinking is minimal
 
 ### 5.6 Tools at scale
 
-The tools are usually the real bottleneck, because the systems behind them have a capacity for the traffic of people. The executor applies these mechanisms, in this order:
+The tools are usually the real bottleneck, because the owners of the systems behind them set their capacity for the traffic of people. The executor applies these mechanisms, in this order:
 
 1. a bulkhead (a semaphore per tool per instance), so that a slow billing call cannot occupy every worker,
 2. a circuit breaker per tool,
@@ -729,7 +729,7 @@ The expected effects are a cost 4–5× down and a p95 of 6–8 s. You also get 
 | Compute | Cloud Run services (gateway, orchestrator, tools), worker pools (GA) for pull-based long turns, instances (Preview) for singleton agents, jobs for evals and batch. Agent Runtime as the managed alternative. GKE with KEDA when Kubernetes is the platform. |
 | Queue and durability | Pub/Sub push with OIDC, ordering keys, retry policy, dead-letter topics. Cloud Tasks for rate-capped, scheduled, deduplicated tool work (500/s per queue, 30-minute dispatch deadline). Workflows for year-long approvals (512 KB state, callbacks). |
 | State | Firestore (Standard/Enterprise, with TTL and PITR), Memorystore for Valkey/Redis (streams, buckets, locks). AlloyDB + ScaNN / Vertex AI Vector Search for retrieval. Agent Runtime Sessions and Memory Bank on the managed path. |
-| Edge | Global external ALB with serverless NEGs. Cloud Armor rate limits (per header/cookie/IP keys, throttle or ban) and WAF. IAP (natively on Cloud Run since March 2026). Apigee for spike arrest and quotas on API-shaped tools. |
+| Edge | Global external ALB with serverless NEGs. Cloud Armor rate limits (per header/cookie/IP keys, throttle or ban) and WAF. IAP (natively on Cloud Run from March 2026). Apigee for spike arrest and quotas on API-shaped tools. |
 | Governance at scale | Agent Registry, Agent Gateway (MCP/A2A-aware policy point, 5,000 registered resources per instance), Agent Identity (SPIFFE, mTLS + DPoP), Model Armor inline |
 | Observability | Cloud Trace through OTLP (`telemetry.googleapis.com`), Cloud Monitoring custom metrics and SLOs with burn-rate alerts, log-based metrics, Managed Prometheus sidecar. Agent Observability/Evaluation on the managed path. |
 | Delivery and cost | Cloud Build, Cloud Deploy canaries for Cloud Run (10/50/100 with verify). Budgets with Pub/Sub notifications. Budgets do not cap spend, so connect the notification to a kill switch. Cloud Run flexible CUDs (28 % / 46 %), Cloud Run budget spend caps (Preview). |
@@ -749,7 +749,7 @@ The design is yours, not the vendor's.
 
 ## § Sources and verify list
 
-Official documentation read on 5 September 2026 (for Google's products, now at docs.cloud.google.com):
+Google's product documentation is now at docs.cloud.google.com. This list gives the official documentation read on 5 September 2026:
 
 - Gemini Enterprise Agent Platform pricing, model pages and lifecycle table, Standard/Priority/Flex PayGo, Provisioned Throughput and its supported-models table, context caching, batch inference, quotas,
 - Cloud Run quotas, autoscaling, request timeout, billing settings, Direct VPC egress, WebSockets, Pub/Sub push integration, "Host AI agents on Cloud Run",

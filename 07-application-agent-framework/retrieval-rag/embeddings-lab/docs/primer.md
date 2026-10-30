@@ -74,7 +74,7 @@ $$
 
 **GloVe (Pennington et al., 2014)** makes the factorization explicit. It fits $w_i \cdot c_j + b_i + b_j \approx \log X_{ij}$, with a weight function $f(X_{ij})$ that puts a limit on high counts. It is in the same family.
 
-**fastText (Bojanowski et al., 2017)** uses a bag of character n-grams for each word, and it adds their vectors together. It handles morphology and out-of-vocabulary words. It is also the conceptual ancestor of the role that subword tokenization has in modern models.
+**fastText (Bojanowski et al., 2017)** makes the vector of a word from a bag of character n-grams. It adds the vectors of the n-grams together. It handles morphology and out-of-vocabulary words. It is also the conceptual ancestor of the role that subword tokenization has in modern models.
 
 **Analogies and linear structure.** $\text{king} - \text{man} + \text{woman} \approx \text{queen}$. Why is this linear? If the vectors are (approximately) factorizations of log co-occurrence, then relations that *multiply* co-occurrence ratios *add* in log space. Arora et al. (2016) give a generative model, and Ethayarajh, Duvenaud and Hirst (2019) tie the linear analogies to co-occurrence shift.
 
@@ -104,7 +104,7 @@ For **decoder-only (causal) models**, only the last token attends to the whole i
 
 **Inside an LLM.** The embedding matrix $E \in \mathbb{R}^{\lvert V \rvert \times d_{\text{model}}}$ initializes the residual stream with $E[\text{token}]$ plus positional information. The attention and MLP blocks add to the residual stream layer by layer, and the unembedding $W_U$ maps the final residual to logits. Small models frequently tie $W_U = E^{\top}$ (Press and Wolf, 2017).
 
-The *logit lens* (nostalgebraist, 2020) applies $W_U$ to intermediate residuals to read the prediction of the model at each layer. It reads each layer as if that layer is the last one. The logit lens is evidence that the residual stream keeps an approximately consistent basis across depth.
+The *logit lens* (nostalgebraist, 2020) applies $W_U$ to intermediate residuals to read the prediction of the model at each layer. It reads each layer as if that layer is the last one. The results of the logit lens are evidence that the residual stream keeps an approximately consistent basis across depth.
 
 ![Inside a transformer: the tokenizer splits the text, the embedding matrix E starts the residual stream, the blocks add to it layer by layer from lexical to semantic content, the unembedding maps the final residual to logits, the logit lens reads a prediction at each layer, and pooling collapses the token states into one embedding vector.](figures/residual-stream-pooling.svg)
 
@@ -254,7 +254,7 @@ Your own eval set is the investment with the highest leverage in a retrieval sys
 
 **The identity that ties the metrics together.** For any vectors, $\lVert a - b \rVert^2 = \lVert a \rVert^2 + \lVert b \rVert^2 - 2\,a \cdot b$. For unit vectors, this is $2 - 2\cos(a, b)$. Thus, on normalized vectors, nearest by Euclidean = nearest by cosine = nearest by dot product. Use the metric that the model trained with. Most modern text embedders use cosine and give unit vectors.
 
-**When magnitude matters.** Unnormalized dot products let the norm carry information. In recommenders, the item norm correlates with popularity, and this is a useful prior. Some dense retrievers (DPR) use the dot product in training. In these retrievers, the document norm then encodes how many queries the document can answer. Normalization removes that information, and you want this removal in some cases but not in others.
+**When magnitude matters.** Unnormalized dot products let the norm carry information. In recommenders, the item norm correlates with popularity, and this is a useful prior. Some dense retrievers (DPR) use the dot product in training. In these retrievers, the document norm then encodes "how many queries the document can answer". Normalization removes that information, and you want this removal in some cases but not in others.
 
 Maximum inner product search becomes a nearest-neighbor search if you add one coordinate ($\sqrt{M^2 - \lVert x \rVert^2}$, Bachrach et al., 2014, and Shrivastava and Li, 2014). Graph indexes use this added coordinate to support the dot product.
 
@@ -270,7 +270,7 @@ Maximum inner product search becomes a nearest-neighbor search if you add one co
 
 The remedies are subtraction of the mean, **CSLS**, mutual nearest neighbors and inverted softmax. CSLS (cross-domain similarity local scaling, Conneau et al., 2018) penalizes candidates that are near everything. In production, the symptom is that the same few chunks come up for every query.
 
-**Isotropy metrics.** The metrics are the average cosine between random pairs (≈0 when isotropic), the spectrum of the covariance matrix (effective rank, participation ratio) and IsoScore. Better isotropy helps *raw* models. Contrastive-trained models are already near the optimum for their task. Perfect isotropy is not the goal. The goal is uniformity subject to alignment.
+**Isotropy metrics.** The metrics are the average cosine between random pairs (≈0 when isotropic), the spectrum of the covariance matrix (effective rank, participation ratio) and IsoScore. Better isotropy helps *raw* models. Contrastive-trained models are already near the best point for their task. Perfect isotropy is not the goal. The goal is uniformity subject to alignment.
 
 **Johnson–Lindenstrauss.** A random Gaussian matrix can project any $n$ points in $\mathbb{R}^d$ into $k = O(\log n / \varepsilon^2)$ dimensions, and keep every pairwise distance within a factor of $(1 \pm \varepsilon)$. The consequences: a random projection to a few hundred dimensions costs almost nothing for nearest-neighbor purposes. PCA does better, because it uses the structure. MRL does even better than PCA, because it trains for that structure. JL is also the reason why LSH works, and why superposition (section 9) is possible.
 
@@ -286,7 +286,7 @@ The remedies are subtraction of the mean, **CSLS**, mutual nearest neighbors and
 
 **Sparse autoencoders** decompose residual-stream activations into tens of thousands of interpretable features. Three papers describe this use: Bricken et al., 2023, Templeton et al., 2024 (*Scaling Monosemanticity*), and Gao et al., 2024. The result is an over-complete, sparse *re-embedding of the dense embedding*. Beyond interpretability, researchers used SAE features for retrieval and for controllable embeddings. SAE features also let you audit the signal that an embedding model uses: topic, style, format, or the thing that is important to you.
 
-**Universal geometry.** The **Platonic Representation Hypothesis** (Huh et al., 2024): as models scale, the representations of different models become more like each other, even across modalities. Mutual kNN alignment measures this similarity. The representations converge toward a shared statistical model of the world.
+**Universal geometry.** The **Platonic Representation Hypothesis** (Huh et al., 2024): as models scale, the representations of different models become more and more alike, even across modalities. Mutual kNN alignment measures this similarity. The representations converge toward a shared statistical model of the world.
 
 The **vec2vec** method (Jha et al., 2025) goes to the strong form, with an unsupervised translator (adversarial + cycle-consistency, no paired data). The translator maps embeddings from the space of model A into the space of model B, with cosine up to ~0.9. This translation is sufficiently accurate to run attribute inference and inversion on the translated vectors.
 
@@ -522,7 +522,7 @@ flowchart LR
 - **Inversion** (section 9): vectors are the data. Apply the same controls as for the source text.
 - **Access control at retrieval time.** Filter by ACL before or during the search (pre-filter or filter-aware index). Never trust the LLM to hold back a retrieved chunk. Use per-tenant indexes for hard isolation.
 - **Poisoning** (PoisonedRAG, Zou et al., 2024): an attacker who can write to the corpus crafts passages optimized for retrieval on target queries. The corpus can be the public web, shared drives or ticket systems. The attacker also optimizes these passages to steer the answer. The defenses are provenance-weighted ranking, outlier and duplicate detection on new content, and isolation of untrusted sources. Another defense is to treat retrieved text as untrusted input (prompt-injection hardening).
-- **Extraction via similarity APIs.** Repeated queries permit membership inference and corpus extraction. Rate-limit and log the queries.
+- **Extraction through similarity APIs.** Repeated queries permit membership inference and corpus extraction. Rate-limit and log the queries.
 
 ---
 
@@ -536,7 +536,7 @@ flowchart LR
 4. **Universal geometry, translation, and privacy.** The trends are Platonic convergence, vec2vec translation, steadily better inversion, and regulators who treat embeddings as personal data. Watch for tools for migration between embedding spaces. Also watch for retrieval that protects privacy (encrypted/secure ANN, differential privacy on embeddings).
 5. **Context- and corpus-aware embeddings.** Late chunking, contextual retrieval and Contextual Document Embeddings are representations that depend on what else is in the index. Another topic is document-level versus passage-level representations.
 6. **Scaling laws for retrieval.** Fang et al. (2024) find that contrastive entropy obeys power laws in model size and annotation volume. Annotation *quality* trades off against model size. The practical conclusion: money for hard-negative quality and synthetic data frequently gives more than a larger encoder.
-7. **Efficiency.** MRL + binary + int8 give 64–100× smaller indexes. Static-embedding distillation makes the encoder 100–500× faster. Distilled models of 100–600M are at most a few points from 7B+ teachers. Retrieval on the device is another trend.
+7. **Efficiency.** MRL + binary + int8 give 64–100× smaller indexes. Static-embedding distillation makes the encoder 100–500× faster. The scores of distilled models of 100–600M are at most a few points from the scores of 7B+ teachers. Retrieval on the device is another trend.
 8. **Interpretable and controllable embeddings.** The directions are SAEs over embedding models and feature-level retrieval and steering ("match on this feature, ignore style"). Another direction is concept-geometry results (Park et al.), as a bridge between embedding spaces and explicit ontologies.
 9. **Long-context LLMs versus retrieval.** Million-token contexts decrease the need for fine chunking, but not the need for retrieval. Cost, latency, freshness, permissions and the lost-in-the-middle effect keep retrieval central. The role moves toward coarse selection of larger units plus **agentic search**. In agentic search, the model does more than one search, reads, and refines. In agentic search, embeddings are one tool among lexical search, structured queries and graph traversal.
 10. **Dynamic and continual settings.** The topics are temporal embeddings, drift detection, and backward-compatible training so that indexes survive model updates. Another topic is streaming ANN with low-cost deletes.

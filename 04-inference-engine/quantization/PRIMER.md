@@ -156,9 +156,10 @@ convention widens the range to include 0, and it covers [min, max] instead of [�
 `[−0.3, 0, 0.05, 0.4, 1.2]` it gives scale 0.1 and zero point 3, and 0 is exact (`formats.asym_params()`). It
 halves the step for one-sided data, for example ReLU outputs.
 
-**Floating point.** A float has a sign, $e$ exponent bits with a bias, and $m$ mantissa bits. Between two adjacent powers of
-two, the step is $2^{\text{exponent} - m}$, so the **relative** error is at most $2^{-(m+1)}$ at any magnitude.
-Below the smallest normal exponent, the distance between values stays constant (subnormals).
+**Floating point.** A float has a sign, $e$ exponent bits with a bias, and $m$ mantissa bits. Between a power of two and
+the next power of two, the step is $2^{\text{exponent} - m}$. Thus the **relative** error is at most $2^{-(m+1)}$ at
+any magnitude. Below the smallest normal exponent, the distance between values stays constant (subnormals).
+
 `formats.FloatFormat.grid()` lists every value from the bit patterns, and `formats.to_float()` rounds to that grid
 (ties to even, with saturation). On 100,000 values, `to_float` is bit-identical to the `float8_e4m3fn` and
 `float8_e5m2` casts of torch (notebook 01).
@@ -476,7 +477,7 @@ INT8 uses an INT32 accumulator. FP8 uses FP32. But see the last item of the next
 core.
 
 An emulation with integer codes and integer accumulation gives the fake-quantized product with a difference of at most 10⁻¹⁴
-(notebook 04). The epilogue has three consequences:
+(notebook 04). This form of the W8A8 GEMM has three consequences:
 
 - The activation scale can change per token, and the weight scale per output channel. But **neither can change
   along k**, the reduction axis. That is why SmoothQuant must move per-input-channel variation into the weights,
@@ -692,7 +693,7 @@ snapshot (verify).
 
 On the tiny model, INT4 RTN has KL 0.259, top-1 agreement 87.5% and accuracy 83.7%: it lost 341 right answers and
 gained 79. GPTQ has KL 0.048, 95.5% and 89.7%, losing 85 and gaining 61 (`eval.compare()`). The net accuracy makes
-the number of changed answers look smaller than it is. Greedy text is the most brittle metric of all. In
+the number of changed answers look smaller than it is. Greedy text is the metric that changes most easily. In
 serving-engine §8, an INT8 model with 99.8% top-1 agreement diverges from the BF16 greedy text after 13 tokens.
 
 **Error bars.** lm-eval reports $\text{stderr} = \text{sample stddev} / \sqrt{n}$. For a 0/1 metric, this is
@@ -894,7 +895,7 @@ model. Then change the order for your model. The decision:
 | **Ampere** (A100) | W4A16 or FP8 weight-only | INT8 W8A8 | + FP8 KV (FlashInfer) | FP8 checkpoints run W8A16 |
 | **Ada** (L4, RTX 4090) | W4A16 or FP8 | **FP8 W8A8** | + FP8 KV | CUTLASS FP8 needs CUDA ≥ 12.4. There is no block-FP8 CUTLASS. |
 | **Hopper** (H100, H200) | W4A16 (Machete) or FP8 | FP8 W8A8 (block or per-channel) | + FP8 KV (FA3) | the FP8 default |
-| **Blackwell** (B200, RTX PRO 6000) | NVFP4 | **NVFP4 W4A4** with smoothing or rotation, FP8. Use NVFP4 W4A4 only after it passes an eval. | + FP8 KV (NVFP4 KV on B200/SM100 only) | There is no INT8 W8A8. W4A16 is Marlin, not Machete. |
+| **Blackwell** (B200, RTX PRO 6000) | NVFP4 | **NVFP4 W4A4** with smoothing or rotation, or FP8. Use NVFP4 W4A4 only after it passes an eval. | + FP8 KV (NVFP4 KV on B200/SM100 only) | There is no INT8 W8A8. W4A16 is Marlin, not Machete. |
 
 Notebook 05 works through these examples with `cost.table()` and `cost.choose()`:
 
@@ -919,11 +920,11 @@ Notebook 05 works through these examples with `cost.table()` and `cost.choose()`
 **$0.132/M** (SIMULATED). That is 6.4× cheaper, not 2×. The reasons are fewer bytes per step, and a 5× larger batch
 that shares each step.
 
-This result agrees with the knob table of serving-engine §8. `kv_cache_dtype fp8` gives 2× KV capacity and faster
+These results agree with the knob table of serving-engine §8. `kv_cache_dtype fp8` gives 2× KV capacity and faster
 long-context decode. `quantization` gives memory and decode speed. It gives prefill speed only for FP8 (or INT8,
 FP4) W8A8. Both cost accuracy, and both depend on the kernels that are available for each GPU.
 
-**Where to run it**, concept by concept, on GCP and elsewhere (prices and obtainability in [`COMPUTE.md`](../../COMPUTE.md)):
+**Where to run it**, concept by concept, on GCP and elsewhere (prices and obtainability: [`COMPUTE.md`](../../COMPUTE.md)):
 
 | To learn | T0 (laptop / Colab CPU) | Non-GCP GPU (T1) | GCP (T3) |
 |---|---|---|---|
@@ -972,7 +973,7 @@ that we wrote down first."
    The memory and decode-byte savings stay, but prefill runs at the BF16 rate. INT8 W8A8 with SmoothQuant is the
    prefill lever on Ampere. Also, FP8 KV on an A100 moves attention to FlashInfer.
 3. *INT4 RTN lost 5 points on our model. What next, before we give up on 4 bits?* Calibrate. Use GPTQ, act-order
-   and groups of 128. If the kernel permits groups of 64/32, you can also use them. For layers whose inputs have outlier channels, use AWQ
+   and groups of 128. If the kernel permits groups of 64/32, you can use them instead. For layers whose inputs have outlier channels, use AWQ
    first. On our toy model, GPTQ took INT4 from −6.6 to −0.6 points.
 
    Then make sure that the recipe excludes the LM head and the routers. Also make sure that the calibration data

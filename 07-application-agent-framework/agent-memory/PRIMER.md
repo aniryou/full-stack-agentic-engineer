@@ -245,7 +245,7 @@ $$
 with each term min-max normalised to [0, 1] over the candidates. If all values are equal, each term is 0.5, as `normalize_dict_floats` in
 the reference code does. The paper and its code **are different**, and memcore implements both in `memcore.retrieve.score(..., form=...)`:
 
-| | `form="paper"`: the description in the paper. We did not examine it here, because arXiv was unreachable. | `form="code"` (`joonspk-research/generative_agents`, `retrieve.py`, read 2026-09-26) |
+| | `form="paper"`: the description in the paper. We did not read the paper to make sure of this description, because arXiv was unreachable. | `form="code"` (`joonspk-research/generative_agents`, `retrieve.py`, read 2026-09-26) |
 |---|---|---|
 | weights (recency, importance, relevance) | 1, 1, 1 | 0.5, 2, 3 (`gw = [0.5, 3, 2]` in the order recency, relevance, importance) |
 | recency | $0.995^{\text{hours since last access}}$ | $0.99^{\text{rank}}$, memories sorted by last access **oldest first** |
@@ -309,7 +309,7 @@ questions in the task shapes of two published benchmarks. It uses **shapes, not 
 
 LongMemEval (Wu et al., ICLR 2025, code MIT) marks abstention with an `_abs` suffix on `question_id`, not with a type. It uses an LLM per
 type to judge the answers. LoCoMo (Maharana et al., ACL 2024) numbers its QA categories 1 multi-hop, 2 temporal, 3 open-domain, 4
-single-hop, 5 adversarial. These numbers are an inference from its evaluation code. A comment in that code lists the names in a
+single-hop, 5 adversarial. These numbers are an inference from its evaluation code. Also, a comment in that code lists the names in a
 different order. Its data is **CC BY-NC 4.0**, so the repository bundles none of it (verify both).
 
 A strict template reader (`memcore.harness.read_answer`) answers from what retrieval packed into the budget. It gives the newest value of
@@ -434,8 +434,8 @@ ms** and **50.8** vs **7.7 ms**. Memory before the history costs **53.2 ms** of 
 at turn 20.
 
 The compute-only estimate of the capacity primer agrees on the scale. `capacity.ttft_s(24, 2000, H100)` = **0.0970 s** for a 24B model
-at its default **FP8** (1,979 TFLOP/s dense, 50% MFU). `memcore.budget.compute_ttft` states `capacity.ttft_s` again. This TTFT is about 49 ms per 1,000
-uncached tokens on that model. At the bf16 peak that the roofline of `prefill_seconds` uses (989 TFLOP/s), the same formula gives 0.194 s,
+at its default **FP8** (1,979 TFLOP/s dense, 50% MFU). This TTFT is about 49 ms per 1,000
+uncached tokens on that model. `memcore.budget.compute_ttft` uses the same formula as `capacity.ttft_s`. At the bf16 peak that the roofline of `prefill_seconds` uses (989 TFLOP/s), the same formula gives 0.194 s,
 about 97 ms per 1,000. The [capacity primer](../../00-foundations/gpu-capacity-planning/PRIMER.md) says this in item 4, "Prefill —
 compute-bound": "RAG and agents are prefill-dominated, so prefix caching … is the biggest single win".
 
@@ -598,7 +598,7 @@ in groups by slot and applies three rules (`memcore.consolidate.plan_key`):
 
 1. **Precedence**: of the sources that are present, the one with the highest precedence wins. The order is human > user > tool > inferred
    (`memcore.records.SOURCE_TRUST`). The write path quarantines tool-sourced episodes, so consolidation never reads them at all.
-2. **Newer supersedes older, and the older is kept**. The job closes the older fact with `valid_to` = the `valid_from` of the newer one.
+2. **Newer supersedes older, and the job keeps the older**. The job closes the older fact with `valid_to` = the `valid_from` of the newer one.
    "Newer" is valid time, not the order of arrival. The fact already on file joins the statements at its own `valid_from`. Thus a
    backfilled window or a re-run never lets an old value supersede a newer one.
 
@@ -609,7 +609,7 @@ in groups by slot and applies three rules (`memcore.consolidate.plan_key`):
    pair `valid_at`/`invalid_at` and `created_at`/`expired_at`. Its `resolve_edge_contradictions` closes a contradicted edge and does not
    delete it (`graphiti_core`, 0.30.2). Graphiti has **no `valid_to` field**, and memcore's `valid_to` does the job of `invalid_at`
    (verify).
-3. **A weaker contradiction is flagged**, never applied. Take the statements Lisbon (user, day 1), Porto (user, day 4), porto (user, day
+3. **The job puts a flag on a weaker contradiction** and never applies it. Take the statements Lisbon (user, day 1), Porto (user, day 4), porto (user, day
    5) and Madrid (inferred, day 6). `plan_key` returns a plan to Lisbon valid day 1–4, Porto from day 4 with two pieces of evidence,
    and a flag on Madrid. If an Oslo from the source `human` is on file, the job puts a flag on each user statement instead.
 
@@ -915,7 +915,7 @@ verified token, and the audit log records every read, write and forget."
 | Idempotency key | `session:turn:index`, per partition. It names the step, never its content. A retried turn replays its first write. |
 | Generative-agents score | Recency + importance + relevance, each min-max normalised. The paper form and the code form are different. |
 | Token budget | The tokens of memory injected per turn. Its value is the knee of recall against tokens. |
-| Knee | The smallest budget whose recall is not more than a tolerance below the best recall. In memcore, the tolerance is 2 points absolute (`knee(tol=0.02)`), and memory-lab uses 95% of the best (`knee(frac=0.95)`). |
+| Knee | The smallest budget whose recall is not more than a tolerance below the best recall. The memcore package uses a tolerance of 2 points absolute (`knee(tol=0.02)`), and memory-lab uses 95% of the best (`knee(frac=0.95)`). |
 | Planted-facts harness | A seeded generator plants facts across sessions and asks about them later, in benchmark task shapes. |
 | Abstention | The answer "I don't know" to an unanswerable question. It is also correct for a memory that stores nothing. |
 | Wilson interval | A confidence interval for a pass rate that behaves at 0/n and n/n. |

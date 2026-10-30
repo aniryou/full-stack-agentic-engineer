@@ -244,7 +244,7 @@ print(drain())
 assert RUNS["order-2"]["status"] == "SUCCEEDED" and CHARGES == ["charged"], "exactly one charge"
 '''
 )
-nb0.md("## Duplicate delivery\n\nCloud Tasks (and every real queue) gives at-least-once delivery. Send the `charge` task two times. Then look at how the guard rejects the second delivery.")
+nb0.md("## Duplicate delivery\n\nCloud Tasks (and every real queue) gives at-least-once delivery. Give the `charge` task to the worker two times. Then look at how the guard rejects the second delivery.")
 nb0.code(
     '''
 CHARGES.clear()
@@ -444,7 +444,7 @@ assert r.status == RunStatus.WAITING and r.wait.key == {{expected_key}}
 ''',
     expected_key='f"manager:{run.run_id}"',
 )
-nb2.md("## Resume — idempotent and key-scoped\n\nThe API endpoint `POST /runs/{id}/events` does this same resume. A duplicate event and an event for an incorrect gate return `None`, never an error.")
+nb2.md("## Resume — idempotent and key-scoped\n\nThe API endpoint `POST /runs/{id}/events` does the same resume as the next cell. A duplicate event and an event for an incorrect gate return `None`, never an error.")
 nb2.code(
     '''
 wrong = Event(run_id=run.run_id, key="cfo:" + run.run_id, payload={"decision": "approve"})
@@ -557,11 +557,11 @@ assert parent.status == RunStatus.WAITING and failed[0].attempt_of("research") =
 )
 nb3.md(
     "## The fan-in counter, by hand\n\n"
-    "Children finish in any order, and their completion messages have at-least-once delivery. The parent keeps a "
+    "Children finish in any order, and their completion notices have at-least-once delivery. The parent keeps a "
     "counter. The write that makes the counter reach `expected` wakes the aggregator.\n\n"
     "Write the rule that the store applies atomically (`InMemoryStateStore.record_child_result` under a lock, "
     "Firestore in a transaction). Record each child **one time**. When the counter gets to `expected`, report "
-    "*all done* for every message, and for a late duplicate too. The wake-up of that duplicate is a named, de-duplicated "
+    "*all done* for every notice, and for a late duplicate too. The wake-up of that duplicate is a named, de-duplicated "
     "task, so another try causes no harm. If the first wake-up did not arrive and the store answers *not done*, it is "
     "possible that the parent stays stuck."
 )
@@ -673,7 +673,7 @@ nb4 = NB(
     "```mermaid\nflowchart LR\n  S((START)) --> B[agree_budget<br/>RequestInput 'budget'<br/>rerun_on_resume=True]\n"
     "  B --> P[plan<br/>judgement]\n  P --> Q[queue_up<br/>side effect, runs once]\n"
     "  Q --> C[check_front<br/>RequestInput 'wake'<br/>rerun_on_resume=True]\n  C -- ready --> Y[buy<br/>idempotency key]\n"
-    "  C -- sold_out --> A[abandon]\n```\n(Jupyter already runs an event loop, thus the cells use top-level `await`.)",
+    "  C -- sold_out --> A[abandon]\n```\n(The cells use top-level `await`, because Jupyter already runs an event loop.)",
     requires=("google.adk",),
 )
 nb4.code(
@@ -722,7 +722,7 @@ print("order:", (await state())["order"])
 assert venue.calls == ["join_queue", "purchase"] and r4["interrupts"] == []
 '''
 )
-nb4.md("`queue_up` never ran again during the wake-ups. A resume continues from the node that interrupted, and ADK does not replay the nodes that already finished. `check_front` is the node that interrupted. It has `rerun_on_resume=True`, thus it ran again on every wake-up. With `False`, ADK marks it complete, uses the resume input (`{\"ok\": true}`) as its output and does not look at the queue. `buy` executed one time, with an idempotency key.\n\n## Staleness guard: the world changed while we waited")
+nb4.md("`queue_up` never ran again during the wake-ups. A resume continues from the node that interrupted, and ADK does not replay the nodes that already finished. `check_front` is the node that interrupted. It ran again on every wake-up because it has `rerun_on_resume=True`. With `False`, ADK marks it complete, uses the resume input (`{\"ok\": true}`) as its output and does not look at the queue. `buy` executed one time, with an idempotency key.\n\n## Staleness guard: the world changed while we waited")
 nb4.code(
     '''
 venue2 = Venue(); svc2 = InMemorySessionService(); runner2 = Runner(app=build_app(venue2), session_service=svc2)
@@ -822,7 +822,7 @@ nb4.md(
     "endpoint that resumes a session that *already exists*, and `main.py` adds this endpoint. The design questions for this "
     "notebook are in the drills of the topic primer (`../../PRIMER.md` §11, part D).\n\n"
     "## Takeaways\n\n* `RequestInput` is one primitive for two types of wait: a wait for a person and a wait for the world.\n"
-    "* `rerun_on_resume` decides what a resumed node does. With `True`, the node runs again and examines the world again. With `False`, the node uses the resume input as its answer. ADK does not replay the finished nodes and the side effects have idempotency keys, thus side effects stay safe.\n"
+    "* `rerun_on_resume` decides what a resumed node does. With `True`, the node runs again and examines the world again. With `False`, the node uses the resume input as its answer. Side effects stay safe because ADK does not replay the finished nodes and the side effects have idempotency keys.\n"
     "* Resume the invocation. Do not start a new one.\n* A prompt cannot wake itself. Something with a clock must call the endpoint."
 )
 
@@ -1054,7 +1054,7 @@ nb5.md(
     "on failure, and never runs the activity again after the activity is complete.\n"
     "* `workflow.wait_condition(...)` and a **signal** are the approval gate, with a timeout.\n"
     "* A loop bound in deterministic workflow code and `execution_timeout` are the budget.\n\n"
-    "Note one detail that is easy to miss. An *unexpected* exception in workflow code fails only the workflow **task**. The platform "
+    "One detail is easy to miss. An *unexpected* exception in workflow code fails only the workflow **task**. The platform "
     "retries that task until you repair the code and deploy it again. To fail an execution on purpose, raise `WorkflowError`.\n\n"
     "The Mistral Workflows loop needs Python 3.12–3.14 and the `mistral` extra (`mistralai-workflows` 3.15 declares `Requires-Python >=3.12,<3.15`, "
     "checked 2026-09-26, verify). The loop also needs a local Temporal dev server, which the SDK downloads on first use. "

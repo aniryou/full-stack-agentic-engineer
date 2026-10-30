@@ -361,8 +361,8 @@ events of the engines (`PreciseIndex`). The llm-d counterpart of a precise index
 block size must match the `--block-size` of the engine.
 
 In the simulations here, the difference between the approximate index and the precise one stays in the noise. The difference stayed in the noise even when the
-size of the approximate index was 15× too large and 73 % of its entries were phantoms. The cause is that agent turns come back in
-seconds, and the entries that the router actually reads are fresh.
+size of the approximate index was 15× too large and 73 % of its entries were phantoms. The cause is that agent turns come back after only a few
+seconds, and the entries that the router reads are fresh.
 
 The difference is important in two cases. The first case is a distant reuse (long tool pauses, many tenants,
 small caches). In that case, the KV is also gone, and only tiers help (§6). In the second case, you want the router
@@ -428,7 +428,7 @@ with `spec.poolRef` and `spec.priority` as an int32) sets the priority for a wor
 valid, and an unset priority counts as 0. The effect of the number depends on the `flowControl` feature gate:
 
 - **Gate on (flow control):** requests wait in the router by priority band, and the router always serves a higher
-  band first. The router enforces fairness only *inside* a band. The default ordering is global FCFS. The API
+  band first. The router enforces fairness only *inside* a band. Inside a band, the default ordering is global FCFS. The API
   documentation of the resource describes the behaviour with the gate on, and `fleetsim.FlowControl` models it (the table in §3.1).
 - **Gate off (the llm-d-router v0.10.0 default):** there is no router queue and no ordering. The legacy admission
   check only marks negative-priority objectives as *sheddable*. While the saturation detector reports saturation of
@@ -449,7 +449,7 @@ their TTL, and a full queue rejects new arrivals. The gateway changes these reje
 
 | Question | Layer | Mechanism |
 |---|---|---|
-| Is this tenant inside its budget? Is it necessary to degrade or shed? | 06 gateway | token buckets, in-flight caps, degrade levels, in [`scalelab/admission.py`](../../06-gateway/scaling-admission-cost/agentic-scaling-lab/scalelab/admission.py) |
+| Is this tenant under its budget? Is it necessary to degrade or shed? | 06 gateway | token buckets, in-flight caps, degrade levels, in [`scalelab/admission.py`](../../06-gateway/scaling-admission-cost/agentic-scaling-lab/scalelab/admission.py) |
 | Which request goes next, and to which replica, when replicas are busy? | 05 router | flow control, priorities, saturation detection |
 | Which requests share the next engine step? | 04 engine | continuous batching, token budget, preemption |
 
@@ -511,7 +511,7 @@ Then:
     - The other side of this: a capped metric increases the fleet by a factor of cap/target at the most for each
       cold start (§4.2). While a replica starts, `fleetsim` counts it as Pending for its full cold start (the
       same on a scale-up).
-2. **Multiple metrics:** calculate each one, then use the largest.
+2. **More than one metric:** calculate each one, then use the largest.
 3. **Stabilization** (`HPA.step()`): scale-down uses the **maximum** recommendation of the last
    `stabilizationWindowSeconds` (default 300). Scale-up uses the minimum over its window (default 0).
 4. **Policies**: in each `periodSeconds`, each policy permits `Pods: +value` or `Percent: ×(1 ± value/100)`. Both
@@ -546,7 +546,7 @@ The table shows one L4 replica under a chat load that increases (simulated, note
 | 3.5 | 1.00 | 60 | 0.75 | 0.3 | 0.64 s |
 
 "GPU utilisation" is the fraction of time when a kernel runs. This is what `nvidia-smi` reports. It is 1.00 at a
-seventh of the load that the replica can serve while it meets a 1 s TTFT SLO. The cause is continuous batching: it always
+seventh of the load that the replica can serve while the replica meets a 1 s TTFT SLO. The cause is continuous batching: it always
 runs a step while any request is in flight. Layer 02 §8 has the DCGM fields that measure more.
 
 The next table shows a step from 1.5 to 7.5 req/s, with each HPA on one signal. The HPAs have min 1, max 8 and a
@@ -619,7 +619,7 @@ notebook 03 gives 408 requests for a 7.5 req/s step on one replica that holds th
 - 120 s: 75 s,
 - 120 s with `minReplicas: 3`: 0.29 s on *fewer* GPU-hours (0.75 against 1.36).
 
-The reactive fleet scaled too far to drain its backlog. Thus the last case used fewer GPU-hours. Warm headroom is
+The last case used fewer GPU-hours because the reactive fleet scaled too far to drain its backlog. Warm headroom is
 a decision about cost and latency, not a waste line.
 
 ### 4.4 Scale to zero, and KEDA
@@ -718,7 +718,7 @@ $$
 SLO:
 
 - Prefill: 7,272 tokens/s ÷ (3,781 × 0.7) = **2.75 replicas**.
-- Decode: batch 5 (KV-bound, `max_decode_batch()`). The context of each request is 6,185 tokens, that is, 387 blocks. Batch 5 gives 71.6
+- Decode: batch 5 (KV-bound, `max_decode_batch()`). The KV cache sets the bound: the context of each request is 6,185 tokens, that is, 387 blocks. Batch 5 gives 71.6
   output tokens/s per replica, thus **4.19 replicas**.
 
 A simulation of every split of eight replicas used `search_pd()` (notebook 04, SLO TTFT ≤ 3 s, TPOT ≤ 80 ms).
@@ -1001,9 +1001,9 @@ freely, I use a shared KV store instead."
 4. *Why not autoscale on `num_requests_waiting` alone?*
 
     It is ~0 whenever the capacity is sufficient. Thus the HPA scales down, the queue comes back, and the fleet
-    goes up and down in a sawtooth. Use it together with the requests that run, or scale on work in flight. The HPA takes the max over
-    metrics. If prompt sizes vary, count the work in tokens. In notebook 03, the SLO attainment of a request
-    target adjusted for chat decreased to 0.69 on a chat + RAG mix.
+    goes up and down in a sawtooth. Use it together with the requests that run, because the HPA takes the max over
+    metrics. Or scale on work in flight. If prompt sizes vary, count the work in tokens. In notebook 03, an HPA with a request
+    target adjusted for chat decreased to 0.69 SLO attainment on a chat + RAG mix.
 
 5. *When is P/D disaggregation a bad idea?*
 

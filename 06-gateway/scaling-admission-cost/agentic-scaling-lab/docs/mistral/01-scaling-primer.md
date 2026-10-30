@@ -2,7 +2,7 @@
 
 *This primer explains how to size and deploy an agentic solution on Mistral models. The models run on Mistral's API (hosted) or on your own GPUs (self-hosted). The worked example is the support agent of a Singapore telco. The date of the fact check is 19 September 2026. The sections have numbers so that you can use them in drills. The callouts give anchors to keep in your head (**Numbers**), facts that change (**Verify**) and the mistake that occurs most often in actual designs (**Pitfall**).*
 
-> **How this differs from [the primer](../01-scaling-primer.md).** This is the primer of the Mistral provider. It is a rewrite, not a copy: the two primers share about a quarter of their lines. The thesis, the turn as the unit of work and the mechanisms of §5 are the same ideas, worked again. The new part is the second way to pay for tokens, which an open-weight model permits: your own vLLM fleet. This new part contains these topics:
+> **How this is different from [the primer](../01-scaling-primer.md).** This is the primer of the Mistral provider. It is a rewrite, not a copy: the two primers share about a quarter of their lines. The thesis, the turn as the unit of work and the mechanisms of §5 are the same ideas, worked again. The new part is the second way to pay for tokens, which an open-weight model permits: your own vLLM fleet. This new part contains these topics:
 >
 > - the batch-dependent time per token (§1.3),
 > - sovereignty as a dimension of scale (§1.8),
@@ -141,7 +141,7 @@ On two Ministral 3 14B replicas, the same overload gives *zero errors and zero 4
 
 ### 1.7 Multi-agent multiplies everything
 
-A coordinator with three specialists changes 2.2 model calls per turn into eight. It multiplies the cost by 3.6×, and it still multiplies the latency by 2× when the specialists run in parallel. At 95 % per hop, the probability that every hop succeeds goes from $0.95^{2.2} \approx 0.89$ to $0.95^{8} \approx 0.66$. Thus the multi-agent question is never "how do I scale the coordinator". The question is "what measured problem justifies that multiple". Usually, the problem is a tool set that is too large for one context, or permissions that must be different for each step.
+A coordinator with three specialists changes 2.2 model calls per turn into eight. It multiplies the cost by 3.6×. The specialists run in parallel, but the coordinator still multiplies the latency by 2×. At 95 % per hop, the probability that every hop succeeds goes from $0.95^{2.2} \approx 0.89$ to $0.95^{8} \approx 0.66$. Thus the multi-agent question is never "how do I scale the coordinator", but "what measured problem justifies that multiple". Usually, the problem is a tool set that is too large for one context, or permissions that must be different for each step.
 
 ### 1.8 Sovereignty is a scaling dimension
 
@@ -194,7 +194,7 @@ The anchor scenario is a fictional Singapore mobile operator, Meridian Mobile, w
 |---|---|
 | Conversations per day | 100,000 |
 | Peak hour against daily average | 3× |
-| Network-incident spike against average | 10× (an outage, with 75 % "no signal" intents) |
+| Network-incident spike against average | 10× (an outage, with "no signal" in 75 % of intents) |
 | Turns per conversation | 6 |
 | Model calls per turn | 2.2 (plan, answer, sometimes a third) |
 | Tool calls per turn | 1.3 (0.7 CRM, 0.25 billing, the rest network status and knowledge base) |
@@ -399,7 +399,7 @@ Then the pod writes the transcript and publishes the terminal event. It decremen
 
 *Gateway and orchestrator are separate Deployments* because they scale on different signals and fail in different ways. A streaming connection costs a coroutine and a few kilobytes. The loop costs tokens, tool calls and the memory of a full context.
 
-*The user waits, but a queue sits between them,* because the queue does three things:
+*The user waits, but a queue sits between the gateway and the orchestrator,* because the queue does three things:
 
 - It changes a burst into a backlog with one observable number: the age of the oldest turn that has not started.
 - It gives at-least-once execution with redelivery.
@@ -529,7 +529,7 @@ The controller writes the level to Redis, so every pod goes to the same degrade 
 
 Two details make the difference between an implementation that works and a diagram:
 
-- Levels 1 and 2 need hysteresis, or the level flaps. The lab holds a raised level for 15 s. Level 3 uses the instantaneous cap, because it must switch off at the moment the turns drain.
+- Levels 1 and 2 need hysteresis, or the level flaps. In the lab, the hysteresis holds a raised level for 15 s. Level 3 uses the instantaneous cap, because it must switch off at the moment the turns drain.
 - The *client* must add jitter to `Retry-After`, or every shed user returns at the same time.
 
 ### 5.4 Durable execution
@@ -575,7 +575,7 @@ The tools are usually the real bottleneck. The reason is that their owners sized
 5. A timeout.
 6. One retry, for idempotent reads only.
 
-Failures come back to the model as *structured data* (`{"error": "billing: rate limited"}`), never as exceptions that abort the turn. This is because the model can usually give an answer without the result of the failed tool. Also, an aborted turn is the outcome with the highest cost of all.
+Failures come back to the model as *structured data* (`{"error": "billing: rate limited"}`), never as exceptions that abort the turn. This is because the model can usually give an answer without the fact that the tool did not return. Also, an aborted turn is the outcome with the highest cost of all.
 
 Two habits remove most tool latency from the critical path:
 
@@ -598,7 +598,7 @@ The time-to-first-token that the user sees comes after the plan, the tools and t
 |---|---|---|
 | `--max-num-seqs` | 32 on the Ministral 14B replica (default 128) | puts a cap on the batch, and thus on the time per token. Above it, the latency becomes worse with no signal. |
 | `--max-model-len` | 32,768 (default 262,144) | frees the KV memory reserved for contexts that never occur |
-| `--max-num-batched-tokens` | 16,384 (the API-server default since 0.28) | the chunked-prefill budget per step. A smaller value is better for inter-token latency, and a larger value is better for TTFT. |
+| `--max-num-batched-tokens` | 16,384 (the API-server default from version 0.28) | the chunked-prefill budget per step. A smaller value is better for inter-token latency, and a larger value is better for TTFT. |
 | `--gpu-memory-utilization` | 0.92 (the default). Mistral's Small 4 and Medium 3.5 cards use 0.8. | headroom for activations. If the value is too high, a long prompt stops the pod. |
 | `--kv-cache-dtype fp8` | on, after an evaluation on your own transcripts | makes the KV bytes half: two times the resident sequences, a lighter step |
 | `--max-num-queued-reqs` / `--max-num-queued-tokens` | about 2 × `max_num_seqs` / a few × 16 k | new in 0.29: a 503 when the queue is full. Both have no limit by default, and that is the silent collapse. |
@@ -606,7 +606,7 @@ The time-to-first-token that the user sees comes after the plan, the tools and t
 | `--speculative-config` | EAGLE drafts published for Small 4, Medium 3.5 and Large 3 (`num_speculative_tokens` 3). On Ministral, try n-gram or a draft model. | a lower time per token at the same batch. This is the route to a six-second turn without four times the GPUs. |
 | Weight loading | `--load-format runai_streamer` or a node-local NVMe cache, `--kv-cache-memory-bytes` to skip profiling, the weight-load and tool-parser flags from each model card | 15.7 GB streams in about 30 s, and 121 GB in about a minute at 2 GiB/s. Often, the image pull is the slowest part of the 3–8-minute cold start. |
 | KEDA | vLLM: `sum(vllm:num_requests_waiting)` at an `AverageValue` of 5 and `vllm:kv_cache_usage_perc` at 0.8. Poll 15 s, cooldown 300–360 s. Min = the peak fleet (11), max = the incident (34). Orchestrator: queue length, about 40 messages per pod. | headroom only. Static capacity carries the peak, because a replica needs minutes to appear. |
-| GPU node pool and pods | static nodes for the peak on reserved or capacity-block terms. One replica per GPU, with `nvidia.com/gpu` requests equal to limits. vLLM pods with 4–8 vCPU, and memory of at least the weights again. Orchestrator: 2 vCPU / 2 GiB at concurrency 80. | no time-slicing (no memory isolation) and no MIG, because no slice holds a 14 B model with useful KV |
+| GPU node pool and pods | static nodes for the peak on reserved or capacity-block terms. One replica per GPU, with `nvidia.com/gpu` requests equal to limits. vLLM pods with 4–8 vCPU, and memory of at least the weights again. Orchestrator: 2 vCPU / 2 GiB at concurrency 80. | no time-slicing (no memory isolation) and no MIG (no slice with sufficient memory for a 14 B model and useful KV) |
 | PodDisruptionBudget, rollout, termination | vLLM `minAvailable` = peak fleet − 1. `maxSurge` 1 needs a spare GPU. Grace 60 s on the orchestrator, 30 s on vLLM with requests drained. | A drain must never take two replicas. A rollout of eleven takes an hour, unless there is a spare. |
 
 `--max-num-seqs` and the replica count set the latency of the fleet, not a percentage on an autoscaler. The values in the table come from the load test in notebook 05 (simulated). Calculate them again from `vllm bench serve` on the real hardware.
@@ -762,7 +762,7 @@ Custom models come late and for a different reason. Forge is Mistral's custom-mo
 - "What is the daily volume?" (the volume amortises the two-replica floor above 14–25 k a day. Above that, the GPU price decides.)
 - "What does an H100-hour cost you, and on what term?" (under about $4.95, the fleet costs less than the API. At $6.88 on-demand, it costs $15.5 k a month more.)
 - "Do you want Medium 3.5 on your own GPUs?" (a commercial licence and an eight-GPU replica).
-- "Which organisation holds the Mistral keys, and which tier is it on?" (the limit shared with other projects, and its console-only numbers).
+- "Which organisation holds the Mistral keys, and which tier is it on?" (the limit shared with other projects, and the console-only numbers of the tier).
 - "Do you need an SLA?" (the Priority Tier at +75 %, or the fleet).
 - "What happens to traffic during an outage?" (the incident factor, and the traffic eligible for spill-over).
 - "Which downstream system has the lowest QPS ceiling?" (bulkheads, caches, prefetch).

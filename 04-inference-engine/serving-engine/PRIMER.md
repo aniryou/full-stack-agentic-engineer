@@ -53,7 +53,7 @@ An engine is **a loop around one forward pass**.
   computes shared prefixes (system prompts, agent histories) only once.
 - The **sampler** changes the shape of one distribution per step. **Structured output** masks that distribution with
   a grammar.
-- **Speculative decoding** examines $k$ guessed tokens in one pass. Rejection sampling keeps the distribution of the
+- **Speculative decoding** accepts or rejects $k$ guessed tokens in one pass. Rejection sampling keeps the distribution of the
   target exactly.
 - **Quantization** decreases the bytes (decode), the FLOPs (FP8 prefill) or the KV (concurrency).
 - **Tensor parallelism** adds two all-reduces per layer.
@@ -65,7 +65,7 @@ An engine is **a loop around one forward pass**.
 ## 1. Anatomy of an engine
 
 A modern engine (vLLM's V1 architecture, verify) divides into processes, so that no work on the CPU makes the GPU
-wait. SGLang and TensorRT-LLM have almost the same shape. The diagram shows the processes:
+wait. SGLang and TensorRT-LLM have a shape like vLLM's. The diagram shows the processes:
 
 ```
  HTTP ───────► API server ──────────────► engine core ──────────────────────► GPU worker(s)
@@ -394,8 +394,8 @@ KV, a smaller model, higher utilisation), fewer concurrent sequences, or more re
 
 ## 5. Prefix caching
 
-The K/V of a token depend only on the tokens before it. Thus two requests whose prompts start with the same tokens
-compute identical K/V for that prefix. Prefix caching computes that K/V only once.
+Two requests whose prompts start with the same tokens compute identical K/V for that prefix. The cause is that the
+K/V of a token depend only on the tokens before it. Prefix caching computes that K/V only once.
 
 ![Two identical 20-token prompts with block size 4: request 2 hits the four blocks that request 1 named and computes the last block itself.](figures/prefix-cache-hash-chain.svg)
 
@@ -542,7 +542,7 @@ include the stop string.
 **Structured output** is sampling with a mask in the shape of a grammar. The engine compiles a JSON schema, a regex or
 a context-free grammar to an automaton. In each step, each token that takes the text out of the grammar gets
 $-\infty$ before sampling. Then the automaton advances on the drawn token (`ChoiceFSM`: `start()`, `allowed(state)`,
-`advance(state, token)`). With a byte vocabulary, the mask is simple. With a 100k-token BPE vocabulary, each token spans
+`advance(state, token)`). With a byte vocabulary, this method is simple. With a 100k-token BPE vocabulary, each token spans
 several characters.
 
 Thus the difficult part is to calculate, per grammar state, which of 100k tokens keep the text legal. A token is
@@ -584,7 +584,7 @@ $x \sim q$, in order:
 
 - Accept $x$ with probability $\min(1, p(x) / q(x))$ (`spec.verify()`).
 - At the first rejection, add $y \sim \operatorname{norm}(\max(0, p - q))$ to the output and stop (the "recovered" token).
-- If you accept all $k$, add one more token from the next $p$ of the target (the "bonus" token).
+- If you accept all $k$, add one more token from the next $p$ of the target to the output (the "bonus" token).
 
 This is why the rule is exact. The probability of token $y$ in the output has two terms. The first term is
 $q(y) \min(1, p(y)/q(y)) =$ $\min(p(y), q(y))$, through acceptance. The second term is
@@ -630,7 +630,7 @@ But then the acceptance rate is ${p(x)}$, not $\sum \min(p, q)$. `"probabilistic
 full $q$.
 
 Exactness holds for the `standard` rejection method and for `block` (block verification, Sun et al. 2024). `block`
-examines the $k$ drafts together. It still keeps the distribution, and in expectation it accepts at least as many
+decides how many of the $k$ drafts to accept from all $k$ together, not one draft at a time. It still keeps the distribution, and in expectation it accepts at least as many
 tokens. The `synthetic` method of vLLM accepts with a calibrated probability to benchmark speed, and it does not
 keep the distribution (verify).
 
@@ -656,9 +656,9 @@ H100, $\alpha$ = 0.7, $k$ = 4). A round is one engine step. It pays these costs:
 
 - the fixed overhead of the step, one time (2 ms, as everywhere in this primer),
 - $k$ draft forwards at their roofline time, plus an assumed 0.5 ms each (a CUDA-graph replay and a draft sample),
-- a target pass of $(k + 1) \times \text{batch}$ tokens, with logits at every position.
+- a verify pass of $(k + 1) \times \text{batch}$ tokens, with logits at every position.
 
-When the target pass crosses the knee, the extra positions cost real FLOPs:
+When the verify pass crosses the knee, the extra positions cost real FLOPs:
 
 | Context | B = 1 | B = 16 | B = 64 | B = 128 | B = 256 |
 |---|---|---|---|---|---|
@@ -667,18 +667,20 @@ When the target pass crosses the knee, the extra positions cost real FLOPs:
 
 The robust conclusion is the shape of the table. At short contexts, speculation becomes a slow-down past ~100–250
 concurrent requests. Here that point is 128, and 256 if a draft forward costs only its roofline time. At long contexts,
-decode stays bound by KV reads, which the target pass amortises. Thus speculation still pays, and memory sets the limit on the batch
+decode stays bound by KV reads, which the verify pass amortises. Thus speculation still pays, and memory sets the limit on the batch
 first.
 
-The batch-1 figure depends on the overhead assumption. Here the draft costs $c$ ≈ 0.19 of a target step (the draft's weights
-at 17% of the target's, plus the 0.5 ms), which gives ~1.6×. With no per-draft overhead, $c$ ≈ 0.12 and the speedup
-is ~1.9×. If every draft forward pays a full 2 ms step overhead, $c$ ≈ 0.38 and the speedup is only ~1.1×. Measure $c$
+The batch-1 figure depends on the overhead assumption. Here the draft costs $c$ ≈ 0.19 of a target step, which gives ~1.6×.
+This cost is the 0.5 ms plus the draft's weights, which are 17% of the target's. With no per-draft overhead, $c$ ≈ 0.12 and the speedup
+is ~1.9×. If every draft forward pays a full 2 ms step overhead, $c$ ≈ 0.38 and the speedup is only ~1.1×.
+
+Measure $c$
 on your stack before you quote a number. An EAGLE-like head at $c$ = 0.05 gives 2.31× in the same simulation.
 
 Treat speculation as a per-workload setting. Turn it on for latency-sensitive, low-concurrency or copy-heavy traffic.
 Monitor the acceptance rate and ITL.
 
-**Inside the engine**, the target pass is only a ($k$ + 1)-token chunk. The scheduler reserves "lookahead" slots for
+**Inside the engine**, the verify pass is only a ($k$ + 1)-token chunk. The scheduler reserves "lookahead" slots for
 the draft tokens. It rolls back rejected positions: it decreases `num_computed_tokens`. The next step writes over
 their K/V slots. The core keeps speculation outside the loop (`spec.speculative_generate()`), to show the rule
 without the management of those slots.
@@ -890,10 +892,10 @@ notebook 02 (SIMULATED), a saturated engine produces 1,700–2,300 tok/s. But it
 
 **How to load an engine.**
 
-- **Open loop** shows the growth of the queue and overload. This load is Poisson arrivals at a constant rate,
-  whatever the server does. As the rate approaches capacity, queue time and TTFT increase without bound.
-  **Closed loop** sets a limit of N on concurrency. This load comes from N users, and each user sends the next
-  request when the last one finishes. Closed loop also hides overload: when the server slows down, the load slows
+- **Open loop** sends Poisson arrivals at a constant rate, whatever the server does. Thus open loop shows the growth
+  of the queue and overload. As the rate approaches capacity, queue time and TTFT increase without bound.
+  **Closed loop** has N users, and each user sends the next request when the last one finishes. Thus closed loop
+  sets a limit of N on concurrency. Closed loop also hides overload: when the server slows down, the load slows
   down with it.
 
     Use closed loop to find the throughput at a concurrency. Use open loop to find the rate at which SLOs break.
@@ -907,7 +909,7 @@ notebook 02 (SIMULATED), a saturated engine produces 1,700–2,300 tok/s. But it
   histories (the lab's shared-prefix workload). Thinking models are the extreme case: thousands of heavy-tailed
   output tokens hold their KV for the whole generation
   ([RL and thinking-models §7](../../00-foundations/rl-and-thinking-models/PRIMER.md#7-what-thinking-does-to-serving)).
-- **Hold everything else fixed**: model, dtype, engine version, flags and GPU clocks. Change one knob at a time.
+- **Hold everything else constant**: model, dtype, engine version, flags and GPU clocks. Change one knob at a time.
 
 **The knobs and what each trades.**
 
@@ -948,7 +950,7 @@ The concepts in this primer do not depend on the engine. The flags and metric na
 reference in the lab for two reasons. Its scheduler and KV manager are readable Python. Its metrics are the metrics
 that layer 05's routers use.
 
-**Where to run it**, concept by concept, on GCP and elsewhere (prices and availability in
+**Where to run it**, concept by concept, on GCP and elsewhere (prices and obtainability in
 [`COMPUTE.md`](../../COMPUTE.md)):
 
 | To learn | T0 (laptop / Colab CPU) | Non-GCP GPU (T1/T2) | GCP (T3) |
@@ -1018,7 +1020,7 @@ We measure with open-loop load at realistic lengths, and we report goodput again
 5. *Does speculative decoding change model outputs? When do you turn it off?* No. Accept with $\min(1, p/q)$ and
    resample rejections from the normalised residual $\max(0, p - q)$. Then the output tokens have exactly the
    distribution of the target. Turn it off (or decrease $k$) at high concurrency with short contexts. There, the
-   extra positions of the target pass cost real compute. In the roofline simulation (§7), speculation becomes a
+   extra positions of the verify pass cost real compute. In the roofline simulation (§7), speculation becomes a
    slow-down past ~100–250 concurrent requests at 200-token contexts.
 6. *INT4 or FP8 for an 8B model on a 24 GB L4? It must hold 48 concurrent 2K-token sessions and prefill 1.8K tokens
    in 300 ms.* Use FP8 W8A8 with an FP8 KV cache. It halves prefill (FP8 tensor cores) and doubles KV capacity. The
@@ -1030,7 +1032,7 @@ We measure with open-loop load at realistic lengths, and we report goodput again
 
 ## Glossary
 
-| Term | Definition |
+| Term | Meaning |
 |---|---|
 | Step (iteration) | one scheduling decision and one forward pass over the tokens that it selected |
 | Engine core | the process that runs the scheduler, the KV cache manager and the step loop of the GPU workers |
@@ -1050,7 +1052,7 @@ We measure with open-loop load at realistic lengths, and we report goodput again
 | RadixAttention | SGLang's token-granular prefix cache kept as a radix tree |
 | Top-p / min-p | keep the smallest set that reaches mass $p$ / keep tokens with prob ≥ min_p × the top token's |
 | Structured output | a mask on the logits from a grammar automaton, so that every output parses |
-| Speculative decoding | a low-cost draft of $k$ tokens, which one target pass examines with exact rejection sampling |
+| Speculative decoding | a low-cost draft of $k$ tokens, which one target pass accepts or rejects with exact rejection sampling |
 | Acceptance rate $\alpha$ | $\sum \min(p, q) = 1 - \operatorname{TV}(p, q)$ for a sampled draft (${p(x)}$ for a greedy one): the probability that a draft token survives |
 | EAGLE / MTP | draft heads on the target's hidden states / multi-token prediction heads trained with the model |
 | Weight-only quantization | low-bit weights, dequantized inside the GEMM (W4A16, W8A16). It saves bytes, not FLOPs |

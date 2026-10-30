@@ -154,7 +154,7 @@ There is no single "sandbox." There is a ladder of boundaries. Each boundary def
 - an **ephemeral 0700 workspace**,
 - POSIX **resource limits** that the child applies before it runs the code,
 - a **wall-clock deadline**,
-- output **read as it streams**: the parent keeps it up to a budget and kills the run after a cap,
+- output **read as it streams**, which the parent keeps up to a budget, with a kill of the run after a cap,
 - and a kill of the whole **process group** at the end.
 
 When `ProcessSandbox` runs as root, it also gives each execution **its own unprivileged UID**. That one control brings three more controls:
@@ -583,7 +583,7 @@ It adds the fields that a sandbox needs: **`budgets_used`** (CPU, wall, peak mem
 - sustained `memory`/`cpu_time` is a miner or a runaway loop,
 - a spike in `pids` is a fork bomb.
 
-Count only the reasons that the sandbox saw. `counts(trusted_only=True)` removes the reasons that the sandbox read from the stderr of the program itself. A hostile program can forge those reasons to hide abuse or to put the blame on a different cause.
+Count only the reasons that the sandbox measured. `counts(trusted_only=True)` removes the reasons that the sandbox read from the stderr of the program itself. A hostile program can forge those reasons to hide abuse or to put the blame on a different cause.
 
 Egress attempts need care. A spike of `denied` *declared* egress is an injection that announced itself. But a competent injection does not declare anything. Its attempts show only at the points that enforce the network, as proxy 403s and NetworkPolicy drops. Thus collect those logs too.
 

@@ -225,19 +225,21 @@ claude-haiku-4-5). Thus they get their own canonical field and their own price (
 
 The stream does not normalise cleanly. Anthropic sends named events: `message_start` with the input usage,
 `content_block_delta` that carries `text_delta`, `input_json_delta` or `thinking_delta`, `message_delta` with
-cumulative output usage, and `message_stop`. It sends no `[DONE]`. The Gemini API sends whole function calls, not
-argument fragments (`partial_args` is Vertex-only), and it marks thought parts with `thought: true`. In vLLM, the
-reasoning text has the name `reasoning` (vLLM renames a `reasoning_content` that it gets), and OpenAI's schema has
-neither. `providers.normalize_stream()` changes the Anthropic and Gemini streams into canonical chunks.
+cumulative output usage, and `message_stop`. It sends no `[DONE]`.
+
+The Gemini API sends whole function calls, not argument fragments (`partial_args` is Vertex-only), and it marks thought
+parts with `thought: true`. In vLLM, the reasoning text has the name `reasoning`. vLLM renames a `reasoning_content`
+that it gets. OpenAI's schema has neither field. `providers.normalize_stream()` changes the Anthropic and Gemini streams
+into canonical chunks.
 
 The counts do normalise, but only at the end. Anthropic's usage is cumulative, and the final `message_delta` carries
-all of it. This includes `output_tokens_details.thinking_tokens`, an optional field in the SDK's
-`MessageDeltaUsage`, when the API sends it. Thus the §1.5 stream normalises to the same 1,550 completion and 1,200 reasoning tokens as
-the non-streamed response.
+all of it. This includes `output_tokens_details.thinking_tokens` when the API sends that field. The field is
+optional in the SDK's `MessageDeltaUsage`. Thus the §1.5 stream normalises to the same 1,550 completion and 1,200
+reasoning tokens as the non-streamed response.
 
 The counts do not survive a cut stream that ends before that event. All that such a stream holds is the usage of
-`message_start`, and its `output_tokens` is 1. That count is not a bill. Thus the normaliser sends no usage chunk for a cut
-stream. The gateway makes an estimate from the deltas that it relayed, and it marks the row as estimated (§5.2). It
+`message_start`, and its `output_tokens` is 1. That count is not a bill. Thus the normaliser sends no usage chunk for a
+cut stream. The gateway makes an estimate from the deltas that it relayed, and it marks the row as estimated (§5.2). It
 reconciles the difference later, and it does not invent a count.
 
 ### 1.6 What it costs
@@ -454,10 +456,13 @@ are the subject of this section.
 
 ### 3.2 What is safe to cache
 
-The gateway can reuse an answer only if it is the same answer for this caller now. That rule excludes personal
-classes, for example "what is the status of my order 1234". It also excludes time-sensitive classes, for example "is
-the service down right now". It also excludes anything with tools, because tool calls act on the world. It also excludes sampled outputs where
-variety is the point.
+The gateway can reuse an answer only if it is the same answer for this caller now. That rule excludes these
+classes:
+
+- Personal classes, for example "what is the status of my order 1234".
+- Time-sensitive classes, for example "is the service down right now".
+- Anything with tools, because tool calls act on the world.
+- Sampled outputs where variety is the point.
 
 A gateway cannot tell the class from the text. For example, "How do I reset *my* password?" is an FAQ, but it
 contains "my". Thus the **route declares the class** (`metadata.cache_class`, `cache.cacheable()`). The gateway looks
@@ -473,9 +478,9 @@ scope by default. Find out what your product does.
 
 The exact key is a hash of the fields that change the answer: the model alias, messages, tools, `response_format`,
 sampling parameters, `max_completion_tokens` and `reasoning_effort`. It does not include the fields that do not change
-the answer. These are `stream` and the caller's `user` field. The gateway can send a cached answer again as a new
-stream (`Gateway._replay()`). The cache stores only complete answers (`finish_reason: stop`) and expires them on a TTL.
-When a model or a prompt template changes, increase a version in the namespace.
+the answer. These are `stream` and the caller's `user` field. For `stream`, the gateway can send a cached answer again
+as a new stream (`Gateway._replay()`). The cache stores only complete answers (`finish_reason: stop`) and expires them
+on a TTL. When a model or a prompt template changes, increase a version in the namespace.
 
 ### 3.3 Semantic caching, measured
 
@@ -520,8 +525,8 @@ five codes. At $\tau$ = 0.95, only case and punctuation variants hit. A *normali
 safely.
 
 A real embedder increases the paraphrase scores (at T1, for example a small model on vLLM's pooling runner or
-all-MiniLM-L6-v2 on CPU, verify). But near misses that are different in one word stay near the cached query in any embedding.
-Thus:
+all-MiniLM-L6-v2 on CPU, verify). But near misses that are different in one word stay near the cached query in any
+embedding. Thus:
 
 - Cache narrow, declared classes.
 - Measure the hit and false-hit rates on your own labelled traffic before you select $\tau$.
@@ -684,9 +689,9 @@ the org is inside the provider key. A request must fit every level. `ratelimit.a
 and then commits all of them. Thus a refusal at the provider level leaves nothing half-reserved at the tenant level.
 
 With several gateway replicas, that check-and-commit must be one atomic step on shared state. It is one Lua script on
-one Redis node, and on a cluster the keys of one script are in one hash slot. The refund at reconcile is a second
-script (verify: the fact check of this primer did not read the Redis semantics from a source). LiteLLM's v3 limiter
-is an example that works, with fixed-window counters (verify).
+one Redis node, and on a cluster the keys of one script are in one hash slot. The refund at reconcile is a second script
+(verify). The fact check of this primer did not read the Redis semantics from a source. LiteLLM's v3 limiter is an
+example that works, with fixed-window counters (verify).
 
 ### 4.5 The noisy neighbour
 
@@ -774,9 +779,9 @@ Also, a test reproduces the rows of §8.1 from `roofline.llm.decode()` itself:
 - On demand at $11 → $0.446.
 - An L4 at $0.70 → $0.660.
 
-Those numbers are for *output* tokens at the decode rate. Prefill tokens cost an order of magnitude less. This difference is the
-root of the asymmetry between hosted input and output prices. It is also why the two rows are not the same unit as
-the blended column. Compare hosted and self-hosted at your call shape, not per "token".
+Those numbers are for *output* tokens at the decode rate. Prefill tokens cost an order of magnitude less. This
+difference is the root of the asymmetry between hosted input and output prices. It is also why the two rows are not the
+same unit as the blended column. Compare hosted and self-hosted at your call shape, not per "token".
 
 ### 5.4 Chargeback
 
@@ -813,8 +818,8 @@ default). Run it daily, and alert on it beside cost per conversation (§5.10).
 
 Traces are a sample of evidence that helps you find bugs. The ledger is the bill. The gateway writes one **SERVER** span
 per request (`POST /v1/chat/completions`). It also writes one **CLIENT** span per upstream target that it tried
-(`chat {model}`), because different providers are different operations. Retries against one target stay inside the
-span of that target (`gwcore.otel.Tracer`).
+(`chat {model}`), because different providers are different operations. Retries against one target stay inside the span
+of that target (`gwcore.otel.Tracer`).
 
 Attribute names obey the OpenTelemetry GenAI conventions. These conventions are still at *development* stability, and
 they change. The v1.41.0 release (April 2026) is the last semantic-conventions release that defines them. They now live
@@ -959,9 +964,9 @@ illustrative 150 ms check:
 costs its own time, or nothing in parallel. A held-back window or a final check holds a window of generation before
 the first token reaches the client (`guardrails.added_latency()`).*
 
-A held-back window keeps up only if each check finishes in $W \times \text{ITL}$ or less (4 s at $W$ = 200). It also puts
-$W$ tokens of generation in front of the first token of every user. NeMo Guardrails' streaming output rails have the
-default `stream_first: True`. With it, tokens reach the client *before* the rail sees them. Thus its default is
+A held-back window keeps up only if each check finishes in $W \times \text{ITL}$ or less (4 s at $W$ = 200). It also
+puts $W$ tokens of generation in front of the first token of every user. NeMo Guardrails' streaming output rails have
+the default `stream_first: True`. With it, tokens reach the client *before* the rail sees them. Thus its default is
 "parallel with cancel", not a held-back window (verify when you configure it).
 
 ### 7.3 Dollars and false positives
@@ -980,8 +985,8 @@ cost that limits the design. It is why screens start in inspect-only mode, and w
 
 ### 7.4 Risk reduced, risk bounded
 
-Guardrails are probabilistic, and they **decrease** risk. What **bounds** the risk is deterministic and sits outside the
-model. The parts are keys and tokens with scopes, deny-by-default tool policy, egress allowlists and confirmation
+Guardrails are probabilistic, and they **decrease** risk. What **bounds** the risk is deterministic and sits outside
+the model. The parts are keys and tokens with scopes, deny-by-default tool policy, egress allowlists and confirmation
 gates. The identity primer covers them (§0, idea 4, the four enforcement points of §4.1, and §6).
 
 Give a design review both halves: "we screen input and output, and a fully hijacked model still cannot exceed what its
@@ -1072,8 +1077,8 @@ A token that does not have the scope of a tool gets `403` with
 `WWW-Authenticate: Bearer error="insufficient_scope", scope="…"`. The client authorizes again with the **union** of
 the scopes that it held and the scopes that the server demands. It never asks for only the new scope, because that
 drops the scopes that it already had. It retries a bounded number of times (`MCPClient.call()`, which stops after
-`max_steps`). The first authorization asks for the scope in the 401 challenge, if there is one. If there is none, it asks for
-the `scopes_supported` of the metadata: least privilege first, and a step-up when necessary.
+`max_steps`). The first authorization asks for the scope in the 401 challenge, if there is one. If there is none, it
+asks for the `scopes_supported` of the metadata: least privilege first, and a step-up when necessary.
 
 ```mermaid
 sequenceDiagram
@@ -1159,8 +1164,8 @@ verify). On other platforms, the same pieces map one to one:
 
 ### 9.2 Build or adopt
 
-Most teams adopt a gateway. They keep this primer as the checklist to examine it. The table gives what the upstream
-code shows at the pinned versions (all verify: products change monthly):
+Most teams adopt a gateway. They keep this primer as the checklist to examine it. Products change monthly. Thus the
+table gives what the upstream code shows at the pinned versions (all verify):
 
 | Concern | LiteLLM proxy 1.104.0 | Envoy AI Gateway v1.1.0 | Kong OSS 3.10.0 | Portkey gateway 1.15.2 |
 |---|---|---|---|---|
@@ -1243,7 +1248,7 @@ principal and resource, never in the agent."
 
     The client has already rendered part of an answer. If a second model continues it, the client reads one answer
     from two models, with no shared state. Send an error chunk to the client. Bill the relayed tokens as an estimate.
-    Let the agent decide if it retries the turn. The agent owns the conversation (§2.3, §5.2).
+    The agent owns the conversation. Let the agent decide if it retries the turn (§2.3, §5.2).
 
 5. *The app sets an `X-Tenant` header and the gateway uses it for the cache namespace. What is incorrect?*
 

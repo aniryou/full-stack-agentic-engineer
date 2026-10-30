@@ -33,7 +33,7 @@ It also has one **identity plane** (Agent Identity + Auth Manager + token exchan
 
 ## 1. Why agents break classical identity assumptions
 
-Classical IAM has two kinds of principals. The first kind is **humans**: interactive, able to give consent, slow and MFA-protected. The second kind is **workloads**. A workload is non-interactive and deterministic, with a code path that does not change and one service account per deployment. Agents are in neither group. If you force agents into one of the two groups, the design fails in ways that you can predict.
+Classical IAM has two kinds of principals. The first kind is **humans**: interactive, able to give consent, slow and MFA-protected. The second kind is **workloads**: non-interactive and deterministic, with a code path that does not change and one service account per deployment. Agents are in neither group. If you force agents into one of the two groups, the design fails in ways that you can predict.
 
 ![Three parties share one tool call: the user asks, the model selects the tool and its arguments from a context window that holds instructions and untrusted data in one channel, and the agent runtime makes the call with a credential, under its own authority or on behalf of the user.](agent-three-parties.svg)
 
@@ -118,7 +118,7 @@ An agentic system has more principals than a classical app. Name all of them:
 - **Tool / resource server**: an MCP server, an API, a database. It has its own identity for mTLS and for its own outbound calls. Most important, it is an OAuth **resource server** that validates the tokens issued *for it*.
 - **Model endpoint**: Gemini on the Agent Platform. The agent authenticates to it. You can apply policy (Model Armor floor settings) at this boundary.
 - **Peer agents**: other agents that the agent calls over A2A. Each peer agent has its own identity and Agent Card.
-- **Operators / developers**: people with admin roles. They are a frequent blind spot. Who can change the instructions or the tool list of the agent?
+- **Operators / developers**: people with admin roles. They are a frequent blind spot: who can change the instructions or the tool list of the agent?
 
 ### 3.2 Own authority vs delegated authority
 
@@ -221,7 +221,7 @@ Classify every tool one time, in policy, not in prose:
 - **WRITE**: reversible side effects (`add_comment`, `create_draft`). These tools must be on an explicit allowlist. When the agent acts for a user, these tools also need the user's scope.
 - **DESTRUCTIVE / EXTERNAL**: irreversible, financial, or the action goes outside the trust boundary (`issue_refund`, `send_email`, `fetch_url`). These tools need human confirmation, unless the arguments are in a narrow, pre-approved argument envelope (for example, refund ≤ $50 on the caller's own order). A tool that takes a URL also needs an egress allowlist.
 
-If the tool is unknown, the decision is **deny**. The policy engine examines a `ToolCallRequest` against the policy. That request carries the agent principal, the user, the authority mode, the tool, the arguments and the scopes. MCP tool annotations (`readOnlyHint`, `destructiveHint`) and VPC-SC's `mcp.tool.isReadOnly` express the same tiers at the protocol and network layers. Keep them consistent.
+If the tool is unknown, the decision is **deny**. The policy engine evaluates the policy against a `ToolCallRequest`. That request carries the agent principal, the user, the authority mode, the tool, the arguments and the scopes. MCP tool annotations (`readOnlyHint`, `destructiveHint`) and VPC-SC's `mcp.tool.isReadOnly` express the same tiers at the protocol and network layers. Keep them consistent.
 
 ### 4.3 Scoped credential per tool call
 
@@ -322,7 +322,7 @@ On Google Cloud, you can host an MCP server on Cloud Run with `--functional-type
 
 ### 7.2 A2A: identity between agents
 
-The A2A protocol (v1.0) puts authentication in the **Agent Card**. The card has `securitySchemes` (API key, HTTP bearer, OAuth 2, OpenID Connect, mutual TLS) and `security` requirements per skill. An **authenticated extended card** can expose more skills. A task can enter `TASK_STATE_AUTH_REQUIRED` to ask for credentials during the task. All bindings (JSON-RPC, gRPC, HTTP+JSON) need TLS. Cards can be **signed** (`AgentCardSignature`, JWS), thus a client can make sure that nobody tampered with the card.
+The A2A protocol (v1.0) puts authentication in the **Agent Card**. The card has `securitySchemes` (API key, HTTP bearer, OAuth 2, OpenID Connect, mutual TLS) and `security` requirements per skill. An **authenticated extended card** can expose more skills. A task can enter `TASK_STATE_AUTH_REQUIRED` to ask for credentials during the task. All bindings (JSON-RPC, gRPC, HTTP+JSON) need TLS. Cards can be **signed** (`AgentCardSignature`, JWS), thus a client can verify the signature and know that nobody tampered with the card.
 
 Design rules for multi-agent systems:
 
@@ -339,7 +339,7 @@ Design rules for multi-agent systems:
 
 - **Perimeters.** Put the Agent Platform, the MCP servers, Secret Manager, the Agent Identity services (`agentidentity.googleapis.com`, `agentidentitycredentials.googleapis.com`), and the data stores in a VPC-SC perimeter. Use ingress/egress rules with agent principals. Route Google APIs through the restricted VIP. When you include Agent Platform in a perimeter, the perimeter automatically blocks the agents' public-internet access. You want this behavior by default. Add explicit egress for the few destinations that are legitimate.
 - **Private connectivity.** Agent Runtime supports PSC-interface network attachments and DNS peering for private tool endpoints. Cloud Run MCP servers must use internal ingress and IAM invoker bindings for the agent principal.
-- **Encryption and residency.** Use CMEK on Agent Engine (`encryption_spec.kms_key_name`), Secret Manager, logs and data stores. Select regions deliberately. Model Armor's Vertex integration and Agent Identity have region lists. The residency of the Auth Manager vault is not the same in all regions. For any regulated workload, put the region lists and the vault residency on the Verify list.
+- **Encryption and residency.** Use CMEK on Agent Engine (`encryption_spec.kms_key_name`), Secret Manager, logs and data stores. Select regions deliberately. Model Armor's Vertex integration and Agent Identity have region lists. The residency of the Auth Manager vault is not the same in all regions. For any regulated workload, put the residency of the Auth Manager vault on the Verify list.
 - **Tenancy.** Decide the isolation unit. One option is per-tenant agent deployments (strongest, most cost). The other option is shared agents with per-user delegation and per-tenant memory/session partitions. Sessions and Memory Bank must use the user/tenant as the key, and must never be searchable across tenants. RAG retrieval must be ACL-aware. That is, it runs under the user's delegated identity, or it filters by the user's entitlements *before* content reaches the model.
 - **Logs are data too.** Prompts and tool results often contain PII. Apply Sensitive Data Protection to what you log, and restrict log-bucket access.
 
