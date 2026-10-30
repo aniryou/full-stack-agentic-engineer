@@ -135,7 +135,10 @@ make check                                              # all of the above + tes
 
 ## Verify list (facts dated 2026-09-27 that move)
 
-Checked against the source on 2026-09-27:
+Checked against the source on 2026-09-27, and again on 2026-10-30 against vLLM v0.32.0 and TRL 1.17.0. The second
+check found the same fields, defaults and counter names. Version 0.32.0 of vLLM adds the methods `suffix`,
+`ngram_gpu`, `dflash` and `dspark`, and a `kv_cache_dtype` for the draft. TRL 1.15.0 removed the MiniLLM trainer, and 1.17.0 added
+X-Token to GOLD. The lab keeps its pins:
 
 - vLLM v0.30.0: the `--speculative-config` fields `method`, `model`, `num_speculative_tokens`,
   `draft_sample_method` (its default is `"greedy"`) and `draft_tensor_parallel_size`. The `draft_model` vocabulary

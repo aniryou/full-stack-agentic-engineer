@@ -136,7 +136,7 @@ def decode_tok_s_single(weights_gb: float, tb_s: float) -> float:
 
 
 # -- the fixed cost of making a student ----------------------------------------------------------------------
-PRICES = {"gemini-3.5-flash": (1.50, 9.00, 0.15), "gemini-3.5-flash-lite": (0.30, 2.50, 0.03)}   # $/M in/out/cached, 2026-09-05 (verify)
+PRICES = {"gemini-3.5-flash": (1.50, 9.00, 0.15), "gemini-3.5-flash-lite": (0.30, 2.50, 0.03)}   # $/M in/out/cached, 2026-09-05, unchanged 2026-10-30 (verify)
 
 
 def api_cost(model: str, input_tokens: int, output_tokens: int, cached_tokens: int = 0) -> float:
