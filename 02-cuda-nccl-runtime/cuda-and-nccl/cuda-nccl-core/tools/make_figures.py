@@ -43,11 +43,10 @@ svgchart = _load_svgchart()
 
 # ------------------------------------------------------------------ the inputs the primer names
 
-# §2.3: an L4, blocks of 256 threads, 64 (and 80) registers per thread, 48 KB of shared memory per block
+# §2.3: an L4, blocks of 256 threads, 64 registers per thread, 48 KB of shared memory per block
 L4_CC = occ.DEVICES["L4"]["cc"]
 THREADS = 256
 REGS = 64
-REGS_SUBPARTITION = 80
 SMEM = 48 * 1024
 
 # §4.2: 384 kernels, an eager launch of 5 us, one graph launch of 10 us; 2 us and 20 us kernels
@@ -68,6 +67,7 @@ GIB = 2 ** 30
 KIB = 1024
 SIZES = [round(2 ** (e / 4)) for e in range(64, 121)]       # 64 KiB to 1 GiB, four points per octave
 SIZE_TICKS = [2 ** e for e in range(16, 31, 2)]
+SWEEP_ROWS = [2 ** 24, 2 ** 27]                             # two rows of the §5.5 sweep: 16 MiB and 128 MiB
 
 
 def _r(v: float, nd: int = 4) -> float:
@@ -107,7 +107,6 @@ def spec_occupancy_vs_registers() -> dict:
     sx, sy = _steps(regs, smem)
     at64 = occ.occupancy(THREADS, REGS, 0, L4_CC)
     at64s = occ.occupancy(THREADS, REGS, SMEM, L4_CC)
-    at80 = occ.occupancy(THREADS, REGS_SUBPARTITION, 0, L4_CC)
     wpb = at64.warps_per_block
     yticks = [_r(100 * w / sm.max_warps, 3) for w in range(0, sm.max_warps + 1, wpb)]
     return {
@@ -127,8 +126,6 @@ def spec_occupancy_vs_registers() -> dict:
         "marks": [
             {"kind": "point", "x": REGS, "y": pct(at64), "style": "accent", "dy": -10,
              "label": f"{REGS} registers: {at64.blocks_per_sm} blocks, {at64.occupancy:.0%}"},
-            {"kind": "point", "x": REGS_SUBPARTITION, "y": pct(at80), "style": "accent",
-             "label": f"{REGS_SUBPARTITION} registers: {at80.active_warps} warps"},
             {"kind": "point", "x": REGS, "y": pct(at64s), "style": "warm", "dy": 20,
              "label": f"{REGS} registers and {SMEM // KIB} KB: {at64s.occupancy:.0%}"},
         ],
@@ -192,13 +189,15 @@ def spec_allreduce_busbw_vs_size() -> dict:
     alg_ring = C.algbw(GIB, t_ring) / 1e9
     bus_nvls = C.busbw("all_reduce", GIB, t_nvls, P) / 1e9
     ceiling = C.BUSBW_FACTOR["all_reduce"](P) * BW / 1e9
+    rows = [(s, C.busbw("all_reduce", s, C.model_time("all_reduce", "ring", s, P, ALPHA, BW), P) / 1e9)
+            for s in SWEEP_ROWS]
     return {
         "kind": "line",
         "title": (f"All-reduce bandwidth against message size on {P} H100s in the alpha-beta model: the ring busbw "
                   f"goes up to the {BW / 1e9:.0f} GB/s link rate and is {bus_ring:.0f} GB/s at 1 GiB, and the NVLS "
                   f"busbw is {bus_nvls:.0f} GB/s at 1 GiB, above the link rate."),
         "height": 380,
-        "x": {"label": "message size S (log scale)", "scale": "log", "min": SIZES[0], "max": SIZES[-1],
+        "x": {"label": "message size S (bytes, log scale)", "scale": "log", "min": SIZES[0], "max": SIZES[-1],
               "ticks": SIZE_TICKS, "tick_labels": [_bytes_label(s) for s in SIZE_TICKS]},
         "y": {"label": "bandwidth (GB/s)", "min": 0, "max": 850, "ticks": [0, 100, 200, 300, 400, 500, 600, 700, 800]},
         "series": [
@@ -215,9 +214,13 @@ def spec_allreduce_busbw_vs_size() -> dict:
              "label": f"1 GiB: busbw {bus_ring:.0f} GB/s"},
             {"kind": "point", "x": GIB, "y": _r(alg_ring, 3), "style": "muted", "anchor": "end", "dy": -9,
              "label": f"algbw {alg_ring:.0f} GB/s"},
+        ] + [
+            {"kind": "point", "x": s, "y": _r(v, 3), "style": "accent", "anchor": "start", "dy": 18,
+             "label": f"{_bytes_label(s)}: {v:.2f} GB/s"}
+            for s, v in rows
         ],
         "legend": "bottom-right",
-        "note": "computed by gpusim.collectives.model_time and busbw (cuda-nccl-core)",
+        "note": "computed by gpusim.collectives.model_time, algbw, busbw and pipeline_chunks (cuda-nccl-core)",
     }
 
 
@@ -242,14 +245,14 @@ def spec_ring_allreduce_regimes() -> dict:
                   f"all-reduce of decode sits, and growing with the bandwidth term above it, where the "
                   f"{_bytes_label(s_pre)} all-reduce of prefill sits."),
         "height": 380,
-        "x": {"label": "message size S (log scale)", "scale": "log", "min": SIZES[0], "max": SIZES[-1],
+        "x": {"label": "message size S (bytes, log scale)", "scale": "log", "min": SIZES[0], "max": SIZES[-1],
               "ticks": SIZE_TICKS, "tick_labels": [_bytes_label(s) for s in SIZE_TICKS]},
         "y": {"label": "time (µs, log scale)", "scale": "log", "min": 10, "max": 10000,
               "ticks": [10, 100, 1000, 10000]},
         "series": [
             {"name": "ring all-reduce", "x": SIZES, "y": ring, "style": "accent"},
             {"name": f"latency term 2(p−1)·α, {a} steps", "x": SIZES, "y": lat, "style": "muted", "dash": True},
-            {"name": "bandwidth term 2(p−1)/p · S/B", "x": SIZES, "y": bwt, "style": "plain", "dash": True},
+            {"name": "bandwidth term 2(p−1)/p · S/B", "x": SIZES, "y": bwt, "style": "yellow", "dash": True},
         ],
         "marks": [
             {"kind": "vline", "x": xover, "style": "warm", "label": f"S* = p·α·B = {xover / 1e6:.1f} MB"},
@@ -263,7 +266,7 @@ def spec_ring_allreduce_regimes() -> dict:
              "label": f"1 GiB: {t_gib:.2f} ms"},
         ],
         "legend": "top-left",
-        "note": "computed by gpusim.collectives.model_time and crossover_bytes (cuda-nccl-core)",
+        "note": "computed by gpusim.collectives.model_time, cost_terms, crossover_bytes and tp_comm (cuda-nccl-core)",
     }
 
 

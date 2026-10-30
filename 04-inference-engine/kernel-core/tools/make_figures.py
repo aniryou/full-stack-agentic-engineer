@@ -104,7 +104,7 @@ def spec_kv_bytes_vs_tokens() -> dict:
               "min": 0.125, "max": 256},
         "series": [
             {"name": f"{L2.name}, full MHA: {kv.fmt_bytes(_per_token(L2))} per token", "x": tokens, "y": mha,
-             "style": "violet"},
+             "style": "violet", "dash": True},
             {"name": f"{L3.name}, GQA: {kv.fmt_bytes(_per_token(L3))} per token", "x": tokens, "y": gqa,
              "style": "accent", "markers": True},
         ],

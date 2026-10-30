@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="420" viewBox="0 0 880 420" role="img" aria-label="A contiguous reservation wastes 95% when the request stops after 200 tokens, and PagedAttention maps the blocks of each request through a block table." style="color: #E4EAE7">
+  <title>A contiguous reservation wastes 95% when the request stops after 200 tokens, and PagedAttention maps the blocks of each request through a block table.</title>
+  <rect x="0" y="0" width="880" height="420" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="26" fill="#97A59F">The KV cache of a request before and after paging (§5)</text>
+    <rect x="24" y="40" width="832" height="130" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="40" y="62" fill="#97A59F">Simple implementation: contiguous memory for max_sequence_length tokens, reserved at the start</text>
+    <rect x="40" y="76" width="39" height="36" rx="3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <rect x="79" y="76" width="761" height="36" rx="3" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="460" y="99" text-anchor="middle" font-weight="600">reserved, never used: 95% of the reservation</text>
+    <text x="40" y="132" font-size="11.5" fill="#7ADACF">the request stops after 200 tokens</text>
+    <text x="840" y="132" text-anchor="end" font-size="11.5" fill="#97A59F">the reservation: a 4K output setting</text>
+    <text x="40" y="156" font-size="11.5" fill="#97A59F">In early serving stacks, the measured waste was 60–80%.</text>
+    <rect x="24" y="186" width="832" height="214" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="40" y="208" fill="#97A59F">PagedAttention: blocks of 16 tokens, allocated on demand, stored non-contiguously</text>
+    <rect x="40" y="222" width="162" height="124" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="121" y="242" text-anchor="middle" font-weight="600">block table of A</text>
+    <text x="84" y="262" text-anchor="middle" font-size="11" fill="#97A59F">logical</text>
+    <text x="158" y="262" text-anchor="middle" font-size="11" fill="#97A59F">physical</text>
+    <line x1="52" y1="268" x2="190" y2="268" stroke="#97A59F" stroke-width="0.8"/>
+    <text x="84" y="284" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">0</text>
+    <text x="158" y="284" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">2</text>
+    <text x="84" y="302" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">1</text>
+    <text x="158" y="302" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">5</text>
+    <text x="84" y="320" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">2</text>
+    <text x="158" y="320" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">7</text>
+    <rect x="218" y="222" width="162" height="124" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="299" y="242" text-anchor="middle" font-weight="600">block table of B</text>
+    <text x="262" y="262" text-anchor="middle" font-size="11" fill="#97A59F">logical</text>
+    <text x="336" y="262" text-anchor="middle" font-size="11" fill="#97A59F">physical</text>
+    <line x1="230" y1="268" x2="368" y2="268" stroke="#97A59F" stroke-width="0.8"/>
+    <text x="262" y="284" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">0</text>
+    <text x="336" y="284" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">2</text>
+    <text x="262" y="302" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">1</text>
+    <text x="336" y="302" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">5</text>
+    <text x="262" y="320" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">2</text>
+    <text x="336" y="320" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">4</text>
+    <text x="262" y="338" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">3</text>
+    <text x="336" y="338" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">9</text>
+    <path d="M382 268 L434 268" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <text x="408" y="258" text-anchor="middle" font-size="11" fill="#97A59F">maps</text>
+    <text x="440" y="242" font-size="11.5" fill="#97A59F">physical blocks in GPU memory</text>
+    <rect x="440" y="252" width="30" height="34" rx="4" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="4 3"/>
+    <text x="455" y="302" text-anchor="middle" font-size="11" fill="#97A59F">0</text>
+    <rect x="473" y="252" width="30" height="34" rx="4" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="4 3"/>
+    <text x="488" y="302" text-anchor="middle" font-size="11" fill="#97A59F">1</text>
+    <rect x="506" y="252" width="30" height="34" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="2.4"/>
+    <text x="521" y="273" text-anchor="middle" font-weight="600" font-size="10.5">A B</text>
+    <text x="521" y="302" text-anchor="middle" font-size="11" fill="#97A59F">2</text>
+    <rect x="539" y="252" width="30" height="34" rx="4" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="4 3"/>
+    <text x="554" y="302" text-anchor="middle" font-size="11" fill="#97A59F">3</text>
+    <rect x="572" y="252" width="30" height="34" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="587" y="273" text-anchor="middle" font-weight="600" font-size="12">B</text>
+    <text x="587" y="302" text-anchor="middle" font-size="11" fill="#97A59F">4</text>
+    <rect x="605" y="252" width="30" height="34" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="2.4"/>
+    <text x="620" y="273" text-anchor="middle" font-weight="600" font-size="10.5">A B</text>
+    <text x="620" y="302" text-anchor="middle" font-size="11" fill="#97A59F">5</text>
+    <rect x="638" y="252" width="30" height="34" rx="4" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="4 3"/>
+    <text x="653" y="302" text-anchor="middle" font-size="11" fill="#97A59F">6</text>
+    <rect x="671" y="252" width="30" height="34" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="686" y="273" text-anchor="middle" font-weight="600" font-size="12">A</text>
+    <text x="686" y="302" text-anchor="middle" font-size="11" fill="#97A59F">7</text>
+    <rect x="704" y="252" width="30" height="34" rx="4" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="4 3"/>
+    <text x="719" y="302" text-anchor="middle" font-size="11" fill="#97A59F">8</text>
+    <rect x="737" y="252" width="30" height="34" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="752" y="273" text-anchor="middle" font-weight="600" font-size="12">B</text>
+    <text x="752" y="302" text-anchor="middle" font-size="11" fill="#97A59F">9</text>
+    <rect x="770" y="252" width="30" height="34" rx="4" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="4 3"/>
+    <text x="785" y="302" text-anchor="middle" font-size="11" fill="#97A59F">10</text>
+    <rect x="803" y="252" width="30" height="34" rx="4" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="4 3"/>
+    <text x="818" y="302" text-anchor="middle" font-size="11" fill="#97A59F">11</text>
+    <text x="440" y="328" font-size="11.5" fill="#7ADACF">Blocks 2 and 5: the same system prompt for A and B.</text>
+    <text x="440" y="346" font-size="11.5" fill="#97A59F">The engine stores one copy, not two.</text>
+    <text x="440" y="364" font-size="11.5" fill="#97A59F">A dashed cell has no block yet.</text>
+    <text x="40" y="384" font-size="11.5" fill="#7ADACF">Waste drops to well under 4%.</text>
+  </g>
+</svg>

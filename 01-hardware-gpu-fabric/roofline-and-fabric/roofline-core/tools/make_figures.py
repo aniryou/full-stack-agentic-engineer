@@ -66,21 +66,21 @@ def spec_roofline() -> dict:
         (rl.elementwise(n, 2), "vector add: {:.2f}", "start", 17),
         (rl.reduction(n, 4), "sum of n fp32: {:.2f}", "start", 4),
         (rl.gemm(1, 4096, 4096), "GEMV, 1 token: {:.1f}", "end", -8),
-        (rl.gemm(64, 4096, 4096), "GEMM 64 × 4096 × 4096: {:.0f}", "end", -24),
-        (rl.gemm(4096, 4096, 4096), "GEMM 4096³: {:,.0f}", "middle", 20),
+        (rl.gemm(64, 4096, 4096), "GEMM 64 × 4096 × 4096: {:.0f}", "end", -12),
+        (rl.gemm(4096, 4096, 4096), "GEMM 4096 × 4096 × 4096: {:,.0f}", "middle", 20),
     ]
-    marks = []
-    for k, fmt, anchor, dy in kernels:
-        marks.append({"kind": "point", "x": sig(k.intensity), "y": sig(rl.attainable(k.intensity, H100) / 1e12),
-                      "label": fmt.format(k.intensity), "style": "plain", "anchor": anchor, "dy": dy})
     steps = [  # (step, label, anchor, dy) -- §3.2 and two rows of the §3.3 table (2K context)
         (llm.decode(M8, H100, 1, 2048), "decode, batch 1: {:.1f}", "start", 17),
         (llm.decode(M8, H100, 64, 2048), "decode, batch 64: {:.1f}", "end", -8),
         (llm.prefill(M8, H100, 2048), "prefill, 2,048 tokens: {:,.0f}", "middle", -10),
     ]
+    marks = []                                           # the steps first: the kernel points draw on top of them
     for s, fmt, anchor, dy in steps:
         marks.append({"kind": "point", "x": sig(s.intensity), "y": sig(rl.attainable(s.intensity, H100) / 1e12),
                       "label": fmt.format(s.intensity), "style": "accent", "anchor": anchor, "dy": dy})
+    for k, fmt, anchor, dy in kernels:
+        marks.append({"kind": "point", "x": sig(k.intensity), "y": sig(rl.attainable(k.intensity, H100) / 1e12),
+                      "label": fmt.format(k.intensity), "style": "plain", "anchor": anchor, "dy": dy})
     marks += [
         {"kind": "vline", "x": sig(H100.ridge()), "label": f"H100 ridge: {H100.ridge():.0f} FLOP/B",
          "style": "warm", "anchor": "end"},
@@ -123,7 +123,7 @@ def spec_decode_step() -> dict:
         step.append(sig(s.time * 1e3))
         weights.append(sig(sp.gemms.time * 1e3))
         kv.append(sig(sp.attention.time * 1e3))
-    place = {1: ("start", -10), 8: ("start", -12), 32: ("end", -10), 64: ("end", -10), 128: ("end", -10),
+    place = {1: ("start", 22), 8: ("start", -14), 32: ("start", 18), 64: ("end", -10), 128: ("end", -10),
              cap: ("end", -6)}
     marks = []
     for b in (1, 8, 32, 64, 128, cap):
@@ -138,8 +138,8 @@ def spec_decode_step() -> dict:
                   "stream takes the same time at every batch, and the KV read grows with the batch up to the "
                   "HBM limit."),
         "width": 880, "height": 380,
-        "x": {"label": "batch (sequences of 2K tokens)", "scale": "log",
-              "ticks": [1, 2, 4, 8, 16, 32, 64, 128, 256], "min": 1, "max": 256},
+        "x": {"label": "batch (sequences of 2K tokens)", "scale": "linear",
+              "ticks": [0, 32, 64, 96, 128, 160, 192, 224], "min": 0, "max": 224},
         "y": {"label": "step time (ms)", "min": 0, "max": 24, "ticks": [0, 4, 8, 12, 16, 20, 24]},
         "series": [
             {"name": "step time", "x": xs, "y": step, "style": "accent"},
@@ -171,9 +171,9 @@ def spec_allreduce() -> dict:
     dec, pre = fabric.tp_allreduce_bytes(M70, 1), fabric.tp_allreduce_bytes(M70, 4096)
     marks = [
         {"kind": "point", "x": sig(x_nv), "y": sig(fabric.ring_allreduce_time(x_nv, p, nv) * 1e3),
-         "label": f"crossover: {x_nv / 1e6:.1f} MB", "style": "accent", "anchor": "start", "dy": 16},
+         "label": f"terms meet: {x_nv / 1e6:.1f} MB", "style": "accent", "anchor": "start", "dy": 16},
         {"kind": "point", "x": sig(x_nic), "y": sig(fabric.ring_allreduce_time(x_nic, p, nic) * 1e3),
-         "label": f"crossover: {x_nic / 1e6:.1f} MB", "style": "warm", "anchor": "end", "dy": -9},
+         "label": f"terms meet: {x_nic / 1e6:.1f} MB", "style": "warm", "anchor": "end", "dy": -9},
         {"kind": "point", "x": GIB, "y": sig(t_gib * 1e3), "label": f"1 GiB: {t_gib * 1e3:.2f} ms",
          "style": "accent", "anchor": "start", "dy": 4},
         {"kind": "vline", "x": dec, "label": f"70B decode message: {dec // 1024} KiB", "style": "muted"},
@@ -227,7 +227,7 @@ def spec_checkpoint_waste() -> dict:
     ]
     return {
         "kind": "line",
-        "title": ("The share of wall-clock time that a 16,384-GPU job loses against its checkpoint interval, for "
+        "title": ("The share of wall-clock time that a 16,384-GPU job loses at each checkpoint interval, for "
                   "a 60 s and a 10 s checkpoint and for a 60 s checkpoint with a 10-minute restart."),
         "width": 880, "height": 400,
         "x": {"label": "checkpoint interval τ (min)", "scale": "log", "ticks": [2, 5, 10, 20, 60, 180],

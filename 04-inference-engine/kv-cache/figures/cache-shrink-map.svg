@@ -12,7 +12,8 @@
       <rect x="24" y="48" width="156" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
       <text x="102" y="74">layers</text>
       <rect x="193" y="48" width="156" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
-      <text x="271" y="74">kv_heads × head_dim</text>
+      <text x="271" y="66">kv_heads</text>
+      <text x="271" y="82">× head_dim</text>
       <rect x="362" y="48" width="156" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
       <text x="440" y="74">seq_len</text>
       <rect x="531" y="48" width="156" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
@@ -50,8 +51,8 @@
       <text x="207" y="289">K and V compressed</text>
       <text x="207" y="304">into a small, shared,</text>
       <text x="207" y="319">low-rank latent vector:</text>
-      <text x="207" y="334">a small extra compute</text>
-      <text x="207" y="349">cost, much less memory</text>
+      <text x="207" y="334">small extra compute,</text>
+      <text x="207" y="349">much less memory</text>
       <rect x="362" y="114" width="156" height="125" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
       <text x="376" y="134" font-weight="600" font-size="12">Sliding window</text>
       <text x="376" y="152">each token attends</text>
