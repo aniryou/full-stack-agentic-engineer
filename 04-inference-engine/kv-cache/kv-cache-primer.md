@@ -139,7 +139,7 @@ To know the size is one task. To allocate the memory is a different task. The si
 
 ![A contiguous reservation wastes 95% when the request stops after 200 tokens, and PagedAttention maps the blocks of each request through a block table.](figures/paged-blocks-vs-contiguous.svg)
 
-*In the top bar, the warm part is the 95% of the reservation that the request does not use. In the bottom row, the block table of each request maps logical positions to physical blocks of 16 tokens. Requests A and B point at the same physical blocks 2 and 5 for their system prompt, so the engine stores one copy.*
+*In the top bar, the warm part is the 95% of the reservation that the request does not use. In the bottom panel, the block table of each request maps logical positions to physical blocks of 16 tokens. In this example, requests A and B share physical blocks 2 and 5 for their system prompt, so the engine stores one copy.*
 
 Waste drops to well under 4%. Also, the blocks become *shareable*: two requests with the same system prompt can point at the same physical blocks. The engine then does not store two copies.
 
