@@ -66,7 +66,7 @@
    "dir": "00-foundations/gpu-capacity-planning",
    "python": "3.11",
    "install": "python -m pip install pytest",
-   "test": "python -m pytest -q test_capacity.py"
+   "test": "python -m pytest -q test_capacity.py test_figures.py"
   },
   {
    "id": "gpu-bench-lab",

@@ -408,7 +408,7 @@ attention and sampling kernels. Many of them are a few microseconds long.
 
 ![Time of 384 dependent kernels against the kernel length, with an eager launch of 5 µs per kernel or one CUDA Graph launch of 10 µs: 1,922 µs against 778 µs for 2 µs kernels, and no gain for 20 µs kernels.](figures/step-time-vs-kernel-length.svg)
 
-*The chart shows the time of 384 dependent kernels against the kernel length, on log axes. For kernels shorter than a 5 µs launch, the launches set the eager time, and for longer kernels a graph gives almost no gain. `gpusim.tiling.step_time()` computes the two lines, and `cuda-nccl-core/tests/test_figures.py` pins the chart.*
+*The chart shows the time of 384 dependent kernels against the kernel length, on log axes. For kernels shorter than a 5 µs launch, the launches set the eager time, and for longer kernels a graph gives no gain. `gpusim.tiling.step_time()` computes the two lines, and `cuda-nccl-core/tests/test_figures.py` pins the chart.*
 
 ### 4.3 CUDA Graphs, and why engines capture decode
 
