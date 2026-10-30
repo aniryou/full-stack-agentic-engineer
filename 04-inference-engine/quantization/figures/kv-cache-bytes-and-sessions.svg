@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="880" height="360" viewBox="0 0 880 360" role="img" aria-label="KV bytes per token for Llama-3.1-8B at 16, 8, 5 and 3 bits per element, and 2,000-token sessions on an L4 with FP8 weights." style="color: #E4EAE7">
   <title>KV bytes per token for Llama-3.1-8B at 16, 8, 5 and 3 bits per element, and 2,000-token sessions on an L4 with FP8 weights.</title>
-  <desc>{"categories":["BF16","FP8","4-bit, groups of 32","2-bit, groups of 32"],"kind":"bar","legend":"none","note":"computed by quantcore.cost.sessions","series":[{"name":"sessions, FP8 weights","style":"accent","y":[43,87,140,234]}],"title":"KV bytes per token for Llama-3.1-8B at 16, 8, 5 and 3 bits per element, and 2,000-token sessions on an L4 with FP8 weights.","x":{"tick_labels":["BF16 · 16 bits\n131,072 B per token","FP8 · 8 bits\n65,536 B per token","4-bit, groups of 32 · 5 bits\n40,960 B per token","2-bit, groups of 32 · 3 bits\n24,576 B per token"]},"y":{"label":"2,000-token sessions on an L4","max":260,"min":0,"ticks":[0,50,100,150,200,250]}}</desc>
+  <desc>{"categories":["BF16","FP8","4-bit, groups of 32","2-bit, groups of 32"],"kind":"bar","legend":"none","note":"computed by quantcore.cost.sessions, Model.kv_bytes_per_token and kvquant.kv_bits_per_element","series":[{"name":"sessions, FP8 weights","style":"accent","y":[43,87,140,234]}],"title":"KV bytes per token for Llama-3.1-8B at 16, 8, 5 and 3 bits per element, and 2,000-token sessions on an L4 with FP8 weights.","x":{"tick_labels":["BF16 · 16 bits\n131,072 B per token","FP8 · 8 bits\n65,536 B per token","4-bit, groups of 32 · 5 bits\n40,960 B per token","2-bit, groups of 32 · 3 bits\n24,576 B per token"]},"y":{"label":"2,000-token sessions on an L4","max":260,"min":0,"ticks":[0,50,100,150,200,250]}}</desc>
   <rect x="0" y="0" width="880" height="360" rx="8" fill="#161E1C"/>
   <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12" fill="currentColor">
     <g stroke="#27322E" stroke-width="1">
@@ -39,6 +39,6 @@
       <rect x="688.7" y="48.8" width="140.6" height="241.2" rx="2" fill="#4CC5B7" fill-opacity="0.85"/>
       <text x="759.0" y="43.8" text-anchor="middle" font-size="10.5" fill="#4CC5B7">234</text>
     </g>
-    <text x="10" y="353.0" font-size="10.5" fill="#97A59F" font-family="JetBrains Mono, monospace">computed by quantcore.cost.sessions</text>
+    <text x="10" y="353.0" font-size="10.5" fill="#97A59F" font-family="JetBrains Mono, monospace">computed by quantcore.cost.sessions, Model.kv_bytes_per_token and kvquant.kv_bits_per_element</text>
   </g>
 </svg>

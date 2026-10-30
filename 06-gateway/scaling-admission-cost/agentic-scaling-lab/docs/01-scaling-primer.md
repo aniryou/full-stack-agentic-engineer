@@ -216,17 +216,6 @@ The token budget also puts a cap on concurrency. 10 M TPM ÷ 60 ≈ 167 k tokens
 
 ```mermaid
 flowchart LR
-    C(["100,000 a day ÷ 86,400<br/>≈ 1.16 conversations<br/>a second"]) --> T["× 6 turns<br/>≈ 7 turns<br/>a second"]
-    T --> M["× 2.2 calls<br/>≈ 15 calls<br/>a second"]
-    M --> TPM["× 5,000 tokens × 60<br/>≈ 4.6 M input tokens<br/>a minute (13.75 M<br/>at peak, 45.8 M in<br/>an incident)"]
-    TPM --> CMP["against the baseline:<br/>0.46× at average,<br/>1.38× at peak,<br/>4.58× in an incident"]
-    BASE["the org tier:<br/>10 M TPM baseline"] --> CMP
-```
-
-*The rates of §3.2, with the numbers of the anchor scenario. Each multiplication gives the next rate, from conversations to input tokens a minute. Then the input tokens a minute go against the baseline of the org tier.*
-
-```mermaid
-flowchart LR
     C(["≈ 1.16 conversations<br/>a second"]) --> T["≈ 7 turns a second"]
     T -- "Little's law:<br/>× 6 s" --> IF["in-flight turns:<br/>42 at average,<br/>125 at peak,<br/>417 in an incident"]
     C -- "× 400 s" --> S["concurrent sessions:<br/>460 at average,<br/>4,600 in an incident"]
@@ -234,7 +223,7 @@ flowchart LR
     B -- "÷ 2 k tokens/s<br/>a turn" --> CAP["about 85 turns<br/>in flight: the<br/>in-flight cap,<br/>below peak demand"]
 ```
 
-*The concurrency of §3.3, from Little's law. The turn duration gives the turns in flight, and the length of a conversation gives the concurrent sessions. The same baseline gives the initial in-flight cap (`scalelab.capacity`).*
+*The concurrency of §3.3. In the upper part, Little's law multiplies a rate by a duration: the turn duration gives the turns in flight, and the length of a conversation gives the concurrent sessions. In the lower row, the 10 M TPM baseline gives about 85 turns in flight, the initial in-flight cap, below the 125 turns of the peak (`scalelab.capacity`).*
 
 ### 3.4 Cost per conversation
 
@@ -457,6 +446,26 @@ The loop writes a checkpoint of every step in Firestore *before* it acts on the 
 - After the tool step, the checkpoint holds the tool results, compacted.
 
 On redelivery, the orchestrator replays the turn from the checkpoint, and skips the completed steps. The tool executor makes a key for every write from the turn, the step, the call index and a hash of the arguments. It stores the result under that key for a day. Thus a redelivered turn that already opened a ticket gets the same ticket back. The crash test of the lab (notebook 02) stops the process immediately after the checkpoint of the ticket. It shows one ticket after redelivery, with four of five steps resumed.
+
+```mermaid
+sequenceDiagram
+    participant P as Pub/Sub
+    participant O as orchestrator
+    participant T as tool executor
+    participant F as Firestore
+    P->>O: push the turn
+    O->>F: checkpoint of the model call
+    O->>T: open a ticket, with its key
+    T-->>O: the ticket, stored under the key
+    Note over O,T: the process stops before the checkpoint
+    P->>O: redelivery, because<br/>no 2xx came back
+    O->>F: load the checkpoints,<br/>skip the completed steps
+    O->>T: the same write, the same key
+    T-->>O: the same ticket
+    O-->>P: 200 for the terminal outcome
+```
+
+*A crash after a write and before its checkpoint, and the redelivery of §5.4. Read from the top. On the second delivery, the orchestrator skips the steps with a checkpoint, and the key gives the stored ticket back, not a second ticket.*
 
 The queue contract is the other half. Pub/Sub push acknowledges on any 2xx. On any other response, it sends the message again, with a push backoff that grows from 100 ms to 60 s. The retry policy of the subscription adds a 10–600 s exponential backoff. After five attempts, the message goes to a dead-letter topic that has its own alert.
 

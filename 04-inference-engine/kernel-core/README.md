@@ -11,7 +11,7 @@ After this, you can show three things with code that runs on any CPU:
 ## Start here
 
 1. Read the [KV cache primer](../kv-cache/kv-cache-primer.md) §2–§4 (30 min).
-2. Run `python3 -m pip install -e '.[dev]' && python3 -m pytest -q`. The 51 tests run in about a second and
+2. Run `python3 -m pip install -e '.[dev]' && python3 -m pytest -q`. The 58 tests run in about a second and
    need only numpy. They include "cached decode == recomputing the prefix", "paged == contiguous" and "tiled == exact".
 3. Open [`../kv-cache/notebooks/01_kv_cache_worked.ipynb`](../kv-cache/notebooks/01_kv_cache_worked.ipynb). Then fill in the blanks of
    [`../kv-cache/notebooks/02_kv_cache_practice.ipynb`](../kv-cache/notebooks/02_kv_cache_practice.ipynb).
@@ -37,7 +37,8 @@ and [`../flash-attention/notebooks/`](../flash-attention/notebooks/flash_attenti
 ```bash
 cd 04-inference-engine/kernel-core
 python3 -m pip install -e '.[dev]'    # numpy; plus pytest, matplotlib and Jupyter for the tests and notebooks
-python3 -m pytest -q                  # 51 tests, ~1 s, offline
+python3 -m pytest -q                  # 58 tests, ~1 s, offline
+python3 tools/make_figures.py         # regenerate the kv-cache primer's three charts
 make check                            # the tests, then 01 runs clean and 02's blank stops at its first blank (~10 s)
 python3 -m jupyterlab ../kv-cache     # do the notebooks
 ```

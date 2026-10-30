@@ -103,7 +103,7 @@ beyond, for example at 2,048, where W4A16 and BF16 take the same time.
 
 ![The speedup over BF16 of the down_proj GEMM of Llama-3.1-8B on an L4, for W4A16 and FP8 W8A8, against the tokens per step.](figures/gemm-speedup-vs-tokens.svg)
 
-*W4A16 starts at 3.9× the speed of BF16 and becomes compute-bound at 119 tokens per step. From 462 tokens, BF16 is compute-bound too, and W4A16 has no gain, but FP8 W8A8 stays near 2×. `cost.gemm_time()` computes the speedup of one down_proj GEMM on an L4, and `tests/test_figures.py` pins the chart.*
+*At 1 token, W4A16 keeps almost the full byte ratio of 3.9×, and it becomes compute-bound at 119 tokens per step. From 462 tokens, BF16 is compute-bound too, and W4A16 has no gain, but FP8 W8A8 stays near 2×. `cost.gemm_time()` computes the speedup of one down_proj GEMM on an L4, and `tests/test_figures.py` pins the chart.*
 
 Thus decode batches of a few hundred still get a gain from INT4, but long prefill chunks do not. Real kernels lose
 the gain sooner, because the dequantization is not free (§4).
@@ -601,12 +601,12 @@ with groups of 32 costs 5 bits per element (40,960 B per token), and 2-bit costs
 weights (the core's round memory inputs). There, the 2,000-token sessions go 43 → 87 → 140 → 234. At vLLM's
 defaults, `servelab.sizing` gives BF16 weights 2,363 KV blocks, and 4,727 with an FP8 cache (vllm-internals §4.7).
 
-**Faster long-context decode.** Take Llama-3.1-8B with FP8 weights on an H100, at batch 32 and 8,000 tokens of
-context. FP8 KV takes a decode step from 17.5 ms to 11.3 ms (`cost.step_cost()`, SIMULATED).
-
 ![KV bytes per token for Llama-3.1-8B at 16, 8, 5 and 3 bits per element, and 2,000-token sessions on an L4 with FP8 weights.](figures/kv-cache-bytes-and-sessions.svg)
 
 *Fewer KV bits per element give more 2,000-token sessions of Llama-3.1-8B on an L4 with FP8 weights: 43, 87, 140 and 234. The label under each bar gives the bits per element and the bytes per token of that KV cache dtype. `cost.Model.kv_bytes_per_token()` and `cost.sessions()` compute the values, and `tests/test_figures.py` pins the chart.*
+
+**Faster long-context decode.** Take Llama-3.1-8B with FP8 weights on an H100, at batch 32 and 8,000 tokens of
+context. FP8 KV takes a decode step from 17.5 ms to 11.3 ms (`cost.step_cost()`, SIMULATED).
 
 **FP8 KV and its scale.** vLLM's `--kv-cache-dtype` accepts `fp8` (= `fp8_e4m3`) and `fp8_e5m2`, plus
 per-token-head dynamic types (`int4_per_token_head`, `int8_per_token_head`, `fp8_per_token_head`) and NVFP4 on

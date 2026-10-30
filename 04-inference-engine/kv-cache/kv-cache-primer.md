@@ -62,7 +62,7 @@ This distinction is the core of GPU inference.
 
 ![Prefill runs one forward pass over the whole prompt and fills the cache, and then each decode step adds one token and reads every weight and the full cache.](figures/prefill-decode-phases.svg)
 
-*Prefill runs one forward pass over all the prompt tokens and fills the cache. Then each decode step adds one token, and it reads every model weight and the full cache. The cache grows by one token per step. The last lines compare the ~300 operations per byte that the H100 needs with the 1 or 4 that attention over a cache does.*
+*Prefill runs one forward pass over all the prompt tokens and fills the cache. Then each decode step adds one token, and it reads every model weight and the full cache. The cache grows by one token per step.*
 
 **Prefill** is the phase that processes the input prompt. All the prompt tokens go through the model at the same time, in parallel, as large matrix multiplications. This phase fills the cache. It is **compute-bound**: the tensor cores of the GPU are the bottleneck. The latency of this phase is your *time to first token*.
 
@@ -76,7 +76,7 @@ In both cases, the intensity is about two orders of magnitude too low (the [Flas
 
 ![Decode attention does 2g/b FLOP per byte: 1 for full MHA and 4 for Llama 3 8B in fp16, against the ~300 that the H100 needs.](figures/decode-intensity.svg)
 
-*The chart shows the FLOP per byte of decode attention against g, the number of query heads that share one KV head. The marked points, 1 and 4, are about two orders of magnitude under the ~300 FLOP per byte that the H100 needs. `kerncore.kv.decode_intensity` and `kerncore.kv.ridge` calculate the values, and `kernel-core/tests/test_figures.py` pins the chart.*
+*The chart shows the FLOP per byte of decode attention against g, the number of query heads that share one KV head. The marked points, 1 and 4, are about two orders of magnitude under the ~300 FLOP per byte that the H100 needs. The fp8 line, with b = 1, is two times higher than the fp16 line at every g. `kerncore.kv.decode_intensity` and `kerncore.kv.ridge` calculate the values, and `kernel-core/tests/test_figures.py` pins the chart.*
 
 A useful approximation for decode speed:
 
@@ -107,9 +107,9 @@ per token = 2 × 32 × 8 × 128 × 2 = 131,072 bytes = 128 KiB
 | 1 user, 128K (131,072-token) context | 16 GiB (17.2 GB); the notebooks' 128,000 tokens give 15.6 GiB (16.8 GB) |
 | 32 users, 8K context each | 32 GiB (34.4 GB) |
 
-![One token of Llama 3 8B keeps 128 KiB of K and V across 32 layers, and the cache grows to 1 GiB at 8K context, 16 GiB at 128K and 32 GiB for 32 users, against fixed weights of about 16 GB.](figures/kv-cache-size.svg)
+![One token of Llama 3 8B keeps 128 KiB of K and V across 32 layers of 8 KV heads, and Llama 2 13B keeps 800 KiB.](figures/kv-cache-size.svg)
 
-*The left panel shows the K and V of one token of Llama 3 8B: 128 KiB across 32 layers of 8 KV heads. Llama 2 13B, with full multi-head attention, keeps 800 KiB per token. The right panel shows the cache at three context and batch settings next to the weights, which do not change in size. `kerncore.kv.kv_cache_bytes` calculates the cache sizes, and `sessions_per_gpu` calculates the session counts of an 80 GB H100.*
+*The figure shows the K and V of one token of Llama 3 8B: 128 KiB across 32 layers of 8 KV heads. Llama 2 13B, with full multi-head attention, keeps 800 KiB per token. `kerncore.kv.kv_bytes_per_token` calculates the two sizes.*
 
 The *weights* of the model are a fixed ~16 GB (15 GiB) in fp16. On an 80 GB H100, that batch of 32 users already uses more memory than the model itself. The cache is the part that scales with your traffic and your context lengths. The weights do not change in size.
 
@@ -125,7 +125,7 @@ Six times larger per token, for a model only 1.6× bigger. That gap is the effec
 
 ![The fp16 KV cache grows with the tokens that it holds: 128 KiB per token for Llama 3 8B, 800 KiB for Llama 2 13B.](figures/kv-bytes-vs-tokens.svg)
 
-*The chart shows the fp16 KV cache against the tokens that it holds, `seq_len × batch`, for Llama 3 8B and Llama 2 13B. The marked points are the rows of the table, and the dashed line shows the weights of Llama 3 8B. `kerncore.kv.kv_cache_bytes` calculates the values, and `kernel-core/tests/test_figures.py` pins the chart.*
+*The chart shows the fp16 KV cache against the tokens that it holds, `seq_len × batch`, for Llama 3 8B and Llama 2 13B. The Llama 2 13B cache is six times larger at every token count. The marked points are the rows of the table, and the dashed line shows the weights of Llama 3 8B. `kerncore.kv.kv_cache_bytes` calculates the values, and `kernel-core/tests/test_figures.py` pins the chart.*
 
 **Second-order effect:** at 128K context, decode reads ~16 GB of weights *plus* ~17 GB of cache per token. That is two times the traffic, so you get roughly **half the tokens per second** of a short context. Long context costs you capacity *and* speed.
 
@@ -179,7 +179,7 @@ Three consequences to keep in mind:
 
 ![On an 80 GB H100 with Llama 3 8B, fewer sessions fit as the context grows: 59 of 8K tokens in fp16, 119 in fp8.](figures/sessions-per-gpu.svg)
 
-*The chart shows the sessions that fit on an 80 GB H100 next to the weights of Llama 3 8B, against the context length. The count decreases by approximately half each time the context doubles, and the marked points are the 59 and 119 of §4. `kerncore.kv.sessions_per_gpu` calculates the counts, and `kernel-core/tests/test_figures.py` pins the chart.*
+*The chart shows consequence 2 in numbers. It gives the sessions that fit on an 80 GB H100 after the weights of Llama 3 8B, against the context length. The count decreases as the context grows, because each session keeps more KV bytes. The marked points are the 59 and 119 of §4. `kerncore.kv.sessions_per_gpu` calculates the counts, and `kernel-core/tests/test_figures.py` pins the chart.*
 
 ---
 

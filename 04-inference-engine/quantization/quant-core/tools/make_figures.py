@@ -68,14 +68,15 @@ def spec_gemm_speedup() -> dict:
         "marks": [
             {"kind": "vline", "x": round(cross["bf16"], 3), "label": f"BF16 compute-bound: {cross['bf16']:.0f}",
              "style": "warm"},
-            {"kind": "point", "x": 1, "y": at[1], "label": f"1 token: {at[1]:.1f}×", "style": "accent"},
+            {"kind": "point", "x": 1, "y": at[1], "label": f"1 token: bytes {16 / C.SCHEMES['w4a16'].w_bits:.1f}× smaller",
+             "style": "accent"},
             {"kind": "point", "x": round(knee, 3), "y": round(t(knee, "bf16") / t(knee, "w4a16"), 4),
              "label": f"W4A16 compute-bound: {knee:.0f}", "style": "accent", "anchor": "end", "dy": 18},
             {"kind": "point", "x": 256, "y": at[256], "label": f"256 tokens: {at[256]:.1f}×", "style": "accent",
              "anchor": "end", "dy": 18},
         ],
         "legend": "bottom-left",
-        "note": "computed by quantcore.cost.gemm_time",
+        "note": "computed by quantcore.cost.gemm_time and crossover_tokens",
     }
 
 
@@ -104,7 +105,7 @@ def spec_sqnr_vs_bits() -> dict:
              "style": "accent", "dy": 18},
         ],
         "legend": "top-left",
-        "note": "computed by quantcore.formats.sqnr_rule_db",
+        "note": "computed by quantcore.formats.sqnr_rule_db and quantcore.granularity.error",
     }
 
 
@@ -128,7 +129,7 @@ def spec_kv_sessions() -> dict:
         "y": {"label": "2,000-token sessions on an L4", "min": 0, "max": 260, "ticks": [0, 50, 100, 150, 200, 250]},
         "series": [{"name": "sessions, FP8 weights", "y": sessions, "style": "accent"}],
         "legend": "none",
-        "note": "computed by quantcore.cost.sessions",
+        "note": "computed by quantcore.cost.sessions, Model.kv_bytes_per_token and kvquant.kv_bits_per_element",
     }
 
 
@@ -151,7 +152,7 @@ def spec_visible_drop() -> dict:
         "marks": [
             {"kind": "point", "x": 250, "y": round(d250, 4), "label": f"250 items: ~{d250:.1f} points",
              "style": "accent"},
-            {"kind": "point", "x": n77, "y": round(100 * 2 * E.diff_stderr(0.77, 0.77, n77), 4),
+            {"kind": "point", "x": n77, "y": round(100 * 2 * E.diff_stderr(p, p, n77), 4),
              "label": f"{n77:,} items per model: 1 point at 77%", "style": "warm", "anchor": "end", "dy": 18},
         ],
         "legend": "top-right",

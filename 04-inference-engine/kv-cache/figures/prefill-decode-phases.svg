@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="880" height="434" viewBox="0 0 880 434" role="img" aria-label="Prefill runs one forward pass over the whole prompt and fills the cache, and then each decode step adds one token and reads every weight and the full cache." style="color: #E4EAE7">
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="360" viewBox="0 0 880 360" role="img" aria-label="Prefill runs one forward pass over the whole prompt and fills the cache, and then each decode step adds one token and reads every weight and the full cache." style="color: #E4EAE7">
   <title>Prefill runs one forward pass over the whole prompt and fills the cache, and then each decode step adds one token and reads every weight and the full cache.</title>
-  <rect x="0" y="0" width="880" height="434" rx="8" fill="#161E1C"/>
+  <rect x="0" y="0" width="880" height="360" rx="8" fill="#161E1C"/>
   <defs>
     <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
     <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
@@ -78,11 +78,5 @@
     <text x="763" y="286" text-anchor="middle" font-size="11">they wait for data</text>
     <text x="763" y="306" text-anchor="middle" font-size="11" fill="#97A59F">the latency is your</text>
     <text x="763" y="320" text-anchor="middle" font-size="11" fill="#97A59F">tokens per second</text>
-
-    <!-- the ridge -->
-    <text x="24" y="368" font-size="11.5" fill="#97A59F">An H100 does roughly 1,000 TFLOP/s in fp16, but it moves only about 3.35 TB/s from HBM.</text>
-    <text x="24" y="386" font-size="11.5" fill="#97A59F">To keep the arithmetic units busy, you need ~300 floating-point operations per byte loaded.</text>
-    <text x="24" y="404" font-size="11.5" fill="#97A59F">Attention over a cache does about 1 FLOP per byte in fp16 with full multi-head attention.</text>
-    <text x="24" y="422" font-size="11.5" fill="#97A59F">GQA with g = 4 (Llama 3 8B) gets to 4 FLOP/B: still about two orders of magnitude too low.</text>
   </g>
 </svg>

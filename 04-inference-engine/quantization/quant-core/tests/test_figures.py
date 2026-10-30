@@ -24,21 +24,21 @@ def check(name: str, **tolerances) -> None:
     svgchart.check_figure(make_figures.FIGURES_DIR / name, make_figures.FIGURES[name], **tolerances)
 
 
-def test_gemm_speedup_vs_tokens():
-    check("gemm-speedup-vs-tokens.svg")
-
-
-def test_sqnr_vs_bits():
+TOLERANCES = {
     # seeded Gaussian weights rounded onto integer grids; the primer prints the SQNR to 0.1 dB
-    check("sqnr-vs-bits.svg", rel_tol=1e-4)
+    "sqnr-vs-bits.svg": {"rel_tol": 1e-4},
+}
 
 
-def test_kv_cache_bytes_and_sessions():
-    check("kv-cache-bytes-and-sessions.svg")
+@pytest.mark.parametrize("name", sorted(make_figures.FIGURES))
+def test_chart(name):
+    check(name, **TOLERANCES.get(name, {}))
 
 
-def test_visible_drop_vs_eval_items():
-    check("visible-drop-vs-eval-items.svg")
+def test_every_computed_chart_is_built():
+    # every chart in ../figures/ that svgchart rendered (it stores its spec in <desc>) has a spec builder
+    charts = {p.name for p in make_figures.FIGURES_DIR.glob("*.svg") if "<desc>" in p.read_text(encoding="utf-8")}
+    assert charts == set(make_figures.FIGURES)
 
 
 @pytest.mark.parametrize("name", sorted(make_figures.FIGURES))

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="880" height="360" viewBox="0 0 880 360" role="img" aria-label="The SQNR of per-channel INT2 to INT8 on 128×256 Gaussian weights: the rule of about 6 dB per bit, and what the grid measures." style="color: #E4EAE7">
   <title>The SQNR of per-channel INT2 to INT8 on 128×256 Gaussian weights: the rule of about 6 dB per bit, and what the grid measures.</title>
-  <desc>{"kind":"line","legend":"top-left","marks":[{"anchor":"end","kind":"point","label":"INT8: rule 43.2 dB, grid 43.1","style":"accent","x":8,"y":43.083},{"dy":18,"kind":"point","label":"INT4: rule 19.1, grid 18.4","style":"accent","x":4,"y":18.409}],"note":"computed by quantcore.formats.sqnr_rule_db","series":[{"dash":true,"name":"the rule, crest factor 3.07","style":"plain","x":[2,3,4,5,6,7,8],"y":[7.069,13.09,19.11,25.131,31.152,37.172,43.193]},{"markers":true,"name":"the grid measures","style":"accent","x":[2,3,4,5,6,7,8],"y":[4.52,11.869,18.409,24.749,30.909,37.003,43.083]}],"title":"The SQNR of per-channel INT2 to INT8 on 128×256 Gaussian weights: the rule of about 6 dB per bit, and what the grid measures.","x":{"label":"integer bits b (one scale per channel)","max":8,"min":2,"ticks":[2,3,4,5,6,7,8]},"y":{"label":"SQNR (dB)","max":48,"min":0,"ticks":[0,10,20,30,40]}}</desc>
+  <desc>{"kind":"line","legend":"top-left","marks":[{"anchor":"end","kind":"point","label":"INT8: rule 43.2 dB, grid 43.1","style":"accent","x":8,"y":43.083},{"dy":18,"kind":"point","label":"INT4: rule 19.1, grid 18.4","style":"accent","x":4,"y":18.409}],"note":"computed by quantcore.formats.sqnr_rule_db and quantcore.granularity.error","series":[{"dash":true,"name":"the rule, crest factor 3.07","style":"plain","x":[2,3,4,5,6,7,8],"y":[7.069,13.09,19.11,25.131,31.152,37.172,43.193]},{"markers":true,"name":"the grid measures","style":"accent","x":[2,3,4,5,6,7,8],"y":[4.52,11.869,18.409,24.749,30.909,37.003,43.083]}],"title":"The SQNR of per-channel INT2 to INT8 on 128×256 Gaussian weights: the rule of about 6 dB per bit, and what the grid measures.","x":{"label":"integer bits b (one scale per channel)","max":8,"min":2,"ticks":[2,3,4,5,6,7,8]},"y":{"label":"SQNR (dB)","max":48,"min":0,"ticks":[0,10,20,30,40]}}</desc>
   <rect x="0" y="0" width="880" height="360" rx="8" fill="#161E1C"/>
   <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12" fill="currentColor">
     <g stroke="#27322E" stroke-width="1">
@@ -53,6 +53,6 @@
       <line x1="86.0" y1="60.0" x2="104.0" y2="60.0" stroke="#4CC5B7" stroke-width="2"/>
       <text x="110.0" y="64.0" fill="currentColor">the grid measures</text>
     </g>
-    <text x="10" y="353.0" font-size="10.5" fill="#97A59F" font-family="JetBrains Mono, monospace">computed by quantcore.formats.sqnr_rule_db</text>
+    <text x="10" y="353.0" font-size="10.5" fill="#97A59F" font-family="JetBrains Mono, monospace">computed by quantcore.formats.sqnr_rule_db and quantcore.granularity.error</text>
   </g>
 </svg>
