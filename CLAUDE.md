@@ -549,6 +549,30 @@ find . -maxdepth 5 -name '*.ipynb' ! -path '*/.ipynb_checkpoints/*' | wc -l
   the next step, the notebooks. Not done, as before: docstrings and code comments in STE, and a check against the STE
   dictionary proper. **Baseline unchanged: 385 notebooks.**
 
+- **2026-10-30 — figures in the notebooks (round 3, part 2).** The notebooks had no figures, because Colab renders
+  neither a Mermaid block nor a relative image; a figure embedded by its absolute URL on `main`
+  (`https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/<path>.svg`, served as
+  `image/svg+xml`) renders on GitHub, Colab, JupyterLab and the site alike. FIGURE-STYLE.md §8 is the rule: at most
+  one figure per notebook, in its first Markdown cell after the first paragraph, and only a figure a primer already
+  carries (an SVG or a chart; a Mermaid block cannot be embedded), with an italic caption in STE that names the
+  document and the section and says what to look at for this notebook; the blank and its solution twin carry the
+  same cell. `figure_notebooks_workflow.js`, run as four parallel workflows over the 39 labs with notebooks: an
+  agent per lab reads each notebook's introduction and code, chooses from a catalogue of every SVG figure a
+  document references (path, document, section, alt text, caption; generated at launch) or skips with a reason, and
+  applies the cell the way the lab is built (the percent source and a rebuild for the 26 percent-source labs, the
+  builder's embedded cells for the transformers, lra-gcp, embeddings and RAG labs, `nb_md.py` on both twins for the
+  hand-written labs); an adversarial verifier checks the figure against the notebook's code, the twins, the
+  untouched cells and outputs, the rebuild as a no-op, the lab's notebook tests, `ci.py check`, the link test and the
+  linter; a fixer; up to two rounds. 102 agents in about 41 minutes of wall clock. **152 figures embedded** (a blank
+  and its twin count once): 284 of the 385 notebooks now open with a figure; 53 notebooks skipped with a written
+  reason (no catalogue figure shows their mechanism: the broker's consent flow, A2A agent cards, the audit queries,
+  the chunking strategies, hybrid search with BM25 and RRF, which only a Mermaid block draws, superposition, the
+  geometry of embeddings, the FakeLLM). Round-1 findings: 2 blocking (a figure that showed a different mechanism from
+  the one the notebook works through; a caption with a linter finding), 17 major and 108 minor; 46 fixes applied, 4
+  rejected with a reason, nothing open. Validated on the exact tree like part 1 (every lab's tests, every builder and
+  the injector as no-ops, `ci.py check`, the Colab index, the link check, `test_figure_links.py`, the site generator,
+  the strict site build; the STE linter unchanged over the layers (234 errors and 3,803 warnings before and after; the 152 captions add about 1,000 sentences and no finding)) and merged through its own PR. **Baseline unchanged: 385 notebooks.**
+
 ## Housekeeping
 - Deduped 2026-09-26: `07-.../long-running-durable/PRIMER.md` is the only copy of the durable-execution primer, and
   `long-running-durable/lra-gcp/docs/primer.md` the only lra primer (the byte-identical twins were removed).
