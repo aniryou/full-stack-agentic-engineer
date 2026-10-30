@@ -38,7 +38,7 @@ A 24B model needs 48 GB (bf16), 24 (fp8) or 12 (int4). Add ~10% for the CUDA con
 and the activations. On an 80 GB H100, the **spare after weights** decides how many
 users you serve. The 80 does not decide it.
 
-**2. KV cache: how many concurrent users fit?** *(most people do not include this number)*
+**2. KV cache: how many concurrent users fit?** *Most people do not include this number.*
 
 $$
 \text{KV/token} = 2\,(K,V) \times \text{layers} \times \text{kv_heads} \times \text{head_dim} \times \text{bytes}
@@ -64,7 +64,7 @@ $$
 48 GB ÷ 3.35 TB/s ≈ 14 ms. This gives a **~70 tok/s single-stream ceiling** on H100.
 More compute does *not* help. Only more bandwidth or fewer bytes (quantize) help.
 
-**Batching is nearly free**: the GPU reads the weights one time per step for the full
+**Batching is almost free**: the GPU reads the weights one time per step for the full
 batch. Thus throughput increases in proportion to the batch until you reach the memory limit or the
 compute roofline (~batch 300 on H100 = FLOPS ÷ bandwidth).
 
@@ -78,7 +78,7 @@ $$
 \end{aligned}
 $$
 
-The attention term increases as $S^2$. Thus it is important only for long prompts.
+The attention term increases as $S^2$. Thus the attention term is important only for long prompts.
 Mistral Small has 40 layers and 32 query heads × 128. For this model, the attention term adds 1.4% at 2K
 tokens, 5.6% at 8K, 22% at 32K and 90% at 128K (`capacity.attention_flops`).
 
@@ -174,7 +174,7 @@ target is ≥25 tok/s/user (TPOT ≤ 40 ms).
 MoE divides the size calculation into two parts, and people make errors in both:
 
 - **The TOTAL params set the memory** (all experts are in HBM): ~675 GB in fp8. When
-  you add the KV, this does **not** fit in 8×H100 (576 GB usable). The minimum is
+  you add the KV, this total does **not** fit in 8×H100 (576 GB usable). The minimum is
   **8×H200** (~1 TB) or a Blackwell node. NVFP4 (~340 GB) is the native path of Blackwell.
 - **The ACTIVE params set the compute**: prefill costs the same as a 41B dense model.
   But **decode is only 41B-like at low batch**. At high batch, each step uses almost
@@ -219,8 +219,8 @@ the bytes that a step reads. `moecore` reproduces the 17.6 ms floor of this sect
 
 ## Decisions worth defending
 
-- **Dense against MoE** for the workload (the quality that you need against the hardware
-  that you can get).
+- **Dense against MoE** for the workload. This decision puts the quality that you need against the hardware
+  that you can get.
 - **FP8 by default** on Hopper+. **INT4 only where the workload's own evals showed that
   the quality is sufficient.**
 - **Prefix caching** for RAG/agents, and **speculative decoding** for latency at low batch.
