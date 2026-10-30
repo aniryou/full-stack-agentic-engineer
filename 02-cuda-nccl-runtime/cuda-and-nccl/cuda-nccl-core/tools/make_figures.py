@@ -125,11 +125,11 @@ def spec_occupancy_vs_registers() -> dict:
              "step": True, "dash": True},
         ],
         "marks": [
-            {"kind": "point", "x": REGS, "y": pct(at64), "style": "accent", "anchor": "end",
+            {"kind": "point", "x": REGS, "y": pct(at64), "style": "accent", "dy": -10,
              "label": f"{REGS} registers: {at64.blocks_per_sm} blocks, {at64.occupancy:.0%}"},
             {"kind": "point", "x": REGS_SUBPARTITION, "y": pct(at80), "style": "accent",
              "label": f"{REGS_SUBPARTITION} registers: {at80.active_warps} warps"},
-            {"kind": "point", "x": REGS, "y": pct(at64s), "style": "warm", "anchor": "end", "dy": 18,
+            {"kind": "point", "x": REGS, "y": pct(at64s), "style": "warm", "dy": 20,
              "label": f"{REGS} registers and {SMEM // KIB} KB: {at64s.occupancy:.0%}"},
         ],
         "legend": "top-right",
@@ -153,18 +153,21 @@ def spec_step_time_vs_kernel_length() -> dict:
                   f"{LAUNCH_US:.0f} µs per kernel or one CUDA Graph launch of {GRAPH_LAUNCH_US:.0f} µs: "
                   f"{e2:,.0f} µs against {g2:,.0f} µs for {SHORT_US:.0f} µs kernels, and no gain for "
                   f"{LONG_US:.0f} µs kernels."),
-        "x": {"label": "kernel length (µs)", "min": 0, "max": ks[-1]},
-        "y": {"label": f"time of {N_KERNELS} kernels (µs)", "min": 0},
+        "x": {"label": "kernel length (µs, log scale)", "scale": "log", "min": ks[0], "max": ks[-1],
+              "ticks": [0.5, 1, 2, 5, 10, 20]},
+        "y": {"label": f"time of {N_KERNELS} kernels (µs, log scale)", "scale": "log", "min": 100, "max": 20000,
+              "ticks": [100, 200, 500, 1000, 2000, 5000, 10000, 20000]},
         "series": [
             {"name": f"eager: one {LAUNCH_US:.0f} µs launch per kernel", "x": ks, "y": eager, "style": "warm"},
-            {"name": f"CUDA Graph: one {GRAPH_LAUNCH_US:.0f} µs launch", "x": ks, "y": graph, "style": "accent"},
+            {"name": f"CUDA Graph: one {GRAPH_LAUNCH_US:.0f} µs launch", "x": ks, "y": graph, "style": "accent",
+             "dash": True},
         ],
         "marks": [
             {"kind": "vline", "x": LAUNCH_US, "style": "muted", "label_pos": "bottom",
              "label": f"kernel = launch, {LAUNCH_US:.0f} µs"},
-            {"kind": "point", "x": SHORT_US, "y": _r(e2, 3), "style": "warm", "dy": -10,
+            {"kind": "point", "x": SHORT_US, "y": _r(e2, 3), "style": "warm", "anchor": "middle", "dy": -11,
              "label": f"{SHORT_US:.0f} µs kernels: eager {e2:,.0f} µs"},
-            {"kind": "point", "x": SHORT_US, "y": _r(g2, 3), "style": "accent", "dy": -10,
+            {"kind": "point", "x": SHORT_US, "y": _r(g2, 3), "style": "accent", "dy": 17,
              "label": f"graph {g2:,.0f} µs, {e2 / g2:.1f}× faster"},
             {"kind": "point", "x": LONG_US, "y": _r(e20, 3), "style": "warm", "anchor": "end", "dy": -12,
              "label": f"{LONG_US:.0f} µs kernels: eager {e20:,.0f} µs, graph {g20:,.0f} µs"},
@@ -206,14 +209,14 @@ def spec_allreduce_busbw_vs_size() -> dict:
         "marks": [
             {"kind": "hline", "y": BW / 1e9, "style": "warm", "label": f"link rate B = {BW / 1e9:.0f} GB/s"},
             {"kind": "hline", "y": ceiling, "style": "muted", "label": f"NVLS ceiling 2(p−1)/p · B = {ceiling:.0f} GB/s"},
-            {"kind": "point", "x": GIB, "y": _r(bus_nvls, 3), "style": "violet", "anchor": "end", "dy": 16,
-             "label": f"1 GiB, k* = {k_nvls}: busbw {bus_nvls:.0f} GB/s"},
+            {"kind": "point", "x": GIB, "y": _r(bus_nvls, 3), "style": "violet", "anchor": "end", "dy": 36,
+             "label": f"k* = {k_nvls}: busbw {bus_nvls:.0f} GB/s"},
             {"kind": "point", "x": GIB, "y": _r(bus_ring, 3), "style": "accent", "anchor": "end", "dy": 16,
              "label": f"1 GiB: busbw {bus_ring:.0f} GB/s"},
             {"kind": "point", "x": GIB, "y": _r(alg_ring, 3), "style": "muted", "anchor": "end", "dy": 16,
              "label": f"algbw {alg_ring:.0f} GB/s"},
         ],
-        "legend": "top-left",
+        "legend": "bottom-right",
         "note": "computed by gpusim.collectives.model_time and busbw (cuda-nccl-core)",
     }
 
@@ -244,7 +247,7 @@ def spec_ring_allreduce_regimes() -> dict:
               "ticks": [10, 100, 1000, 10000]},
         "series": [
             {"name": "ring all-reduce", "x": SIZES, "y": ring, "style": "accent"},
-            {"name": f"latency term 2(p−1)·α = {a} steps", "x": SIZES, "y": lat, "style": "muted", "dash": True},
+            {"name": f"latency term 2(p−1)·α, {a} steps", "x": SIZES, "y": lat, "style": "muted", "dash": True},
             {"name": "bandwidth term 2(p−1)/p · S/B", "x": SIZES, "y": bwt, "style": "plain", "dash": True},
         ],
         "marks": [
