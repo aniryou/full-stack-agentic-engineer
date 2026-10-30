@@ -75,7 +75,7 @@ Responsibilities:
 
 Responsibilities:
 
-- Run one turn until it completes, in the limits of a budget.
+- Run one turn until it completes, within a budget.
 - Write a checkpoint for each step.
 - Run the tools through the executor.
 - Send the events as a stream.
@@ -109,7 +109,7 @@ The model gateway is a library in the orchestrator process. For each call, it do
 3. It goes through the circuit breaker.
 4. It takes tokens from a token bucket. The size of the bucket is the share of the model's TPM for this deployment.
 5. It does an attempt with a timeout.
-6. On a 429, a 503 or a timeout, it retries with full-jitter backoff, before the deadline. It moves to a sibling
+6. On a 429, a 503 or a timeout, it retries with full-jitter backoff, within the deadline. It moves to a sibling
    model after two 429s, one directly after the other, or when the breaker is open.
 7. It records the usage, cost, latency, TTFT and traffic type.
 
@@ -142,7 +142,7 @@ The executor applies these stages in sequence:
 6. retry (reads only)
 7. truncation
 
-The executor returns structured errors to the model. Tools run in one of three modes:
+It returns structured errors to the model. Tools run in one of three modes:
 
 - In the process, locally.
 - As HTTP tool services on Cloud Run, in production (`tools_mode=http`).
@@ -151,7 +151,7 @@ The executor returns structured errors to the model. Tools run in one of three m
 Each tool spec carries its scaling policy: idempotent or not, the timeout, the concurrency cap per instance, the
 retry attempts and the cache TTL.
 
-| Tool | Idempotent | Timeout | Bulkhead | Cache | Backend system |
+| Tool | Idempotent | Timeout | Bulkhead | Cache | Backing system |
 |---|---|---|---|---|---|
 | get_customer | yes | 2 s | 100 | 300 s | CRM (200 QPS) |
 | get_invoice | yes | 4 s | 30 | 120 s | billing mainframe (40 QPS) |
@@ -188,9 +188,9 @@ Cloud Run ingress is `internal-and-cloud-load-balancing`. Thus, no request can g
 
 The observability has three parts:
 
-- OpenTelemetry spans for each turn, model call and tool call, with `gen_ai.*` attributes. The spans go to Cloud Trace
+- OpenTelemetry spans for each turn, model call and tool call, with `gen_ai.*` attributes. They go to Cloud Trace
   through the Telemetry API, at a 10 % head-based sample.
-- A process-local metrics registry, available at `/metrics`. In production, the service also exports the registry through
+- A process-local metrics registry, available at `/metrics`. In production, the service also exports it through
   the OTLP endpoint.
 - Structured JSON logs.
 
@@ -238,7 +238,7 @@ How each component scales:
 
 | Failure | Behaviour |
 |---|---|
-| Model 429 / 503 / timeout | Backoff with jitter before the deadline. A sibling model after two 429s. A breaker per model. The failure counts toward the degrade level. |
+| Model 429 / 503 / timeout | Backoff with jitter within the deadline. A sibling model after two 429s. A breaker per model. The failure counts toward the degrade level. |
 | Tool timeout / error / rate limit | A structured error to the model. One retry for reads. A breaker per tool. The bulkhead protects the instance. |
 | Orchestrator instance crashes mid-turn | Pub/Sub redelivers the message. The orchestrator replays the checkpointed steps and does not run them again. The idempotency key removes duplicate writes. |
 | Redis unavailable | The gateway fails closed on admission (503 + Retry-After). The orchestrator cannot take locks, so the result is `RetryLater`. |
@@ -293,7 +293,7 @@ The v1 design does not include these items:
 - PT allocation per tenant.
 - Long-term memory beyond the session summary.
 - Autonomous multi-step writes without a turn that confirms them.
-- Self-hosted models. Section 11 gives a sketch of that variant.
+- Self-hosted models (section 11 gives a sketch of that variant).
 
 Each item has a documented trigger in the growth path of the primer.
 
@@ -332,16 +332,16 @@ The authors examined the product facts on 19 September 2026 (verify).
 ### 11.1 The model layer
 
 **Hosted path.** `api.mistral.ai` is the global endpoint. It is EU-hosted by default, with no committed inference
-location. `api.eu.` and `api.us.` are regional at +10 %, GA from 11 August 2026. On them, function calling is the
-only regional tool. They have no Agents, Batch or Files.
+location. `api.eu.` and `api.us.` are regional at +10 %, GA since 11 August 2026. On them, function calling is the
+only regional tool, and they have no Agents, Batch or Files.
 
 Priority Tier is +75 %. A request selects it with `service_tier="auto"`. Above the limits of Priority Tier, a
-request changes back to the standard tier. The response reports `service_tier`. The docs state a 99.5 % SLA. The
-AI Cloud page says 99.9 % (verify).
+request changes back to the standard tier. The response reports `service_tier`. The docs state a 99.5 % SLA (the
+AI Cloud page says 99.9 %, verify).
 
 Each call sends the 2,700-token prefix first, with a `prompt_cache_key` per prompt version. Mistral bills 64-token
 cached blocks at 10 % and reports them in `usage.prompt_tokens_details.cached_tokens`. Mistral does not publish the
-TTL or the cache-write price. The lab assumes a TTL of 300 s.
+TTL or the cache-write price (the lab assumes 300 s).
 
 The rate-limit request is 60 RPS, 19 M TPM and 209 B tokens a month for Small 4. You send it to support after the
 billing passes the $2,000 tier. The free tier (1 RPS, 500 k TPM, 1 B tokens a month) is 10 % of the average TPM.
@@ -351,7 +351,7 @@ The `mistralai` SDK (2.10.1) has no retries by default and a 300 s default timeo
 - Retries stay off, so `call_with_retries` is the one place that decides.
 - The timeout is 30 s.
 - A 429 (`errors.SDKError`, `status_code`) maps to `RateLimited`.
-- If a `Retry-After` appears, the client obeys it. The docs give none.
+- If a `Retry-After` appears, the client obeys it (the docs give none).
 
 The design pins the model ids to dated versions. The deprecations of Magistral, Devstral, Pixtral and Medium 3.1 on
 22 May 2026 are the reminder. Zero data retention is available on pay-as-you-go stateless endpoints, on request.
@@ -415,7 +415,7 @@ an outage that comes twice a year.
 
 The fleet has three answers to the 6-second hosted turn:
 
-- Get a TPOT of about 10 ms. This TPOT means batch about 4 and approximately four times the GPUs.
+- Get a TPOT of about 10 ms. This means batch about 4 and roughly four times the GPUs.
 - Use EAGLE speculative decoding. Drafts exist for Small 4, Medium 3.5 and Large 3, not Ministral.
 - Use streaming, and accept 10 s.
 
@@ -432,7 +432,7 @@ Both bills increase with volume: the API bill linearly, and the fleet bill in st
 break-even is a GPU price, not a volume.
 
 If H100s cost less than about $4.95 per GPU-hour, the fleet costs less than the hosted planning mix. The basis of
-this price is 0.16 GPU-minutes per conversation at 28 % average utilisation. This price is below AWS on-demand. The price
+this price is 0.16 GPU-minutes per conversation at 28 % average utilisation. This price is below AWS on-demand. It
 is about level with 3-year commitments and AWS APAC capacity blocks. Neoclouds are clearly below it.
 
 Volume is important only at the bottom. There, the volume must be above these values to amortise the two-replica HA

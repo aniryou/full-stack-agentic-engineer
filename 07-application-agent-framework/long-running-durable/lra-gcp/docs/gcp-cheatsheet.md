@@ -7,8 +7,8 @@ This sheet gives the limits, the delivery semantics, the CLI and SDK snippets an
 | Mechanism | Delivery | What that forces on you |
 |---|---|---|
 | Cloud Tasks | at-least-once | An idempotent handler. Named tasks, so that two enqueues of the same task become one task. |
-| Pub/Sub push/pull | at-least-once (exactly-once only on pull subscriptions, regional) | An idempotent consumer, a dead-letter topic, an ack before the deadline. |
-| Cloud Scheduler | at-least-once. It can send the tick two times. | A check of the due time, and a lease. |
+| Pub/Sub push/pull | at-least-once (exactly-once only on pull subscriptions, regional) | An idempotent consumer, a dead-letter topic, an ack within the deadline. |
+| Cloud Scheduler | at-least-once (it can send the tick two times) | A check of the due time, and a lease. |
 | Cloud Workflows retries | the step runs again | Idempotent HTTP targets. |
 | Cloud Run request retry | the client decides | Return 2xx only after a durable commit. |
 | ADK `ResumabilityConfig` | at-least-once on a resume | Idempotent tools. Do not depend on `temp:`. |
@@ -29,7 +29,7 @@ This sheet gives the limits, the delivery semantics, the CLI and SDK snippets an
 
 ## Pub/Sub
 * The retention is up to 31 days (the default is 7). The ack deadline is 10–600 s. A message is ≤ 10 MB. Ordering keys are available, and each key has a throughput limit. You can filter messages by attributes.
-* A push subscription sends messages to Cloud Run with `--push-auth-service-account`. The endpoint must respond before the ack deadline ends. Give long work to Cloud Tasks.
+* A push subscription sends messages to Cloud Run with `--push-auth-service-account`. The endpoint must respond within the ack deadline. Give long work to Cloud Tasks.
 * For a dead-letter topic, use `--dead-letter-topic --max-delivery-attempts 5..100`.
 * Exactly-once delivery is available only on pull subscriptions. It is not available for push.
 

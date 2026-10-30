@@ -1,6 +1,6 @@
 # GPU Deployment Architecture for LLM Scale-Up
 
-**A primer for people who know models but not the machines that the models run on.**
+**A primer for people who understand models but not the machines that the models run on.**
 
 *Written August 2026. The hardware details change fast. The physics and the mental models do not change.*
 
@@ -31,17 +31,17 @@ A CPU has tens of powerful, general-purpose cores. A GPU has thousands of simple
 
 But usually the raw arithmetic is not the bottleneck. When you serve an LLM, **memory** is the thing that actually limits the performance. Two properties of memory set the limit: how much memory you have and how fast you can read it.
 
-Modern accelerators use **HBM** (High Bandwidth Memory). HBM is a set of DRAM stacks on the same package as the compute die. A wide bus connects the stacks to the die. HBM is the reason for the cost of a data centre GPU. At this time, the HBM supply is also the binding constraint on the whole industry.
+Modern accelerators use **HBM** (High Bandwidth Memory). HBM is a set of DRAM stacks on the same package as the compute die. An extremely wide bus connects the stacks to the die. HBM is the reason for the cost of a data centre GPU. At this time, the HBM supply is also the binding constraint on the whole industry.
 
 ---
 
 ## 2. The single most important mental model: prefill vs decode
 
-The generation of a response has two phases with **opposite** hardware characteristics. If you learn this fully, most deployment decisions become clear.
+The generation of a response has two phases with **opposite** hardware characteristics. If you learn this fully, most deployment decisions become obvious.
 
-![Prefill reads the whole prompt in one forward pass and is compute-bound; decode loads the full set of weights from HBM at each step to produce one token and is memory-bandwidth-bound, and batching lets one load serve 64 requests.](figures/prefill-vs-decode.svg)
+![Prefill reads the whole prompt in one forward pass and is compute-bound; decode loads the entire set of weights from HBM at each step to produce one token and is memory-bandwidth-bound, and batching lets one load serve 64 requests.](figures/prefill-vs-decode.svg)
 
-*Prefill (top) is compute-bound: it reads all the input tokens in one forward pass and uses each loaded weight for much arithmetic. Decode (bottom) is memory-bandwidth-bound: at each step, it loads the full set of weights from HBM to produce one token. With batching, the same loaded weights serve 64 requests in one step, which amortises the high-cost part 64× (§2).*
+*Prefill (top) is compute-bound: it reads all the input tokens in one forward pass and uses each loaded weight for much arithmetic. Decode (bottom) is memory-bandwidth-bound: at each step, it loads the entire set of weights from HBM to produce one token. With batching, the same loaded weights serve 64 requests in one step, which amortises the high-cost part 64× (§2).*
 
 ### Prefill (processing the prompt)
 
@@ -54,17 +54,17 @@ The model reads all input tokens at the same time, in parallel, in a single forw
 
 ### Decode (generating tokens)
 
-The model generates one token. Then it feeds that token back in and generates the next token. Each step must load *the full set of model weights* from HBM to produce *one token*.
+The model generates one token. Then it feeds that token back in and generates the next token. Each step must load *the entire set of model weights* from HBM to produce *one token*.
 
 - **Memory-bandwidth-bound.** The math units are idle most of the time. They wait for data.
 - Decode sets the **ITL** (inter-token latency). Users see the ITL as the speed of the generation.
-- Batching gives a large improvement. If you load the weights one time and use them for 64 requests at the same time, you amortise the high-cost part 64×.
+- Batching gives an extremely large improvement. If you load the weights one time and use them for 64 requests at the same time, you amortise the high-cost part 64×.
 
 ### Why this matters
 
-These two phases need different things from the hardware and different things from a scheduler. If they run on the same GPU, they interfere. A long prefill blocks decode steps, and the output stutters. This conflict is the reason for most of the architecture in section 8.
+These two phases need different things from the hardware and different things from a scheduler. If they run on the same GPU, they interfere. A long prefill blocks decode steps, and the output stutters. This conflict is the reason for most of the interesting architecture in section 8.
 
-A useful shorthand here is **arithmetic intensity**: the ratio of the FLOPs done to the bytes moved. Prefill has a high arithmetic intensity. Decode has a low arithmetic intensity. Almost every optimisation for the inference of an LLM is an attempt to increase the arithmetic intensity of decode.
+A useful shorthand here is **arithmetic intensity**: the ratio of the FLOPs done to the bytes moved. Prefill has a high arithmetic intensity. Decode has an extremely low arithmetic intensity. Almost every optimisation for the inference of an LLM is an attempt to increase the arithmetic intensity of decode.
 
 ---
 
@@ -87,7 +87,7 @@ $$
 
 **The general rule: at BF16, a model needs approximately 2 GB per billion parameters only for the weights.**
 
-The use of a lower precision (quantisation) is the single largest lever that you have. Current-generation hardware has native FP4 support. This is why 4-bit inference changed from a research curiosity to the production default.
+Quantisation (the use of a lower precision) is the single largest lever that you have. Current-generation hardware has native FP4 support. This is why 4-bit inference changed from a research curiosity to the production default.
 
 ### 3.2 KV cache
 
@@ -115,7 +115,7 @@ Activations, CUDA graphs, communication buffers, fragmentation and the framework
 
 ### 3.4 Putting it together
 
-Think about a 70B model at FP8 on one 80 GB GPU. The 70 GB of weights leaves 10 GB, minus overhead, for KV cache. That is approximately 20–25 concurrent 1K-token requests. This is satisfactory for a demo, but not for production. This is the reason that you find that you need more than one GPU, even when the model technically "fits".
+Think about a 70B model at FP8 on one 80 GB GPU. The 70 GB of weights leaves 10 GB, minus overhead, for KV cache. That is approximately 20–25 concurrent 1K-token requests. This is satisfactory for a demo, but not for production. This is the reason that you find that you need multiple GPUs, even when the model technically "fits".
 
 ![On one 80 GB GPU, a 70B model at FP8 takes 70 GB of weights and leaves 10 GB, minus overhead, of KV cache for approximately 20 to 25 concurrent 1K-token requests; the KV cache is the variable cost that grows with the sequence length and the concurrency.](figures/memory-budget-80gb.svg)
 
@@ -134,7 +134,7 @@ There are five ways to divide work across GPUs. You can combine them. Actual dep
 ### Tensor parallelism (TP)
 Divide the matrices of each individual layer across GPUs. Each GPU holds a slice of each layer.
 
-- **Communication: high.** The GPUs must synchronise (all-reduce) at each layer, many times per token.
+- **Communication: extremely high.** The GPUs must synchronise (all-reduce) at each layer, many times per token.
 - **Thus: only inside the scale-up domain.** TP across a slow network is catastrophic.
 - Use TP when the model does not fit on one GPU, or to decrease latency.
 
@@ -155,7 +155,7 @@ Put a full copy of the model on each GPU or group. Use a load balancer to divide
 For Mixture-of-Experts models, put different experts on different GPUs and route the tokens to them. The communication is an all-to-all shuffle. This shuffle needs much bandwidth, and load imbalance often occurs in it. MoE is now standard for frontier models. Thus EP is more important now than it was before.
 
 ### Sequence / context parallelism
-Divide a single long sequence across GPUs. This is necessary when a context window is so long that the KV cache for one request is too large for one GPU.
+Divide a single long sequence across GPUs. This is necessary for extremely long context windows, where the KV cache for one request is too large for one GPU.
 
 ### The rule that follows from all of this
 
@@ -196,7 +196,7 @@ There are two practical consequences:
 
 ## 6. The rack is the new unit of deployment
 
-The most important recent change is this: the *rack*, not the server, is now the atomic unit for large deployments.
+The most significant recent change is this: the *rack*, not the server, is now the atomic unit for large deployments.
 
 The NVIDIA NVL72 systems put 72 GPUs into a single NVLink domain in one liquid-cooled cabinet. Thus you can use all 72 as one large pool of memory for tensor parallelism. This is what makes it practical to serve a 671B-parameter MoE model with low latency.
 
@@ -243,11 +243,11 @@ For most teams, this is a reason to use cloud or neocloud capacity, not owned in
 
 Do not write your own loop to serve the model. The engines implement a set of techniques. Together, these techniques give 10–20× over a simple `model.generate()`:
 
-- **Continuous batching**: do not wait for a whole batch to finish. At each step, evict the completed sequences and admit new ones. This keeps the GPU busy. Continuous batching is the largest single win.
-- **PagedAttention**: allocate the KV cache in fixed-size blocks, as OS virtual memory does. Do not make one contiguous reservation per request. This removes fragmentation. Usually, it gives 2–4× more concurrent requests from the same memory.
-- **Prefix caching**: use the KV cache again for shared prefixes. If 10,000 requests share a 2,000-token system prompt, you compute that prompt one time. The gain is large for agentic workloads with long, stable system prompts.
+- **Continuous batching**: do not wait for a whole batch to finish. At each step, evict the completed sequences and admit new ones. This keeps the GPU busy. It is the largest single win.
+- **PagedAttention**: allocate the KV cache in fixed-size blocks, as OS virtual memory does. Do not make one contiguous reservation per request. This removes fragmentation. Typically, it gives 2–4× more concurrent requests from the same memory.
+- **Prefix caching**: use the KV cache again for shared prefixes. If 10,000 requests share a 2,000-token system prompt, you compute that prompt one time. The gain is extremely large for agentic workloads with long, stable system prompts.
 - **Chunked prefill**: divide long prefills into chunks, and interleave the chunks with decode steps. Thus one long prompt does not block the token streams of all the other users.
-- **Speculative decoding**: a small draft model proposes several tokens. Then the large model verifies them in one pass. This uses spare compute to get a lower latency. Speculative decoding works because decode is memory-bound and has spare compute.
+- **Speculative decoding**: a small draft model proposes several tokens. Then the large model verifies them in one pass. This uses spare compute to get a lower latency. It works because decode is memory-bound and has spare compute.
 - **Quantisation**: FP8 or FP4 weights and KV cache.
 
 Which engine to select: **vLLM** is the default open-source choice, with the broadest model coverage. **SGLang** is strong on structured output and on prefix-heavy workloads. Its RadixAttention prefix cache is excellent. **TensorRT-LLM** gives the best raw performance on NVIDIA hardware. The cost is a compilation step and less flexibility.
@@ -290,7 +290,7 @@ flowchart TB
   D1 --> U([token stream to the user])
 ```
 
-*The router sends a request to a prefill worker, which processes the whole prompt in one pass. When prefill finishes, the system transfers the KV cache over the fabric to a decode worker, and the decode worker starts to generate tokens immediately. For a 4K-token request, the transfer is about 1.3 GB and must complete in approximately two hundred milliseconds for a TTFT under 500 ms (§8).*
+*The router sends a request to a prefill worker, which processes the whole prompt in one pass. When prefill finishes, the system transfers the KV cache over the fabric to a decode worker, and the decode worker starts to generate tokens immediately. For a 4K-token request, the transfer is about 1.3 GB and must complete in a couple hundred milliseconds for a TTFT under 500 ms (§8).*
 
 **Why it helps:**
 
@@ -299,7 +299,7 @@ flowchart TB
 - Long prefills never block the decode workers. Thus the token streams stay smooth.
 - You can even use different hardware for each phase.
 
-**Why it is hard:** you must move the KV cache sufficiently fast that the decode worker is not idle. Think about a request of 4K tokens with approximately 1.3 GB of KV cache, and a TTFT budget under 500 ms. For this request, the transfer must complete in approximately two hundred milliseconds. This needs RDMA and careful design work.
+**Why it is hard:** you must move the KV cache sufficiently fast that the decode worker is not idle. Think about a request of 4K tokens with approximately 1.3 GB of KV cache, and a TTFT budget under 500 ms. For this request, the transfer must complete in a couple hundred milliseconds. This needs RDMA and careful design work.
 
 **Tools:** NVIDIA **Dynamo** is an orchestration layer above the engines. It has a smart router, a planner, and NIXL for transfers. Its Kubernetes-native equivalent, built on vLLM, is **llm-d** (Red Hat/IBM/Google, donated to CNCF in March 2026). Both vLLM and SGLang support disaggregation directly.
 
@@ -316,7 +316,7 @@ Training clusters and inference clusters have greatly different shapes. If you c
 | Coupling | One synchronous job across all GPUs | Many independent replicas |
 | Failure impact | One failed GPU stops everything | One failed replica sheds some traffic |
 | Network | All-reduce is the dominant traffic. It needs a full-bisection fabric. | Mostly north-south traffic, modest east-west traffic |
-| Storage | Large checkpoints, high write bandwidth | Mostly reads, when the replicas load the model |
+| Storage | Extremely large checkpoints, high write bandwidth | Mostly reads, when the replicas load the model |
 | Unit of scale | The whole cluster | The replica |
 | Key metric | MFU (Model FLOPs Utilisation) | Tokens/sec/GPU, $/M tokens, latency SLOs |
 | Elasticity | Poor. The allocation does not change for weeks. | Good. It autoscales on queue depth. |
@@ -336,14 +336,14 @@ Training needs checkpoints and fault tolerance as first-class concerns, because 
 **Throughput**
 
 - Output tokens/sec/GPU is the honest efficiency number.
-- **Goodput**: the requests/sec that actually met their SLO. Goodput is better than raw throughput, because a throughput that you measure with a 10-second TTFT is a lie.
+- **Goodput**: the requests/sec that actually met their SLO. It is better than raw throughput, because a throughput that you measure with a 10-second TTFT is a lie.
 
 **Efficiency**
 
 - **MFU**: the fraction of the theoretical FLOPs that you get. 40–50% is good for training. Inference decode is memory-bound, so MFU is naturally low. Measure the bandwidth utilisation instead.
 - **$/million tokens**: the number that your finance team cares about. It is also the honest basis for build-vs-buy.
 
-**The tradeoff you cannot escape:** larger batches increase throughput and decrease the cost per token, but they increase latency. No configuration optimises both. Select your SLO first. Then make the throughput as large as possible, but do not go above the limit of that SLO.
+**The tradeoff you cannot escape:** larger batches increase throughput and decrease the cost per token, but they increase latency. No configuration optimises both. Select your SLO first. Then maximise the throughput within the limit of that SLO.
 
 ---
 
@@ -354,7 +354,7 @@ This architecture is one 8×H100/H200 server. The model fits with tensor paralle
 *Use it for: most enterprise deployments, 7B–70B models, internal tools.*
 
 ### B. Kubernetes cluster (tens to hundreds of GPUs)
-This architecture has GPU Operator and more than one node, with TP in the nodes and DP across them. It autoscales horizontally on queue depth. Prefix caching is on. It has separate node pools per model and per workload class. A gateway does the routing, the quotas and the per-tenant cost accounting.
+This architecture has multiple nodes and GPU Operator, with TP in the nodes and DP across them. It autoscales horizontally on queue depth. Prefix caching is on. It has separate node pools per model and per workload class. A gateway does the routing, the quotas and the per-tenant cost accounting.
 *Use it for: multi-tenant platforms, several models, production SLOs.*
 
 ### C. Rack-scale disaggregated (hundreds to thousands of GPUs)
@@ -374,7 +374,7 @@ For most organisations, the correct start is A. Most of them are incorrect when 
 - **Fragmentation.** Memory is "free", but allocations fail. The solution: paged KV cache.
 - **NCCL hangs.** A distributed job stops and gives no signal. The cause is usually topology, MTU, or driver mismatch. The solution: pin the driver/CUDA/NCCL/engine versions together. Do a test of the collective path before the model.
 - **Version drift.** The disaggregation and scheduling APIs still change fast. Pin everything. Upgrade deliberately.
-- **A plan for GPUs that you cannot get.** The allocation lead times are 6–12 months for current-generation hardware. Design for the hardware that you can actually get.
+- **A plan for GPUs that you cannot get.** The allocation lead times are 6–12 months for current-generation hardware. Design for the hardware that you can actually procure.
 
 ---
 
@@ -395,7 +395,7 @@ For most organisations, the correct start is A. Most of them are incorrect when 
 | **Continuous batching** | The admission and the eviction of requests at each decode step. |
 | **PagedAttention** | Block-based KV cache allocation, borrowed from OS virtual memory. |
 | **Quantisation** | The use of a lower precision (FP8, FP4, INT4) for weights/activations. |
-| **MoE** | Mixture of Experts. Only some parameters are active per token. |
+| **MoE** | Mixture of Experts. Only some parameters activate per token. |
 | **Disaggregation** | The separation of prefill and decode onto different GPU pools. |
 | **MIG** | Multi-Instance GPU: the partition of one GPU into isolated slices. |
 

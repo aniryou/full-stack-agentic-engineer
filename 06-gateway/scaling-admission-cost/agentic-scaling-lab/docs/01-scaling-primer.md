@@ -45,7 +45,7 @@ How to use this primer:
 
 ### 1.1 The unit of work is a turn, not a request
 
-A web request is stateless and short, and each web request is almost the same as the others. To scale it, you add replicas until CPU is the limit. A turn of an agent is a *loop*. It has a model call that plans, tool calls that get or change something, and another model call that answers. Sometimes it has more calls.
+A web request is stateless and short, and each web request is similar to the others. To scale it, you add replicas until CPU is the limit. A turn of an agent is a *loop*. It has a model call that plans, tool calls that get or change something, and another model call that answers. Sometimes it has more calls.
 
 The model decides the length of the turn at run time. Its steps are sequential, because each step depends on the step before it. Its middle steps have side effects in systems that you do not own. Also, the memory of the loop (the context) grows as the conversation continues.
 
@@ -65,7 +65,7 @@ Everything in the rest of this primer comes from that last column.
 
 On the Gemini Enterprise Agent Platform, the pay-as-you-go path ("Standard PayGo", the successor of dynamic shared quota) has no constant quota for each project. Your organisation gets a tokens-per-minute *baseline* for each model family. The baseline depends on the spend of the 30 days before now. For Flash and Flash-Lite, the baseline is 2 M, 4 M or 10 M TPM at tiers 1, 2 and 3. For Pro, it is 0.5 M, 1 M or 2 M. Your organisation can send bursts above the baseline on a best-effort basis.
 
-A 429 does not mean "you hit a number". It means "there is contention on the shared pool right now". The documented reaction is exponential backoff, the global endpoint, and smooth traffic in each minute. Guaranteed capacity is a separate purchase. You buy Provisioned Throughput in generative-scale units (GSUs), by the week, month, quarter or year. By default, it has a pay-as-you-go spill-over.
+A 429 does not mean "you hit a number". It means "there is contention on the shared pool right now". The documented reaction is exponential backoff, the global endpoint, and smooth traffic within the minute. Guaranteed capacity is a separate purchase. You buy Provisioned Throughput in generative-scale units (GSUs), by the week, month, quarter or year. By default, it has a pay-as-you-go spill-over.
 
 Two consequences give every design its shape. First, the capacity plan is a *token* budget. You calculate the demand in tokens per minute before you calculate anything else. Second, you share the pool with every other team in the organisation. Thus the shape of your traffic (smooth or bursty) affects your own 429 rate and the 429 rate of the other teams. Smooth traffic is the obligation of a good neighbour as much as an optimisation.
 
@@ -73,7 +73,7 @@ Two consequences give every design its shape. First, the capacity plan is a *tok
 
 ### 1.3 Latency is a sum of sequential tails
 
-A turn with two tool calls has four segments on the critical path. They are the plan call, the tools, the answer call, and the streaming of the answer. Model latency is the time-to-first-token (now with *thinking* time) plus the output tokens divided by the tokens per second. The segments are sequential. Thus the p95 of the turn is approximately the sum of the tails of the segments, not the tail of their sums. A 4-second p95 target makes four things necessary: parallel tools, streaming, prefetch, and a Flash-class model on the plan step.
+A turn with two tool calls has four segments on the critical path. They are the plan call, the tools, the answer call, and the streaming of the answer. Model latency is the time-to-first-token (which now includes *thinking* time) plus the output tokens divided by the tokens per second. The segments are sequential. Thus the p95 of the turn is approximately the sum of the tails of the segments, not the tail of their sums. A 4-second p95 target makes four things necessary: parallel tools, streaming, prefetch, and a Flash-class model on the plan step.
 
 ![One turn with two tool calls on a time axis: the plan call, the two tool calls in parallel, the answer call and the streaming of the answer are four sequential segments on the critical path, and the user sees the first token only after the plan call, the tools and the time-to-first-token of the answer call.](figures/turn-critical-path.svg)
 
@@ -83,11 +83,11 @@ Also, because turns are long, Little's law connects latency to concurrency. At 2
 
 ### 1.4 Cost scales with context, and context grows
 
-The bill is tokens, and input is the largest part of it. A support turn sends 4–6 k tokens of system prompt, tool schemas, customer context and history. It gets 300–400 tokens back. Without compaction, the input grows by several hundred tokens each turn. Thus the cost of the tenth turn is a multiple of the cost of the first turn.
+The bill is tokens, and input is the largest part of it. A support turn sends 4–6 k tokens of system prompt, tool schemas, customer context and history. It receives 300–400 tokens back. Without compaction, the input grows by several hundred tokens each turn. Thus the cost of the tenth turn is a multiple of the cost of the first turn.
 
 Three levers change the cost by integer factors:
 
-- routing of routine calls to a Flash-Lite-class model (a 3–5× lower cost per token),
+- routing of routine calls to a Flash-Lite-class model (a cost per token that is 3–5× lower),
 - caching of the stable prefix (cached input at 10 % of the price),
 - a bounded context (compaction, tool-result truncation, output caps).
 
@@ -95,7 +95,7 @@ The order is important. Route and cache first, because each later percentage app
 
 ### 1.5 Side effects mean at-least-once, and at-least-once means idempotency
 
-At some point in a turn, the agent opens a ticket or changes a plan. The process can stop after the action and before it records the action. For example, Cloud Run gives ten seconds after SIGTERM, the model call can time out, and the queue can send the message again. Exactly-once delivery is not available on the push path that you want. Pub/Sub exactly-once is pull-only and regional. Thus the loop must be *replayable*:
+At some point in a turn, the agent opens a ticket or changes a plan. The process can stop after the action and before it records the action. For example, Cloud Run gives ten seconds after SIGTERM, the model call can time out, and the queue can deliver the message again. Exactly-once delivery is not available on the push path that you want (Pub/Sub exactly-once is pull-only and regional). Thus the loop must be *replayable*:
 
 - Write a checkpoint of each step before you act on it.
 - Give each write a key from the turn, the step and the arguments.
@@ -114,7 +114,7 @@ The loop has these steps:
 
 Without a circuit breaker on the loop, an agent system under overload does not fail fast. It slows down for everyone until the turn deadlines expire and the users go away. By then, the users have already used the tokens.
 
-The load generator in the lab shows this feedback loop in a few seconds (notebook 04). It puts 120 virtual users against a simulated 3 M TPM pool:
+The load generator in the lab shows this in a few seconds (notebook 04). It puts 120 virtual users against a simulated 3 M TPM pool:
 
 - With retries only, the p95 turn goes from 5.8 s to about 40 s. There are hundreds of 429s and a few dozen hard failures.
 - Degrade levels and a breaker without a cap change that into 120 fail-fast turns.
@@ -124,7 +124,7 @@ It is kinder to shed fast than to keep requests in a slow queue. It is also the 
 
 ### 1.7 Multi-agent multiplies everything
 
-A coordinator with three specialists changes 2.2 model calls per turn into eight. It multiplies the cost by 3.6×, and the latency by 2× even with parallel specialists. At 95 % per hop, the probability that every hop succeeds goes from $0.95^{2.2} \approx 0.89$ to $0.95^{8} \approx 0.66$. Thus, in a design for scale, the multi-agent question is never "how do I scale the coordinator". It is "what measured problem justifies paying that multiple". The answer is usually one of two things: a tool set too large for one context, or permissions that must be different per step.
+A coordinator with three specialists changes 2.2 model calls per turn into eight. It multiplies the cost by 3.6×, and the latency by 2× even with parallel specialists. At 95 % per hop, the probability that every hop succeeds goes from $0.95^{2.2} \approx 0.89$ to $0.95^{8} \approx 0.66$. Thus, in a design for scale, the multi-agent question is never "how do I scale the coordinator". It is "what measured problem justifies paying that multiple". The answer is usually one of two things: a tool set too large for one context, or permissions that must differ per step.
 
 > **Pitfall.** Do not describe scale as "put it on Cloud Run with max instances 100 and autoscaling handles it". Cloud Run scales the *container*. It cannot scale the token budget, the billing mainframe behind the tools or the cost per conversation. An experienced platform team hears that sentence as "has not run one of these in production".
 
@@ -136,12 +136,12 @@ Go through this list in the first ten minutes. For each dimension, the table giv
 
 | Dimension | Ask | Compute | Lever |
 |---|---|---|---|
-| Volume and burstiness | Conversations per day? Peak-to-average? What does an incident do to traffic? An outage sends a flood of traffic to the chat. | conv/s, turns/s, model calls/s at average, peak, incident | admission control, PT for the base, spill-over for peaks, degrade for incidents |
+| Volume and burstiness | Conversations per day? Peak-to-average? What does an incident do to traffic (an outage sends a flood of traffic to the chat)? | conv/s, turns/s, model calls/s at average, peak, incident | admission control, PT for the base, spill-over for peaks, degrade for incidents |
 | Turn shape | Turns per conversation, model calls and tool calls per turn, tokens in and out | tokens per turn, tokens per minute | routing, caching, compaction, output caps |
 | Latency budget | What must the user see and when? First token? Whole answer? | TTFT p95, turn p95, and their sum over the critical path | streaming, parallel tools, prefetch, Flash on the plan step, thinking level |
 | Concurrency | How many users at once? How long is a conversation? | in-flight turns = turns/s × turn duration, concurrent sessions = conv/s × conversation duration | in-flight cap, a gateway with a low cost per connection, per-instance concurrency |
 | Model capacity | Which tier is the org on? Did the org buy PT? Which region must the data stay in? | demand TPM against baseline, GSUs for the base load, break-even utilisation | Standard/Priority/Flex tiers, PT term, global or regional endpoint |
-| Cost | Cost per conversation today? A contact that a person handles costs dollars. Budget? | $/conversation, $/month, and the share of each lever | route, cache, compact, batch offline work, budgets per turn |
+| Cost | Cost per conversation today (a contact that a person handles costs dollars)? Budget? | $/conversation, $/month, and the share of each lever | route, cache, compact, batch offline work, budgets per turn |
 | Tools and downstream | Which systems, their QPS limits and p95? Which calls have side effects? | tool calls/s per system against its limit | prefetch, caching, bulkheads, circuit breakers, idempotency keys |
 | State | What must survive a crash? A restart? A region failure? How long do you keep a transcript? | writes/s per collection and per document, document size, retention | checkpoints in Firestore, hot state in Redis, TTLs, compaction |
 | Tenancy and fairness | One customer or many brands? Priorities (VIP, agents-assist)? | per-tenant turns/min, priority classes | per-tenant buckets, priority bypass of the cap, separate quotas |
@@ -163,7 +163,7 @@ The anchor scenario is a fictional consumer telco, Meridian Mobile, with a suppo
 |---|---|
 | Conversations per day | 100,000 |
 | Peak hour against daily average | 3× |
-| Network-incident spike against average | 10×. An outage sends everyone to the chat at the same time, with an intent mix that is 75 % "no signal". |
+| Network-incident spike against average | 10× (an outage sends everyone to the chat at once, with an intent mix that is 75 % "no signal") |
 | Turns per conversation | 6 |
 | Model calls per turn | 2.2 (plan, answer, sometimes a third) |
 | Tool calls per turn | 1.3 |
@@ -208,7 +208,7 @@ $$
 
 The two numbers give the size of different things. In-flight turns give the size of the orchestrator memory, the session locks and the model concurrency. Concurrent sessions give the size of the open streaming connections at the gateway and of the hot session state in Redis.
 
-The token budget also puts a cap on concurrency. 10 M TPM ÷ 60 ≈ 167 k tokens/s. A turn uses 2.2 × 5,350 ≈ 11.8 k tokens over 6 s ≈ 2 k tokens/s. Thus the baseline can carry about 85 turns in flight, or 14 turns per second. This value of about 85 turns in flight is the initial value for the in-flight cap of the admission controller. It is *below* peak demand, and that is the whole story of this scenario.
+The token budget also puts a cap on concurrency. 10 M TPM ÷ 60 ≈ 167 k tokens/s. A turn uses 2.2 × 5,350 ≈ 11.8 k tokens over 6 s ≈ 2 k tokens/s. Thus the baseline can carry about 85 turns in flight, or 14 turns per second. That is the initial value for the in-flight cap of the admission controller. It is *below* peak demand, and that is the whole story of this scenario.
 
 ```mermaid
 flowchart LR
@@ -248,7 +248,7 @@ The calculation for one 3.5 Flash call:
 
 The call costs $0.00345 + $0.0004 + $0.00315 ≈ $0.0070. Thirteen calls in a conversation come to ≈ $0.092. When you route a third of them to Flash-Lite at $0.00165, the cost goes down to $0.068. With self-hosted models, the same lever is a distilled student behind a cascade. The price of that student, with its break-even, is in [distillation §9](../../../../00-foundations/distillation/PRIMER.md#9-the-economics-of-a-student).
 
-Compared with a contact that a person handles, at several dollars, all three rows are low-cost. Compared with each other, the highest cost per conversation is 2× the lowest. At this volume, the difference is $220 k a month. Output tokens are the largest single line, but there are fourteen times fewer of them. The reason is that, on this model, the price of output is six times the price of input. Thus output caps and thinking levels are cost levers, not only latency levers.
+Compared with a contact that a person handles, at several dollars, all three rows are low-cost. Compared with each other, they differ by 2×. At this volume, that is $220 k a month. Note that output tokens are the largest single line, but there are fourteen times fewer of them. This is because, on this model, the price of output is six times the price of input. Thus output caps and thinking levels are cost levers, not only latency levers.
 
 > **Verify.** The prices are for the global endpoint on 5 September 2026:
 >
@@ -295,7 +295,7 @@ PT buys an SLA and immunity from the contention of the shared pool, for the traf
 | Billing mainframe QPS | 1.7 | 5.2 | 17.4 | limit 40: satisfactory, but cache invoices all the same |
 | CRM QPS | 4.9 | 14.6 | 48.6 | limit 200: prefetch at the start of the session, cache the profile |
 
-The Cloud Run fleet for all of this system is a few dozen vCPUs. The cost of that fleet is approximately 0.1 % of the model bill. The estimation exercise is really an exercise in tokens, and a good design says so.
+The Cloud Run fleet for all of this system is a few dozen vCPUs. That is approximately 0.1 % of the model bill. The estimation exercise is really an exercise in tokens, and a good design says so.
 
 ### 3.7 What breaks first
 
@@ -327,7 +327,7 @@ Pub/Sub pushes the message to the orchestrator with an OIDC token. The orchestra
 5. It repeats.
 6. It finishes.
 
-Then the orchestrator writes the transcript, publishes the terminal event, decrements the in-flight gauge and acknowledges the push. The compaction of the history runs after the terminal event. Thus the orchestrator is on instance-based billing.
+Then the orchestrator writes the transcript, publishes the terminal event, decrements the in-flight gauge and acknowledges the push. The compaction of the history runs after the terminal event. That is why the orchestrator is on instance-based billing.
 
 ### 4.1 Why it is shaped this way
 
@@ -335,19 +335,19 @@ Then the orchestrator writes the transcript, publishes the terminal event, decre
 
 Also, a different per-instance limit of Cloud Run is relevant to each service. The 1,000-connection and 800 requests-per-second caps set the limit of a gateway instance. The memory per in-flight turn sets the limit of an orchestrator instance.
 
-*A queue sits between the gateway and the orchestrator, but the user waits*, for three reasons:
+*A queue sits between them even though the user waits*, for three reasons:
 
-- A queue changes a burst into a backlog with one number that you can measure, not into a pile of failed requests. That number is the age of the oldest turn that has not started.
-- It gives at-least-once execution with redelivery. This at-least-once execution is what makes the loop durable.
+- A queue changes a burst into a backlog with one number that you can observe, not into a pile of failed requests. That number is the age of the oldest turn that has not started.
+- It gives at-least-once execution with redelivery. This is what makes the loop durable.
 - It separates the drain rate of the orchestrator from the arrival rate. Thus the token bucket, not the load balancer, sets the pace.
 
 The cost is a few tens of milliseconds and a Pub/Sub push subscription.
 
-*Events travel through Redis Streams, not a direct connection*. The reason is that the orchestrator instance that runs the turn is not the gateway instance that holds the client. A stream with sequence numbers also gives resume-after-reconnect (`Last-Event-ID`) at no cost. SSE clients need resume-after-reconnect on Cloud Run, where every stream is a request with a 60-minute ceiling.
+*Events travel through Redis Streams, not a direct connection*. The reason is that the orchestrator instance that runs the turn is not the gateway instance that holds the client. A stream with sequence numbers also gives resume-after-reconnect (`Last-Event-ID`) at no cost. SSE clients need this on Cloud Run, where every stream is a request with a 60-minute ceiling.
 
-*Firestore holds the durable state and Redis the hot state* because they have opposite access patterns. Firestore gets a few document writes per turn, with a ~1 write/s/document rule and a 1 MiB cap. Redis gets thousands of sub-millisecond counter, lock and bucket operations per second. To put the two states into one store is the most common mistake in these designs.
+*Firestore holds the durable state and Redis the hot state* because they have opposite access patterns. Firestore gets a few document writes per turn, with a ~1 write/s/document rule and a 1 MiB cap. Redis gets thousands of sub-millisecond counter, lock and bucket operations per second. To put them into one store is the most common mistake in these designs.
 
-*The model gateway is a library, not a service*, for two reasons. An extra hop on the critical path costs latency. Also, the state that it needs (buckets, breakers, the 429 ratio) fits in Redis. The model gateway becomes a service when many agents share one quota and need central policy. At the enterprise level, Apigee or the Agent Gateway of the platform do that job.
+*The model gateway is a library, not a service*, for two reasons. An extra hop on the critical path costs latency. Also, the state that it needs (buckets, breakers, the 429 ratio) fits in Redis. It becomes a service when many agents share one quota and need central policy. At the enterprise level, Apigee or the Agent Gateway of the platform do that job.
 
 ### 4.2 Alternatives and when to choose them
 
@@ -368,7 +368,7 @@ The honest answer has two parts. First, Agent Runtime is the default for a Googl
 You must shape the demand for the model before it gets to the pool. There are three layers:
 
 1. An in-flight cap at the gateway (Part 5.3) limits how many turns can make tokens at the same time.
-2. A token bucket per model in the model gateway spreads calls evenly in each minute. Its size is *your share* of the tier baseline, and it refills continuously.
+2. A token bucket per model in the model gateway spreads calls evenly within each minute. Its size is *your share* of the tier baseline, and it refills continuously.
 3. The choice of endpoint and tier:
    - The global endpoint, unless residency forbids it. It routes to the region with the most capacity, and the tiers apply there.
    - Priority PayGo for traffic that customers see and that must not wait in a queue.
@@ -377,7 +377,7 @@ You must shape the demand for the model before it gets to the pool. There are th
 
 The *capacity* of the bucket is the burst that you tolerate. Its *rate* is the sustained tokens per second. A six-second burst allowance is a good default. A smaller allowance gives smoother traffic and fewer 429s, but more waits in the client-side queue.
 
-If the bucket cannot admit a call before a bounded wait ends, the gateway treats that as a rate-limit signal too. That signal counts toward the degrade level. Then the gateway tries a sibling model with its own pool before the call fails. When there is more than one orchestrator instance, the bucket must be in Redis. A Lua-scripted Redis bucket is atomic and costs one round-trip per call.
+If the bucket cannot admit a call within a bounded wait, the gateway treats that as a rate-limit signal too. That signal counts toward the degrade level. Then the gateway tries a sibling model with its own pool before the call fails. When there is more than one orchestrator instance, the bucket must be in Redis. A Lua-scripted Redis bucket is atomic and costs one round-trip per call.
 
 Provisioned Throughput connects at the same place. For each request, you select one of three modes:
 
@@ -387,7 +387,7 @@ Provisioned Throughput connects at the same place. For each request, you select 
 
 You also select the tier that absorbs the spill (Standard, Priority, Flex). The `traffic_type` of the response tells you which pool served it. That field belongs on your dashboard. At scale, PT enforcement windows are short (1–5 s above 50 GSUs). Thus, to stay inside a PT commitment, you must make the bursts smooth to second granularity, not minute granularity.
 
-> **Numbers.** Google's own guidance for 429s: exponential backoff, global endpoint, smooth traffic in each minute. The Gemini 3.x context-cache minimum is 4,096 tokens (6,144 on 3.7/3.8 Flash and 3.1 Pro). The default TTL of an explicit cache is 60 minutes. Storage is $1.00 per M tokens per hour on Flash, and $4.50 on 3.1 Pro.
+> **Numbers.** Google's own guidance for 429s: exponential backoff, global endpoint, smooth within the minute. The Gemini 3.x context-cache minimum is 4,096 tokens (6,144 on 3.7/3.8 Flash and 3.1 Pro). The default TTL of an explicit cache is 60 minutes. Storage is $1.00 per M tokens per hour on Flash, and $4.50 on 3.1 Pro.
 
 ### 5.2 Retries, jitter, breakers, fallbacks, hedging
 
@@ -397,17 +397,17 @@ The lab simulates 200 clients that retry against a pool with room for 40 per sec
 
 A circuit breaker per model and per tool changes repeated failures into fail-fast decisions for a cooling period. A half-open probe lets it recover. Breakers are more important for agents than for web services. The reason is that an unhealthy dependency does not only slow down one request. It holds hundreds of coroutines *with their contexts in memory* until the deadline.
 
-When the breaker of a model opens, or two consecutive 429s arrive, the gateway moves to a *sibling* model. The order is 3.5 Flash, then 3.7 Flash, then 3.5 Flash-Lite. The reason is that each family has its own pool, and the 429 rate of a sibling is almost independent of yours. Thus model ids are in configuration, never in code. Model ids in configuration are also how you survive the 45-day retirement clock on the short-lived Flash releases.
+When the breaker of a model opens, or two consecutive 429s arrive, the gateway moves to a *sibling* model. The order is 3.5 Flash, then 3.7 Flash, then 3.5 Flash-Lite. The reason is that each family has its own pool, and the 429 rate of a sibling is nearly independent of yours. Thus model ids are in configuration, never in code. This is also how you survive the 45-day retirement clock on the short-lived Flash releases.
 
 A hedge is a p99 tool for small, idempotent calls without streaming, for example intent classification. A hedge is a second identical request. You send it when the first request has not answered by a selected delay, and you keep the winner.
 
-A hedge exchanges extra calls for tail latency. A hedge sent after approximately the p90 usually cuts p99 by a third to a half, for a few percent more calls. A hedge sent early halves p99 again, but it almost doubles the calls. A hedge is incorrect for streaming answers, because you cannot take back the stream of the loser. It is also incorrect when the pool already has contention, because it adds load exactly when load is the problem. Thus the hedge has a gate on the degrade level.
+A hedge exchanges extra calls for tail latency. A hedge sent after approximately the p90 usually cuts p99 by a third to a half, for a few percent more calls. A hedge sent early halves p99 again, but it nearly doubles the calls. A hedge is incorrect for streaming answers, because you cannot take back the stream of the loser. It is also incorrect when the pool already has contention, because it adds load exactly when load is the problem. Thus the hedge has a gate on the degrade level.
 
 ### 5.3 Admission control and graceful degradation
 
 Admission control is the circuit breaker on the feedback loop of 1.6. It sits at the gateway, before a turn has cost anything. It asks three questions, in this order:
 
-1. Is this tenant inside its budget? A token bucket per tenant answers this question, so that a noisy brand cannot take all of the global pool.
+1. Is this tenant within its budget? A token bucket per tenant answers this question, so that a noisy brand cannot take all of the global pool.
 2. What is the degrade level of the system?
 3. Will this turn take the in-flight count above the cap?
 
@@ -441,26 +441,26 @@ Two details make the difference between an implementation that works and a diagr
 
 The loop writes a checkpoint of every step in Firestore *before* it acts on the result of the step:
 
-- After the model call, the checkpoint holds the response of the model. The response includes the parts that the next call must echo back (the thought signatures of Gemini 3).
+- After the model call, the checkpoint holds the response of the model. This includes the parts that the next call must echo back (the thought signatures of Gemini 3).
 - After the tool step, the checkpoint holds the tool results, compacted.
 
 On redelivery, the orchestrator replays the turn from the checkpoint, and skips the completed steps. The tool executor makes a key for every write from the turn, the step, the call index and a hash of the arguments. It stores the result under that key for a day. Thus a redelivered turn that already opened a ticket gets the same ticket back. The crash test of the lab (notebook 02) stops the process immediately after the checkpoint of the ticket. It shows one ticket after redelivery, with four of five steps resumed.
 
-The queue contract is the other half. Pub/Sub push acknowledges on any 2xx. On any other response, it sends the message again, with a push backoff that grows from 100 ms to 60 s. The retry policy of the subscription adds a 10–600 s exponential backoff. After five attempts, the message goes to a dead-letter topic that has its own alert.
+The queue contract is the other half. Pub/Sub push acknowledges on any 2xx. On any other response, it delivers the message again, with a push backoff that grows from 100 ms to 60 s. The retry policy of the subscription adds a 10–600 s exponential backoff. After five attempts, the message goes to a dead-letter topic that has its own alert.
 
 The orchestrator returns 503 only for transient infrastructure trouble (`RetryLater`). It returns 200 for every *terminal* outcome, graceful failure included. A turn that ended with "I couldn't complete that, a colleague will follow up" must not get a retry. A retry makes a second bill. The ack deadline (≤ 600 s) is the ceiling for one delivery. The turn budget (45 s) is well below it.
 
-A session lock in Redis, with the turn id as value, serialises the turns of each session. The lock does this even when a redelivery and a new turn overlap. The TTL of the lock is the budget plus a margin, so that a crashed instance releases it.
+A session lock in Redis, with the turn id as value, serialises the turns of each session. It does this even when a redelivery and a new turn overlap. The TTL of the lock is the budget plus a margin, so that a crashed instance releases it.
 
 Firestore shapes the layout:
 
-- a session document that compaction keeps bounded, well under 1 MiB,
+- a session document (compaction keeps it bounded, well under 1 MiB),
 - a turn document per user message, with steps appended atomically (`ArrayUnion` is idempotent for identical elements, and a replayed step needs that),
 - tool results truncated to a few kilobytes, *in the checkpoint and also in the transcript*,
 - a `expires_at` timestamp with a TTL policy,
 - no counters in documents.
 
-A turn writes its document a few times over several seconds. This rate is comfortably below the sustained one-write-per-second-per-document rule.
+A turn writes its document a few times over several seconds. That is comfortably below the sustained one-write-per-second-per-document rule.
 
 ### 5.5 Context engineering for scale
 
@@ -476,17 +476,17 @@ With implicit prefix caching, the identical prefix costs 10 % when it reaches th
 
 The prompt *version* is part of the cache key. Thus a prompt change invalidates the cache cleanly, and does not silently halve your hit rate. On Flash, the explicit-cache break-even is below one request per hour. Storage is not the reason to hesitate. The reason is operational (TTL refresh, prompt versions).
 
-Compaction keeps the input bounded. When the pending history is more than a token threshold, the Lite tier summarises everything except the verbatim tail. Compaction occurs *after* the turn completes, off the critical path. Without compaction, the first model call of a twelve-turn conversation grows from under 2 k to over 7 k tokens. With compaction, the call stays near 2.4 k. Over twenty turns, that is approximately 385 k against 184 k input tokens, three times the cost.
+Compaction keeps the input bounded. When the pending history is more than a token threshold, the Lite tier summarises everything except the verbatim tail. This occurs *after* the turn completes, off the critical path. Without compaction, the first model call of a twelve-turn conversation grows from under 2 k to over 7 k tokens. With compaction, the call stays near 2.4 k. Over twenty turns, that is approximately 385 k against 184 k input tokens, three times the cost.
 
-The loop truncates tool results before they go into the transcript. For example, a 180-line invoice becomes 600 tokens instead of 3,600. The loop does not replay the tool traffic of earlier turns at all, because the answer of the assistant carries the facts.
+The loop truncates tool results before they go into the transcript (a 180-line invoice becomes 600 tokens instead of 3,600). The loop does not replay the tool traffic of earlier turns at all, because the answer of the assistant carries the facts.
 
 Each task has its own output cap and its own thinking level. Thinking is minimal for routing and extraction, low for answers, and medium only for the rare hard case. The reason is that the bill counts thinking tokens as output. Also, 3.8 Flash at high effort uses about 30 % more of them than 3.7.
 
 ### 5.6 Tools at scale
 
-The tools are usually the real bottleneck, because the owners of the systems behind them set their capacity for the traffic of people. The executor applies these mechanisms, in this order:
+The tools are usually the real bottleneck, because the capacity of the systems behind them was set for the traffic of people. The executor applies these mechanisms, in this order:
 
-1. a bulkhead (a semaphore per tool per instance), so that a slow billing call cannot occupy every worker,
+1. a bulkhead (a semaphore per tool per instance, so that a slow billing call cannot occupy every worker),
 2. a circuit breaker per tool,
 3. a result cache for pure reads (profile for five minutes, invoice for two, network status for thirty seconds),
 4. the idempotency check for writes,
@@ -497,7 +497,7 @@ Failures come back to the model as *structured data*, for example "billing unava
 
 Two habits remove most tool latency from the critical path:
 
-- Prefetch the profile of the customer when the session starts. The prefetch is one CRM call. Without the prefetch, the call is in the plan step of the first turn.
+- Prefetch the profile of the customer when the session starts. This is one CRM call. Without the prefetch, the call is in the plan step of the first turn.
 - Let the model send independent calls in one step, so that they run concurrently (profile and network status together). Then the tool time of the turn is the max, not the sum.
 
 Tool services run as their own Cloud Run services, with their own service accounts and invoker bindings. Thus they scale and fail independently. An MCP server over the same tools standardises discovery. It lets Agent Registry and Agent Gateway see and control the calls, at the cost of a hop. Thus the MCP server runs in the same region, with keep-alive connections.
@@ -508,7 +508,7 @@ SSE over HTTP/1.1 chunked transfer is the correct transport for a chat agent on 
 
 Cloud Run caps a response without chunked transfer at 32 MiB. It does not cap streams. WebSockets also work, but they need session affinity, which is best-effort. In both cases, you need a cross-instance fan-out through Redis pub/sub.
 
-The time-to-first-token that a user sees comes after the plan, the tools and the answer. That time is about four seconds in the load tests. A TTFT SLO of two seconds is possible only if the stream sends *progress* events ("checking your invoice…") from the tool steps. The event stream already carries these events.
+The time-to-first-token that a user sees comes after the plan, the tools and the answer. That is about four seconds in the load tests. A TTFT SLO of two seconds is attainable only if the stream sends *progress* events ("checking your invoice…") from the tool steps. The event stream already carries these events.
 
 ### 5.8 Cloud Run settings that matter
 
@@ -522,7 +522,7 @@ The time-to-first-token that a user sees comes after the plan, the tools and the
 | Timeout | 600 s | 600 s | SSE budget + queue + slack. It equals the Pub/Sub ack deadline. |
 | Ingress | internal + load balancer | internal only | No request can bypass Cloud Armor. Pub/Sub push from the project is internal. |
 | Autoscaling | 60 % CPU over 1 min, or 60 % of max concurrency | same | The signal that needs more instances wins. Adaptive concurrency tuning decreases the effective concurrency to keep CPU < 90 %. |
-| Shutdown | SIGTERM + 10 s | same | Write the checkpoint early. The queue sends the message again. |
+| Shutdown | SIGTERM + 10 s | same | Write the checkpoint early. The queue delivers the message again. |
 
 For agents, two Cloud Run resource types are important:
 
@@ -534,7 +534,7 @@ For agents, two Cloud Run resource types are important:
 - Firestore for durable documents (sessions, turns, checkpoints). Regional: 99.99 %. Multi-region: 99.999 %. It has PITR and TTL policies, and documents of at most 1 MiB. One document can take ~1 sustained write/s. A collection with a sequential indexed field can take 500 writes/s. Ramp new collections at 500 ops/s, then +50 % every five minutes.
 - Memorystore for Valkey or Redis for hot state: streams for the event relay, locks, token buckets, idempotency markers, the degrade level. It does ~120 k ops/s per 2-vCPU node. Cloud Run gets to it over Direct VPC egress. Direct VPC egress needs a /26 or larger subnet and about twice as many IPs as instances.
 - Pub/Sub for the queue (10 MB messages, 31-day retention, ordering keys at 1 MB/s per key, push quota an order of magnitude below pull).
-- Long-term memory and retrieval (AlloyDB with ScaNN, Vertex AI Vector Search, or the Memory Bank of the platform) sit beside these. Their size is chunks × dimensions × bytes. That size is a small number next to the token bill.
+- Long-term memory and retrieval (AlloyDB with ScaNN, Vertex AI Vector Search, or the Memory Bank of the platform) sit beside these. Their size is chunks × dimensions × bytes. That is a small number next to the token bill.
 
 ### 5.10 Observability and SLOs
 
@@ -575,7 +575,7 @@ A turn that uses all of a budget ends *gracefully*, with a message and a termina
 
 In multi-agent topologies, the budget is hierarchical. The budget of the coordinator sets the limit for the sum of the budgets of the specialists. The calls of the specialists go through the same gateway and the same buckets. Thus fan-out cannot escape admission control.
 
-Keep the arithmetic of 1.7 at hand as the argument. A measured problem justifies a specialist (incorrect-tool rate, context too large for one prompt, different permissions). A good design says which metric triggers the split.
+Keep the arithmetic of 1.7 at hand as the argument. A measured problem justifies a specialist (incorrect-tool rate, context too large for one prompt, permissions that differ). A good design says which metric triggers the split.
 
 ### 5.12 Tenancy, priority, regions
 
@@ -586,7 +586,7 @@ Regions:
 - The global endpoint for the model, unless residency forbids it. Regional endpoints cost 10 % more and carry fewer models. 3.1 Pro Preview and the newest Flash releases are global or multi-region only.
 - Cloud Run multi-region services with Service Health failover for the stateless tier.
 - Firestore multi-region for the durable tier.
-- Redis per region, with the event relay pinned to the region that runs the turn. Pub/Sub push sends the messages in-region by default, and that is what you want.
+- Redis per region, with the event relay pinned to the region that runs the turn. Pub/Sub push delivers in-region by default, and that is what you want.
 
 ---
 
@@ -649,11 +649,11 @@ flowchart LR
 
 ### 8.2 Questions that change the design
 
-- "What happens to traffic during an outage?" (the incident factor). The incident factor decides the degrade design.
+- "What happens to traffic during an outage?" (the incident factor, which decides the degrade design).
 - "Is there a PT commitment already, and on what term?" (spill-over design, break-even).
 - "Does the data have to stay in-country?" (regional endpoint, model availability, +10 %).
 - "Which downstream system has the lowest QPS ceiling?" (bulkheads, caches, prefetch).
-- "What does a human-handled contact cost today?" (the ROI line). The ROI line shows that $0.07 a conversation is clearly acceptable.
+- "What does a human-handled contact cost today?" (the ROI line, which shows that $0.07 a conversation is clearly acceptable).
 - "How many brands or tenants share this?" (fairness).
 - "What must never happen twice?" (idempotency scope).
 
@@ -707,7 +707,7 @@ The expected effects are a cost 4–5× down and a p95 of 6–8 s. You also get 
 ### 8.5 Quick-fire
 
 - *Why not just raise max instances?* Because instances do not make tokens. The pool is a shared resource, and the cap is the token budget.
-- *Why a queue if the user waits?* A backlog with one age that you can measure, redelivery for durability, and a drain rate that the bucket sets.
+- *Why a queue if the user waits?* A backlog with one age that you can observe, redelivery for durability, and a drain rate that the bucket sets.
 - *Exactly-once?* Not on push. Design for at-least-once with idempotency keys.
 - *PT or PayGo?* Use PT for the base on a long term, if utilisation is above the break-even. Use PayGo/Priority for peaks. Shape the demand for incidents.
 - *Sync or async?* Use sync for a single-step read with a sub-second budget. Use a queue for anything with tools, side effects or a deadline over a few seconds.
@@ -729,7 +729,7 @@ The expected effects are a cost 4–5× down and a p95 of 6–8 s. You also get 
 | Compute | Cloud Run services (gateway, orchestrator, tools), worker pools (GA) for pull-based long turns, instances (Preview) for singleton agents, jobs for evals and batch. Agent Runtime as the managed alternative. GKE with KEDA when Kubernetes is the platform. |
 | Queue and durability | Pub/Sub push with OIDC, ordering keys, retry policy, dead-letter topics. Cloud Tasks for rate-capped, scheduled, deduplicated tool work (500/s per queue, 30-minute dispatch deadline). Workflows for year-long approvals (512 KB state, callbacks). |
 | State | Firestore (Standard/Enterprise, with TTL and PITR), Memorystore for Valkey/Redis (streams, buckets, locks). AlloyDB + ScaNN / Vertex AI Vector Search for retrieval. Agent Runtime Sessions and Memory Bank on the managed path. |
-| Edge | Global external ALB with serverless NEGs. Cloud Armor rate limits (per header/cookie/IP keys, throttle or ban) and WAF. IAP (natively on Cloud Run from March 2026). Apigee for spike arrest and quotas on API-shaped tools. |
+| Edge | Global external ALB with serverless NEGs. Cloud Armor rate limits (per header/cookie/IP keys, throttle or ban) and WAF. IAP (natively on Cloud Run since March 2026). Apigee for spike arrest and quotas on API-shaped tools. |
 | Governance at scale | Agent Registry, Agent Gateway (MCP/A2A-aware policy point, 5,000 registered resources per instance), Agent Identity (SPIFFE, mTLS + DPoP), Model Armor inline |
 | Observability | Cloud Trace through OTLP (`telemetry.googleapis.com`), Cloud Monitoring custom metrics and SLOs with burn-rate alerts, log-based metrics, Managed Prometheus sidecar. Agent Observability/Evaluation on the managed path. |
 | Delivery and cost | Cloud Build, Cloud Deploy canaries for Cloud Run (10/50/100 with verify). Budgets with Pub/Sub notifications. Budgets do not cap spend, so connect the notification to a kill switch. Cloud Run flexible CUDs (28 % / 46 %), Cloud Run budget spend caps (Preview). |
@@ -749,7 +749,7 @@ The design is yours, not the vendor's.
 
 ## § Sources and verify list
 
-Google's product documentation is now at docs.cloud.google.com. This list gives the official documentation read on 5 September 2026:
+Official documentation read on 5 September 2026 (Google's product docs are now at docs.cloud.google.com):
 
 - Gemini Enterprise Agent Platform pricing, model pages and lifecycle table, Standard/Priority/Flex PayGo, Provisioned Throughput and its supported-models table, context caching, batch inference, quotas,
 - Cloud Run quotas, autoscaling, request timeout, billing settings, Direct VPC egress, WebSockets, Pub/Sub push integration, "Host AI agents on Cloud Run",

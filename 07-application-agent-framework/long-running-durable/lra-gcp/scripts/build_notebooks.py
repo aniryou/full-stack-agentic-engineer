@@ -244,7 +244,7 @@ print(drain())
 assert RUNS["order-2"]["status"] == "SUCCEEDED" and CHARGES == ["charged"], "exactly one charge"
 '''
 )
-nb0.md("## Duplicate delivery\n\nCloud Tasks (and every real queue) gives at-least-once delivery. Give the `charge` task to the worker two times. Then look at how the guard rejects the second delivery.")
+nb0.md("## Duplicate delivery\n\nCloud Tasks (and every real queue) gives at-least-once delivery. Deliver the `charge` task two times. Then look at how the guard rejects the second delivery.")
 nb0.code(
     '''
 CHARGES.clear()
@@ -306,7 +306,7 @@ engine.registry.register(wf)
     attempts="3",
     effect_key='"update-ticket"',
 )
-nb1.md("## Run it one task at a time\n\n`LocalRunner.step()` sends one task that is due, the same as one push from Cloud Tasks.")
+nb1.md("## Run it one task at a time\n\n`LocalRunner.step()` delivers one task that is due, the same as one push from Cloud Tasks.")
 nb1.code(
     '''
 run = engine.start("triage", {"ticket": "I was charged twice"})
@@ -349,7 +349,7 @@ assert store.get(run.run_id).status == RunStatus.SUCCEEDED
     chaos_point='"after_commit_before_enqueue"',
     advance_s="61",
 )
-nb1.md("## Crash after the side effect, before the checkpoint\n\nThis is the crash window with the highest cost. The effect occurred, but the checkpoint did not. When the queue sends the task again, the engine runs the step again. The engine finds the effect record and does not do the effect again.")
+nb1.md("## Crash after the side effect, before the checkpoint\n\nThis is the crash window with the highest cost. The effect occurred, but the checkpoint did not. When the queue delivers the task again, the engine runs the step again. It finds the effect record and does not do the effect again.")
 nb1.code(
     '''
 TICKETS_UPDATED.clear(); crashed.clear()
@@ -372,7 +372,7 @@ assert r.status == RunStatus.SUCCEEDED and len(TICKETS_UPDATED) == {{n_effects}}
     chaos_point='"after_step_before_commit"',
     n_effects="1",
 )
-nb1.md("## Leases: a second worker\n\nTwo replicas get the same task with 50 ms between them. The replica that loses gets `lease-held`. The HTTP layer returns `lease-held` as **503**, so Cloud Tasks retries later.")
+nb1.md("## Leases: a second worker\n\nTwo replicas receive the same task with 50 ms between them. The replica that loses gets `lease-held`. The HTTP layer returns `lease-held` as **503**, so Cloud Tasks retries later.")
 nb1.code(
     '''
 engine, runner, clock, store, queue, bus = harness(routes=routes)
@@ -444,7 +444,7 @@ assert r.status == RunStatus.WAITING and r.wait.key == {{expected_key}}
 ''',
     expected_key='f"manager:{run.run_id}"',
 )
-nb2.md("## Resume — idempotent and key-scoped\n\nThe API endpoint `POST /runs/{id}/events` does the same resume as the next cell. A duplicate event and an event for an incorrect gate return `None`, never an error.")
+nb2.md("## Resume — idempotent and key-scoped\n\nThe API endpoint `POST /runs/{id}/events` does this same thing. A duplicate event and an event for an incorrect gate return `None`, never an error.")
 nb2.code(
     '''
 wrong = Event(run_id=run.run_id, key="cfo:" + run.run_id, payload={"decision": "approve"})
@@ -500,7 +500,7 @@ assert store.get(run4.run_id).result == {"auto_approved": True}
 ''',
     policy='"resume"',
 )
-nb2.md("## Cancel while waiting\n\nNo task ever runs for a run that waits. Thus a cancel ends the run immediately. If a step with a compensation completed before the cancel, the cancel also compensates that step.")
+nb2.md("## Cancel while waiting\n\nNo task will ever run for a run that waits. Thus a cancel ends the run immediately. If a step with a compensation completed before the cancel, the cancel also compensates that step.")
 nb2.code(
     '''
 run5 = engine.start("expense", {"amount": 400}); runner.run_until_idle()
@@ -1028,7 +1028,7 @@ print("my_to_messages matches the adapter on", len(journals), "journals; ids loo
     cid='tool_call_id(intent["key"])',
     content='intent.get("result") if intent["done"] else {"pending": True}',
 )
-nb5.md("## Mistral as the engine's model\n\n`MistralLLM` implements the same `LLM` port as `GeminiLLM` and `FakeLLM`. Thus every workflow in `lra.examples` runs on it with no change. The usage becomes cost for the budget of the run. The prices in the adapter are illustrative.")
+nb5.md("## Mistral as the engine's model\n\n`MistralLLM` implements the same `LLM` port as `GeminiLLM` and `FakeLLM`. Thus every workflow in `lra.examples` runs on it with no change. The usage becomes cost for the budget of the run (the prices in the adapter are illustrative).")
 nb5.code(
     '''
 fake = FakeMistral([{"final": "billing"}])
@@ -1050,11 +1050,11 @@ nb5.md(
     "`lra/adapters/mistral/workflow.py` is this loop on Mistral Workflows, with Temporal below it. The infrastructure code "
     "goes away: there is no store, no queue, no lease and no reaper. In their place:\n\n"
     "* The **event history** of the execution is the store.\n"
-    "* The model call and the charge are **activities**. The platform records every activity before the activity runs. The platform retries the activity "
+    "* The platform records every **activity** (the model call and the charge) before the activity runs. The platform retries the activity "
     "on failure, and never runs the activity again after the activity is complete.\n"
     "* `workflow.wait_condition(...)` and a **signal** are the approval gate, with a timeout.\n"
     "* A loop bound in deterministic workflow code and `execution_timeout` are the budget.\n\n"
-    "One detail is easy to miss. An *unexpected* exception in workflow code fails only the workflow **task**. The platform "
+    "Note one detail that is easy to miss. An *unexpected* exception in workflow code fails only the workflow **task**. The platform "
     "retries that task until you repair the code and deploy it again. To fail an execution on purpose, raise `WorkflowError`.\n\n"
     "The Mistral Workflows loop needs Python 3.12–3.14 and the `mistral` extra (`mistralai-workflows` 3.15 declares `Requires-Python >=3.12,<3.15`, "
     "checked 2026-09-26, verify). The loop also needs a local Temporal dev server, which the SDK downloads on first use. "

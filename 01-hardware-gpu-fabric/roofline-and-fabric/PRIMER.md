@@ -43,7 +43,7 @@ A GPU is a memory system with arithmetic attached to it.
   cost in the step.
 - Quantization and MoE change **bytes**.
 - Between GPUs, every transfer costs **$\alpha + n/\beta$**. The tensor-parallel all-reduces of decode
-  are latency-bound. The all-reduces of prefill are bandwidth-bound, and their cost does not decrease when the TP
+  are latency-bound. The all-reduces of prefill are bandwidth-bound, and they do not decrease when the TP
   degree increases. Also, β per GPU falls ~9× from NVLink to a 400 Gb/s NIC. Thus tensor parallelism stays
   inside the NVLink domain.
 - Three fleet numbers then come from the same arithmetic. Cold start is **bytes ÷ the slowest tier**.
@@ -95,7 +95,7 @@ rate doubles again on parts that support it.
 ### Caches are for reuse inside a kernel
 
 The last-level cache is 50 MB of L2 on an H100, 48 MB on an L4, and 256 MB of Infinity Cache on an
-MI300X. It serves re-reads of tiles *inside* a kernel (§4). It cannot hold a model. A decode step streams
+MI300X. It serves re-reads of tiles *within* a kernel (§4). It cannot hold a model. A decode step streams
 15 GB of Llama-3.1-8B weights once per step, three hundred times the H100's L2. Thus nothing stays in the
 cache from one step to the next. Use HBM bandwidth for the decode plan, not the cache.
 
@@ -140,7 +140,7 @@ Worked ridges (dense, `roofline.specs.Device.ridge()`):
 - A100 80GB 153, H200 206, B200 281, MI300X 247
 
 That list holds two lessons. First, compute-first generations increase the ridge (A100 153 → H100 295).
-Memory refreshes decrease it again (H200, an H100 with more bandwidth: 206). Second, a *narrower*
+Memory refreshes decrease it again (H200 is an H100 with more bandwidth: 206). Second, a *narrower*
 precision doubles the ridge. Thus fp8 gives a gain only at twice the intensity.
 
 ### Where kernels land
@@ -182,8 +182,8 @@ The roofline is a bound, not a prediction. Real kernels do not reach either ceil
   of math at peak, 29 ns on the roofline, microseconds in practice.
 
 The model also assumes compulsory traffic, and §4 shows how far a real tiling is from that. Use the model
-to decide *which* ceiling to attack. Then measure how near you get. `gpu-bench-lab` fits a measured
-roofline to your device.
+to decide *which* ceiling to attack. Then measure how near you get (`gpu-bench-lab` fits a measured
+roofline to your device).
 
 ---
 
@@ -218,7 +218,7 @@ For Llama-3.1-8B, the values are:
 
 A decode step streams **15.0 GB**: every layer plus the LM head. The input embedding is a gather of one
 row per token, not a stream of the table. The calculator assumes that activations stay on chip (fused), and
-its efficiencies default to 1. Thus every time value that follows is an ideal lower bound (`roofline.llm.prefill()`,
+its efficiencies default to 1. Thus every time that follows is an ideal lower bound (`roofline.llm.prefill()`,
 `decode()`).
 
 ### 3.2 Prefill: intensity ≈ tokens in the step
@@ -311,7 +311,7 @@ Llama-3.1-8B, H100, FP8 weights and KV, 2K context, batch 400 (476 fit):
 ```
 
 After the GEMM crossover, throughput increases no more: 20,978 tokens/s here at any larger batch. Each
-extra sequence only adds KV time. The KV-cache techniques in layer 04 work against the KV time
+extra sequence only adds KV time. The KV-cache techniques in layer 04 work against this
 ([KV cache](../../04-inference-engine/kv-cache/kv-cache-primer.md),
 [PagedAttention](../../04-inference-engine/paged-attention/paged-attention-primer.md)). GQA/MQA/MLA and FP8
 KV decrease the bytes. Paging and prefix caching stop the waste of bytes. This KV-time limit is also the
@@ -319,7 +319,7 @@ argument for attention–FFN disaggregation: the two kernels on separate GPU poo
 
 ### 3.5 Quantization moves bytes
 
-In the memory-bound regime, the speedup of a step is old bytes ÷ new bytes. The schemes are different in *which*
+In the memory-bound regime, the speedup of a step is old bytes ÷ new bytes. The schemes differ in *which*
 bytes they cut (Llama-3.1-8B, H100, 2K context, `roofline.llm.SCHEMES`):
 
 | Scheme | Weight bytes | KV bytes | Math | Batch 1 | Speedup | Batch 64 | Speedup | Compute-bound from (c = 0) |
@@ -331,8 +331,8 @@ bytes they cut (Llama-3.1-8B, H100, 2K context, `roofline.llm.SCHEMES`):
 | W4A16 + FP8 KV | 0.5 | 1 | bf16 | 1.16 ms | 3.93× | 3.69 ms | 2.61× | 74 |
 
 FP8 halves every byte and doubles the peak. Thus it is exactly 2× in either regime. Weight-only INT4 is
-almost 4× at batch 1 but only 1.5× at batch 64. The reason is that half the bytes at batch 64 are KV
-cache, which INT4 does not touch. INT4 also decreases the compute-bound crossover to ~75, because the math
+nearly 4× at batch 1 but only 1.5× at batch 64. The reason is that half the bytes at batch 64 are KV
+cache, which INT4 did not touch. INT4 also decreases the compute-bound crossover to ~75, because the math
 still runs at the bf16 peak.
 
 Quantization also gives **capacity**: FP8 weights and KV let 476 sequences of 2K tokens fit on the H100
@@ -361,10 +361,10 @@ The consequence for the roofline: the FLOPs change with the *active* parameters,
 stream reaches the ridge scales with total ÷ active. At c = 0 on an H200 (ridge 206;
 `decode_crossover_batch()`): 207 for Llama-3.1-8B, 754 for Mixtral-8x7B (total/active 3.6) and 2,055 for
 Qwen3-30B-A3B (9.1, or 9.9 without the input embedding). The step gathers the input embedding. It does
-not stream the embedding or multiply it.
+not stream it or multiply it.
 
 Thus large batches are the main factor when you serve large MoE models. Expert parallelism is how systems
-get large batches.
+get them.
 Attention runs data-parallel on many GPUs, and all their tokens meet at each expert. For the calculation
 of size, see [capacity planning](../../00-foundations/gpu-capacity-planning/PRIMER.md). For the all-to-all
 that expert parallelism causes, see §5.
@@ -377,8 +377,8 @@ balance the load, and how the dispatch and combine of expert parallelism work.
 
 ## 4. The memory hierarchy and why tiling/fusion win
 
-Each level down the hierarchy is larger and slower (see
-[gpu-primer §3](../gpu-primer/gpu-primer.md#3-memory-is-the-whole-game) for approximate H100 bandwidths and latencies):
+Each level down the hierarchy is larger and slower (for approximate H100 bandwidths and latencies, see
+[gpu-primer §3](../gpu-primer/gpu-primer.md#3-memory-is-the-whole-game)):
 
 | Level | Size and speed | Holds |
 |---|---|---|
@@ -410,8 +410,8 @@ In bf16: 16×16 → 8, 64×64 → 32, 128×128 → 64, 128×256 → 85, 256×256
 
 Larger tiles give more reuse, but they must fit. Take a 128 × 256 tile with 64-wide $k$-slices in bf16 and
 four pipeline stages. It needs 4 × (128 + 256) × 64 × 2 = 192 KiB of shared memory (`tile_smem_bytes()`).
-Its fp32 accumulators need 128 × 256 × 4 = 128 KiB of registers. The 192 KiB is 84% of an H100 SM's shared
-memory, and the 128 KiB is half its register file. That is why production GEMM tiles stop at approximately this size.
+Its fp32 accumulators need 128 × 256 × 4 = 128 KiB of registers. These are 84% of an H100 SM's shared
+memory and half its register file. That is why production GEMM tiles stop at approximately this size.
 
 Even then, 85 FLOP/B is below the HBM ridge of 295. Assume that every tile re-reads its panels from HBM.
 Then a 4096³ bf16 GEMM with 128 × 128 tiles will move 2.18 GB — 21.7× the compulsory 101 MB — at 63 FLOP/B
@@ -488,11 +488,11 @@ cliff between scale-up and scale-out.
 | recursive doubling | $t = \lceil \log_2 p \rceil \cdot (\alpha + n/\beta)$ | `recursive_doubling_allreduce_time()` |
 | crossover | ring latency term = bandwidth term at $n = p\,\alpha\,\beta$ | `allreduce_crossover_bytes()` |
 
-The bandwidth term of the ring, $\sim 2n/\beta$, is the lowest possible and independent of $p$. Its latency term grows
+The bandwidth term of the ring, $\sim 2n/\beta$, is optimal and independent of $p$. Its latency term grows
 with $p$. Recursive doubling has the opposite shape.
 
 Take 8 H100s over NVLink 4 as a worked example. The two terms of the ring meet at **7.2 MB** (over a
-400 Gb/s NIC: 2.0 MB). A 1 GiB all-reduce takes 4.20 ms — algbw 255 GB/s. For this all-reduce, nccl-tests reports
+400 Gb/s NIC: 2.0 MB). A 1 GiB all-reduce takes 4.20 ms — algbw 255 GB/s. For it, nccl-tests reports
 **$\text{busbw} = \text{algbw} \times 2(p-1)/p$ = 447 GB/s**, the number to compare with the link's 450
 (`busbw()`). Layer 02 covers busbw, NCCL algorithms and protocols in depth.
 
@@ -522,7 +522,7 @@ Prefill, 4,096 tokens, TP=16 across two 8-GPU nodes (`tp_comm_time_across_nodes(
   262.6 ms with one NIC per node, and 426.7 ms as one flat ring through the NICs.
 
 There are two lessons. First, at decode, the cost is the count of collectives times the latency of the
-algorithm. This is why engines include latency-optimized all-reduce kernels. It is also why TP's per-GPU
+algorithm. This is why engines ship latency-optimized all-reduce kernels. It is also why TP's per-GPU
 efficiency decreases when $p$ grows (batch-1 tokens per GPU-second: 23.3 at TP=2, 12.9 at TP=8 with a
 ring).
 
@@ -539,7 +539,7 @@ Without a NIC per GPU, the all-reduce time is much worse (263 ms with one NIC pe
 node, two things set the cost: the NIC aggregate of the node (8 × 50 GB/s with rails) and a larger
 $\alpha$. The links between nodes also carry data-, pipeline- and expert-parallel traffic.
 
-This arithmetic gives the rule from the
+This gives the rule from the
 [deployment primer §4](../gpu-deployment/gpu-deployment-primer.md#4-when-one-gpu-isnt-enough-the-parallelism-menu):
 tensor (and expert) parallelism inside the NVLink domain, pipeline and data parallelism across it. The
 all-to-all of expert parallelism has busbw factor $(p-1)/{p}$ and the same α-β shape.
@@ -567,14 +567,14 @@ same time. A hierarchical 1 GiB all-reduce over 4 nodes × 8 GPUs takes **8.3 ms
 with one** (`hierarchical_allreduce_time()`).
 
 A two-tier folded Clos of radix-$R$ switches is **non-blocking** (1:1) when each leaf gives half its ports
-to hosts and half to spines. Its maximum size is $R^2/2$ endpoints (`leaf_spine()`). With radix-64 switches,
+to hosts and half to spines. Its maximum is $R^2/2$ endpoints (`leaf_spine()`). With radix-64 switches,
 2,048 endpoints need 64 leaves and 32 spines.
 
 With 48 ports down and 16 up, the network serves 3,072 endpoints with 64 leaves and 16 spines — at **3:1
-oversubscription**. The oversubscription decreases the **bisection bandwidth** (the capacity across the worst half/half cut,
+oversubscription**. This divides the **bisection bandwidth** (the capacity across the worst half/half cut,
 `bisection_gbs()`) from 76,800 GB/s to 25,600 GB/s. Independent inference replicas (mostly north-south
 traffic) can accept oversubscription. Training all-reduces, expert all-to-all and disaggregated KV transfer
-(layer 05) need bisection bandwidth.
+(layer 05) need bisection.
 
 ### 5.5 GPUDirect RDMA and staged copies
 
@@ -599,11 +599,11 @@ worst, the paths are:
 - **NV#** (a bonded set of # NVLinks)
 - **PIX** (at most one PCIe bridge: the same PCIe switch)
 - **PXB** (several PCIe bridges, no host bridge: several switches under one host bridge)
-- **PHB** (through a PCIe host bridge, usually the CPU)
-- **NODE** (between host bridges in a NUMA node)
+- **PHB** (through a PCIe host bridge, typically the CPU)
+- **NODE** (between host bridges within a NUMA node)
 - **SYS** (across the inter-socket link, QPI/UPI)
 
-The CPU and NUMA affinity columns of the matrix tell which socket each GPU connects to. Three rules:
+Its CPU and NUMA affinity columns tell which socket each GPU connects to. Three rules:
 
 1. Put tensor-parallel groups on NV# pairs, never across SYS.
 2. Give each GPU the NIC in its own PCIe switch tree: PIX or PXB, never through the host bridge. Then
@@ -649,7 +649,7 @@ behind safetensors loaders that read directly into device memory. It is also the
 streamers such as the Run:ai Model Streamer load format in vLLM (verify).
 
 Host-to-device copies from pinned memory run near the PCIe rate. But for pageable memory, the driver must
-stage the data through a pinned bounce buffer. The assumptions here are 25 GB/s (pinned) against 12 GB/s (pageable) on PCIe Gen4.
+stage the data through a pinned bounce buffer. The assumptions here are 25 against 12 GB/s on PCIe Gen4.
 Measure your own values with `gpu-bench-lab` notebook `02_memory_bandwidth_and_transfers`.
 
 ### 6.2 The anatomy of a cold start
@@ -672,8 +672,8 @@ The table assumes these stage times: provision 120 s, image 60 s, engine init 90
 *With one stream, the fetch of the weights is 84% of the cold start. With parallel and streamed weights, the node provision is the largest stage. On a warm node, the engine init is 93% of the time (§6.2, `cold_start()`).*
 
 The lesson is the order of attack. First, work on the weights (parallelism, streaming, a local or
-regional cache, smaller precision). Then work on the node (layer 03: warm pools, pre-pulled or
-streamed images). Then work on the engine (layer 04).
+regional cache, smaller precision). Then work on the node (warm pools, pre-pulled or streamed images:
+see layer 03). Then work on the engine (layer 04).
 
 A budget sets the bandwidth that you need. Take a 70B replica that must be ready in 120 s on a warm node pool.
 Assume a 20 s image pull and 60 s of engine init. This leaves 40 s for streamed weights: 141.1 GB / 40 s =
@@ -704,11 +704,11 @@ $M_{\text{gpu}}$ = 16,384 × 1,296 h / 419 = 50,677 GPU-hours ≈ 5.8 years
 Each GPU lasts years, but the job does not last a shift. The figure combines GPUs, hosts, network and
 software. Real fleets add infant mortality and correlated failures (a switch, a power feed). Silent data
 corruption shows as incorrect numbers, not as crashes. Thus use the figure as a first-order rate for plans,
-and monitor the health signals (layer 02: DCGM, XID errors).
+and monitor the health signals (DCGM, XID errors: see layer 02).
 
 ### 7.2 How often to checkpoint: Young/Daly
 
-Take a synchronous job that writes a checkpoint every $\tau$ seconds. Each checkpoint takes $\delta$
+Take a synchronous job that writes a checkpoint every $\tau$ seconds, and each checkpoint takes $\delta$
 seconds. The job loses $\delta/\tau$ to the checkpoints. Per failure, it also loses about $\tau/2$ of
 recomputed work plus a restart $R$ (`wasted_fraction()`):
 
@@ -736,7 +736,7 @@ with an assumed restart R = 10 min (reschedule, reload, re-initialise): R/M = 5.
    δ = 60 s → waste 15.8%        δ = 10 s → waste 9.6%
 ```
 
-Waste scales as $\sqrt{\delta}$. Thus a 4× faster checkpoint halves that part of the waste. This is the argument for
+Waste scales as $\sqrt{\delta}$. Thus a 4× faster checkpoint halves that part. This is the case for
 asynchronous checkpoints to host memory and local disk, then to storage in the background. Restart time
 adds $R/{M}$ on top, and it does not move $\tau^{*}$. At this failure rate, a 10-minute restart (5.4%)
 costs more than everything a 10 s checkpoint wastes (4.2%). Thus fast restart is a lever next to fast
@@ -745,7 +745,7 @@ checkpoints: hot spare nodes, checkpoints replicated in peer memory, pre-initial
 ### 7.3 Inference: replicas are failure domains
 
 Serving replicas fail independently. Thus the question becomes "how many spares?". A TP=8 replica is down
-when any of its GPUs is down: replica MTBF = M/8 = 6,335 h. With a 48 h MTTR (assumed: find the failure, drain,
+when any of its GPUs is down: replica MTBF = M/8 = 6,335 h. With a 48 h MTTR (assumed: detect, drain,
 repair), the availability is $a = \text{MTBF}/(\text{MTBF} + \text{MTTR})$ = 0.99248
 (`replica_availability()`). If you need 8 replicas up (`p_at_least()`, `replicas_for()`):
 
@@ -799,7 +799,7 @@ flowchart LR
 *The ITL SLO and the HBM capacity set the batch, and the decode step sets the tokens per second. The price per GPU-hour and the utilisation then set the cost of a token (§8.1 and §8.2).*
 
 The L4 cannot meet the SLO at any batch, because at batch 1 it needs 50.9 ms to stream the weights. Thus
-its row is at its HBM limit. The L4 is a slower product. Even so, the H100 gives the lower-cost token. Its
+its row is at its HBM limit. The L4 row is a slower product. Even so, the H100 gives the lower-cost token. Its
 bandwidth and capacity together deliver 23× the L4's tokens/s for 15.7× the price.
 
 FP8 then decreases the H100's cost by another 2.8×: exactly 2.0× from halving every byte, and 1.4× more
@@ -817,7 +817,7 @@ the place where serving economics succeed or fail. These things control it:
 
 - autoscaling and scale-to-zero (layers 03 and 05),
 - batch traffic that fills the troughs,
-- admission control (layer 06), which keeps the peak inside its plan.
+- admission control (layer 06), which keeps the peak within its plan.
 
 ### 8.3 Rent or own
 
@@ -900,7 +900,7 @@ How to read the table for inference:
 - **Bandwidth sets decode speed per replica** (§3.3): 0.3 TB/s (L4) to 8 TB/s, a 27× range. Compare parts
   on $/M tokens (§8), not on $/hour or TFLOPS.
 - **Capacity sets what fits and how large the batch can be** (§3.4–3.5): 16 GB (T4, TPU v5e) to 288 GB
-  (GB300, MI355X). An H200 is an H100 plus capacity and bandwidth. For decode, capacity and bandwidth are most of what is
+  (GB300, MI355X). An H200 is an H100 plus capacity and bandwidth. For decode, that is most of what is
   important.
 - **The ridge sets how much batching the FLOPs need**: from 153 (A100 80GB) to 560 (TPU v6e). A high ridge
   is acceptable for prefill and training, but it gives no benefit to small-batch decode.
@@ -923,7 +923,7 @@ what each tier gives you here:
 | T0 | laptop, Colab CPU, CI | the core notebooks, and your CPU's own roofline and disk throughput with `gpu-bench-lab` (numpy backend) | $0 |
 | T1 | Colab or Kaggle T4 (free, not guaranteed), a rented 24 GB GPU, GCP L4 Spot or Cloud Run L4 | a real GPU roofline (GEMM sweep by dtype), HBM bandwidth, pinned against pageable host copies, weight loads | free to ~$0.7/hr |
 | T2 | Kaggle 2×T4 (free, PCIe only, no NVLink), RunPod / Vast / Lambda 2–8× A100/H100 SXM for an hour, GCP `a2-highgpu-2g` | P2P bandwidth over PCIe against NVLink, `nvidia-smi topo -m` on real topologies, all-reduce busbw | $0 to ~$25 per session |
-| T3 | GCP through Terraform (`gpu-bench-lab/deploy/gcp/terraform`) | the same suite on a Spot L4 VM with results in a bucket. Change the machine type for NVLink. | pay per use, Spot, auto-stop |
+| T3 | GCP via Terraform (`gpu-bench-lab/deploy/gcp/terraform`) | the same suite on a Spot L4 VM with results in a bucket. Change the machine type for NVLink. | pay per use, Spot, auto-stop |
 
 ### 10.1 On Google Cloud
 
@@ -945,7 +945,7 @@ GKE (verify).
 
 The ability to get the capacity is as important as the price. **On-demand** is the simplest, and it is the
 most difficult to get for large parts. **Spot** is 60–91% lower in cost, and the provider can preempt it
-at any time. Spot is acceptable for benchmarks and for stateless replicas with headroom. **Dynamic
+at any time. That is acceptable for benchmarks and for stateless replicas with headroom. **Dynamic
 Workload Scheduler flex-start** puts a request in a queue and provisions all of it at the same time (up to
 7 days). You use it through Kueue ProvisioningRequest (layer 03).
 
@@ -968,7 +968,7 @@ containers. They give no driver or kernel control, and no Kubernetes. **Lambda**
 **Modal** runs serverless Python on GPUs, with monthly free credits. A local kind cluster serves the
 Kubernetes layers (03, 05) without GPUs.
 
-Prices and quotas change monthly. The up-to-date list is [`COMPUTE.md`](../../COMPUTE.md). The order of
+Prices and quotas change monthly. The maintained list is [`COMPUTE.md`](../../COMPUTE.md). The order of
 study is in [`CURRICULUM.md`](../../CURRICULUM.md).
 
 ---
@@ -987,7 +987,7 @@ averages at most 32 FLOP/B, and HBM capacity limits the batch first. Because of 
 bytes: FP8 weights and KV, GQA, paging, prefix caching.
 
 "Across GPUs, I use α-β. TP makes 160 all-reduces per step for a 70B model. They are latency-bound at
-decode and bandwidth-bound at prefill. The bandwidth cost does not decrease when TP grows, but the compute of each
+decode and bandwidth-bound at prefill. That cost does not decrease when TP grows, but the compute of each
 GPU does. Beyond the node, the share of each GPU goes over a NIC 9× slower than NVLink. Thus TP stays in
 the NVLink domain.
 
@@ -1024,7 +1024,7 @@ $/M tokens is $/GPU-hr over tokens/s × utilisation."
    ~4%. Then the restart is the largest cost, so make it fast too.
 6. *We need 8 TP=8 replicas up at 99.9%. How many do we deploy, and can we use fewer GPUs?* Deploy ten
    (80 GPUs) at a 48 h MTTR. Smaller failure domains need fewer spares. If FP8 lets the model fit on TP=4,
-   18 replicas (72 GPUs) give the same capacity at the same target.
+   18 replicas (72 GPUs) deliver the same capacity at the same target.
 
 ---
 
@@ -1107,20 +1107,20 @@ Product facts in this primer and in `roofline-core/roofline/specs.py`, as of Sep
   192 GB), GB200 memory (186 GB), GB300 TDP and MI355X xGMI bandwidth. What the TPU ICI
   figures mean is also especially important.
 - SM counts and boost clocks behind `peak_from_clock()`: T4 40 / 1.59 GHz, L4 58 / 2.04 GHz, A100 108 /
-  1.41 GHz. For the H100 SXM, 989.4 TFLOP/s means 132 / 1.83 GHz.
+  1.41 GHz. For the H100 SXM, 989.4 TFLOP/s implies 132 / 1.83 GHz.
 - H100 PCIe differences (SMs, HBM2e ~2 TB/s, 350 W). The MiB figure that `nvidia-smi` reports for an
   "80 GB" H100.
 - Link rates: NVLink 3/4/5 per-GPU link counts and speeds, PCIe Gen4/Gen5 x16, InfiniBand NDR/XDR. The
   GPU–NIC `topo -m` code on HGX H100 servers (PIX or PXB). The $\alpha$ values are illustrative, not
   product facts.
-- The maximum system power of the DGX H100 (10.2 kW), which §8.3 uses. The $300k server price and opex are
+- DGX H100 maximum system power (10.2 kW), which §8.3 uses. The $300k server price and opex are
   assumptions.
 - GCP prices (L4 ~$0.70/hr, H100 ~$11/GPU-hr on demand as `a3-highgpu-8g` ≈ $88/hr, Spot ~$3.7/GPU-hr).
   The Spot discount range (60–91%). Machine families with their GPUs and NICs, and the availability of small
   A3 shapes. DWS flex-start (up to 7 days) and calendar mode. Cloud Run GPU types, the TPU7x GA date
   (2026-04-22), and quota behaviour for new accounts.
 - Free and low-cost tiers: Colab (T4, hours per week), Kaggle (2×T4 or P100, 30 GPU-hours per week), and
-  the Vast.ai, RunPod, Lambda and Modal offers. The up-to-date list is in [`COMPUTE.md`](../../COMPUTE.md).
+  the Vast.ai, RunPod, Lambda and Modal offers. The maintained list is in [`COMPUTE.md`](../../COMPUTE.md).
 - The Run:ai Model Streamer as a vLLM load format. The loader behaviour of safetensors.
 - The Llama 3 interruption figures (419 unexpected in 54 days on 16,384 GPUs, ~78% hardware).
 - Assumptions, not product facts (replace them with your own): $\alpha$ values, storage tier bandwidths,

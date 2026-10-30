@@ -121,7 +121,7 @@ gcloud workflows run research-approval --data='{"goal":"...","subtopics":["a","b
 ```
 
 Set `LRA_BACKEND=gcp` and the variables in `.env.example`. The two services read these variables. Set
-`LRA_GEMINI_MODEL` to one specific model that you turned on in your project. Set real prices in `GeminiLLM` before you
+`LRA_GEMINI_MODEL` to one specific model that is turned on in your project. Set real prices in `GeminiLLM` before you
 trust the values of `cost_usd`.
 
 ## Caveats

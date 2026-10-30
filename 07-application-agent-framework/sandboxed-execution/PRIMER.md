@@ -4,7 +4,7 @@
 
 *For some product facts, a check against the live docs of a vendor was not possible. These facts have the mark `(verify)`, and the dated Verify list is at the end. Each formula gives the name of the function in [`sandbox-core`](sandbox-core) (package `sandboxcore`) that calculates it. Latencies are inputs, with the label "measured on the build host" or `(verify)`, and this primer never invents one. The detailed lab is [`sandbox-lab`](sandbox-lab).*
 
-This primer is about one tool: the tool that runs code that the model wrote. The identity primer defines an agent in one line: a workload that turns untrusted text into a privileged action. Each action of that kind is most dangerous in this tool. The tool can be a `run_code` tool, a code interpreter or an "execute this shell command" action. It can also be a tool that runs a query that the model wrote.
+This primer is about one tool: the tool that runs code that the model wrote. The identity primer defines an agent in one line: a workload that turns untrusted text into a privileged action. Each action of that kind is most dangerous in this tool. The tool can be a `run_code` tool, a code interpreter or an "execute this shell command" action. It can also be a tool that evaluates a query that the model wrote.
 
 This primer uses material that is already in the repository. It refers to that material and does not repeat it:
 
@@ -34,7 +34,7 @@ flowchart TB
   S -.-> A
 ```
 
-*This figure shows the shape of a safe `run_code` tool. The model writes code, the policy decides, and the sandbox runs the code with no ambient authority. The egress proxy is the only way out, and each execution leaves one audit event (§3, §4, §8).*
+*This figure shows the shape of a safe `run_code` tool. The model emits code, the policy decides, and the sandbox runs the code with no ambient authority. The egress proxy is the only way out, and each execution leaves one audit event (§3, §4, §8).*
 
 - A sandbox must restore one invariant: **no ambient authority**. That is: no credentials, no network by default and no persistent filesystem. The sandbox gets only what the caller gives it on purpose for one execution.
 - To get there, you go up an **isolation ladder**. You also write the decision as **policy**, and you enforce that policy two times.
@@ -74,9 +74,9 @@ flowchart LR
   C --> U
 ```
 
-*An injection makes the model write a program. With `subprocess.run` in the process of the agent, that program inherits the environment, the home directory, the filesystem, the network and unbounded resources.*
+*An injection makes the model emit a program. With `subprocess.run` in the process of the agent, that program inherits the environment, the home directory, the filesystem, the network and unbounded resources.*
 
-When the agent can **run code**, the target of the attacker changes. The target is no longer "make the model say something incorrect". It is "make the model write a program, and run it with whatever the runner holds". That is a jump in the kind of blast radius.
+When the agent can **run code**, the target of the attacker changes. The target is no longer "make the model say something wrong". It is "make the model emit a program, and run it with whatever the runner holds". That is a jump in the kind of blast radius.
 
 **The blast radius of a simple code tool.** Suppose that the implementation of `run_code` is `subprocess.run([python, "-c",
 code])` in the process of the agent itself. Then the code that the model wrote inherits these items by default:
@@ -87,7 +87,7 @@ code])` in the process of the agent itself. Then the code that the model wrote i
 - the **network**, in and out, with the identity of the agent itself,
 - **unbounded** CPU, memory, processes, disk and output.
 
-`sandboxcore.threats` makes each of these items concrete as a **probe**. A probe is a short, harmless program that takes the place of a program that a hijacked model can write. Each probe comes with two more facts: what it does with no sandbox, and the exit reason that a correct sandbox gives. The probes are these:
+`sandboxcore.threats` makes each of these items concrete as a **probe**. A probe is a short, harmless program that takes the place of a program that a hijacked model can emit. Each probe comes with two more facts: what it does with no sandbox, and the exit reason that a correct sandbox gives. The probes are these:
 
 - `read_env_secret` reads a planted `CLOUD_API_TOKEN`.
 - `read_ssh_key` reads a stand-in key from a 0700 victim home, by `~` and by its absolute path.
@@ -110,14 +110,14 @@ The lab also gives a few probes different names. `sandboxlab.probes.CORE_PROBE_N
 | Risk (probe) | OWASP-for-agents | Bounded by |
 |---|---|---|
 | read a credential from the environment | ASI03 Identity & Privilege Abuse | a **clean environment** (it inherits nothing) |
-| read a private key from home | ASI03 | a **different UID**, or a filesystem that does not contain the key (a mount namespace, a container). To point `HOME` to a different location is not a boundary, because the absolute path still opens |
+| read a private key from home | ASI03 | a **different UID** (or a filesystem that does not contain the key: a mount namespace, a container). To point `HOME` to a different location is not a boundary, because the absolute path still opens |
 | exfiltrate over the network | ASI01 Goal Hijack (exfiltration leg) | the **network layer**: deny-by-default egress and a proxy with an allowlist |
 | fork bomb | ASI05 Unexpected Code Execution | a **process limit** (`RLIMIT_NPROC` under a dedicated UID, or a pids cgroup) |
 | fill the disk | ASI05 | a **file-size / disk limit** |
 | spin the CPU | ASI05 | a **CPU-time limit** |
 | hang forever (no CPU) | ASI08 Cascading Failures | a **wall-clock timeout** (separate from CPU time) |
 | flood the output | ASI08 | output **read as it streams**. The sandbox truncates it and kills the run after a cap |
-| stay alive after the call, leave files behind | ASI05 | a **per-execution UID** that the sandbox sweeps after the run, and an ephemeral workspace. A cgroup / PID namespace that stops with the sandbox can take the place of the UID |
+| stay alive after the call, leave files behind | ASI05 | a **per-execution UID** that the sandbox sweeps after the run (or a cgroup / PID namespace that stops with the sandbox), and an ephemeral workspace |
 
 §2 of the identity primer has the full OWASP Top 10 for Agentic Applications (ASI01–ASI10) and the controls for the other risks. This topic gives the details of the ASI05 row that the identity primer names ("Sandboxed execution … with no ambient credentials").
 
@@ -132,7 +132,7 @@ The second most important line is the key row. Three of the controls (the key, t
 3. **No persistent filesystem.** The workspace is ephemeral, and the sandbox discards it. The code runs as a UID that cannot open your files. With a per-execution UID, the sandbox sweeps what that UID leaves in other locations (in `/tmp`) after the run. Without one, a file written to `/tmp` stays. A container has its own filesystem, and that filesystem prevents this problem.
 4. **Only** what the caller passes on purpose for this one execution (the inputs and budget of §3).
 
-A code tool that meets all four still lets a hijacked model *compute*. But a computation with no authority is a contained blast radius. That is the goal. The rest of this primer tells how far up the isolation ladder you go to trust it. It also tells how to enforce it, how to give it secrets through a broker, how to calculate its size and how to monitor it.
+A code tool that meets all four still lets a hijacked model *compute*. But a computation with no authority is a contained blast radius. That is the goal. The rest of this primer tells how far up the isolation ladder you go to trust it. It also tells how to enforce it, how to give it secrets through a broker, how to calculate its size and how to observe it.
 
 ---
 
@@ -154,7 +154,7 @@ There is no single "sandbox." There is a ladder of boundaries. Each boundary def
 - an **ephemeral 0700 workspace**,
 - POSIX **resource limits** that the child applies before it runs the code,
 - a **wall-clock deadline**,
-- output **read as it streams**, which the parent keeps up to a budget, with a kill of the run by the parent after a cap,
+- output **read as it streams** (the parent keeps it up to a budget and kills the run after a cap),
 - and a kill of the whole **process group** at the end.
 
 When `ProcessSandbox` runs as root, it also gives each execution **its own unprivileged UID**. That one control brings three more controls:
@@ -181,10 +181,10 @@ In that case, the process budget holds only approximately. The parent counts the
 Tools such as bubblewrap (`bwrap`) and nsjail put these parts in one package. The `ProcessSandbox` of the lab goes up to this rung (`--level process+netns`: a dedicated UID and an empty network namespace). The `seccomp.py` of the lab builds a profile. This rung is not available in these places:
 
 - macOS (no namespaces),
-- inside the default seccomp profile of Docker, a profile that blocks `unshare`/user namespaces,
+- inside the default seccomp profile of Docker (it blocks `unshare`/user namespaces),
 - Ubuntu hosts whose AppArmor policy restricts unprivileged user namespaces.
 
-The `env.netns_mode()` of the lab finds each case and says so.
+The `env.netns_mode()` of the lab detects each case and says so.
 
 ### Container, gVisor and VM rungs
 
@@ -194,7 +194,7 @@ The `env.netns_mode()` of the lab finds each case and says so.
 - a `--read-only` root filesystem with a small `--tmpfs` workspace,
 - `--cap-drop ALL`,
 - `--security-opt no-new-privileges`,
-- the default seccomp profile, which already blocks ~44 dangerous syscalls,
+- the default seccomp profile (it already blocks ~44 dangerous syscalls),
 - a non-root `--user`,
 - `--pids-limit`, `--memory` and `--cpus`.
 
@@ -204,15 +204,15 @@ This is the `docker.py` of the lab. It still shares the host kernel, so a kernel
 
 A companion process, the **Gofer**, owns the container filesystem. To escape, an attacker must exploit *both* the Sentry and the host kernel, "which do not share any code".
 
-The default platform is `systrap`, a seccomp-based interception that works inside VMs. `kvm` is best on bare metal. gVisor runs as the OCI runtime `runsc` (`docker run --runtime=runsc`, or a Kubernetes `RuntimeClass` whose handler is `runsc`).
+The default platform is `systrap` (seccomp-based interception, which works inside VMs). `kvm` is best on bare metal. gVisor runs as the OCI runtime `runsc` (`docker run --runtime=runsc`, or a Kubernetes `RuntimeClass` whose handler is `runsc`).
 
-It does **not** defend against Spectre-style side channels, attacks in higher layers, or exploits *inside* what the configuration lets the sandbox reach. Thus different tenants still go in different sandboxes. It has a cost on syscall-heavy workloads, because the Sentry is on the path. But pure compute runs natively.
+It does **not** defend against Spectre-style side channels, attacks in higher layers, or exploits *within* what the configuration lets the sandbox reach. Thus different tenants still go in different sandboxes. It has a cost on syscall-heavy workloads, because the Sentry is on the path. But pure compute runs natively.
 
 **Rung 4: a microVM (Firecracker, Kata).** This rung is a hardware virtualization boundary. The code runs in a lightweight VM with its **own guest kernel**. Thus a guest kernel exploit does not reach the host kernel.
 
-**Firecracker** starts a VMM in ~**12 ms** typical (8 CPU ms, wall 6–60 ms). It reaches the guest `/sbin/init` in **≤ 125 ms**, with a VMM memory overhead **≤ 5 MiB** (its `SPECIFICATION.md`). It needs **KVM** (`/dev/kvm`). Thus it runs on bare metal or nested-virt hosts, not on Colab or the Docker of a typical laptop.
+**Firecracker** starts a VMM in ~**12 ms** typical (8 CPU ms, wall 6–60 ms). It reaches the guest `/sbin/init` within **≤ 125 ms**, with a VMM memory overhead **≤ 5 MiB** (its `SPECIFICATION.md`). It needs **KVM** (`/dev/kvm`). Thus it runs on bare metal or nested-virt hosts, not on Colab or the Docker of a typical laptop.
 
-**Kata Containers** run each pod as its own lightweight VM with a `kata-agent` inside. Its 4.x runtime is `runtime-rs` (Rust), and its Kubernetes RuntimeClasses have a `-runtime-rs` suffix (`kata-qemu-runtime-rs`). It also needs `/dev/kvm`. The `RuntimeClass` of Kata sets an `overhead.podFixed` (320Mi/250m by default for the QEMU shim). Thus the scheduler and the quota include the VMM in their count.
+**Kata Containers** run each pod as its own lightweight VM with a `kata-agent` inside. Its 4.x runtime is `runtime-rs` (Rust), and its Kubernetes RuntimeClasses have a `-runtime-rs` suffix (`kata-qemu-runtime-rs`). It also needs `/dev/kvm`. The `RuntimeClass` of Kata sets an `overhead.podFixed` (the QEMU shim reserves 320Mi/250m by default). Thus the scheduler and the quota include the VMM in their count.
 
 **Snapshot/restore, and its one rule.** Instead of a boot for each execution, you can boot one time and warm the interpreter and libraries. Then you take a **snapshot** of the VM and **restore** a copy for each execution. Firecracker maps the memory file of the snapshot `MAP_PRIVATE`. This has three results (its `docs/snapshotting/snapshot-support.md`):
 
@@ -240,9 +240,9 @@ This table gives a compact view of the ladder:
 | microVM (Firecracker/Kata) | hardware virtualization, own guest kernel | guest-kernel escape to host | side channels. It needs `/dev/kvm`. A snapshot restored two times shares its RNG and secrets | VMM ~12 ms + ≤125 ms to init (Firecracker spec), Kata ~0.5–2 s `(verify)`, restore from snapshot faster `(verify)` |
 | full VM | a whole machine | almost everything at this layer | cost, minutes | tens of seconds `(verify)` |
 
-> **The process sandbox's sharp edges (measured, FACTS §10/§15).** `RLIMIT_CPU` counts **CPU seconds**, not wall time. Thus a sleeper or a blocked I/O call never reaches that limit. Always add a wall-clock kill. If soft `<` hard, the soft limit first raises a `SIGXCPU` that the code can catch, and then the hard limit sends `SIGKILL`. If soft `==` hard, the result is an immediate `SIGKILL`.
+> **The process sandbox's sharp edges (measured, FACTS §10/§15).** `RLIMIT_CPU` counts **CPU seconds**, not wall time. Thus a sleeper or a blocked I/O call never activates it. Always add a wall-clock kill. If soft `<` hard, the soft limit first raises a `SIGXCPU` that the code can catch, and then the hard limit sends `SIGKILL`. If soft `==` hard, the result is an immediate `SIGKILL`.
 >
-> `RLIMIT_NPROC` is **per real UID, system-wide, and ignored for uid 0**. Thus it stops a fork bomb only after a switch to an unprivileged UID, and that switch itself needs privilege. Also, all executions that share that UID share one budget. With a single `nobody` UID, the fork bomb of one run starves the other runs and any daemon that runs as `nobody`. This is the reason for a **UID per execution**.
+> `RLIMIT_NPROC` is **per real UID, system-wide, and ignored for uid 0**. Thus it stops a fork bomb only after a switch to an unprivileged UID, and that switch itself needs privilege. Also, all executions that share that UID share one budget. With a single `nobody` UID, the fork bomb of one run starves the others (and any daemon that runs as `nobody`). This is the reason for a **UID per execution**.
 >
 > Colab and many CI containers run as root. A laptop user cannot switch UID at all. `ProcessSandbox.isolation_report()` tells which case applies.
 >
@@ -250,7 +250,7 @@ This table gives a compact view of the ladder:
 >
 > A simple `subprocess.run(timeout=)` kills only the direct child. It leaves a **grandchild** in the background, and init becomes the parent of that grandchild. Thus start the child in a new session. To stop it, kill the whole **process group** (`sandboxcore.executor._kill_group`). But the group is advisory: code can call `setsid()` and leave it. Thus only the UID (or a cgroup / PID namespace) finds that process after the run.
 >
-> The `preexec_fn` of `subprocess` can cause a deadlock in a child forked from a threaded parent. Thus the sandbox switches UID and session inside `Popen` (in C), and lets the interpreter of the child decrease its own limits (`executor._LAUNCHER`). If you read output with `communicate()`, the caller buffers all of it. Read the output as it streams. None of these controls touch the **network**.
+> The `preexec_fn` of `subprocess` can deadlock a child forked from a threaded parent. Thus the sandbox switches UID and session inside `Popen` (in C), and lets the interpreter of the child decrease its own limits (`executor._LAUNCHER`). If you read output with `communicate()`, the caller buffers all of it. Read the output as it streams. None of these controls touch the **network**.
 
 ---
 
@@ -307,9 +307,9 @@ There are two things that a budget is not. First, `file_mb` is a *single-file* c
 
 **The result (`ExecutionResult`).** The result contains these items:
 
-- Truncated stdout/stderr, with a `truncated` flag and the full byte counts in `usage`.
+- Truncated stdout/stderr (with a `truncated` flag and the full byte counts in `usage`).
 - An **exit reason** from a closed vocabulary (`ok`, `error`, `wall_timeout`, `cpu_time`, `memory`, `file_too_large`, `pids`, `open_files`, `output_limit`, `disk_limit`, `killed`, `denied`, `sandbox_error`, in `sandboxcore.contract.EXIT_REASONS`). The wrapper of the lab returns the same names. It also returns `harness_timeout` for its contrast executor, which has no budget on purpose.
-- **Where that reason came from** (`reason_source`). The parent enforced or measured it, the kernel sent a signal, or the exit status and stderr of the untrusted program itself said so.
+- **Where that reason came from** (`reason_source`). The parent enforced or measured it, the kernel delivered a signal, or the exit status and stderr of the untrusted program itself said so.
 - The `usage` (CPU and peak memory of the child through `wait4`, wall, disk, output bytes).
 - The `artifacts` (workspace files by digest).
 - Any `over_budget` fields.
@@ -344,11 +344,11 @@ turn_id, step, call_index, args)` uses the recipe of §5.4 of the scaling primer
 - It returns the stored result on a later delivery.
 - It refuses (`InFlight`) a delivery that arrives while the first run continues.
 
-Be precise about what `run_once` guarantees. In one process, a redelivery does not run the code again. But the guarantee has three limits:
+Be precise about what that guarantees. In one process, a redelivery does not run the code again. But the guarantee has three limits:
 
-- It is not durable. If a crash occurs between the run and the write of the result, the store forgets the claim. A real store writes the claim and the result with a conditional put.
+- It is not durable. If a crash occurs between the run and the store, the store forgets the claim. A real store writes the claim and the result with a conditional put.
 - It does not remove duplicates across replicas.
-- It does not make the side effects of the code *itself* idempotent. End to end, idempotent side effects need the key forwarded downstream, as the recipe of the scaling primer does. For example, the egress proxy can add an `Idempotency-Key` header to the upstream call.
+- It does not make the side effects of the code *itself* idempotent. End to end, that needs the key forwarded downstream, as the recipe of the scaling primer does. For example, the egress proxy can add an `Idempotency-Key` header to the upstream call.
 
 Notebook 03 has this worked example: two deliveries of the same keyed request give one execution.
 
@@ -372,7 +372,7 @@ The check must hold on **every hop**. Without that, a host on the allowlist can 
 
 This is the **gateway path** of the identity primer (§5), built one layer lower. The identity primer says that "end-user credentials are … decrypted only at Agent Gateway, which injects them into the egress request; the agent code never sees the raw credential". This is also the same host-side header-injection pattern that managed services such as E2B use. The audit log records the **name** of the injected header, never its value. The check in notebook 04 asserts that the secret never appears in an event.
 
-**Enforcement is the network, not the environment variable (or the tool call).** `HTTP_PROXY` only asks a well-behaved client to use the proxy. Malicious code opens a raw socket and ignores the variable. In the same way, a tool call that *declares* the hosts that its code needs (`ExecutionRequest.egress`) is the claim of the model itself. A check of that claim refuses a hijacked model that is sufficiently polite to name `attacker.example`, and nothing else.
+**Enforcement is the network, not the environment variable (or the tool call).** `HTTP_PROXY` only asks a well-behaved client to use the proxy. Malicious code opens a raw socket and ignores it. In the same way, a tool call that *declares* the hosts that its code needs (`ExecutionRequest.egress`) is the claim of the model itself. A check of that claim refuses a hijacked model that is sufficiently polite to name `attacker.example`, and nothing else.
 
 `sandboxcore.agent` shows both cases. The policy denies the declared exfiltration before the run. The undeclared exfiltration (a raw socket) leaks through a process sandbox, and the audit log records it as an ordinary `allow`.
 
@@ -380,7 +380,7 @@ The network layer is the thing that *forces* traffic through the proxy. One form
 
 **Two honest edges.** First, **DNS**. A default-deny egress policy "also blocks DNS traffic," and the repair that looks easy is to open port 53 again. But that repair brings back a **DNS-exfiltration** channel. The code hides data in query names, and the DNS of the cluster resolves those names for the sandbox.
 
-The safe shape keeps DNS closed. The sandbox reaches only the proxy, through `hostAliases` that point at the pinned ClusterIP of the proxy Service, with `dnsPolicy: None`. The **proxy** resolves names and reaches the allowlist.
+The safe shape keeps DNS closed. The sandbox reaches only the proxy (through `hostAliases` that point at the pinned ClusterIP of the proxy Service, with `dnsPolicy: None`). The **proxy** resolves names and reaches the allowlist.
 
 Second, **HTTPS**. A proxy cannot inject a credential into an opaque `CONNECT` TLS tunnel if it does not terminate TLS. Thus the example proxy of this topic relays **plain HTTP**, so that it can read and change headers, and it refuses `CONNECT`. A production proxy does one of two things. It terminates TLS with a CA that the sandbox trusts. Or it is itself the TLS client, and the sandbox speaks plain HTTP to it over loopback or a cluster address.
 
@@ -443,7 +443,7 @@ Thus the deadline of the rendered Job is a **startup allowance plus the wall bud
 
 At the container level, these fields are:
 
-- `allowPrivilegeEscalation: false`, whose default is **true** if the field is absent (pitfall 10),
+- `allowPrivilegeEscalation: false` (the default is **true** if the field is absent, pitfall 10),
 - `readOnlyRootFilesystem: true`,
 - `capabilities.drop: [ALL]`,
 - and the same seccomp profile.
@@ -470,7 +470,7 @@ The workspace is an `emptyDir` with a `sizeLimit`. An `emptyDir` with no size li
 
 **ValidatingAdmissionPolicy: reject sandbox pods that do not conform.** A `ValidatingAdmissionPolicy` + `ValidatingAdmissionPolicyBinding` (CEL) became stable in Kubernetes 1.30. It rejects any pod in the sandbox namespace that does not have the controls: `runtimeClassName == 'gvisor'`, `runAsNonRoot`, `allowPrivilegeEscalation: false`, and `capabilities.drop` that contains `ALL`.
 
-The binding must set `validationActions: [Deny]`. Deny + Warn together is invalid. Also, `resources: ["pods"]` does not cover `pods/exec` or `pods/ephemeralcontainers`. If you intend to control an exec-into-warm-pool path, list them. The admission policy is the deterministic backstop. Even if the runtime code is incorrect, the cluster refuses an unsafe pod.
+The binding must set `validationActions: [Deny]` (Deny + Warn together is invalid). Also, `resources: ["pods"]` does not cover `pods/exec` or `pods/ephemeralcontainers`. If you intend to control an exec-into-warm-pool path, list them. The admission policy is the deterministic backstop. Even if the runtime code is incorrect, the cluster refuses an unsafe pod.
 
 **GKE Sandbox and Autopilot.** A GKE **Sandbox** node pool runs pods with `runtimeClassName: gvisor` on gVisor. Autopilot also accepts `runtimeClassName: gvisor`. In Terraform, the field is `node_config.sandbox_config { type = "GVISOR" }`. The field is **case-sensitive**: `"GVISOR"`, not `"gvisor"`. The validator of the provider rejects the lowercase form, and this is a common trap.
 
@@ -504,7 +504,7 @@ Because of the jump from ~35 ms (a process) to ~45 s (a fresh pod on a busy clus
 
 - A **replace-after-use** warm pool (the safe default) gives each execution a ready sandbox. It destroys the sandbox after the run and warms a replacement in the background. If a warm sandbox is ready, the request never waits for a cold start. But each execution holds a slot for its run **and** for the warm-up of its replacement.
 - A **reuse** pool (one warm sandbox serves execution after execution) holds a slot for the run only. It is faster and lower-cost. But state carries between executions, and the one-shot default of §3 exists to prevent that.
-- **Cold-on-demand** uses no pool. It starts a sandbox per request when the request arrives, and puts the whole cold start on the path of each request.
+- **Cold-on-demand** (no pool: a sandbox per request, which starts when the request arrives) puts the whole cold start on the path of each request.
 
 ![On a time axis, one slot of each pool: a replace-after-use slot runs for 2 s and then warms a replacement for 3 s off the request path, a reuse slot runs execution after execution, and cold-on-demand puts the 3 s cold start on the path of every request.](figures/pool-slot-timeline.svg)
 
@@ -531,7 +531,7 @@ Erlang C assumes exponential hold times. A cold start of constant length varies 
 - replace-after-use at 31 slots: 14% wait, 0.06 s,
 - cold-on-demand at 31 slots: every request waits at least the 3 s cold start.
 
-**Where the arrival rate comes from.** It comes from the workload, through the arithmetic of §3.2 of the scaling primer: **27.1 tool calls/s at peak**. If a fifth of them are `run_code`, $\lambda \approx$ **5.4/s** (27.1 × 0.2 = 5.42). That rate gives a mean occupancy of 27.1 and **34** replace-after-use slots for $P(\text{wait}) \le 0.2$.
+**Where the arrival rate comes from.** It comes from the workload, through the arithmetic of §3.2 of the scaling primer: **27.1 tool calls/s at peak**. If a fifth of them are `run_code`, $\lambda \approx$ **5.4/s** (27.1 × 0.2 = 5.42). That gives a mean occupancy of 27.1 and **34** replace-after-use slots for $P(\text{wait}) \le 0.2$.
 
 **Cost per action.** `pool.cost_per_execution(t_exec, t_cold, node_cost_per_s)` = sandbox-seconds held × the per-second share of the node (+ any constant per-execution fee). Each one-shot sandbox (a pod per call, a replace-after-use pool, a pay-per-use service) uses a cold start that someone pays for. Here, that is **$t_{\text{exec}} + t_{\text{cold}} = 5$ sandbox-seconds**. A warm pool moves the cold start off the latency path, not off the bill. Only a reuse pool spreads the cold start over many executions (`reuse=True`: 2 s), and the price is state.
 
@@ -549,13 +549,13 @@ Code execution is the common case. The same design covers three neighbours.
 
 **Headless browsers.** A browser tool (navigate, click, screenshot, read) is a code sandbox with a browser inside. It has the same three "no"s:
 
-- an ephemeral **profile**, with no saved cookies or logins that carry over between sessions or tenants,
+- an ephemeral **profile** (no saved cookies or logins that carry over between sessions or tenants),
 - **downloads** that stay in the workspace,
 - and **egress** through the same proxy with an allowlist.
 
-A browser that can reach any URL is an engine for SSRF and exfiltration. Screenshot-to-action loops add an untrusted-content surface. In these loops, the model sees a screenshot and sends a click. The *page* is attacker-controlled. Thus its text and any on-page instructions are data, and the agent screens them like any tool result.
+A browser that can reach any URL is an engine for SSRF and exfiltration. Screenshot-to-action loops (the model sees a screenshot and emits a click) add an untrusted-content surface. The *page* is attacker-controlled. Thus its text and any on-page instructions are data, and the agent screens them like any tool result.
 
-**Computer-use.** This is the same design, one level higher: a whole desktop that the model drives. It needs a full VM or a strong container, because the process tree of the desktop is large. It also needs an ephemeral disk, egress control and an action log that a person can see. You must be able to see what the model actually clicked, not the click that it announced.
+**Computer-use.** This is the same design, one level higher: a whole desktop that the model drives. It needs a full VM or a strong container, because the process tree of the desktop is large. It also needs an ephemeral disk, egress control and an action log that a person can see. You must be able to see what it actually clicked, not the click that it announced.
 
 **GPU sandboxes.** An agent that starts a GPU job (fine-tuning, a heavy eval) runs the same contract plus the layer of GPU scheduling. The pod requests `nvidia.com/gpu` (an integer, requests == limits). It has a toleration for the GPU taint, and it selects the accelerator. For isolation, the `--nvproxy` of gVisor forwards NVIDIA `ioctl`s to the host driver with almost no overhead (supported on T4/L4/A100/H100).
 
@@ -575,7 +575,7 @@ Each execution must leave a record, as each tool call does.
 
 The event uses the same field names as `agentsec.audit.AuditEvent` in the identity lab. It is a standalone copy, so that the core stays dependency-free. It calculates `args_digest` in the same way (sha256 of canonical JSON, first 16 hex).
 
-It adds the fields that a sandbox needs: **`budgets_used`** (CPU, wall, peak memory, disk, output), **`exit_reason`** with its **`exit_reason_source`**, and **`policy_decision`**. The executor layer writes the event. Thus the event exists even when the code crashes or the sandbox kills it. The deny path and the kill path both leave evidence (`SandboxAgent._audit`).
+It adds the fields that a sandbox needs: **`budgets_used`** (CPU, wall, peak memory, disk, output), **`exit_reason`** with its **`exit_reason_source`**, and **`policy_decision`**. The executor layer emits the event. Thus the event exists even when the code crashes or the sandbox kills it. The deny path and the kill path both leave evidence (`SandboxAgent._audit`).
 
 **Metrics.** The metrics are p50/p95 **startup** and **run** time by isolation level, and the **exit-reason histogram** (`AuditLog.counts()`). In the histogram:
 
@@ -583,11 +583,11 @@ It adds the fields that a sandbox needs: **`budgets_used`** (CPU, wall, peak mem
 - sustained `memory`/`cpu_time` is a miner or a runaway loop,
 - a spike in `pids` is a fork bomb.
 
-Count only the reasons that come from the parent or from a kernel signal. `counts(trusted_only=True)` removes the reasons that the sandbox read from the stderr of the program itself. A hostile program can forge those reasons to hide abuse or to put the blame on a different cause.
+Count only the reasons that the sandbox observed. `counts(trusted_only=True)` removes the reasons that the sandbox read from the stderr of the program itself. A hostile program can forge those reasons to hide abuse or to put the blame on a different cause.
 
 Egress attempts need care. A spike of `denied` *declared* egress is an injection that announced itself. But a competent injection does not declare anything. Its attempts show only at the points that enforce the network, as proxy 403s and NetworkPolicy drops. Thus collect those logs too.
 
-**Detection and response.** The controls of §1–§5 *bound* abuse, and the audit trail *finds* it and drives the response. You can attribute each execution to a principal, and each execution has an argument hash. Thus you can trace an incident to the content that caused it (provenance tags). The response is the kill switch of the identity primer. The kill switch is a policy change (deny the principal, tighten the egress allowlist) that takes effect without a redeploy.
+**Detection and response.** The controls of §1–§5 *bound* abuse, and the audit trail *detects* it and drives the response. You can attribute each execution to a principal, and each execution has an argument hash. Thus you can trace an incident to the content that caused it (provenance tags). The response is the kill switch of the identity primer. That is a policy change (deny the principal, tighten the egress allowlist) that takes effect without a redeploy.
 
 The admission control of §5.3 of the scaling primer also belongs here. Under load, shed `run_code` first, because it is the action with the highest cost.
 
@@ -597,9 +597,9 @@ The admission control of §5.3 of the scaling primer also belongs here. Under lo
 
 GCP is one target, never a prerequisite. You can learn every concept at T0.
 
-**Laptop (T0).** `sandboxcore.ProcessSandbox` runs the whole conceptual model: clean env, rlimits, wall-clock kill, streamed output and the policy engine. It also runs the egress proxy, the pool arithmetic and the rendered manifests (validated offline). As a non-root user, it cannot switch UID and says so, but Colab (root) gets the per-execution UID. Where Docker is available, the `docker.py` of the lab adds a hardened `docker run`, and `--runtime=runsc` if gVisor is present. This is where you learn everything.
+**Laptop (T0).** `sandboxcore.ProcessSandbox` runs the whole conceptual model: clean env, rlimits, wall-clock kill, streamed output and the policy engine. It also runs the egress proxy, the pool arithmetic and the rendered manifests (validated offline). As a non-root user, it cannot switch UID and says so, but Colab (root) gets the per-execution UID. Where Docker is available, the `docker.py` of the lab adds a hardened `docker run` (and `--runtime=runsc` if gVisor is present). This is where you learn everything.
 
-**kind (T0 + Docker).** A kind cluster runs the real scheduler, Pod Security, NetworkPolicy and the ValidatingAdmissionPolicy. For NetworkPolicy, kindnetd at kind v0.33.0 enforces standard policy but **fails open**: a broken policy controller means no policies, silently. Thus the must-fail egress step of the lab examines the enforcement on your cluster. If that step fails, create the cluster with `networking.disableDefaultCNI: true`. Then install Calico.
+**kind (T0 + Docker).** A kind cluster runs the real scheduler, Pod Security, NetworkPolicy and the ValidatingAdmissionPolicy. For NetworkPolicy, kindnetd at kind v0.33.0 enforces standard policy but **fails open**: a broken policy controller means no policies, silently. Thus the must-fail egress step of the lab examines it on your cluster. If that step fails, create the cluster with `networking.disableDefaultCNI: true`. Then install Calico.
 
 The `deploy/kind` of the lab makes the restricted namespace, the default-deny NetworkPolicy, the egress proxy, the quota and the runner Job. **A kind cluster cannot run gVisor**. Thus you examine the runtime-class path here, but you do not run it.
 
@@ -608,7 +608,7 @@ The `deploy/kind` of the lab makes the restricted namespace, the default-deny Ne
 **GCP (T3).** The Terraform of the lab builds a zonal GKE Standard cluster with these parts:
 
 - a **GKE Sandbox (gVisor)** node pool (`sandbox_config { type = "GVISOR" }`, tainted, Spot, autoscale-from-zero),
-- no Cloud NAT, thus no *internet* egress by default, but Google APIs stay reachable over Private Google Access until the NetworkPolicy closes them (§5),
+- no Cloud NAT, thus no *internet* egress by default (Google APIs stay reachable over Private Google Access until the NetworkPolicy closes them, §5),
 - Artifact Registry for the sandbox image,
 - and managed Prometheus.
 
@@ -645,7 +645,7 @@ For prices and availability, see [`COMPUTE.md`](../../COMPUTE.md).
 
 "Sandboxes have a cold start. Thus I calculate the size of a replace-after-use warm pool with Erlang C. The input is the arrival rate of the workload times the sum of the run time and the warm-up time. Little's law gives only the floor. Cost per action is sandbox-seconds, cold start included, times the node price.
 
-"Each execution leaves one audit event with the principal, the policy decision, the budgets used and the exit reason. I find abuse in the exit-reason histogram. Under load, I shed code execution first."
+"Each execution leaves one audit event with the principal, the policy decision, the budgets used and the exit reason. I detect abuse from the exit-reason histogram. Under load, I shed code execution first."
 
 **Drill questions**
 
@@ -653,7 +653,7 @@ For prices and availability, see [`COMPUTE.md`](../../COMPUTE.md).
 
 2. *A colleague says "we sandbox with CPU, memory and PID limits, so we're safe." What is absent?* The network and the kernel boundary are absent. For the network, rlimits never touch sockets, and egress needs deny-by-default + a proxy or a netns. For the kernel, a process sandbox shares the host kernel, and a kernel exploit escapes it. Resource limits bound abuse, not exfiltration or escape.
 
-3. *You set a 2-second CPU limit, and code still hangs for a minute. Why, and what do you add?* The code sleeps or waits on I/O and uses no CPU, so it never reaches `RLIMIT_CPU`. Add a wall-clock timeout that kills the whole process group, because a simple `subprocess` timeout leaves grandchildren alive.
+3. *You set a 2-second CPU limit, and code still hangs for a minute. Why, and what do you add?* The code sleeps or waits on I/O and uses no CPU, so `RLIMIT_CPU` never activates. Add a wall-clock timeout that kills the whole process group, because a simple `subprocess` timeout leaves grandchildren alive.
 
 4. *When sandboxed code calls an API on the allowlist, where does the credential live? How does the code get it?* It lives only in the egress proxy. The code makes a plain request to the proxy. The proxy examines the allowlist and injects the credential outbound. The code never sets or reads the credential. This is the gateway path of the identity primer.
 
@@ -685,7 +685,7 @@ For prices and availability, see [`COMPUTE.md`](../../COMPUTE.md).
 | ValidatingAdmissionPolicy | CEL-based admission control (stable 1.30) that rejects pods that do not conform. It is the deterministic backstop. |
 | Little's law | in-flight = arrival rate × time held. It gives the *mean* occupancy of a pool (busy + warming), the floor below any size that works. |
 | Erlang C | The M/M/c formula for the fraction of requests that wait. It turns a wait target into a slot count. |
-| Replace-after-use / reuse pool | A warm pool whose sandboxes run one execution, and then the pool replaces them. No state carries over, and each execution pays a warm-up. The other kind is a pool whose sandboxes serve many executions (lower-cost, stateful). |
+| Replace-after-use / reuse pool | A warm pool whose sandboxes run one execution, and then the pool replaces them (no state carries over, and each execution pays a warm-up). The other kind is a pool whose sandboxes serve many executions (lower-cost, stateful). |
 | Per-execution UID | A fresh unprivileged UID for each run. It makes `RLIMIT_NPROC` real and keeps your files unreadable. It also lets the sandbox find and kill every process that the run left behind. |
 | Cold start | The time from the need for a sandbox to the start of the code. It is ms for a process, ~125 ms for a microVM and tens of seconds for a fresh pod. |
 

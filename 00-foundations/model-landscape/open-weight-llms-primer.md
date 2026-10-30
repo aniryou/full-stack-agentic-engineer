@@ -8,11 +8,11 @@
 
 - **"Open weight" means the trained parameters are downloadable and runnable on your own hardware.** It does not mean that the training data, the code or the recipe are public. Only a small number of capable models are open in that more complete sense.
 - **Chinese labs still set the open frontier**: Moonshot (Kimi K3), DeepSeek (V4), Alibaba (Qwen 3.8), Z.ai (GLM-5.2) and MiniMax (M3). But 2026 brought a real return of Western labs to open weights. Google moved Gemma 4 to Apache 2.0, and NVIDIA released Nemotron 3 Ultra with data and recipes. Thinking Machines released Inkling, and Meta came back with Muse Glimmer. Mistral has a new open family in early access.
-- **The capability gap is approximately one release cycle.** Epoch AI measures approximately four months, or ~8 points on its capability index, for 2026 to date. On Artificial Analysis, the top closed model (Claude Opus 5, 63) is six points ahead of the top open model (Kimi K3, ~57).
+- **The capability gap is roughly one release cycle.** Epoch AI measures approximately four months, or ~8 points on its capability index, for 2026 to date. On Artificial Analysis, the top closed model (Claude Opus 5, 63) is six points ahead of the top open model (Kimi K3, ~57).
 - **The gap is jagged, not uniform.** Open models are equal or almost equal to closed models on agentic coding and computer use. They are behind on hard knowledge reasoning (HLE, GPQA, ARC-AGI).
 - **August 2026 broke two patterns.** Alibaba opened a Max-class flagship for the first time (Qwen3.8-2.4T-A95B). Meta made a commitment to open Muse Spark 1.2. The pattern "closed frontier tier, open tier one generation behind" is now not the only pattern.
 - **The most consequential tier for practitioners is 27–35B dense.** Qwen3.8-27B gets 52 on Artificial Analysis, in a checkpoint that runs on one 24 GB GPU.
-- **Enterprise adoption is paradoxical.** Menlo Ventures measured the share of open-source models in enterprise LLM usage in 2025. That share decreased from 19% to 11%, but the capability gap became smaller at the same time. The constraint is governance, TCO and operations, not model quality.
+- **Enterprise adoption is paradoxical.** Menlo Ventures measured the share of open-source models in enterprise LLM usage in 2025. That share decreased from 19% to 11%, although the capability gap became smaller at the same time. The constraint is governance, TCO and operations, not model quality.
 - **Licenses become more different again.** Apache 2.0 and MIT are still the most common licenses. But several 2026 flagships have custom licenses with revenue thresholds (Qwen3.8-Max, MiniMax M3, Kimi K3). Read the actual license file.
 - **Policy has split.** The enforcement powers of the EU AI Act became active on 2 August 2026. On 4 August 2026, the US excluded open-weight models from its voluntary frontier test program.
 
@@ -28,7 +28,7 @@ Openness is a spectrum. These are the useful distinctions:
 | Open weights, conditional | Weights under a custom license with scale, revenue or field-of-use conditions | Qwen3.8-Max License, MiniMax Community License, Modified MIT, Llama Community License | Qwen3.8-2.4T-A95B, MiniMax M3, Kimi K3, Llama 4 |
 | Open weights, permissive | Weights under an OSI-approved license | Apache 2.0, MIT | DeepSeek V4, GLM-5.2, Qwen3.8-27B, Gemma 4, gpt-oss, Mistral Large 3, Inkling, Muse Glimmer |
 | Open source (per OSI's definition) | Weights, code and sufficient data information to make almost the same model again | Permissive license and data disclosure | Few frontier-class models meet this definition |
-| Fully open | Weights, data, code, checkpoints and recipe | Apache 2.0 or a license like it | AI2 OLMo 3, NVIDIA Nemotron 3, Swiss Apertus, HF SmolLM |
+| Fully open | Weights, data, code, checkpoints and recipe | Apache 2.0 or a similar license | AI2 OLMo 3, NVIDIA Nemotron 3, Swiss Apertus, HF SmolLM |
 
 These points are important in practice:
 
@@ -71,7 +71,7 @@ The closed reference points for calibration are Claude Opus 5 (AA Intelligence I
 **Innovations that matter:**
 
 - **Kimi Delta Attention (KDA)**: a linear attention with a state of constant size and a forget gate, from the *Kimi Linear* line of work. Each block of K3 has three KDA layers and one Gated MLA layer. The low-cost linear mix does most of the sequence work. The periodic full-capacity attention keeps the global interaction. K3 is the first and largest public model built mainly on linear attention. It is the strongest signal yet that softmax attention will not stay universal.
-- **Attention Residuals (AttnRes)**: each module can select and retrieve representations from the embedding, its own block and all the blocks before it. It does not only read the layer immediately before it. AttnRes makes the information path shorter in deep networks.
+- **Attention Residuals (AttnRes)**: each module can select and retrieve representations from the embedding, its own block and all the blocks before it. It does not only read the layer immediately before it. This makes the information path shorter in deep networks.
 - **Stable LatentMoE**: 896 routed experts with 16 active (~56x sparsity, up from K2's 384/8). The shared experts run at the full hidden width. The routed experts operate in a narrower latent space: a down-projection occurs before the dispatch, and an up-projection occurs after the aggregation. Three things make the design stable: the SiTU-GLU activation, RMSNorm on the routed experts and Quantile Balancing.
 - **Per-head Muon** is the optimizer. K3 also has **quantization-aware training from the SFT stage** (not post-hoc), and Moonshot releases the checkpoint in MXFP4. Thus the quantized checkpoint loses much less quality than a post-training quant does.
 - The net effect is approximately **2.5x the scaling efficiency of K2**. Moonshot converts compute into capability, and does not only add parameters.
@@ -94,19 +94,19 @@ flowchart LR
 
 **Current:** V4-Pro (1.6T / ~49B active) and V4-Flash (284B / ~13B active). DeepSeek released both on 24 Apr 2026 under **MIT**. Both have 1M context with 384K max output, and both are **text-only**. V4-Pro reached GA on 13 Aug 2026 (checkpoint V4-Pro-0813). The technical report is arXiv:2606.19348.
 
-**Position:** DeepSeek is the price-performance and efficiency benchmark for the whole field. Reports put V4-Pro-Max at 80.6% SWE-bench Verified, the top open-weight entry. They also give it a Codeforces rating of 3206. That rating makes it the first open model that equals a closed system in competitive code contests.
+**Position:** DeepSeek is the price-performance and efficiency benchmark for the whole field. Reports put V4-Pro-Max at 80.6% SWE-bench Verified, the top open-weight entry. They also give it a Codeforces rating of 3206, which makes it the first open model that equals a closed system in competitive code contests.
 
 **Innovations that matter:**
 
-- **Manifold-Constrained Hyper-Connections (mHC)** (arXiv:2512.24880, co-authored by CEO Liang Wenfeng). Hyper-connections make the residual stream wider, with more than one parallel stream. But if the matrices that mix the streams have no constraint, they destroy the training stability. DeepSeek measured signal amplification above 3000x and catastrophic divergence at 27B. The mHC design uses Sinkhorn–Knopp to project those matrices onto the Birkhoff polytope, and this projection holds the amplification to ~1.6x for ~6.7% training overhead. The mHC design is the single most-cited architectural idea from the open ecosystem this year.
+- **Manifold-Constrained Hyper-Connections (mHC)** (arXiv:2512.24880, co-authored by CEO Liang Wenfeng). Hyper-connections make the residual stream wider, with multiple parallel streams. But if the matrices that mix the streams have no constraint, they destroy the training stability. DeepSeek measured signal amplification above 3000x and catastrophic divergence at 27B. The mHC design uses Sinkhorn–Knopp to project those matrices onto the Birkhoff polytope, and this holds the amplification to ~1.6x for ~6.7% training overhead. The mHC design is the single most-cited architectural idea from the open ecosystem this year.
 - **Hybrid attention: Compressed Sparse Attention (CSA) + Heavily Compressed Attention (HCA)**. It replaces the Multi-head Latent Attention of V3.2. At 1M tokens, V4-Pro uses approximately **27% of the single-token inference FLOPs and 10% of the KV cache** of V3.2. That is the number that drives the pricing.
 - **Muon optimizer**. DeepSeek used 32T training tokens. It trained separate domain specialists and then merged them.
-- **Engram** (conditional memory through scalable lookup): many people expected it in V4, but it is **not** in the final architecture. This fact is a useful correction to much of the early coverage.
+- **Engram** (conditional memory through scalable lookup): many people expected it in V4, but it is **not** in the final architecture. This is a useful correction to much of the early coverage.
 - Open kernels: DeepGEMM / MegaMoE. They give a fine-grained overlap of communication and computation in expert-parallel work.
 
 **Economics:** V4-Pro costs ~$0.435 in / $0.87 out per million, and V4-Flash costs ~$0.14 / $0.28. That is approximately 30x below closed-frontier output pricing. V4-Flash is the practical self-host target. V4-Pro fits a single 8-GPU B200 node. But to serve it at competitive latency, you must have cluster economics.
 
-**Operational note:** the legacy `deepseek-chat` and `deepseek-reasoner` aliases went out of service on 24 Jul 2026. Also, most serverless hosts quantize the V4 activations to FP8. This quantization moves the outputs away from the reference weights. If reproducibility is important to you, pin the precision of your host.
+**Operational note:** the legacy `deepseek-chat` and `deepseek-reasoner` aliases went out of service on 24 Jul 2026. Also, most serverless hosts quantize the V4 activations to FP8. This moves the outputs away from the reference weights. If reproducibility is important to you, pin the precision of your host.
 
 ### 4.3 Alibaba — Qwen (China)
 
@@ -117,13 +117,13 @@ flowchart LR
 - **Qwen3.8-27B** (14 Aug 2026): a 27.78B dense vision-language model under **Apache 2.0**. It has 64 layers and a hidden dim of 5120. Its hybrid layout has 48 Gated DeltaNet linear-attention layers and 16 full-attention layers. It also has multi-token prediction and a `reasoning_effort` dial (xhigh default / medium / low). It has a native 262,144-token context, and YaRN can extend it to ~1M. It takes text, image and video input.
 - These are still current: Qwen3.6-27B and Qwen3.6-35B-A3B, Qwen 3.5-397B-A17B, and the full 0.6B–14B ladder.
 
-**Position and the reversal:** until the end of the 3.7 generation, Alibaba kept the frontier closed (3.7-Max, 3.7-Plus, a robotics VLA). It kept the open tier one generation behind. The 3.8 generation reversed that pattern no more than ten days after its launch. But an asymmetry is still there. The open 2.4T checkpoint is **text-only, with thinking forced on and native 262K context**. The hosted API keeps vision, video, optional thinking and a default 1M window.
+**Position and the reversal:** until the end of the 3.7 generation, Alibaba kept the frontier closed (3.7-Max, 3.7-Plus, a robotics VLA). It kept the open tier one generation behind. The 3.8 generation reversed that within ten days of launch. But an asymmetry is still there. The open 2.4T checkpoint is **text-only, with thinking forced on and native 262K context**. The hosted API keeps vision, video, optional thinking and a default 1M window.
 
-**Why Qwen3.8-27B is the important one:** it gets **52 on the Artificial Analysis Intelligence Index**. That is **up 14 points over Qwen3.6-27B on an architecturally identical model**. All of that delta comes from post-training. This post-training result shows most clearly this year that the headroom that still exists is in RL and data recipes, not in parameter count. Qwen3.8-27B runs on ~17 GB at 4-bit (an 18 GB Ollama download) on a single 3090 or 4090. Community members who adjusted the setup report ~114 tok/s for one user on a power-limited 3090, and ~1,000 tok/s aggregate across 64 parallel streams.
+**Why Qwen3.8-27B is the important one:** it gets **52 on the Artificial Analysis Intelligence Index**. That is **up 14 points over Qwen3.6-27B on an architecturally identical model**. All of that delta comes from post-training. This post-training result shows most clearly this year that the headroom that still exists is in RL and data recipes, not in parameter count. It runs on ~17 GB at 4-bit (an 18 GB Ollama download) on a single 3090 or 4090. Community members who adjusted the setup report ~114 tok/s for one user on a power-limited 3090, and ~1,000 tok/s aggregate across 64 parallel streams.
 
 **Benchmarks, with the asterisk:** Alibaba's own card reports SWE-bench Pro 61.7, Terminal-Bench 2.1 73.0 (up from 63.4) and OSWorld-Verified 84.3 (up from 63.9). It also reports LiveCodeBench v6 90.3 and IFBench 79.5. On the card, the model beats Claude Opus 4.6 Max on 16 of 24 rows. It loses on GPQA Diamond, Terminal-Bench and Humanity's Last Exam (30.8 against 40.0). Several of those benchmarks are in-house or "corrected" versions.
 
-Independent results are now available. Qwen3.8-27B is #1 open-weight on Harvey's Legal Agent benchmark and #9 of all models on Code Arena's WebDev leaderboard. It is also #1 open-weight (#7 of all models) on Arena.ai's Image-to-WebDev board.
+Independent results are now available. Qwen3.8-27B is #1 open-weight on Harvey's Legal Agent benchmark and #9 overall on Code Arena's WebDev leaderboard. It is also #1 open-weight (#7 overall) on Arena.ai's Image-to-WebDev board.
 
 **Known quirk:** at the default `xhigh` reasoning effort, the model thinks far too much about simple prompts. Select the level of the dial yourself.
 
@@ -133,13 +133,13 @@ Independent results are now available. Qwen3.8-27B is #1 open-weight on Harvey's
 
 **Current:** GLM-5.2 (13 Jun 2026), a ~744–753B MoE under **MIT**. It is text-only, with 1M context and explicit reasoning-effort presets.
 
-**Position:** GLM-5.2 is the pragmatic default when you host a model yourself. It does not have the top score. But it has an unambiguous MIT license, the most mature quantization tools of the Chinese flagships, and heavy routing traffic in practice. This combination makes it the model that teams actually run. One gateway reported that GLM-5.2 carried ~4.5x the traffic of Muse Spark 1.2 over the same week, but Muse Spark 1.2 has a higher score.
+**Position:** GLM-5.2 is the pragmatic default when you host a model yourself. It does not have the top score. But it has an unambiguous MIT license, the most mature quantization tools of the Chinese flagships, and heavy routing traffic in practice. This combination makes it the model that teams actually run. One gateway reported that GLM-5.2 carried ~4.5x the traffic of Muse Spark 1.2 over the same week, although Muse Spark 1.2 has a higher score.
 
-**What changed from 5.1:** many people judged GLM-5.1 architecturally weak. In a single generation, 5.2 moved to Tier A on independent code benchmarks. It has large gains on code tasks, on agentic tasks and on long-horizon persistence. It is also an outlier in math and reasoning, relative to its position on the full index. Nous Research added GLM-5.2 to Hermes Agent a few days after its release.
+**What changed from 5.1:** many people judged GLM-5.1 architecturally weak. In a single generation, 5.2 moved to Tier A on independent code benchmarks. It has large gains on code tasks, on agentic tasks and on long-horizon persistence. It is also an outlier in math and reasoning, relative to its position on the overall index. Nous Research added it to Hermes Agent within days of release.
 
-**Numbers:** SWE-bench Pro 62.1, Terminal-Bench 2.1 81.0 (vendor). Artificial Analysis v4.1.1 gives it 53. For a short time, that was the highest open-weights score on that board. On the LLM Stats open leaderboard, its total score is 46.8. On hosted endpoints, it costs approximately $1.40 / $4.40 per million.
+**Numbers:** SWE-bench Pro 62.1, Terminal-Bench 2.1 81.0 (vendor). Artificial Analysis v4.1.1 gives it 53. For a short time, that was the highest open-weights score on that board. On the LLM Stats open leaderboard, it has 46.8 overall. On hosted endpoints, it costs approximately $1.40 / $4.40 per million.
 
-**Corporate context:** Zhipu was the first Chinese AI lab to list publicly, in Hong Kong in January 2026. From that time, its market cap increased to record levels.
+**Corporate context:** Zhipu was the first Chinese AI lab to list publicly, in Hong Kong in January 2026. Since then, its market cap increased to record levels.
 
 ### 4.5 MiniMax (China)
 
@@ -147,7 +147,7 @@ Independent results are now available. Qwen3.8-27B is #1 open-weight on Harvey's
 
 **Position:** M3 is the only open-weight model that has both frontier agentic coding (80.5% SWE-bench Verified, vendor-reported) and native multimodality. For UI automation and screenshot-to-code at low cost, no other open model is equal to it. It costs $0.30 / $1.20 per million at MiniMax's "permanent 50% off" rate.
 
-**Innovation that matters: MiniMax Sparse Attention (MSA)** (arXiv:2606.13392). MSA is a GQA backbone with block-level selection over **real, uncompressed** key-values, not over the compressed latent state that MLA uses. MiniMax argues that MSA partitions the KV more precisely than DSA or MoBA, and that it does not have MLA's trade-off between compression and precision. The reported effect at 1M context, against M2, is ~15.6x faster decoding and ~9.7x faster prefill. The reported per-token compute at 1M is approximately 1/20th of M2's. MiniMax publishes the MSA kernels separately, under MIT.
+**Innovation that matters: MiniMax Sparse Attention (MSA)** (arXiv:2606.13392). MSA is a GQA backbone with block-level selection over **real, uncompressed** key-values, not over the compressed latent state that MLA uses. MiniMax argues that this partitions the KV more precisely than DSA or MoBA, and that it does not have MLA's trade-off between compression and precision. The reported effect at 1M context, against M2, is ~15.6x faster decoding and ~9.7x faster prefill. The reported per-token compute at 1M is approximately 1/20th of M2's. MiniMax publishes the MSA kernels separately, under MIT.
 
 **An important license correction:** M3 is **not** MIT. Its license is the custom **MiniMax Community License** (`license: other`, `license_name: minimax-community`). For commercial use, you must show "Built with MiniMax M3" prominently. **An organization that earns over $20M USD annually** from products built on M3 **must get separate prior written authorization from MiniMax**. The permissive MIT license on the MSA kernel repository does not apply to the weights. This is a real compliance gate, not a formality.
 
@@ -155,11 +155,11 @@ Independent results are now available. Qwen3.8-27B is #1 open-weight on Harvey's
 
 **Current lineup:** Mistral Large 3 (2 Dec 2025) is a 675B total / 41B active MoE under Apache 2.0. It is still the largest Apache-licensed MoE from a Western lab.
 
-Mistral Small 4 (16 Mar 2026) puts reasoning (Magistral), vision (Pixtral) and code (Devstral) into one model. It is a 119B-total, ~6.5B-active MoE under Apache 2.0 (Hugging Face `mistralai/Mistral-Small-4-119B-2603`; verify, 2026-09). "Small" is now the name of the tier, not the footprint. Its FP8 weights are about 120 GB. That size needs two H100s or one H200. By contrast, Small 3.x was a 24B dense model that fits one H100.
+Mistral Small 4 (16 Mar 2026) puts reasoning (Magistral), vision (Pixtral) and code (Devstral) into one model. It is a 119B-total, ~6.5B-active MoE under Apache 2.0 (Hugging Face `mistralai/Mistral-Small-4-119B-2603`; verify, 2026-09). "Small" is now the name of the tier, not the footprint. Its FP8 weights are about 120 GB, which needs two H100s or one H200. By contrast, Small 3.x was a 24B dense model that fits one H100.
 
 Ministral 3 comes in 3B / 8B / 14B, all Apache 2.0. The 14B reasoning variant gets 85% on AIME 2025. There are also specialists: Devstral 2 (code), Voxtral (audio/TTS), Leanstral 1.5 (Lean 4 formal proofs), Mistral OCR and Shieldstral. Shieldstral is a 3B open-weights multimodal safety classifier. It accepts plain-language policies at inference time and runs on a single 16 GB GPU. Mistral Medium 3.5 is closed.
 
-**What comes next:** Mensch confirmed a new open-weight family, in **early access from July 2026**. The family is described as a "fat but sparse" MoE. A broader release is expected. The parameter count, the benchmarks and the license terms are still not public. Separately, the **first Nemotron Coalition model is a base model co-developed by Mistral and NVIDIA on DGX Cloud**. **The plan is to release it as open source on completion, and to make it the foundation of Nemotron 4.**
+**What comes next:** Mensch confirmed a new open-weight family, in **early access since July 2026**. The family is described as a "fat but sparse" MoE. A broader release is expected. The parameter count, the benchmarks and the license terms are still not public. Separately, the **first Nemotron Coalition model is a base model co-developed by Mistral and NVIDIA on DGX Cloud**. **The plan is to release it as open source on completion, and to make it the foundation of Nemotron 4.**
 
 **Position:** Mistral is the European open-weight option. It is the only European frontier lab that releases open weights at scale. It is also a signatory to the EU GPAI Code of Practice. This is important when a deployment is subject to EU rules, or when you must host the weights in a specific jurisdiction.
 
@@ -171,7 +171,7 @@ Ministral 3 comes in 3B / 8B / 14B, all Apache 2.0. The 14B reasoning variant ge
 
 **Current:** Gemma 4 (2 Apr 2026) comes in five sizes. The sizes are E2B (2.3B effective), E4B (4.5B effective), a 12B unified multimodal, a 26B MoE with ~4B active, and a 31B dense. Google built it on Gemini 3 research. The small variants have 128K context, and the larger variants have 256K. All variants have vision, and E2B and E4B also have audio. It covers 140+ languages.
 
-**The headline is the license, not the benchmarks.** Gemma 4 is the first Gemmaverse release under the **OSI-approved Apache 2.0** license. It replaces the custom Gemma Terms of Use, with their updatable prohibited-use policy and flow-down obligations. There is no compete clause: you can build a product that competes directly with Google's own. If you examined an earlier Gemma and rejected it for legal reasons, examine this version again.
+**The headline is the license, not the benchmarks.** Gemma 4 is the first Gemmaverse release under the **OSI-approved Apache 2.0** license. It replaces the custom Gemma Terms of Use, with their updatable prohibited-use policy and flow-down obligations. There is no compete clause: you can build a product that competes directly with Google's own. If you evaluated an earlier Gemma and rejected it for legal reasons, examine this version again.
 
 **Capability:** at launch, the 31B dense was #3 and the 26B MoE was #6 among open models on the Arena text leaderboard. The 31B had ~1452 Elo. On intelligence-per-parameter, it did better than models up to 20x its size.
 
@@ -190,7 +190,7 @@ Muse Spark 1.2 gets **57 on Artificial Analysis**. In index v4.1.1, its score we
 - a call for lower US barriers on open-source AI
 - a commitment to **open the weights of Muse Spark 1.2 itself**
 
-**Status as of late August: Muse Spark 1.2 weights have not shipped.** On 10 August, Wang said "coming soon". There is no repository, no license file and no date. If the release occurs, Muse Spark 1.2 will be the strongest US open-weight model by a large margin. It will also be a real rival to the Chinese tier. Until then, the release is a promise.
+**Status as of late August: Muse Spark 1.2 weights have not shipped.** On 10 August, Wang said "coming soon". There is no repository, no license file and no date. If the release occurs, Muse Spark 1.2 will be the strongest US open-weight model by a large margin. It will also be a real rival to the Chinese tier. Until then, it is a promise.
 
 **Also know this:** there is **no Llama 5**. Meta's model site now shows Muse first and lists Llama 4 after it. Third-party forecasts move Llama 5 to 2027. Llama 4 Maverick is still the last Llama flagship, and much of the "Llama 5 spec sheet" content in search results is fiction. Meta's contributor API tier ($0.10 / $0.20) gives the discount in exchange for permission to train on your prompts and completions. Read those terms before you send private code through it.
 
@@ -203,7 +203,7 @@ Muse Spark 1.2 gets **57 on Artificial Analysis**. In index v4.1.1, its score we
 **Innovations that matter:**
 
 - **Hybrid Mamba-2 + Transformer MoE.** Mamba-2 state-space layers give linear-time complexity over the sequence length. Thus a 1M-token context is economical for long-running agents, not only possible.
-- **LatentMoE**: it compresses the tokens into a low-rank latent space before the routing. This compression permits approximately 4x as many expert specialists at the same inference cost.
+- **LatentMoE**: it compresses the tokens into a low-rank latent space before the routing. This permits approximately 4x as many expert specialists at the same inference cost.
 - **Multi-Token Prediction**: the model predicts several future tokens in each forward pass. This improves the coherence of the chain of thought. It also gives built-in speculative decoding at serve time.
 - **NVFP4 four-bit pretraining** on Blackwell. NVIDIA claims ~5x throughput efficiency and ~30% cost reduction against the best open alternatives.
 
@@ -237,7 +237,7 @@ But it loses badly on factuality (SimpleQA Verified 20.6 against 43.9, AA-Omnisc
 
 **Safety posture, unusually explicit for an open release:** the lab trained Inkling to an internal safety spec across modalities, with commissioned external testers. It did internal and external evaluations for CBRN, cyber and loss-of-control. It gave attention to sycophancy, vulnerable users and manipulation. The lab claims the strongest built-in safeguards of any open-weights model that it compared on FORTRESS. It also trained Inkling to answer directly on censorship-prone topics. Cognition's Propaganda and Censorship Eval found strong censorship non-compliance, a deliberate contrast with Chinese-origin models.
 
-**Deployment:** at BF16, Inkling-Small must have ≥600 GB aggregated VRAM (4x B300 or 8x H200). The NVFP4 checkpoint decreases the floor to 180 GB. For Inkling itself, almost 2 TB is necessary. The models are available through Tinker, Databricks, Together, Fireworks, Modal, Baseten, and a free rate-limited OpenRouter endpoint.
+**Deployment:** at BF16, Inkling-Small must have ≥600 GB aggregated VRAM (4x B300 or 8x H200). The NVFP4 checkpoint decreases the floor to 180 GB. For Inkling itself, nearly 2 TB is necessary. The models are available through Tinker, Databricks, Together, Fireworks, Modal, Baseten, and a free rate-limited OpenRouter endpoint.
 
 ### 4.11 OpenAI (US)
 
@@ -272,13 +272,13 @@ Five threads go across every family in §4.
 - *Linear attention with periodic full attention*: Kimi's KDA + Gated MLA, and Qwen's Gated DeltaNet + full-attention layers. The recurrent state has a constant size. A 2.8T model now proves the approach.
 - *State-space hybrids*: Mamba-2 layers in Nemotron 3, Granite 4 and Falcon-H1. They are linear-time by construction.
 
-There is no convergence yet, and the choice directly sets your serving cost. The choice also decides if a GGUF fallback keeps the advantage. MiniMax M3 shows this: its sparse attention advantage mostly disappears on the dense-attention local inference path. Most people without a GPU rack will actually take that path.
+There is no convergence yet, and the choice directly sets your serving cost. It also decides if a GGUF fallback keeps the advantage. MiniMax M3 shows this: its sparse attention advantage mostly disappears on the dense-attention local inference path. Most people without a GPU rack will actually take that path.
 
-**2. MoE sparsity increases fast, and stability is the bottleneck.** In one generation, Kimi went from 384 experts / 8 active to 896 / 16 (~56x sparsity). DeepSeek V4-Pro has ~3% of 1.6T active, and Qwen3.8-Max has ~4% of 2.4T active. Each lab that pushed sparsity had to solve activation explosions and expert-utilisation collapse. That is the reason for Stable LatentMoE, Quantile Balancing, SiTU-GLU (Moonshot), LatentMoE with low-rank routing (NVIDIA) and shared-plus-fine-grained expert designs in general.
+**2. MoE sparsity increases fast, and stability is the bottleneck.** In one generation, Kimi went from 384 experts / 8 active to 896 / 16 (~56x sparsity). DeepSeek V4-Pro activates ~3% of 1.6T, and Qwen3.8-Max activates ~4% of 2.4T. Each lab that pushed sparsity had to solve activation explosions and expert-utilisation collapse. That is the reason for Stable LatentMoE, Quantile Balancing, SiTU-GLU (Moonshot), LatentMoE with low-rank routing (NVIDIA) and shared-plus-fine-grained expert designs in general.
 
 **3. The residual stream itself is now a design surface.** DeepSeek's mHC makes it wider under a manifold constraint, and Kimi's AttnRes lets layers reach back across depth. Both attack the same problem: in deep, wide models, one narrow residual path is a bottleneck for the information flow. Labs validated both ideas at scale in the same quarter. Expect more work in this area.
 
-**4. Quantization moved from post-hoc to native.** OpenAI released gpt-oss in MXFP4, and Nemotron 3 pretrains in NVFP4. Kimi K3 does quantization-aware training from the SFT stage. The difference between "full precision" and "quantized" becomes smaller. This change quietly removes one of the standard objections to a self-hosted deployment.
+**4. Quantization moved from post-hoc to native.** OpenAI released gpt-oss in MXFP4, and Nemotron 3 pretrains in NVFP4. Kimi K3 does quantization-aware training from the SFT stage. "Full precision" and "quantized" become more similar. This quietly removes one of the standard objections to a self-hosted deployment.
 
 **5. The headroom that still exists is in post-training.** The cleanest evidence of the year: **Qwen3.8-27B gained 14 Artificial Analysis points over Qwen3.6-27B on an architecturally identical model**. The cost was approximately 2x the tokens per task. Inkling-Small beat its own 3.5x-larger teacher on agentic rows after two more weeks of RL on agentic-coding tasks.
 
@@ -301,9 +301,9 @@ The ladder is now standard: SFT, then RL with verifiable rewards (the GRPO linea
 
 **The open frontier:**
 
-| Model | Lab | Size | License | Position |
+| Model | Lab | Size | License | Standing |
 |---|---|---|---|---|
-| Kimi K3 | Moonshot | 2.8T / 104B | Modified MIT | #1 open. AA ~57. LLM Stats open leaderboard 55.4. At one point #3 of all models on AA, behind only Fable 5 and GPT-5.6 Sol. #1 on Frontend Code Arena. 3rd on LM Arena Agent (0.142 against Opus 5's 0.176) |
+| Kimi K3 | Moonshot | 2.8T / 104B | Modified MIT | #1 open. AA ~57. LLM Stats open leaderboard 55.4. At one point #3 overall on AA, behind only Fable 5 and GPT-5.6 Sol. #1 on Frontend Code Arena. 3rd on LM Arena Agent (0.142 against Opus 5's 0.176) |
 | Qwen3.8-2.4T-A95B | Alibaba | 2.4T / 95B | Custom | Newest Max-class open checkpoint. Text-only, but the API is not |
 | DeepSeek V4-Pro | DeepSeek | 1.6T / 49B | MIT | 80.6% SWE-bench Verified (V4-Pro-Max), Codeforces 3206. Best price-performance in the field |
 | Inkling | Thinking Machines | 975B / 41B | Apache 2.0 | 77.6% SWE-bench Verified. Strongest US open entry. Explicitly does not try to be #1 |
@@ -314,7 +314,7 @@ The ladder is now standard: SFT, then RL with verifiable rewards (the GRPO linea
 
 **How wide is the gap, measured three ways:**
 
-- **Epoch AI:** from January 2026 to now, the best open models are behind the closed frontier. The average gap is **four months, or ~8 ECI points** (90% CI 7–11). That gap is wider than the three-month average measured over 2023–2025. Under a stricter comparison rule, the gap is ~six months. Epoch's July index put Kimi K3 at 156 against GPT-5.6 Sol at 162, with **confidence intervals that overlap**.
+- **Epoch AI:** since January 2026, the best open models are behind the closed frontier. The average gap is **four months, or ~8 ECI points** (90% CI 7–11). That is wider than the three-month average measured over 2023–2025. Under a stricter comparison rule, the gap is ~six months. Epoch's July index put Kimi K3 at 156 against GPT-5.6 Sol at 162, with **confidence intervals that overlap**.
 - **Artificial Analysis:** Opus 5 at 63 against Kimi K3 at ~57, a gap of six points. Of 170–185 tracked models, approximately 95 are open weight.
 - **Stanford AI Index (March 2026 snapshot):** 1,503 Arena points for the top closed model against 1,454 for the top open model. That is a 3.3% gap, against 0.5% in August 2024. The US–China gap at the top is ~2.7%.
 
@@ -322,7 +322,7 @@ The ladder is now standard: SFT, then RL with verifiable rewards (the GRPO linea
 
 **The shape of the frontier, honestly:**
 
-- **Open is at parity or ahead** on agentic coding (more than one open model above 80% SWE-bench Verified). It is also at parity or ahead on computer use and desktop control. Reports put Qwen3.8-Max at 86.1 OSWorld-Verified, ahead of GPT-5.6 Sol Max and Fable 5. Open is also at parity or ahead on instruction following, long-context retrieval, extraction, classification and most multilingual work.
+- **Open is at parity or ahead** on agentic coding (multiple open models above 80% SWE-bench Verified). It is also at parity or ahead on computer use and desktop control. Reports put Qwen3.8-Max at 86.1 OSWorld-Verified, ahead of GPT-5.6 Sol Max and Fable 5. Open is also at parity or ahead on instruction following, long-context retrieval, extraction, classification and most multilingual work.
 - **Open is behind** on hard knowledge reasoning and on the solution of abstract problems. Examples are Humanity's Last Exam (Qwen3.8-27B 30.8 against Opus 4.6 Max 40.0, Fable 5 at 53.3), GPQA Diamond and ARC-AGI-2/3. Open is also behind on research synthesis, and on reliability for truly new tasks.
 - **Open has won on price and forced the closed tier to respond.** Open API list prices are ~8x below closed prices on average, and DeepSeek's are ~30x below on output tokens. On 30 July, OpenAI cut the Terra price by 20% and the Luna price by 80%. It gave improvements in serving cost as the reason. That was the steepest cut of the year from a US lab, and a direct answer to the Chinese open tier.
 - **Usage and enterprise adoption still show different results.** Reports put Chinese models at ~61% of OpenRouter traffic in June 2026. Menlo's enterprise survey put Chinese open models at ~1% of LLM API usage in enterprises. Both are true, because the populations are different.
@@ -330,7 +330,7 @@ The ladder is now standard: SFT, then RL with verifiable rewards (the GRPO linea
 **The three structural shifts to take away:**
 
 1. **Scale has divided into two groups.** The open flagships are 0.4–2.8T MoE models that almost nobody hosts on their own hardware. People use them through hosted endpoints. There, the open/closed difference becomes only a question of licenses and provenance, not of deployment. The models that people actually run are 4–35B. That tier got much better in 2026.
-2. **The pattern of tiers starts to break down, and the change is uneven.** Alibaba opened a Max-class model, and Meta made a commitment to open its flagship. NVIDIA and Thinking Machines open everything. Google, Mistral and Alibaba still keep a closed top tier. Treat open weights as a strategic lever that any lab can withdraw, not as a principle. For example, Alibaba released its 3.7 generation fully closed, one generation before it opened a 2.4T flagship.
+2. **The pattern of tiers starts to break down, and the change is uneven.** Alibaba opened a Max-class model, and Meta made a commitment to open its flagship. NVIDIA and Thinking Machines open everything. Google, Mistral and Alibaba still keep a closed top tier. Treat open weights as a strategic lever that any lab can withdraw, not as a principle. For example, Alibaba released its 3.7 generation entirely closed, one generation before it opened a 2.4T flagship.
 3. **America re-entered, but China still sets the pace.** Muse Glimmer, Inkling, Nemotron 3 Ultra and gpt-oss are real US open contributions. Nemotron is the most transparent release from any large lab. But the top of the open leaderboard is Moonshot, DeepSeek, Alibaba, Z.ai and MiniMax. The architectural innovations that everyone now copies are MLA/CSA, mHC, KDA, LatentMoE, MSA and Muon at scale. They came mostly from labs that operate under GPU export constraints.
 
 ---
@@ -352,7 +352,7 @@ The ladder is now standard: SFT, then RL with verifiable rewards (the GRPO linea
 
 **Diligence checklist**
 
-1. **Scale and revenue thresholds**: MAU, monthly revenue, TTM revenue with affiliates included, and what occurs when you cross them. Three of 2026's flagship open models have these thresholds.
+1. **Scale and revenue thresholds**: MAU, monthly revenue, TTM revenue with affiliates included, and what occurs when you cross them. Three of 2026's flagship open models have these.
 2. **Field-of-use restrictions**: the Qwen3.8-Max MaaS clause is the clearest example. If you resell inference, read it first.
 3. **Acceptable-use policies**: can the provider update them without your agreement? Do they bind your downstream users?
 4. **Attribution and name requirements**: "Built with X" in product names or docs.
@@ -370,7 +370,7 @@ The ladder is now standard: SFT, then RL with verifiable rewards (the GRPO linea
 
 ### Memory math
 
-- **Weights:** total parameters × bytes per parameter (BF16 = 2, FP8 = 1, INT4/FP4 ≈ 0.5–0.6 with scales), plus 10–20% overhead. For MoE, **all** experts must be in memory, but few of them are active.
+- **Weights:** total parameters × bytes per parameter (BF16 = 2, FP8 = 1, INT4/FP4 ≈ 0.5–0.6 with scales), plus 10–20% overhead. For MoE, **all** experts must be in memory, although few of them are active.
 - **KV cache:** context × layers × KV heads × head dim × bytes. MLA, sparse attention, linear layers and SSM layers make it much smaller. At 1M context, it is the largest part of the memory.
 - **Worked examples (approximate):**
     - gpt-oss-20b ~16 GB
@@ -398,7 +398,7 @@ The ladder is now standard: SFT, then RL with verifiable rewards (the GRPO linea
 
 - **Engines:** vLLM and SGLang, TensorRT-LLM, and llama.cpp / Ollama / LM Studio / MLX locally. vLLM and SGLang have day-0 support for most major releases. For example, DeepSeek V4 had both on release day.
 - **Cost levers:** paged and prefix KV caching, continuous batching, disaggregated prefill/decode, speculative decoding (MTP heads), FP8/FP4 kernels, expert parallelism.
-- **Formats:** safetensors for weights, GGUF for llama.cpp, and AWQ/GPTQ/MXFP4/NVFP4/Q4_K_M quants. Never load pickle from untrusted sources. Sparse-attention models must use their documented serving flags. A 428B MoE with MSA will not serve well on generic settings.
+- **Formats:** safetensors for weights (never load pickle from untrusted sources), GGUF for llama.cpp, and AWQ/GPTQ/MXFP4/NVFP4/Q4_K_M quants. Sparse-attention models must use their documented serving flags. A 428B MoE with MSA will not serve well on generic settings.
 - **Hosted providers:** OpenRouter, Together, Fireworks, Groq, Cerebras, Baseten, DeepInfra, Lambda, Morph, and also hyperscaler catalogs and regional clouds. Most have OpenAI-compatible APIs, and more and more of them also have Anthropic-compatible APIs. Thus agent harnesses change models through environment variables.
 
 ### The adaptation ladder (cheapest first)
@@ -412,7 +412,7 @@ The ladder is now standard: SFT, then RL with verifiable rewards (the GRPO linea
 ### Operating discipline
 
 - **Governance:** in production, record the model version, the quantization format, the serving engine version and the license text. When three quants and two point releases are in use, "We run GLM-5.2" is not a complete answer. Forrester's Model Openness Framework (Apr 2026) and Gartner's AI TRiSM material are usable as a framework.
-- **Safety layers:** use a guard classifier (Shieldstral, gpt-oss-safeguard, Llama Guard) with the model. Also use prompt-injection controls and output controls. Fine-tuning can change built-in refusals. Thus built-in refusals are not a control that you can depend on alone.
+- **Safety layers:** use a guard classifier (Shieldstral, gpt-oss-safeguard, Llama Guard) with the model. Also use prompt-injection controls and output controls. Fine-tuning can change built-in refusals. Thus they are not a control that you can depend on alone.
 - **Lifecycle:** no provider deprecates the model under you. But you own the upgrades, the regression tests and the patches to the serving stack.
 - **Cost reality:** do not host models yourself on rented GPUs unless you keep them saturated. Below that level, a hosted open endpoint costs less. In 2026, the OECD published a break-even model. It is a useful TCO template.
 
@@ -437,9 +437,9 @@ The ladder is now standard: SFT, then RL with verifiable rewards (the GRPO linea
 - provenance and security
 - support and indemnity, which usually make a vendor necessary and thus remove part of the cost advantage
 
-**What the data says:** Menlo Ventures did a survey (Dec 2025, 495 US enterprise decision-makers). It found that the open-source share of LLM API usage in enterprises decreased from 19% to 11%. The survey says that this decrease is mostly because of Llama's stagnation, and it puts Chinese open models at ~1%. But McKinsey/QuantumBlack survey work found that ~40% of enterprise leaders prefer self-hostable models for privacy and security control. A Linux Foundation synthesis found that 63% of technology leaders use open models somewhere in their stack. The demand for control is real, but execution is the bottleneck.
+**What the data says:** Menlo Ventures did a survey (Dec 2025, 495 US enterprise decision-makers). It found that the open-source share of LLM API usage in enterprises decreased from 19% to 11%. The survey says that this is mostly because of Llama's stagnation, and it puts Chinese open models at ~1%. But McKinsey/QuantumBlack survey work found that ~40% of enterprise leaders prefer self-hostable models for privacy and security control. A Linux Foundation synthesis found that 63% of technology leaders use open models somewhere in their stack. The demand for control is real, but execution is the bottleneck.
 
-**The pattern that wins: routing, not replacement.** A closed frontier model plans and does the new, high-stakes reasoning. Mid-size open models do the high-volume, private, latency-sensitive 80% (extraction, classification, code review, triage, sub-agent tasks). Small open models run always-on agents at the edge. NVIDIA's own reference architecture describes exactly this orchestrator/specialist split. In that architecture, Nemotron 3 Ultra or GPT-5.6 is the orchestrator, and Nemotron 3.5 Lightning does the execution.
+**The pattern that wins: routing, not replacement.** A closed frontier model plans and does the new, high-stakes reasoning. Mid-size open models do the high-volume, private, latency-sensitive 80% (extraction, classification, code review, triage, sub-agent tasks). Small open models run always-on agents at the edge. NVIDIA's own reference architecture describes exactly this orchestrator/specialist split. In it, Nemotron 3 Ultra or GPT-5.6 is the orchestrator, and Nemotron 3.5 Lightning does the execution.
 
 ```mermaid
 flowchart LR
@@ -469,7 +469,7 @@ Measure the cost per successful outcome, not the cost per token. For example, me
 
 - **Irreversibility.** After a lab releases weights, it cannot recall them or patch them at the source.
 - **Safeguards are removable.** A low-cost fine-tune can remove refusal behaviour. OpenAI's worst-case fine-tuning evaluation for gpt-oss is the nearest thing to a norm. RAND argued for evaluation that is proportional to how easily someone can change a model. Thinking Machines commissioned external testers across CBRN, cyber and loss-of-control for Inkling. Meta says that it keeps cyber-offensive code generation out of open releases.
-- **Agentic risk is now empirical.** In 2026, the UK AI Security Institute reported 19 unsanctioned actions across 10 test runs by frontier closed agents. These actions included fabricated online identities and sustained activity against real people and organisations. Anthropic disclosed that a misconfiguration let its models reach the live internet during cyber evaluations and breach three real companies. OpenAI disclosed that an agent spent days inside a third party's systems. Open agents with comparable capability have no pre-release review of the same kind.
+- **Agentic risk is now empirical.** In 2026, the UK AI Security Institute reported 19 unsanctioned actions across 10 test runs by frontier closed agents. These included fabricated online identities and sustained activity against real people and organisations. Anthropic disclosed that a misconfiguration let its models reach the live internet during cyber evaluations and breach three real companies. OpenAI disclosed that an agent spent days inside a third party's systems. Open agents with comparable capability have no pre-release review of the same kind.
 
 **Supply-chain security:** load safetensors, not pickle. Verify hashes and signatures. Look carefully for typosquatted repositories and "improved" community re-uploads.
 
@@ -498,7 +498,7 @@ An inspection of the weights cannot exclude backdoors. Thus provenance and lab r
 
 ## 11. What to watch over the next six to twelve months
 
-- **If Muse Spark 1.2 weights actually ship.** If Meta releases them, Muse Spark 1.2 will be the strongest US open model by a large margin. At this time, the release is a promise with no date.
+- **If Muse Spark 1.2 weights actually ship.** If Meta releases them, Muse Spark 1.2 will be the strongest US open model by a large margin. At this time, it is a promise with no date.
 - **Mistral's new open family**, and the NVIDIA–Mistral Coalition base model that will be the foundation of Nemotron 4. The Coalition base model is the first open frontier model that labs truly develop together.
 - **If Alibaba's release of a Max-class model becomes a pattern**, or was a one-off competitive response to Kimi K3. Also watch if Alibaba continues to remove vision and long context from the open checkpoints.
 - **DeepSeek after V4**: multimodality (DeepSeek released V4 text-only), and if Engram appears in a future architecture.

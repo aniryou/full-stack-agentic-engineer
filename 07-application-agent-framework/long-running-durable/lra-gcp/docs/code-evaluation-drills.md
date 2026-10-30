@@ -16,7 +16,7 @@ def commit(run, outcome):
 
 <details><summary>Answer</summary>
 
-The enqueue occurs **before** the checkpoint. If the process crashes between the two lines, a worker gets a task for a step that the run document does not yet expect. Then one of two things occurs. The first thing is that the guard rejects the task as stale forever, because the engine never writes the checkpoint. The second thing is worse: if the guard is weak, the task runs against state that the engine did not save.
+The enqueue occurs **before** the checkpoint. If the process crashes between the two lines, a worker receives a task for a step that the run document does not yet expect. Then one of two things occurs. The first thing is that the guard rejects the task as stale forever, because the engine never writes the checkpoint. The second thing is worse: if the guard is weak, the task runs against state that the engine did not save.
 
 Invariant I1: write the checkpoint, *then* enqueue. Let the reaper cover the opposite window.
 </details>
@@ -30,7 +30,7 @@ def charge(ctx):
 
 <details><summary>Answer</summary>
 
-The code makes the effect key from the *arguments*, not from the *intent*. If two different steps, or a run with a new plan, charge the same amount, they share a key. Then the second charge uses the first result again, and nothing gives a warning. But the opposite error also occurs: a valid retry after a correction of the amount creates a new charge. A key must be `run:intent` (`"charge"`). The record must also carry the external id that the compensation uses later.
+The code makes the effect key from the *arguments*, not from the *intent*. If two different steps (or a run with a new plan) charge the same amount, they share a key. Then the second charge uses the first result again, and nothing gives a warning. But the opposite error also occurs: a valid retry after a correction of the amount creates a new charge. A key must be `run:intent` (`"charge"`). The record must also carry the external id that the compensation uses later.
 </details>
 
 ### Drill 3 — lease released too early
