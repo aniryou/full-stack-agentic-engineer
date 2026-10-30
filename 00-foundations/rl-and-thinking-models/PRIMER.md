@@ -668,7 +668,7 @@ flowchart LR
   N --> PK{"what selects<br/>the sample?"}
   PK -->|"a verifier"| V["best-of-n:<br/>1 − (1 − p)^n"]
   PK -->|"a reward<br/>model"| RM["best-of-n<br/>through noise"]
-  PK -->|"a majority<br/>vote"| MV["self-<br/>consistency"]
+  PK -->|"a majority<br/>vote"| MV["self-consistency"]
 ```
 
 *Test-time compute as `rlcore.ttc` models it: `ttc.allocate()` divides one budget per question between a longer think and more samples. A longer think helps a question that is slow to crack, and more samples help where an attempt can come to a dead end. But only a verifier or a vote turns the samples into accuracy, and a reward model sees correctness through noise.*
@@ -804,14 +804,15 @@ Thus it calculates prefill separately, as in `plan()`.
 
 ```mermaid
 flowchart LR
-  TP(["the SLO's TPOT:<br/>40 ms"]) -->|"plan()"| LL
+  TP(["the SLO's TPOT"]) -->|"plan()"| LL
   B(["b: the batch per<br/>GPU at a cap,<br/>HBM or ITL SLO"]) --> ST["step(b) = max(<br/>bytes/bandwidth,<br/>FLOPs/peak)"]
   ST -->|"plan_steady()"| LL
+  B --> LL
   LL["Little's law, per cap:<br/>N = rps × (TTFT +<br/>out × step) / b"] --> G["GPUs needed<br/>(binding)"]
   PF["prefill,<br/>calculated separately"] --> G
 ```
 
-*Read the two edges into Little's law: `plan()` gives every output token the SLO's TPOT, and `plan_steady()` uses `step(b)`, the step the fleet runs at. Both divide by b, the batch per GPU at a cap, and the cap that binds, or prefill, sets the GPUs needed.*
+*Read the two edges into Little's law: `plan()` gives every output token the SLO's TPOT, and `plan_steady()` uses `step(b)`, the step the fleet runs at. Both divide by b, the batch per GPU at a cap. The largest need, from a cap, decode or prefill, sets the GPUs needed.*
 
 | | No thinking (the primer) | 2,700 thinking + 300 answer | Same, 20 ms ITL SLO |
 |---|---|---|---|
@@ -978,7 +979,7 @@ weight versions old (verify).
 
 ![Three ways to schedule rollouts and training: a synchronous step where each side waits for the other, one-step-off-policy where generation of the next step overlaps training, and fully asynchronous rollouts on separate GPUs with stale samples.](figures/rl-step-timeline.svg)
 
-*The synchronous row uses the §1 numbers (`workload.rl_step_time()`): each side waits for the other, and the batch waits for its longest completion. The one-step-off-policy trainer generates step k + 1 while it trains on step k. The fully asynchronous trainer runs rollouts and training on separate GPUs, at the price of staleness.*
+*The figure compares three schedules of one step. The synchronous group uses the §1 numbers (`workload.rl_step_time()`): each side waits for the other, and the batch waits for its longest completion. The one-step-off-policy trainer generates step k + 1 while it trains on step k, and the fully asynchronous trainer uses separate GPUs and stale samples.*
 
 The price is staleness. Samples come from an older policy, so the ratio $\rho = \pi/\pi_{\text{old}}$ is no
 longer 1. Then the clip (§4) and the corrections by importance sampling do real work.

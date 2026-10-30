@@ -80,6 +80,6 @@
       <path d="M254 190 L254 290"/><path d="M372 190 L372 290"/><path d="M490 190 L490 290"/><path d="M608 190 L608 290"/><path d="M726 190 L726 290"/>
     </g>
     <text x="490" y="306" text-anchor="middle" font-size="10.5" fill="#97A59F">the dashed lines are the asynchronous barriers between the two groups</text>
-    <text x="440" y="322" text-anchor="middle" font-size="10.5" fill="#7ADACF">TMA: a single thread issues a descriptor, and the hardware moves the whole tile from HBM to shared memory, not through registers</text>
+    <text x="440" y="322" text-anchor="middle" font-size="10.5" fill="#7ADACF">TMA: a single thread issues a descriptor, and the hardware moves a full multidimensional tile</text>
   </g>
 </svg>

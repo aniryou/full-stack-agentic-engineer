@@ -212,7 +212,7 @@ def spec_max_tokens_vs_budget() -> dict:
              "anchor": "end", "label_pos": "top"},
             pt(forced(4096)["accuracy"], "accent", "end", -9, "thinking budget: "),   # the two solid lines, named
             pt(cut(4096)["accuracy"], "plain", "start", 16, "max_tokens: "),
-            pt(cut(4096)["truncated"], "warm", "end", 16),
+            pt(cut(4096)["truncated"], "warm", "end", 16, "truncated: "),
         ],
         "legend": "top-left",
         "note": "computed by rlcore.workload.budget_outcome (median 1,500, sigma = 1, e0 = 0.7)",

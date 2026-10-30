@@ -220,7 +220,7 @@ sequenceDiagram
     C->>A: POST /v1/chat/completions (stream=true)
     Note over A: render_chat, tokenize,<br/>EngineCoreRequest
     A->>E: ADD over ZMQ (msgpack)
-    Note over E: Request, block hashes.<br/>Scheduler.add_request:<br/>waiting
+    Note right of E: Request, block hashes.<br/>Scheduler.add_request:<br/>waiting
     loop output_handler task, at the same time as the busy loop
         Note over A: process_outputs:<br/>detokenize, stop strings
         A-->>C: data: {json}
@@ -891,7 +891,7 @@ flowchart LR
   R -.-> O
 ```
 
-*Start at `collective_rpc`: it puts the `SchedulerOutput` of each step in one `MessageQueue`. Readers on the node read it from the shared-memory ring buffer, and remote readers read it from the ZMQ XPUB socket. NCCL carries the tensors between the workers, and only the rank that `_get_output_rank` returns sends the reply.*
+*Start at `collective_rpc`: it puts the `SchedulerOutput` of each step in one `MessageQueue`. Readers on the node read it from the shared-memory ring buffer, and remote readers read it from the ZMQ XPUB socket. Only the rank that `_get_output_rank` returns sends the reply to EngineCore.*
 
 **Ray or multiprocessing.** `RayExecutorV2` is a subclass of `MultiprocExecutor`
 (`vllm/v1/executor/ray_executor_v2.py`: "Inherits from MultiprocExecutor to reuse the MQ-based control plane and
@@ -1091,7 +1091,7 @@ flowchart LR
   U -->|"no"| P["PIECEWISE graphs,<br/>eager attention<br/>between pieces"]
 ```
 
-*Follow one batch from the left, in the default `FULL_AND_PIECEWISE` mode. A batch above `max_capture` runs without graphs, and a smaller batch replays the next captured size up. A uniform decode batch replays a full graph, a mixed batch replays piecewise graphs, and `--enforce-eager` gives `NONE` for every batch.*
+*Start at the batch on the left, in the default `FULL_AND_PIECEWISE` mode. A batch above `max_capture` runs without graphs, and a smaller batch replays the next captured size up. A uniform decode batch replays a full graph, and a mixed batch replays piecewise graphs.*
 
 The optimization levels (`vllm/config/vllm.py: OptimizationLevel`) are these:
 
@@ -1630,17 +1630,17 @@ sequenceDiagram
     participant S as decode scheduler
     participant W as decode worker<br/>(NixlConnector)
     R->>P: do_remote_decode,<br/>max_tokens = 1 (verify)
-    Note over P: request_finished:<br/>delay_free_blocks = True
+    Note over P: request_finished:<br/>delay_free_blocks = True,<br/>blocks under a lease
     P-->>R: kv_transfer_params
     R->>S: the request with those params
     Note over S: get_num_new_matched_tokens,<br/>WAITING_FOR_REMOTE_KVS
     S->>W: kv_connector_metadata
     W->>P: start_load_kv: RDMA read through NIXL
-    Note over S,W: finished_recving: decode starts
-    W-->>P: notification: free the blocks<br/>(or the lease frees them)
+    Note over S,W: finished_recving:<br/>_update_waiting_for_remote_kv
+    W-->>P: notification: free the blocks
 ```
 
-*Read down for the five steps of §10.2. The prefill engine keeps the blocks of a finished request under a lease, and the decode scheduler marks the request `WAITING_FOR_REMOTE_KVS`. The decode worker reads the remote blocks through NIXL, and its notification or the lease frees them on the prefill side.*
+*Read down for the five steps of §10.2. The prefill engine keeps the blocks of a finished request under a lease, and the decode scheduler marks the request `WAITING_FOR_REMOTE_KVS`. The decode worker reads the remote blocks through NIXL, and decode starts after `_update_waiting_for_remote_kv`. Its notification or the lease frees the blocks on the prefill side.*
 
 Routing, P:D ratios and the conditions in which disaggregation is worth its cost belong to
 [`../../05-orchestrator/`](../../05-orchestrator/).
