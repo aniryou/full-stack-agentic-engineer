@@ -1193,8 +1193,8 @@ The 57× assumes 128-dim keys and values. But the MHA-style heads of DeepSeek-V3
 and 128-dim values. Thus the like-for-like figure is 61 × 128 × (192 + 128) × 2 B ≈ 5.0 MB/token, 71× the latent
 cache.
 
-Thus MLA has its own kernels (FlashMLA, CUTLASS MLA, FlashInfer MLA) and its own KV dtypes (`fp8_ds_mla`,
-`nvfp4_ds_mla`).
+Because of this latent cache, MLA has its own kernels (FlashMLA, CUTLASS MLA, FlashInfer MLA) and its own KV dtypes
+(`fp8_ds_mla`, `nvfp4_ds_mla`).
 
 ---
 
@@ -1693,7 +1693,7 @@ A reviewer expects this one-line summary:
 `vllm/v1/metrics/loggers.py: PrometheusStatLogger` defines these metrics (the names match `FACTS.md`). Their labels
 are `model_name` and `engine`. `prometheus_client` exposes the counters with a `_total` suffix.
 
-| Metric | Type | Meaning (from the source) | Use it for |
+| Metric | Type | What it means (from the source) | Use it for |
 |---|---|---|---|
 | `vllm:num_requests_running` | gauge | requests in model execution batches | occupancy against `max_num_seqs` |
 | `vllm:num_requests_waiting` (+ `_by_reason`: `capacity`/`deferred`) | gauge | the requests in the `waiting` and `skipped_waiting` queues. The deferred reasons are LoRA budget, KV transfer, blocked status. | saturation against blocked requests, autoscaling |
@@ -1756,7 +1756,7 @@ means that the pool is too small for the admitted mix.
 ### 13.2 Put everything in one process
 
 The fastest way to know how a mechanism works is to stop inside it. Three settings put all of vLLM into one process
-that you can debug. The code below is T1: it needs a GPU, and a 0.6B model fits anywhere.
+that you can debug. The code that follows is T1: it needs a GPU, and a 0.6B model fits anywhere.
 
 ```python
 # debug_one_process.py  (T1)
@@ -2024,14 +2024,14 @@ Concurrency is max_num_seqs, bounded by that capacity."
 
 ## Glossary
 
-| Term | Meaning here |
+| Term | What it means here |
 |---|---|
 | API server | the front-end process: FastAPI routes, `AsyncLLM`, tokenization, detokenization, SSE |
 | EngineCore | the process that runs the scheduler, the KV cache manager and the executor (`vllm/v1/engine/core.py`) |
 | `SchedulerOutput` | the per-step plan that goes to the workers: new requests, deltas, tokens per request |
 | token budget | `max_num_batched_tokens`: the tokens that the engine computes per step across all requests |
 | `num_computed_tokens` | how far the engine has computed the KV of a request. The scheduler moves it toward `num_tokens_with_spec`. |
-| chunked prefill | the computation of a prompt over several steps, inside the budget |
+| chunked prefill | the computation of a prompt over several steps. Each chunk is not more than the token budget of its step. |
 | preemption | the release of the blocks of a RUNNING request and the return of that request to the queue, for recompute |
 | KV block / null block | `block_size` token slots (default 16) per layer of a group / block 0, a placeholder |
 | block hash, extra keys | the hash of (parent hash, block tokens, extra keys: LoRA name, MM item id and offset, cache salt, prompt-embeds digest) |
@@ -2122,7 +2122,7 @@ Other engines: the `README.md` of `sgl-project/sglang` and of `NVIDIA/TensorRT-L
 | Same-step prefix hits | vLLM hashes blocks at allocation. Thus a later request in the same `schedule()` can get a hit on them. | inferred from `allocate_slots`. Do a test to make sure. |
 | DeepSeek-V3 MLA shape | 61 layers, latent 512 + RoPE 64 | This primer did not fetch the model config. |
 | NIXL proxy convention | the prefill request with `max_tokens = 1` and `do_remote_decode` | Proxy and router implementations are different. |
-| GGUF and bitsandbytes loading | not in the loader registry at this commit: out-of-tree plugins `vllm-gguf-plugin` 0.0.5 and `vllm-bnb-plugin` 0.0.3. The quantization topic read them on 2026-09-26. | plugin versions, and if either returns in-tree |
+| GGUF and bitsandbytes loaders | not in the loader registry at this commit: out-of-tree plugins `vllm-gguf-plugin` 0.0.5 and `vllm-bnb-plugin` 0.0.3. The quantization topic read them on 2026-09-26. | plugin versions, and if either returns in-tree |
 | `--enforce-eager` ITL cost | larger on small models than on large ones | Measure it in the serving lab. |
 | SGLang and TensorRT-LLM specifics marked `(verify)` | from READMEs and the SGLang paper only | Examine their docs and code before a decision. |
 | Orchestrator support | llm-d, Dynamo and KServe integrate vLLM | from FACTS.md (Dynamo) and project descriptions. Examine each support matrix. |
