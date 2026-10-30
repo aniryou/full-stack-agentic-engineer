@@ -118,10 +118,10 @@ flowchart LR
   C["KV per<br/>session"]
   L["concurrency"]
   N["sessions<br/>per GPU"]
-  T["GPUs for<br/>decode, GPUs<br/>for prefill"]
+  T["GPUs for<br/>decode and<br/>prefill"]
   M["GPUs for<br/>memory"]
   X{"take the<br/>maximum"}
-  R["headroom<br/>and N+1<br/>spares"]
+  R["headroom<br/>~60–70%, then<br/>N+1 spares"]
   P --> S
   K --> C
   S --> N
@@ -135,7 +135,7 @@ flowchart LR
   X --> R
 ```
 
-*The figure shows the formula chain of `capacity.py`. The weights and the KV cache set how many sessions one GPU holds. The workload gives the live sessions: concurrency = RPS × duration. Then each constraint gives a GPU count, you take the maximum, and you add headroom and spares.*
+*The figure shows the chain of steps in `capacity.py`. The weights (`weight_memory_gb()`, `usable_hbm_gb()`) and the KV cache (`kv_per_token_kb()`, `kv_per_session_gb()`) set the sessions per GPU (`max_concurrent_sessions()`). The workload gives the live sessions: concurrency = RPS × duration (`concurrency()`). Then each constraint gives a GPU count (`decode_aggregate()`, `prefill_tok_s()`), you take the maximum, and you add headroom and spares (`provision()`).*
 
 ---
 

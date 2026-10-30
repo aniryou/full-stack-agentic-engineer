@@ -55,15 +55,16 @@ vLLM divides serving into two kinds of processes.
 
 ```mermaid
 flowchart TB
-  R["API server process<br/>render, tokenize,<br/>build the EngineCoreRequest"] -->|"ZMQ, msgpack"| S
+  R["API server process<br/>render, tokenize,<br/>EngineCoreRequest"] -->|"ZMQ, msgpack"| CORE
   subgraph CORE["EngineCore process"]
-    S["Scheduler.schedule()<br/>how many tokens each<br/>request computes"] --> X["executor: one forward pass<br/>on the GPU workers:<br/>the compiled model,<br/>CUDA graphs,<br/>the attention backend"]
-    X --> P["sampler: selects the tokens"]
-    P --> U["Scheduler.update_from_output()<br/>append the tokens,<br/>examine the stop conditions"]
+    direction LR
+    S["Scheduler.<br/>schedule()"] --> X["executor<br/>one forward pass"]
+    X --> P["sampler"]
+    P --> U["Scheduler.<br/>update_from_output()"]
     U -->|"next step"| S
-    S -.->|"16-token blocks"| K[("KV cache<br/>the block pool")]
+    S -.->|"16-token<br/>blocks"| K[("KV cache<br/>the block pool")]
   end
-  U -->|"ZMQ, msgpack"| O["API server process<br/>detokenize, send the<br/>streaming response"]
+  CORE -->|"ZMQ, msgpack"| O["API server process<br/>detokenize, send the<br/>streaming response"]
 ```
 
 *The two kinds of processes and one step of the loop. The API server renders, tokenizes and builds an `EngineCoreRequest`. In EngineCore, `Scheduler.schedule()` gives out the token budget, the executor runs one forward pass, the sampler selects the tokens and `Scheduler.update_from_output()` appends them. The two sides communicate over ZMQ with msgpack (§1.3, §2).*
@@ -215,32 +216,37 @@ client      API server process                                EngineCore process
 sequenceDiagram
     participant C as client
     participant A as API server (AsyncLLM)
-    participant E as EngineCore (busy loop)
-    participant G as GPUModelRunner
-    C->>A: POST /v1/chat/completions<br/>(stream=true)
-    Note over A: render_chat, tokenize,<br/>build the<br/>EngineCoreRequest
+    participant E as EngineCore
+    C->>A: POST /v1/chat/completions (stream=true)
+    Note over A: render_chat, tokenize,<br/>EngineCoreRequest
     A->>E: ADD over ZMQ (msgpack)
-    Note over E: input thread: Request,<br/>block hashes.<br/>Scheduler.add_request:<br/>waiting
-    par EngineCore process
-        loop each step: step_with_batch_queue
-            E->>E: Scheduler.schedule(): SchedulerOutput
-            E->>G: execute_model(so,<br/>non_block=True)
-            Note over E: get_grammar_bitmask<br/>on the CPU, overlaps<br/>the forward
-            E->>G: sample_tokens(grammar)
-            G-->>E: ModelRunnerOutput
-            E->>E: update_from_output(): EngineCoreOutputs
-            E-->>A: EngineCoreOutputs over ZMQ
-        end
-    and API server process
-        loop output_handler task
-            Note over A: process_outputs:<br/>detokenize, stop strings
-            A-->>C: data: {json}
-        end
+    Note over E: input thread: Request,<br/>block hashes.<br/>add_request: waiting
+    loop output_handler task
+        Note over A: process_outputs:<br/>detokenize, stop strings
+        A-->>C: data: {json}
     end
     A-->>C: data: [DONE]
 ```
 
-*The same path in time, with its two loops. In each step, the busy loop of EngineCore calls `schedule`, `execute_model`, `sample_tokens` and `update_from_output`. At the same time, the output handler task of the API server detokenizes each `EngineCoreOutputs` and sends the SSE deltas (§2.2, row 12).*
+*The same path in time, on the side of the API server. The API server tokenizes the request and sends the `EngineCoreRequest` to EngineCore over ZMQ. Then its output handler task detokenizes each `EngineCoreOutputs` and sends the SSE deltas (§2.2, row 12).*
+
+```mermaid
+sequenceDiagram
+    participant A as API server (AsyncLLM)
+    participant E as EngineCore (busy loop)
+    participant G as GPUModelRunner
+    loop each step: step_with_batch_queue
+        E->>E: Scheduler.schedule(): SchedulerOutput
+        E->>G: execute_model(so, non_block=True)
+        Note over E: get_grammar_bitmask<br/>on the CPU, overlaps<br/>the forward
+        E->>G: sample_tokens(grammar)
+        G-->>E: ModelRunnerOutput
+        E->>E: update_from_output(): EngineCoreOutputs
+        E-->>A: EngineCoreOutputs over ZMQ (msgpack)
+    end
+```
+
+*The busy loop of EngineCore runs at the same time as the output handler task. In each step, it calls `schedule`, `execute_model`, `sample_tokens` and `update_from_output`, and it sends the `EngineCoreOutputs` to the API server. EngineCore builds the grammar bitmask on the CPU during the forward pass.*
 
 ### 2.2 The same path as a table
 
@@ -1589,16 +1595,16 @@ sequenceDiagram
     participant P as prefill engine
     participant S as decode scheduler
     participant W as decode worker<br/>(NixlConnector)
-    R->>P: the request, do_remote_decode,<br/>max_tokens = 1 (verify)
-    Note over P: computes the prompt<br/>and finishes.<br/>request_finished:<br/>delay_free_blocks = True,<br/>the blocks stay pinned<br/>under a lease
-    P-->>R: kv_transfer_params: do_remote_prefill,<br/>remote_block_ids, remote_engine_id,<br/>remote_host, remote_port
+    R->>P: the request, do_remote_decode, max_tokens = 1 (verify)
+    Note over P: delay_free_blocks = True,<br/>blocks under a lease
+    P-->>R: kv_transfer_params
     R->>S: the request with those params
-    Note over S: get_num_new_matched_tokens:<br/>(prompt tokens − local hits,<br/>load_async = True).<br/>allocate blocks,<br/>WAITING_FOR_REMOTE_KVS,<br/>continue with other requests
-    S->>W: kv_connector_metadata<br/>in the SchedulerOutput
-    W->>P: start_load_kv: RDMA read of<br/>the remote blocks through NIXL
-    Note over S,W: finished_recving:<br/>_update_waiting_for_remote_kv<br/>caches them, and the request<br/>decodes from a full KV cache
+    Note over S: get_num_new_matched_tokens,<br/>WAITING_FOR_REMOTE_KVS
+    S->>W: kv_connector_metadata
+    W->>P: start_load_kv: RDMA read through NIXL
+    Note over S,W: finished_recving:<br/>_update_waiting_for_remote_kv
     W-->>P: notification
-    Note over P: frees the blocks.<br/>With no notification,<br/>the lease frees them
+    Note over P: frees the blocks,<br/>or the lease frees them
 ```
 
 *The five steps in time: the prefill engine keeps the blocks of a finished request under a lease and returns the `kv_transfer_params`. The decode scheduler allocates blocks and marks the request `WAITING_FOR_REMOTE_KVS`. The decode worker reads the remote blocks through NIXL, and a notification frees them on the prefill side.*
@@ -1770,6 +1776,21 @@ The multiprocess mode is on by default (`VLLM_ENABLE_V1_MULTIPROCESSING` default
 `InprocClient` (`vllm/v1/engine/llm_engine.py`, `core_client.py`). The server path cannot do this ("Running
 EngineCore in asyncio without multiprocessing is not currently supported", `make_client`). Thus, debug the server
 with logs and profiles, and debug the engine with this script.
+
+```mermaid
+flowchart LR
+  subgraph ONE["one process: debug_one_process.py"]
+    L["LLMEngine"] --> C["InprocClient"]
+    C --> E["EngineCore"]
+    E --> X["UniProcExecutor"]
+    X --> W["worker"]
+  end
+  M(["VLLM_ENABLE_V1_<br/>MULTIPROCESSING=0"]) -.-> C
+  T(["TP=1"]) -.-> X
+  G(["enforce_eager=True"]) -.-> W
+```
+
+*With `VLLM_ENABLE_V1_MULTIPROCESSING=0`, `make_client` returns an `InprocClient`, and EngineCore runs in the process of the script. With TP=1, `UniProcExecutor` keeps the worker in the same process. With `enforce_eager=True`, the model code has no `torch.compile` and no CUDA graphs, and you can step through it.*
 
 The recipe runs the default runner, MRV2, whose input preparation is Triton kernels. Thus you examine the tensors
 that the kernels make, and you do not step through the arithmetic. To step through the input build line by line in

@@ -232,7 +232,7 @@ for name, t in traces.items():
 #
 # Write `sectors_per_request(stride_bytes, lanes=32, sector=32)`. Lane `l` accesses byte address
 # `l * stride_bytes` (4-byte elements, base aligned). Return the number of different sectors that one warp
-# request touches. Then predict the stores of the naive transpose (the stride is one output row of `N` floats).
+# request touches. Then predict the stores of the naive transpose. The stride is one output row of `N` floats.
 
 # %% exercise
 def sectors_per_request(stride_bytes: int, lanes: int = 32, sector: int = 32) -> int:
@@ -324,7 +324,7 @@ print(f"✅ tile 16: 16x fewer loads, 4 FLOP/B — still below a T4's {balance:.
 # size.
 #
 # Threads in a block work together through shared memory and barriers. Blocks are independent. Thus
-# a global result needs a second launch or atomics, and atomics make float results order-dependent.
+# a global result needs a second launch or atomics. Atomics make float results order-dependent.
 #
 # The memory requests per warp decide the performance. Coalesced accesses fetch 4 sectors for 32 floats,
 # and strided accesses fetch 32. Tiling repairs the two problems at the same time. It changes strided global
@@ -341,5 +341,5 @@ print(f"✅ tile 16: 16x fewer loads, 4 FLOP/B — still below a T4's {balance:.
 #    thread reads a half-written tile. The other barrier comes after the computation, so that no thread
 #    overwrites a tile that another thread still reads.
 # 3. *Why can blocks not sync in a kernel?* Blocks run in waves when SMs become free. A barrier across
-#    blocks that are not resident causes a deadlock. Divide the work into two launches (or use atomics or
-#    cooperative launches, with their limits).
+#    blocks that are not resident causes a deadlock. Divide the work into two launches. As an alternative, use
+#    atomics or cooperative launches, with their limits.

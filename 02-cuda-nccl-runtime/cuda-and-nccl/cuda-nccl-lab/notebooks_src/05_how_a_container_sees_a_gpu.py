@@ -1,9 +1,9 @@
 # %% [markdown]
 # # 05 · How a container sees a GPU: device nodes, injected drivers and the compatibility contract
 #
-# **Tier:** T0. It examines *this* machine live (a machine without a GPU is a completely acceptable first
-# case). It also reads two bundled probe logs (**illustrative**: they have the exact format of
-# `deploy/any-gpu/probe.sh`, but they do not come from real machines). **T1/T3**: run `probe.sh` in your own
+# **Tier:** T0. It examines *this* machine live. A machine without a GPU is a completely acceptable first
+# case. It also reads two **illustrative** bundled probe logs: they have the exact format of
+# `deploy/any-gpu/probe.sh`, but they do not come from real machines. **T1/T3**: run `probe.sh` in your own
 # GPU container, or `deploy/gke/run.sh smoke` on GKE. Then give the log to the same cells.
 #
 # ## The one-minute version
@@ -236,7 +236,7 @@ print("✅ the same image: fine on an L4, fine-with-caveats on an older driver, 
 #
 # `c.stray_libcuda()` looks for the 803 case on a live system: a versioned `libcuda` that the runtime did
 # not inject. On a GPU box, pass the arch list of your framework (`torch.cuda.get_arch_list()`) to
-# `c.probe(archs=...)`. This gives the gate-2 verdict for the real binary.
+# `c.probe(archs=...)`. This call gives the gate-2 verdict for the real binary.
 
 # %%
 if live.devices:
@@ -260,8 +260,8 @@ else:
 # forward-compatibility package on data-center GPUs. Second, the binary must contain SASS for the
 # architecture of the GPU, or PTX that the driver can JIT.
 #
-# When something fails, I read the error number (35, 209, 222, 803, 100). It tells me which half and which
-# gate.
+# When something fails, I read the error number (35, 209, 222, 803, 100). The number tells me which half and
+# which gate.
 #
 # **Drill questions**
 #
@@ -272,6 +272,6 @@ else:
 #    through a private interface. That interface changes with each driver build. A mismatch fails with 803.
 #    Only the host knows which build it runs. Thus the runtime injects the driver.
 # 3. *A new GPU generation arrives, and the image from last year fails with "no kernel image". What is the
-#    solution?* Build or install the framework again for the new compute capability (or include PTX, so that
-#    the driver can JIT). An upgrade of the driver alone does not help, because the binary has
+#    solution?* Build or install the framework again for the new compute capability. As an alternative, include PTX,
+#    so that the driver can JIT. An upgrade of the driver alone does not help, because the binary has
 #    nothing for that GPU.

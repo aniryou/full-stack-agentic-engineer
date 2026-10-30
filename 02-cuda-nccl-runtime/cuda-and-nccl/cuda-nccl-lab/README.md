@@ -17,7 +17,7 @@ After this lab, you can do these things:
 3. Open [`notebooks/01_kernels_in_the_simulator.ipynb`](notebooks/01_kernels_in_the_simulator.ipynb). It runs real
    CUDA kernels in the simulator of Numba. With any GPU,
    [`02_memory_bound_kernels_on_a_real_gpu`](notebooks/02_memory_bound_kernels_on_a_real_gpu.ipynb) measures the
-   time of the same source. A free Colab T4 is sufficient.
+   time of the same source. A free Colab T4 is sufficient for notebook 02.
 
 ## What you get
 
@@ -49,7 +49,7 @@ What each tier adds:
 | **T0** | laptop, Colab CPU, CI ($0) | Kernels in the CUDA simulator (correctness, thread indices, shared memory, barriers, and per-warp memory requests that the lab traces from the kernel itself). Collectives over a real multi-process ring (`pipes`) or gloo. nccl-tests, probe and DCGM samples. Every model prediction has a label that says so. |
 | **T1** | one GPU (Colab/Kaggle T4, L4, rented 24 GB GPU) | kernel timings with CUDA events, effective bandwidth against peak, launch overhead, CUDA Graphs against eager mode (torch), the live container probe with the driver API |
 | **T2** | 2+ GPUs (Kaggle 2×T4 free, PCIe only, or a rented NVLink box) | NCCL sweeps through `torchrun`, nccl-tests (pinned v2.20.0) against the same NCCL, and busbw against the link. On a GPU VM: dcgm-exporter in Docker, and MIG and MPS by hand. |
-| **T3** | GKE through Terraform (optional) | A smoke and probe Job, a CUDA sample, a 2-GPU nccl-tests Job on `g2-standard-24`, and time-sharing and MIG pools. DCGM metrics in Managed Prometheus. Alert rules as `ClusterRules`, which the Alertmanager of the cluster routes. |
+| **T3** | GKE through Terraform (optional) | A smoke and probe Job, a CUDA sample, a 2-GPU nccl-tests Job on `g2-standard-24`, and time-sharing and MIG pools. DCGM metrics in Managed Prometheus. Alert rules as `ClusterRules`, which the managed Alertmanager of Managed Prometheus routes. |
 
 ## Run it
 
@@ -141,7 +141,7 @@ section *The library* names the primer section that it measures. Each notebook l
 
 The same kernel source serves both tiers. The tests run it in the simulator. `tools/check_ptx.py` compiles every
 kernel to PTX for `sm_75` and `sm_89`, and it rejects float64 arithmetic. `make ptx-check` runs `tools/check_ptx.py`.
-`tests/test_ptx.py` also runs it when numba-cuda is installed, and skips without numba-cuda. The PTX compilation needs
+`tests/test_ptx.py` also runs `tools/check_ptx.py` when numba-cuda is available, and skips without numba-cuda. The PTX compilation needs
 no GPU, but the repository leaves the kernel runs on a GPU to you.
 
 One detail of the simulator is important. Numba's simulator creates the shared array of a block only at its first

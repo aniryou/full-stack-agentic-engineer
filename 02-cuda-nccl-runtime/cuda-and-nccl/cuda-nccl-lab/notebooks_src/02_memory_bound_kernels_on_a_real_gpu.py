@@ -3,7 +3,7 @@
 #
 # **Tier:** T1. It needs any NVIDIA GPU (Colab or Kaggle T4, an L4, a rented RTX 4090) with `numba-cuda`
 # installed. If there is no GPU, or if Numba cannot use the GPU (no numba-cuda, a driver/toolkit
-# mismatch), the notebook takes its **T0 path**. `gpurt.kernels` detects the cause and tells you why.
+# mismatch), the notebook takes its **T0 path**. `gpurt.kernels` finds the cause and tells you why.
 #
 # On the T0 path, the same kernels run at small sizes in the simulator (correctness only). The notebook labels each
 # printed number *model prediction*. It calculates these numbers from byte counts and stated assumptions,
@@ -156,9 +156,9 @@ print(f"✅ below ~{mine:,.0f} floats a copy is launch-bound on {'this GPU' if H
 # %% [markdown]
 # ## Transpose: the cost of strided stores
 #
-# Notebook 01 counted it: the stores of the naive transpose touch 32 sectors per warp request, not 4.
-# On a GPU, the effect is smaller than 8×, because L2 merges some partial sectors before they get to DRAM.
-# This is why you measure.
+# Notebook 01 counted the sectors: the stores of the naive transpose touch 32 sectors per warp request, not 4.
+# On a GPU, L2 merges some partial sectors before they get to DRAM. Thus the effect is smaller than 8×.
+# This difference is why you measure.
 
 # %%
 if HAVE_GPU:
@@ -361,8 +361,8 @@ print(f"✅ batch 1: {eager / graph:.2f}x faster as a graph, {eager_gap / graph_
 #
 # 1. *The first call of my kernel takes 300 ms, and the other calls take 50 µs. Is the GPU slow?* No. The
 #    first call does a JIT compilation (Numba, Triton, PTX JIT), and it can also create the CUDA context. Do
-#    a warm-up before you measure the time. In production, compile in advance or cache the result (engines do
-#    a warm-up and capture graphs at start-up).
+#    a warm-up before you measure the time. In production, compile in advance or cache the result. Engines do
+#    a warm-up and capture graphs at start-up.
 # 2. *Our fused kernel gets 88 % of peak DRAM bandwidth. How do we make it faster?* Move fewer bytes: use
 #    lower precision (bf16/fp8), fuse the adjacent op, or do not read the inputs again. More threads do not
 #    help a saturated memory system.

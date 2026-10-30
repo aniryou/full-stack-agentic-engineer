@@ -13,9 +13,9 @@
 #   latency multiplies with the number of busy tenants.
 # * MIG shapes have limits: 7 compute slices, 8 memory slices, and a set of permitted start
 #   positions for each profile. 3 + 3 + 1 = 7, but `3g + 3g + 1g` does **not** fit.
-# * For LLM serving, the best "sharing" is usually **one engine for each GPU, and that engine
+# * For LLM serving, the best way to "share" a GPU is usually **one engine for each GPU, and that engine
 #   batches many requests**. Continuous batching shares the weight reads. No GPU-level mechanism
-#   can do this.
+#   can share the weight reads.
 # * **GPU utilization** is the fraction of *time* in which at least one kernel runs. One small
 #   kernel on 8 of 132 SMs shows 100%. Use SM active, tensor active and DRAM active to measure
 #   the load.

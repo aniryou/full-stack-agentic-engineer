@@ -9,7 +9,7 @@
 # * What each rank holds before and after defines a **collective**. Inference uses these collectives:
 #   broadcast, all-reduce, reduce-scatter, all-gather, all-to-all and send/recv.
 # * **All-reduce = reduce-scatter + all-gather.** On a ring of $p$ ranks, that is ${2(p-1)}$ steps,
-#   and each step moves $S/p$ bytes. Thus $T = 2(p-1) \cdot \alpha + 2(p-1)/p \cdot S/B$. That is
+#   and each step moves $S/p$ bytes. Thus $T = 2(p-1) \cdot \alpha + 2(p-1)/p \cdot S/B$. The ring is
 #   bandwidth-optimal, but its latency term increases with $p$.
 # * Below a crossover size ($S^{\ast} = p \cdot \alpha \cdot B$ for the ring), a collective is
 #   **latency-bound**.
@@ -51,7 +51,7 @@ for op in ("broadcast", "reduce", "all_reduce", "reduce_scatter", "all_gather", 
 # ## Exercise 3.1: ring reduce-scatter
 #
 # Write it with the rules of a ring. In each step, **each rank sends exactly one chunk to its right
-# neighbour** `(r + 1) % p`. The neighbour **adds** it into its own copy of that chunk. All sends in a
+# neighbour** `(r + 1) % p`. The neighbour **adds** the chunk that it gets into its own copy of that chunk. All sends in a
 # step occur at the same time. Thus compute each message from the state at the *start* of the step.
 # After the last step, rank $r$ must own the fully reduced chunk $r$.
 #
@@ -197,7 +197,7 @@ for algo in ("ring", "tree", "one_shot", "two_shot", "switch"):
 #
 # Write `ring_allreduce_time(S, p, alpha, bw)` from the step structure that you wrote. Also write
 # `crossover_size(p, alpha, bw)`: the $S$ at which the latency term is equal to the bandwidth term.
-# Then calculate it for 8 GPUs. Use the illustrative NVLink 4 numbers of layer 01: $\alpha$ = 2 us
+# Then calculate the crossover size for 8 GPUs. Use the illustrative NVLink 4 numbers of layer 01: $\alpha$ = 2 us
 # per step and $B$ = 450 GB/s per direction.
 
 # %% exercise
@@ -286,7 +286,7 @@ for phase, tokens in (("decode, batch 32", 32), ("prefill, 8k tokens", 8192)):
 # One formula gives two regimes. In decode, 93% of the time of the ring is $\alpha$. The solution is
 # fewer steps (two-shot or one-shot custom all-reduce, NVLS, tree), not more bandwidth. The solution
 # also includes CUDA graphs, so that the 160 launches per step cost nothing on the CPU. In prefill,
-# the messages are large and bandwidth-bound. Thus the optimal byte count of the ring is important,
+# the messages are large and bandwidth-bound. Thus the bandwidth-optimal byte count of the ring is important,
 # and so is the overlap of the communication with compute.
 #
 # ## Exercise 3.5: the decode all-reduce you would ship
@@ -319,7 +319,7 @@ print(f"✅ 1 MiB per call; ring {ring_ms_per_step:.2f} ms/step; best is {best_a
 # %% [markdown]
 # **Expert parallelism** (MoE) moves tokens, not partial sums. Each token goes to the GPUs of its
 # top-k experts (all-to-all *dispatch*), and then comes back (all-to-all *combine*). Per GPU and
-# direction, that is `tokens x top_k x hidden x bytes`, and $(p-1)/p$ of it crosses the fabric. The
+# direction, the traffic is `tokens x top_k x hidden x bytes`, and $(p-1)/p$ of it crosses the fabric. The
 # next cell uses a Mixtral-like layer (hidden 4096, top-2) with 256 tokens per GPU in BF16:
 
 # %%
@@ -330,7 +330,7 @@ for algo in ("pairwise", "direct"):
 
 # %% [markdown]
 # Pipeline parallelism sends one `tokens x hidden` activation per stage boundary per micro-batch
-# (point-to-point, not per layer). That is small. This is why the slower scale-out network is
+# (point-to-point, not per layer). That activation is small. Thus the slower scale-out network is
 # sufficient for PP, while TP and EP stay in the NVLink domain.
 #
 # ## Exercise 3.6: find the hang
@@ -377,7 +377,7 @@ print("✅ the first call where ranks disagree is where everyone else blocks unt
 # rank. That is exactly the input to this function.
 #
 # Floats teach you one more thing: the ring and the tree add in **different orders**. Thus their
-# float32 results are different in the last bits. But all ranks still agree *within* one algorithm.
+# float32 results are different in the last bits. But when all ranks use the *same* algorithm, they still agree.
 
 # %%
 xs = [np.random.default_rng(i).normal(size=4096).astype(np.float32) for i in range(8)]
@@ -395,7 +395,7 @@ print("ring vs tree max |diff|    :", float(np.max(np.abs(ring_out[0] - tree_out
 # are latency-bound.
 #
 # "We use an algorithm with few steps (a one-/two-shot custom all-reduce, or NVLS where the switch
-# supports it). We capture it in the decode CUDA graph. Prefill messages are 100+ MB and
+# supports it). We capture the all-reduce in the decode CUDA graph. Prefill messages are 100+ MB and
 # bandwidth-bound. There, NCCL's ring or NVLS is at the link limit. We confirm this when we compare
 # busbw from nccl-tests with the NVLink spec.
 #

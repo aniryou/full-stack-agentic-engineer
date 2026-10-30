@@ -361,27 +361,27 @@ TRL's `GKDTrainer` minimises $\mathrm{JSD}(\beta)$ and mixes the data sources pe
 ```mermaid
 flowchart LR
   P([prompts]) --> C{"λ coin flip,<br/>per batch"}
-  C -->|"probability λ"| S["Student samples<br/>on-policy"]
-  C -->|"seq_kd=True"| T["Teacher<br/>generates"]
-  C -->|"seq_kd=False"| D[("completion<br/>from the dataset")]
+  C -->|"with probability λ"| S["Student samples<br/>on-policy"]
+  C -->|"otherwise, seq_kd=True"| T["Teacher<br/>generates"]
+  C -->|"otherwise, seq_kd=False"| D[("completion<br/>from the dataset")]
   S --> X["text of<br/>the batch"]
   T --> X
   D --> X
 ```
 
-*The GKD loop of TRL's `GKDTrainer`, the same loop as `onpolicy.gkd_train()`, part 1. A coin flip with probability λ selects the source of each batch.*
+*Part 1 of the GKD loop of TRL's `GKDTrainer`, the same loop as `onpolicy.gkd_train()`. A coin flip with probability λ selects the student. If not, `seq_kd` selects the teacher or the dataset.*
 
 ```mermaid
 flowchart LR
-  X["text of<br/>the batch"] --> TS["Teacher:<br/>full next-token<br/>distribution"]
-  X --> SS["Student:<br/>its distribution"]
+  X["text of<br/>the batch"] --> TS["Teacher:<br/>its distribution<br/>at every position"]
+  X --> SS["Student:<br/>its distribution<br/>at the same positions"]
   TS --> J["JSD(β)<br/>β = 0: forward KL<br/>β = 1: reverse KL"]
   SS --> J
   J -->|"gradient"| U[["update<br/>the student"]]
-  U -.->|"next batch"| C{"λ coin flip,<br/>per batch"}
+  U -.->|"next batch"| C{"λ coin flip<br/>of part 1"}
 ```
 
-*Part 2 of the GKD loop. The teacher gives its full next-token distribution at every position of that text, and the student minimises JSD(β) there. At β = 1, the per-token reward of the policy-gradient view gives the same gradient in expectation (`onpolicy.token_pg_identity()`).*
+*Part 2 of the GKD loop. The teacher gives its full next-token distribution at every position of that text, and the student minimises JSD(β) there. At β = 1, the per-token reward of the policy-gradient view gives the same gradient in expectation (`onpolicy.token_pg_identity()`). Then the next batch goes back to the λ coin flip of part 1.*
 
 **Exposure bias removed.** Continue the training of the §3 KD student with GKD at λ = 1 for 300 steps (notebook
 02):
@@ -506,14 +506,14 @@ answer is correct with probability $1 - e_0 \cdot (1 - q)^L$ ($e_0 = 0.8,\; q = 
 
 ```mermaid
 flowchart LR
-  T["Teacher<br/>RL policy<br/>16,000 rollouts"] -->|"1,000 traces"| F{"filter"}
-  F -->|"kept traces"| M["LengthPolicy<br/>.fit()<br/>the stop rule"]
+  T["Teacher<br/>RL, 16,000<br/>rollouts"] -->|"1,000<br/>traces"| F{"filter"}
+  F -->|"all, correct only,<br/>or correct and<br/>L ≤ 16 or 12"| M["LengthPolicy.fit()<br/>the stop rule"]
   M --> S["Student<br/>procedure and<br/>thinking length"]
   S --> W["serving workload<br/>decode-heavy<br/>heavy-tailed"]
   S --> K["accuracy from<br/>its own<br/>knowledge q"]
 ```
 
-*The trace pipeline of §5. The teacher's traces go through a filter (`reasoning.distil()`), and `LengthPolicy.fit()` reads the stop rule from the lengths that stay. The student copies that rule, that is the procedure and the thinking length, but its accuracy comes from its own knowledge $q$.*
+*The trace pipeline of §5. The teacher comes from `reasoning.reinforce()`. Its traces go through a filter (`reasoning.distil()`), and `LengthPolicy.fit()` reads the stop rule from the lengths that stay. The student copies that rule, that is the procedure and the thinking length, but its accuracy comes from its own knowledge $q$.*
 
 A policy is a rule that decides when to stop. SFT on traces is maximum likelihood, and it has a closed form for this
 rule. At each length, the closed form is the fraction of traces that stopped at that length, among the traces that

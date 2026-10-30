@@ -33,16 +33,7 @@ server on Cloud Run or GKE (T3).
 
 An engine is **a loop around one forward pass**.
 
-```mermaid
-flowchart TB
-  S["schedule()<br/>the token budget: running first, then waiting"] --> B["build_batch()<br/>one flat batch, no padding,<br/>a slot per token"]
-  B --> F["forward<br/>one pass, the weights read once"]
-  F --> P["sample<br/>one token per complete prompt"]
-  P --> U["update()<br/>append the tokens, finish, free blocks"]
-  U -->|"next step"| S
-  S -.->|"allocate blocks,<br/>publish full blocks"| K[("KV cache manager<br/>the block pool")]
-  K -.->|"block tables"| B
-```
+![One engine step is a loop of schedule(), build_batch(), forward, sample and update(), and the KV cache manager gives blocks and block tables.](figures/engine-step-loop.svg)
 
 *In one step (§1), `schedule()` gives out the token budget and allocates blocks from the KV cache manager. `build_batch()` reads the block tables and flattens the scheduled tokens into one batch with no padding. One forward pass reads the weights once for all requests and reads each history through its block table. `update()` appends the sampled tokens and frees the blocks of finished requests, and the next step starts.*
 

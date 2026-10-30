@@ -788,7 +788,7 @@ largest batch that meets an **ITL of 10 ms** (100 tokens/s per user) and fits in
 
 ```mermaid
 flowchart LR
-  SLO(["ITL SLO<br/>10 ms"]) --> B["best_batch_under_itl()<br/>batch"]
+  SLO(["ITL SLO<br/>10 ms"]) --> B["best_batch_under_itl()<br/>meets the ITL<br/>fits in HBM"]
   B --> T["decode()<br/>tokens/s"]
   P["$/GPU-hr"] --> C
   T --> C["cost_per_million_tokens()"]

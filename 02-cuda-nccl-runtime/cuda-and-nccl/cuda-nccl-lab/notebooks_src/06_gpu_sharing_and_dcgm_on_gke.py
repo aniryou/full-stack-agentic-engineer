@@ -2,7 +2,7 @@
 # # 06 · GPU sharing and DCGM on GKE: MIG vs time-slicing, and reading the right metrics
 #
 # **Tier:** T0: the GKE manifests and Terraform pool definitions of the lab, a bundled dcgm-exporter scrape and
-# the alert rules. This notebook evaluates all of them offline. The scrape has **illustrative** values in the
+# the alert rules. This notebook examines all of them offline. The scrape has **illustrative** values in the
 # documented format of the exporter, not values from a real cluster. **T1/T2**: any GPU VM that you control
 # (Lambda, a GCP VM, your workstation), where you run dcgm-exporter in Docker and read a real scrape here. On
 # a rented A100/H100 VM, partition the GPU with MIG or share it with MPS by hand
@@ -133,7 +133,7 @@ print("✅ GPU_UTIL would read 100 % in both cases while 6-7 % of the SMs work: 
 # * It calculates signals from the values.
 # * It gives a first interpretation of the values.
 # * It sorts the XIDs by **owner** (application / node / hardware).
-# * It evaluates the alert rules of the lab.
+# * It runs the alert rules of the lab.
 
 # %%
 text = (Path(dcgm.__file__).parent / "fixtures" / "dcgm_exporter_sample.prom").read_text()
@@ -201,7 +201,7 @@ print("✅ decoded; the deployed rule tests bits 0x20|0x40 as:", thermal_rule.ex
 # Because the alert resolves, the drain keeps the state of the node, and the alert does not. One snapshot
 # cannot show a change, so `dcgm.evaluate` treats a present XID as recent.
 #
-# Write `worst_alert(snapshot)`. It returns the most severe severity of the rules that fire for one GPU, or
+# Write `worst_alert(snapshot)`. It returns the highest severity of the rules that fire for one GPU, or
 # `None`. `dcgm.evaluate([snapshot])` gives `(rule, severity, gpu)` tuples.
 
 # %% exercise
@@ -226,7 +226,7 @@ print("✅ nobody is paged tonight; node-d gets a ticket (thermal + pending row 
 # Each rule reads some DCGM fields (`rule.fields`). No exporter configuration exports all of these fields by
 # default. The stock dcgm-exporter does not export the clock-event bitmask. It also has `PROF_SM_ACTIVE` and
 # `PROF_SM_OCCUPANCY` commented out. The example list of DCGM fields that Google gives for GMP has the profiling
-# fields but no XID, row-remap or clock-event fields. The managed package of GKE is similar to this list (verify).
+# fields but no XID, row-remap or clock-event fields. The managed package of GKE is like this list (verify).
 #
 # If the exporter never exports the field of a rule, the rule never fires. Nothing tells you that the rule is
 # blind: the dashboard is quiet. `dcgm.EXPORTED_BY` records the upstream lists (read 2026-09-26, verify for your
@@ -278,7 +278,7 @@ if not scrapes:
 #
 # The next code cell prints the rules. `dcgm.rules_manifest()` generates them, and
 # `deploy/gke/06-dcgm-alert-rules.yaml` stores them. The rules are a **`ClusterRules`** object, because a
-# namespaced GMP `Rules` object evaluates only metrics from its own namespace. Also, the exporter never runs in the
+# namespaced GMP `Rules` object reads only metrics from its own namespace. Also, the exporter never runs in the
 # namespace of the workloads.
 #
 # The `namespace`/`pod` target labels of the scraper have priority. Thus the workload labels of the exporter
@@ -305,7 +305,7 @@ print("\n".join(dcgm.rules_manifest().splitlines()[:34]))
 # ## In a design review
 #
 # **Two minutes.** First, I ask if it is necessary to share the GPU at all. An inference engine with
-# continuous batching shares a GPU better than any partition of the GPU. Thus GPU sharing is for many small
+# continuous batching shares a GPU better than any partition of the GPU. Thus a shared GPU is for many small
 # things that come in bursts.
 #
 # If the tenants need isolation (memory, faults, predictable latency), I use MIG on an A100/H100-class GPU. I
@@ -328,7 +328,7 @@ print("\n".join(dcgm.rules_manifest().splitlines()[:34]))
 #    busy, the cause is small kernels, small batches or a launch-bound workload. In that case, batch, fuse, or
 #    use CUDA Graphs. Look at DRAM_ACTIVE: if the workload is bandwidth bound, move fewer bytes. Look at
 #    PIPE_TENSOR_ACTIVE to see if the tensor cores are in use at all.
-# 3. *XID 79 at 3 am on one node. Who acts, and how?* This is a hardware fault: the GPU "fell off the bus". The
+# 3. *XID 79 at 3 am on one node. Who acts, and how?* XID 79 is a hardware fault: the GPU "fell off the bus". The
 #    automation drains the node (cordon, evict). The on-call engineer sends a page to the infrastructure team.
 #    Then the node gets a reboot and a diagnosis (`dcgmi diag`). If the fault occurs again, replace the
 #    hardware. The application team only needs the scheduler to schedule its pods again.

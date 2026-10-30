@@ -201,7 +201,7 @@ can make decisions from attributes and from how pods share devices, not from cou
 flowchart TB
   DRV["DRA driver"] -->|"writes, per node or pool"| RS["ResourceSlice<br/>devices: attributes, capacity"]
   ADMIN["cluster admin"] -->|"writes"| DC["DeviceClass<br/>a named selection"]
-  WL["workload"] -->|"writes"| RC["ResourceClaimTemplate<br/>devices.requests: deviceClassName,<br/>CEL selectors, count"]
+  WL["workload"] -->|"writes"| RC["ResourceClaimTemplate<br/>deviceClassName, selectors"]
   RC -->|"listed in spec.resourceClaims"| POD["Pod<br/>containers: resources.claims"]
   RS --> DRP
   DC --> DRP
@@ -468,18 +468,18 @@ catches the rest.
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Suspended: Job created with the queue-name label, the webhook sets spec.suspend
-    Suspended --> QuotaReserved: the whole Workload fits the ClusterQueue quota (logical)
-    QuotaReserved --> Admitted: admission checks pass, TAS assignment or ProvisioningRequest (physical)
-    Admitted --> Running: Job unsuspended, pods get the flavor nodeSelector, all pods Ready
-    Admitted --> Evicted: pods not all Ready within 30 min (waitForPodsReady)
+    [*] --> Suspended: Job created
+    Suspended --> QuotaReserved: whole Workload fits quota
+    QuotaReserved --> Admitted: TAS or ProvisioningRequest
+    Admitted --> Running: all pods Ready
+    Admitted --> Evicted: waitForPodsReady, 30 min
     Evicted --> Suspended: requeued with backoff
     Running --> [*]: Job complete
 ```
 
-*The figure shows one gang job under Kueue. The webhook suspends the Job at creation. Kueue reserves quota for the
-whole Workload, runs the admission checks, and then unsuspends the Job. If the pods are not all Ready within 30 min,
-`waitForPodsReady` evicts the job and requeues it with backoff.*
+*Under Kueue, the webhook suspends a gang Job at creation, and Kueue reserves logical quota for the whole Workload.
+TAS or a ProvisioningRequest does the check of physical capacity, and then Kueue unsuspends the Job. If the pods are
+not all Ready within 30 min, `waitForPodsReady` evicts the job and requeues it with backoff.*
 
 ### 4.3 JobSet and LeaderWorkerSet
 

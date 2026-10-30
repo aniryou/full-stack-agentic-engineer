@@ -44,7 +44,7 @@ for label, addr in patterns:
 # %% [markdown]
 # Read the table as the memory system reads it:
 #
-# * `a[lane]`: 32 x 4 B = 128 contiguous bytes, aligned, thus **4 sectors**. This is the ideal.
+# * `a[lane]`: 32 x 4 B = 128 contiguous bytes, aligned, thus **4 sectors**. This pattern is the ideal.
 # * `a[lane + 1]`: the same 128 bytes with an offset of 4. Thus they cross into a fifth sector, and
 #   the warp uses 80% of the bytes that the memory system moves. Misalignment has a small cost.
 # * `a[2 * lane]`: one float in two. Thus the warp needs 8 sectors, and it discards half of each
@@ -90,7 +90,7 @@ print("tile[32][33] column read:", bank_conflicts(col(33)))
 #
 # Write `sectors(addresses, elem_bytes)`. It returns the number of different 32-byte sectors that
 # the warp touches when each lane reads `elem_bytes` bytes that start at its address. An access can
-# cross into two sectors. Thus count each byte that it touches (address `a` touches bytes
+# cross into two sectors. Thus count each byte that the access touches (address `a` touches bytes
 # `a .. a + elem_bytes - 1`).
 
 # %% exercise
@@ -116,7 +116,7 @@ print("✅ sectors() matches the model, including straddling accesses")
 #
 # * `a[3 * lane]`, float32
 # * `a[lane]`, float64
-# * `a[lane // 2]`, float32 (pairs of lanes read the same float)
+# * `a[lane // 2]`, float32. Pairs of lanes read the same float.
 # * a warp that reads **column** 5 of a row-major `float32` matrix with 1024 columns
 
 # %% exercise
@@ -217,7 +217,7 @@ assert sorted_ > 2 * unsorted
 print(f"✅ SIMT efficiency: {unsorted:.0%} unsorted -> {sorted_:.0%} sorted by length")
 
 # %% [markdown]
-# That is why kernels over ragged batches put the sequences into buckets by length, or sort them by
+# That difference is why kernels over ragged batches put the sequences into buckets by length, or sort them by
 # length. It is also why attention kernels divide work by *tiles of tokens*, and not by one thread
 # per sequence. A branch costs nothing extra when all 32 lanes agree. Warp-aligned branches are
 # free:
