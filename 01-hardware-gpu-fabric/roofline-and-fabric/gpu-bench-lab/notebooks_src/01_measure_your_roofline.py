@@ -101,7 +101,7 @@ print("✅ my_gemm_cost matches the lab's accounting (and a square GEMM's intens
 # The first call of anything is slow. Fresh buffers page-fault, the BLAS thread pool (or cuBLAS) starts and selects
 # a kernel, and the clock frequencies increase. Thus a benchmark does a warm-up first. Then it repeats the call until each
 # sample is sufficiently long that the timer resolution is small in comparison. It takes several samples and reports
-# the **best** (what the machine can do) and the **median** (what you typically see). On a GPU, it must also wait
+# the **best** (what the machine can do) and the **median** (what you usually see). On a GPU, it must also wait
 # until the asynchronous work is complete, and the torch backend uses CUDA events for this.
 
 # %%
@@ -125,7 +125,7 @@ print(f"→ {si(m.flops_per_s(), 'FLOP/s')} best, {si(m.flops_per_s('median'), '
 # on a CPU, and the tensor-core rate on a GPU.
 #
 # The speedup of fp16/bf16 over IEEE fp32 **depends on the part**. It is about 15–16× on an A100 or H100, 8× on a
-# T4 and 4× on an L4. It is 2× on an RTX 4090 (its fp16 figure with fp32 accumulate, which is what PyTorch uses).
+# T4 and 4× on an L4. It is 2× on an RTX 4090 for its fp16 figure with fp32 accumulate, the mode that PyTorch uses.
 # TF32 has a rate between the two, where it exists. The next cell prints the ratios from the spec table, so you know what to expect on
 # your GPU.
 #
@@ -386,10 +386,10 @@ print(f"✅ {batches[-1]}× the rows for {table[-1][2] / table[0][2]:.1f}× the 
 # cost. After the batch passes your ridge, the FLOPs become the limit, and the time increases with the batch. Where
 # the measurement is different from the model, the model tells you something:
 #
-# * **far below** it: the weights came from cache, not from memory (a CPU with a large last-level cache: the model
-#   counts DRAM bytes).
+# * **far below** it: the weights came from cache, not from memory. This occurs, for example, on a CPU with a
+#   large last-level cache, because the model counts DRAM bytes.
 # * **far above** it at a small batch: the library runs below the roof there. For a GEMM with a few rows, CPU BLAS
-#   libraries typically copy ("pack") the weight matrix into their own tile layout. That is one more read and write
+#   libraries usually copy ("pack") the weight matrix into their own tile layout. That is one more read and write
 #   of every weight. But batch 1 uses a GEMV path that streams the weights one time. GPU libraries have the same kind
 #   of sudden change in rate between GEMV and GEMM kernels. This is why engines supply their own small-batch decode
 #   kernels.
@@ -428,7 +428,7 @@ print(f"✅ H100 bf16, d = 8192: {standalone} counting activation bytes, {on_chi
 #
 # "A large prefill GEMM is far to the right of the ridge (compute-bound). A decode step at batch 1 is at ~1 FLOP per
 # byte (memory-bound, at well under 1% of peak FLOP/s). Thus decode time is weight bytes divided by bandwidth until
-# the batch gets to a few hundred. Up to that point, batching gives throughput that is nearly free.
+# the batch gets to a few hundred. Up to that point, batching gives throughput that is almost free.
 #
 # "Quantisation decreases the bytes that decode streams, and that is what makes decode faster. FP8 schemes for the
 # weights *and* the activations also double the tensor-core rate. That matters only where the math is the limit:

@@ -2,7 +2,7 @@
 
 **Tier:** T0 + Docker. **Cost:** free. **Time:** about 5 minutes the first time (image build and a Postgres pull).
 
-The `up.sh` script of this folder starts the services in the table. All of them are bound to 127.0.0.1:
+The `up.sh` script of this folder starts the services in the table. `compose.yaml` binds all of them to 127.0.0.1:
 
 | Service | Port | What it is |
 |---|---|---|
@@ -34,12 +34,12 @@ The service, the SQLite store and Postgres are real. The model server is the fak
 hits obey the block rules of vLLM, and its TTFTs come from a roofline model. When you quote these numbers, say
 "simulated". For measurements, run a real vLLM ([`../any-gpu/`](../any-gpu/)). Then point `MEMLAB_LLM_URL` at it.
 
-The passwords and the token key in `compose.yaml` are local-only defaults (the ports are bound to 127.0.0.1).
+The passwords and the token key in `compose.yaml` are local-only defaults, because `compose.yaml` binds the ports to 127.0.0.1.
 For anything shared, set your own `MEMLAB_TOKEN_KEY` and `MEMLAB_PG_PASSWORD` in your shell.
 
 ## Cost
 
-It costs nothing more than the CPU of your laptop and about 1 GB of disk for the images.
+This local setup costs nothing more than the CPU of your laptop and about 1 GB of disk for the images.
 
 ## Cleanup
 

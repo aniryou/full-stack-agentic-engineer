@@ -83,15 +83,15 @@ ideas for real:
 
 - The same kernels in Numba (the CUDA simulator on a CPU, then any GPU).
 - Collectives over OS pipes, gloo and NCCL.
-- nccl-tests output (bundled samples, or your own from two or more GPUs). The lab parses it into algbw/busbw and an
+- nccl-tests output (bundled samples, or your own from two or more GPUs). The lab parses the output into algbw/busbw and an
   α-β fit.
 - What a container really sees of its GPU.
 - MIG, time-sharing and DCGM on GKE (optional).
 
 ## Going further / caveats
 
-- Every output is **simulated**. It is a model of documented NVIDIA behaviour, not a measurement. The lab measures.
-- The version tables, per-SM limits and MIG profiles are dated September 2026. They have the *verify* mark in the
+- Every output comes from a **simulation**. It is a model of documented NVIDIA behaviour, not a measurement. The lab measures.
+- The version tables, per-SM limits and MIG profiles have the date September 2026. They have the *verify* mark in the
   code and in the [Verify list](../PRIMER.md#verify-list) of the primer.
 - [`COMPUTE.md`](../../../COMPUTE.md) tells where to run the GPU parts and what they cost.
 

@@ -63,14 +63,14 @@ for task in tm.TASKS:
           f"{np.mean(top > 0.999):.1%} of answer positions")
 
 # %% [markdown]
-# The reference is saturated. It is almost certain at every position. Thus a small logit error almost does not
+# The reference is saturated. It is almost sure of its answer at every position. Thus a small logit error almost does not
 # move the softmax, and KL values of 1e-8 against 1e-9 mean nothing.
 #
 # The model is also easy to compensate. Its inputs come from a 16-token vocabulary through 128-wide layers. Thus
-# they are low-rank, and GPTQ can move nearly all of the rounding error of each column onto the other columns.
-# That is why INT4 GPTQ looks as near to BF16 as FP8 or W8A8 here.
+# they are low-rank, and GPTQ can move almost all of the rounding error of each column onto the other columns.
+# For these reasons, INT4 GPTQ looks as near to BF16 as FP8 or W8A8 here.
 #
-# On a real LLM, expect FP8 W8A8 and INT8 W8A8 with SmoothQuant within a fraction of a point. Expect INT4
+# On a real LLM, expect FP8 W8A8 and INT8 W8A8 with SmoothQuant at most a fraction of a point from the reference. Expect INT4
 # GPTQ/AWQ behind them, and INT4 RTN last. This is the order from which `cost.choose()` in PRIMER §10 starts.
 # Measure the order on your model. The things that transfer from this table are the mechanisms, not the order of the schemes that
 # pass. These mechanisms are the outlier loss of RTN, what calibration gets back, and the collapse of FP4
@@ -117,9 +117,9 @@ for task in tm.TASKS:
     print(f"{task:8s} disagreement by position {np.round(dis, 3)}   first wrong position counts {first}")
 
 # %% [markdown]
-# For `add`, the damage is almost entirely on the tens digit. This is the first digit that depends on a carry. The
-# same pattern occurs at scale: quantization damage goes mostly to specific capabilities (arithmetic, rare
-# languages, tool-call formats, long-range retrieval). Thus a task-level eval on *your* workload is the gate, not
+# For `add`, almost all of the damage is on the tens digit. This is the first digit that depends on a carry. The
+# same pattern occurs at scale: quantization damage goes mostly to specific capabilities, for example arithmetic, rare
+# languages, tool-call formats and long-range retrieval. Thus a task-level eval on *your* workload is the gate, not
 # perplexity.
 #
 # ## Exercise 3.2 — how many questions does it take to see a drop?
@@ -249,7 +249,7 @@ for e in (1 - e_rtn, 1e-3, 1e-4):
     print(f"per-token divergence {e:.1e}: " + "  ".join(f"L={L:>6,}: {1 - (1 - e) ** L:6.1%}" for L in (6, 500, 5000, 20000)))
 
 # %% [markdown]
-# Divergence is not failure, because a paraphrase can still be correct. But divergence is the reason to evaluate
+# Divergence is not failure, because a paraphrase can still be correct. But divergence is the reason to run evals of
 # quantized *reasoning* models on long-generation tasks (math, code). These evals use the chat template and the
 # thinking tokens of the model. Divergence is also the reason that a KL budget is more important for them than
 # for short classification.
@@ -259,8 +259,8 @@ for e in (1 - e_rtn, 1e-3, 1e-4):
 # The next cell gives the command lines for the three backends (lm-eval 0.4.13, verify):
 #
 # * `vllm` runs the engine in process.
-# * `local-completions` evaluates a server that you already started (the same server that you use for the
-#   benchmark).
+# * `local-completions` runs the eval against a server that you already started. This server is the same one that
+#   you use for the benchmark.
 # * `hf` uses transformers.
 #
 # The commands set `add_bos_token=True`, because quantized models can be sensitive to it (the vLLM docs).
@@ -305,6 +305,6 @@ else:
 # limit on the damage only on that distribution. KL measures the shift everywhere, and a large KL predicts failures
 # on inputs that the eval did not contain.
 #
-# **Drill 3.** *lm-eval says 27.2 against 30.0 on gsm8k with ±2.9 stderr each. Regression?* Unpaired, it is within
+# **Drill 3.** *lm-eval says 27.2 against 30.0 on gsm8k with ±2.9 stderr each. Regression?* Unpaired, it is inside
 # the noise ($z \approx -0.7$). Run the eval again with `--log_samples`. Then count the paired flips. Or run the full
 # split.

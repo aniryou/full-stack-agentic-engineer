@@ -6,12 +6,12 @@
 # formulas plus a roofline step.
 #
 # Two `thinking-lab` notebooks ask the same questions against a server:
-# `02_a_thinking_model_on_one_gpu` and `04_serving_thinking_models`. The server is a T0 fake server that emits
+# `02_a_thinking_model_on_one_gpu` and `04_serving_thinking_models`. The server is a T0 fake server that sends
 # `reasoning` deltas, or real vLLM with Qwen3 and `--reasoning-parser` on a T4.
 #
 # ## The one-minute version
 # Training teaches a thinking model to spend output tokens before it answers. RL with verifiable rewards makes the
-# thinking longer. Rejection-sampling SFT keeps it. Distillation copies it into small models without RL.
+# thinking longer. Rejection-sampling SFT keeps the longer thinking. Distillation copies it into small models without RL.
 #
 # - Thus the serving workload is **output-heavy and decode-bound**. Its length distribution is **heavy-tailed**:
 #   the p99 trace is ten times the median. The KV of a request grows while the request thinks. Thus its
@@ -102,7 +102,7 @@ print(f"Qwen3-0.6B: {kv:.0f} kB of KV per token ({kv * 1000:,.0f} B); an 8K-toke
 # does not include: HBM and the ITL SLO limit the batch per GPU.
 #
 # Like the primer, `w.plan` gives every output token the TPOT of the SLO. But `w.plan_steady`
-# lets a request live as long as the step at which the fleet actually runs. With this model,
+# calculates the lifetime of a request from the step at which the fleet actually runs. With this model,
 # $N = \text{rps} \cdot (\text{TTFT} + \text{out} \cdot \operatorname{step}(b))/b$ GPUs hold a steady batch $b$ per
 # GPU (`w.gpus_for_batch`).
 
@@ -130,11 +130,11 @@ print(f"decode_aggregate alone would batch all 1,000 on one GPU: "
 # against 1,650). The decode *throughput* that is necessary is not the binding constraint.
 #
 # Read the last two rows of `w.plan` carefully. A 20 ms SLO halves the lifetime that the convention assumes. Thus
-# it needs *fewer* GPUs (3) than the 40 ms SLO (6). That is an artefact.
+# the 20 ms SLO needs *fewer* GPUs (3) than the 40 ms SLO (6). That result is an artefact.
 #
 # At 3 GPUs, the fleet becomes stable at 154 per GPU and 18.5 ms a step, under the two SLOs. Thus `w.plan_steady`
 # needs 3 for the two SLOs, and the need of the tight SLO is the larger. With a 20 ms ITL SLO, the step time limits
-# each GPU to 174 sessions. This is less than the 195 sessions that fit in HBM. Thus ITL binds first.
+# each GPU to 174 sessions. This limit is less than the 195 sessions that fit in HBM. Thus ITL binds first.
 #
 # ## Worked example 4 — KV working set: memory × time
 # A request holds ${P + t}$ tokens of KV at decode step $t$, for $L$ steps:
@@ -167,7 +167,7 @@ for cap in (2048, 4096, 8192, 16384):
 # %% [markdown]
 # The tokens are the same, but the outcome is different. At 4K, one request in six gets no answer at all under
 # `max_tokens`. Set `max_tokens` (and `max_model_len`) to a large value. Use a thinking budget to limit the cost.
-# Note the thing that does **not** work for this on Qwen3. A `reasoning_effort` other than "none" only switches
+# On Qwen3, one setting does **not** limit the cost. A `reasoning_effort` other than "none" only switches
 # thinking on (primer §5, verify).
 #
 # ## Worked example 6 — prefix caching when the template drops old thinking
@@ -208,7 +208,7 @@ for policy in ({"easy": "off", "hard": "off"}, {"easy": "on", "hard": "on"}, {"e
 
 # %% [markdown]
 # Thinking on all requests gives more accuracy at 5× the cost. Thinking only where it gives a benefit keeps almost
-# all of the accuracy for a fraction of the cost. That is routing by effort at the gateway (layer 06). It needs a
+# all of the accuracy for a fraction of the cost. That is routing by effort at the gateway (layer 06). Routing by effort needs a
 # classifier, or a low-cost first pass, that knows which requests are hard.
 #
 # ## Exercise 5.1 — memory × time
@@ -233,7 +233,7 @@ print(f"✅ 10× the output, {ratio:.1f}× the KV-token-steps: the L²/2 term ta
 # %% [markdown]
 # ## Exercise 5.2 — size the thinking deployment by hand
 # This is the bank with thinking. It has 3,000 output tokens, 1,500 in, FP8 and an 80 GB H100 with 10% kept in
-# reserve. It also has 24 GB of weights and 81.92 kB of KV per token. In FP8, this is 2 × 40 layers × 8 KV heads ×
+# reserve. It also has 24 GB of weights and 81.92 kB of KV per token. In FP8, the KV per token is 2 × 40 layers × 8 KV heads ×
 # 128 × 1 byte. As in `capacity.py`, kB = 1,000 bytes and GB = 10⁹. Calculate these values with the convention of
 # the capacity primer:
 #
@@ -266,8 +266,8 @@ print(f"✅ {live:,.0f} live sessions / {per_gpu:.1f} per GPU = {gpus:.2f} GPUs 
 # %% [markdown]
 # ## Exercise 5.3 — choose `max_model_len`
 # Prompts are 1,500 tokens, answers are 300 tokens, and thinking is $\operatorname{lognormal}(1{,}500, \sigma = 1)$.
-# Select the smallest `max_model_len` that is a multiple of 1,024 and truncates at most 1% of requests. (vLLM's
-# `max_model_len` sets the limit for prompt + output.)
+# Select the smallest `max_model_len` that is a multiple of 1,024 and truncates at most 1% of requests. vLLM's
+# `max_model_len` sets the limit for prompt + output.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -307,7 +307,7 @@ print(f"✅ turn 2: {prompt2:,} tokens, {hit2:,} cached, {prefill2} prefilled �
 # ## Exercise 5.5 — route by effort
 # Use `acc`, `share`, `no_think` and `thinking` from worked example 7. Set `best_policy` to the routing with the
 # lowest cost per correct answer. The routing is a dictionary `{"easy": ..., "hard": ...}` with the values "on" or
-# "off". The overall accuracy must be at least 0.90.
+# "off". The accuracy over all requests must be at least 0.90.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -363,7 +363,7 @@ print(f"✅ keeping only correct samples: thinking {before['length']:.2f} → {a
 # cost per correct answer, and we route effort per request class at the gateway."
 #
 # **Drill questions**
-# 1. *We enabled thinking and p99 ITL doubled at the same QPS. Why?* The concurrency increased with the output
+# 1. *We switched thinking on and p99 ITL doubled at the same QPS. Why?* The concurrency increased with the output
 #    length (Little's law), and the KV of each session grew. Thus decode batches are larger and read more KV per
 #    step. If HBM becomes full, preemptions add recomputation. The thing that changed is the capacity for ITL, not
 #    tokens/s.

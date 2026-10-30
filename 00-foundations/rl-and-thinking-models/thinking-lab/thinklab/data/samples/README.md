@@ -13,6 +13,6 @@ they parse the real output at T1.
 | `vllm_chat_truncated.json` | `max_tokens: 64` on a question that needs more thinking: `content: null`, `finish_reason: "length"` |
 | `sglang_chat_reasoning_content.json` | the SGLang / DeepSeek-API name of the field: `message.reasoning_content` |
 | `vllm_stream_qwen3.sse` | a streamed response: role chunk, `delta.reasoning` chunks, `delta.content` chunks, usage, `[DONE]` |
-| `deepseek_r1_raw.txt` | raw R1-distill text as `/v1/completions` returns it: no `<think>` at the start (the template put it in the prompt) |
+| `deepseek_r1_raw.txt` | raw R1-distill text as `/v1/completions` returns it: no `<think>` at the start. The template put `<think>` in the prompt. |
 | `gptoss_harmony_raw.txt` | raw gpt-oss text: `analysis` and `final` channels |
 | `sim_eval_records.jsonl` | per-sample outcomes of the lab's **simulated** model on the generated eval set (regenerate: `python -m thinklab.thinking.recorded`) |

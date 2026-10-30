@@ -22,7 +22,7 @@
 # * There are two solutions. The first is the **Switch auxiliary loss** $\alpha \cdot E \cdot \sum f_e P_e$,
 #   which pushes the probabilities of the router toward uniform. The second is the **auxiliary-loss-free bias
 #   of DeepSeek-V3**. It is a per-expert bias that only *selects* experts. Each step moves it by a small
-#   constant quantity, in the direction of the sign of its load error. The gate weights never see it.
+#   constant quantity, in the direction of the sign of its load error. The gate weights never see the bias.
 # * Experts do specialise, but along the lines that the data make low-cost. In this toy, the token in front of
 #   the router explains most of the selection, and the domain explains almost none. Measure. Do not assume.
 #
@@ -178,7 +178,7 @@ print("✅ E = 1 is the dense MLP; sparse dispatch gives what computing every ex
 # $E \cdot \sum_e f_e \cdot P_e$. Here $f_e = (\text{assignments to } e) / N$. Thus $\sum f_e = k$. $P_e$ is
 # the mean probability of $e$ over the tokens.
 #
-# This is the normalisation of the transformers `load_balancing_loss_func`. Fully uniform routing gives
+# This loss has the normalisation of the transformers `load_balancing_loss_func`. Fully uniform routing gives
 # **$k$**, not 1. Megatron and MegaBlocks divide by $k$. Thus their loss is 1 at balance. Say which one you
 # mean.
 #
@@ -218,8 +218,8 @@ print("✅ uniform -> k (HF normalisation), full collapse -> E; Megatron's versi
 #
 # Every token embedding shares one large direction (`TrainConfig.common = 12`), as the hidden states of a real
 # transformer do. Thus, at step 0, the router gives almost the same scores to every token. With torch, this
-# cell trains the model here (approximately 5 s for each run on one CPU thread). Without torch, it reads the
-# runs that this code recorded.
+# cell trains the model here. Each run takes approximately 5 s on one CPU thread. Without torch, the cell reads
+# the runs that this code recorded.
 
 # %%
 if HAS_TORCH:
@@ -251,7 +251,7 @@ for b in ("none", "bias"):
 
 # %% [markdown]
 # Read the table. Without a balance method, the router collapses. The busiest expert carries 6–7× its fair
-# share, and five or six of the eight experts are dead (each gets under 2% of the tokens). Thus the model is
+# share, and five or six of the eight experts are dead, with under 2% of the tokens each. Thus the model is
 # in effect a two- or three-expert MoE that carries the memory of eight experts. Its loss is 0.1–0.3 nats
 # worse than the loss of each balanced run. Both solutions keep every expert alive, at max/mean 1.04–1.17.
 #
@@ -390,7 +390,7 @@ else:
 #
 # **Two minutes:** "An MoE layer is a router plus $E$ ordinary MLPs. Each token runs $k$ of them. Thus we
 # pay memory for all $E$ and compute for $k$. The router needs help to spread the load. With no help, top-1
-# routing collapses. In our toy, the busiest expert carried 6-7x its share within 400 steps, most experts were
+# routing collapses. In our toy, the busiest expert carried 6-7x its share in 400 steps, most experts were
 # dead, and the loss was worse.
 #
 # "Training adds one of two things. The first is the Switch loss, which pushes the probabilities of the router
@@ -403,7 +403,7 @@ else:
 # measure it. We do not guess it."
 #
 # **Drill 1.** *Your aux loss reads 2.0. Is the router in collapse now?* It depends on the normalisation. The
-# transformers `load_balancing_loss_func` is $k$ at perfect balance (2.0 for top-2 is ideal), and the loss of
+# transformers `load_balancing_loss_func` is $k$ at perfect balance (2.0 for top-2), and the loss of
 # Megatron and of MegaBlocks is 1. Look at the max/mean load and the dead experts, not at the raw loss.
 #
 # **Drill 2.** *Why does the DeepSeek-V3 bias not make the outputs worse in the way that the aux loss can?* The

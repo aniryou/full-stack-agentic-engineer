@@ -129,7 +129,7 @@ print("unconstrained 3-node gang:", spread)
 # %% [markdown]
 # With no constraint, Kueue puts all hosts in one flat list, tightest first (`LeastFreeCapacity`). It
 # takes the tightest single host that holds the whole gang. When no host does, it fills the smallest
-# gaps first (here, every free host holds one 8-GPU pod). Thus the 3-node job goes across sub-blocks.
+# gaps first. Here, every free host holds one 8-GPU pod. Thus the 3-node job goes across sub-blocks.
 #
 # With a topology constraint, Kueue uses **BestFit**. Among the domains that can hold the whole gang, it
 # takes the *tightest*. When it must divide a gang across child domains, it first takes the domains with
@@ -144,7 +144,7 @@ print("unconstrained 3-node gang:", spread)
 #
 # Write `bestfit(capacity, n)`. The `capacity` argument maps sibling domains to the number of pods that
 # each domain can take. Return `{domain: pods}` with all `n` pods placed, or `None` if they do not fit.
-# Use this rule again and again. If an unused domain can hold all the pods that are left, select the
+# Use this rule again and again. If an unused domain can hold the rest of the pods, select the
 # **smallest** such domain (ties by name) and stop. If not, take the domain with the **most** room (ties
 # by name) and fill it.
 
@@ -279,12 +279,12 @@ print("✅", choices)
 #
 # **Drill questions.**
 #
-# 1. *Twelve GPUs are allocated but nothing is training. What happened?* A partial placement of two
+# 1. *Twelve GPUs are allocated but nothing is training. What occurred?* A partial placement of two
 #    gangs. Each gang holds some GPUs and waits for the rest. Admit gangs atomically (Kueue,
 #    coscheduling).
 # 2. *Required or preferred topology for a 2-node tensor-parallel serving group?* Required, at the
 #    smallest multi-node domain. A replica that goes across a slow link is slow for its whole life.
-# 3. *Why does Kueue use LeastFreeCapacity for unconstrained pod sets but BestFit otherwise?* Without a
+# 3. *Why does Kueue use LeastFreeCapacity for unconstrained pod sets but BestFit for constrained ones?* Without a
 #    constraint, the goal is to use the tightest host, or to fill small gaps. The goal is also to keep
 #    large domains whole for the jobs that need them. With a constraint, the goal is to find the
 #    tightest single domain that holds the gang.

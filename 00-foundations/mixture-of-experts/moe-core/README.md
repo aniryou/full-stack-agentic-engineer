@@ -19,7 +19,7 @@ session.
    the byte".
 3. Open [`notebooks/01_the_moe_layer.ipynb`](notebooks/01_the_moe_layer.ipynb) and route six tokens.
 
-For the fastest result, run this from this directory:
+For the fastest result, run this code from this directory:
 
 ```python
 from moecore import touched
@@ -84,10 +84,10 @@ offline, in ~30 s. These tests carry the claims:
   21.20 ms at 64) and Qwen3's experts per layer. A check makes sure that layer 01's primer still prints those rows
   (`test_touched.py`). The tests also reproduce layer 02's 4 MiB, 22 µs pairwise and 10 µs direct all-to-all
   (`test_ep.py`). In `test_sizing.py`, the tests reproduce the 17.6 ms floor of Mistral Large 3 and the prefill of
-  2 × active × tokens from the capacity primer. The same file also reproduces the lab's `moelab.offload.fit` numbers
+  2 × active × tokens from the capacity primer. The tests in the same file also reproduce the lab's `moelab.offload.fit` numbers
   for OLMoE on a T4 and Qwen3-30B-A3B on an L4.
 - **The slowest rank, in both regimes.** Each EP rank is its own roofline. A skewed decode batch keeps the expert
-  time of every rank equal (weight reads), and costs only at the busiest port. But a prefill-sized batch makes the
+  time of every rank equal (weight reads). The skewed batch costs time only at the busiest port. But a prefill-sized batch makes the
   rows of the busiest rank the layer time (`test_ep.py`).
 - **Configs to published totals.** The tests match Mixtral 46,702,526,464 / 12,879,659,008 and Qwen3-30B-A3B
   30,531,911,680 / 3,352,821,760 exactly. They match these to 0.01B: DeepSeek-V3 671.03B / 37.55B, gpt-oss-120b

@@ -8,8 +8,8 @@ T4 second.
 
 ## Start here
 
-1. Run `python3 -m pip install -e ".[dev]" && python3 -m distillab tinylm`. With torch (the CPU build is
-   sufficient), this takes about 90 seconds. It trains a 101K-parameter teacher and four 26K-parameter students on
+1. Run `python3 -m pip install -e ".[dev]" && python3 -m distillab tinylm`. With torch, this takes about 90
+   seconds. The CPU build of torch is sufficient. The command trains a 101K-parameter teacher and four 26K-parameter students on
    the same budget. Then it prints a table of what each one learned. Without torch, it prints a recorded run.
 2. Open [`notebooks/01_kd_on_a_tiny_transformer.ipynb`](notebooks/01_kd_on_a_tiny_transformer.ipynb). It explains
    the same run. You write Hinton's loss and the divergence of GKD yourself. The notebook also shows what a verifier
@@ -30,10 +30,10 @@ comes after each exercise. The notebook ends with *in a design review*. The answ
 
 | # | Notebook | Tier | You will be able to explain | Primer | Time |
 |---|---|---|---|---|---|
-| 01 | [`kd_on_a_tiny_transformer`](notebooks/01_kd_on_a_tiny_transformer.ipynb) | T0 with torch (~2 min on a CPU) | Why logit KD does better than SFT on the *same* sequences (the soft target carries the behaviour of the teacher). The T² factor and the high-temperature limit. How a verifier filter makes a SeqKD student do better than its teacher, but agree with it less. The β of GKD in the convention of TRL. Mode covering against mode seeking, and a reverse-KL student that stops thinking. Exposure bias, measured. | [§1 Why distil](../PRIMER.md#1-why-distil), [§2 Soft targets, temperature and the choice of divergence](../PRIMER.md#2-soft-targets-temperature-and-the-choice-of-divergence), [§3 Sequence-level distillation](../PRIMER.md#3-sequence-level-distillation-learning-from-the-teachers-outputs) and [§4 On-policy distillation](../PRIMER.md#4-on-policy-distillation) | ~2.5 h |
+| 01 | [`kd_on_a_tiny_transformer`](notebooks/01_kd_on_a_tiny_transformer.ipynb) | T0 with torch (~2 min on a CPU) | Why logit KD does better than SFT on the *same* sequences: the soft target carries the behaviour of the teacher. The T² factor and the high-temperature limit. How a verifier filter makes a SeqKD student do better than its teacher, but agree with it less. The β of GKD in the convention of TRL. Mode covering against mode seeking, and a reverse-KL student that stops thinking. Exposure bias, measured. | [§1 Why distil](../PRIMER.md#1-why-distil), [§2 Soft targets, temperature and the choice of divergence](../PRIMER.md#2-soft-targets-temperature-and-the-choice-of-divergence), [§3 Sequence-level distillation](../PRIMER.md#3-sequence-level-distillation-learning-from-the-teachers-outputs) and [§4 On-policy distillation](../PRIMER.md#4-on-policy-distillation) | ~2.5 h |
 | 02 | [`teacher_data_and_a_real_student`](notebooks/02_teacher_data_and_a_real_student.ipynb) | T1 (T0: the simulated fake teacher, and a tiny student with torch) | The teacher-data pipeline, with its yield and its bill. What an API teacher gives (samples, top-k log-probs, `prompt_logprobs` scores), and why logit KD runs in-process. The per-token on-policy reward. How a student trained on unverified data learns the mistakes of the teacher. What fits on a T4, and why the logits decide it. | [§3](../PRIMER.md#3-sequence-level-distillation-learning-from-the-teachers-outputs), [§4](../PRIMER.md#4-on-policy-distillation) and [§10 Where to run it](../PRIMER.md#10-where-to-run-it) | ~2 h |
-| 03 | [`distilling_reasoning_traces_for_real`](notebooks/03_distilling_reasoning_traces_for_real.ipynb) | T1 (T0: bundled traces, which are illustrative, and a tiny run with torch) | What a student inherits from traces (procedure and length). How the verifier and a length cap change the balance of accuracy, coverage of hard problems and serving cost. How to select a cap and a `max_tokens`. Why a capped student can score at chance on correct-only data. | [§5 Distilling reasoning](../PRIMER.md#5-distilling-reasoning) | ~1.5 h |
-| 04 | [`a_distilled_draft_in_vllm`](notebooks/04_a_distilled_draft_in_vllm.ipynb) | T1, 24 GB (T0: tiny models with torch, and synthetic counters) | Acceptance as the metric of a draft. Why a draft distilled on the unfiltered outputs of the target does better than an off-the-shelf one. How to read the spec-decode counters of vLLM (α, mean acceptance length, the "acceptance rate" that is not α). The upper limit of a greedy draft. Which pairs vLLM accepts, and the best k. | [§7 A distilled draft for speculative decoding](../PRIMER.md#7-a-distilled-draft-for-speculative-decoding) | ~2 h |
+| 03 | [`distilling_reasoning_traces_for_real`](notebooks/03_distilling_reasoning_traces_for_real.ipynb) | T1 (T0: illustrative bundled traces, and a tiny run with torch) | What a student inherits from traces (procedure and length). How the verifier and a length cap change the balance of accuracy, coverage of hard problems and serving cost. How to select a cap and a `max_tokens`. Why a capped student can score at chance on correct-only data. | [§5 Distilling reasoning](../PRIMER.md#5-distilling-reasoning) | ~1.5 h |
+| 04 | [`a_distilled_draft_in_vllm`](notebooks/04_a_distilled_draft_in_vllm.ipynb) | T1, 24 GB (T0: tiny models with torch, and synthetic counters) | Acceptance as the metric of a draft. Why a draft distilled on the unfiltered outputs of the target does better than an off-the-shelf one. How to read the spec-decode counters of vLLM: α, mean acceptance length, and the "acceptance rate" that is not α. The upper limit of a greedy draft. Which pairs vLLM accepts, and the best k. | [§7 A distilled draft for speculative decoding](../PRIMER.md#7-a-distilled-draft-for-speculative-decoding) | ~2 h |
 | 05 | [`is_the_student_worth_it`](notebooks/05_is_the_student_worth_it.ipynb) | T0 calculators, simulated accuracy (T1: measured throughput, lm-eval) | Agreement against task accuracy. The capability gap per difficulty, with Wilson intervals. Serving cost per million tokens from a roofline decode step. The fixed cost and break-even. A cascade judged by cost per correct answer under an accuracy floor. The five options for a lower-cost model. | [§8 Measuring a student](../PRIMER.md#8-measuring-a-student) and [§9 The economics of a student](../PRIMER.md#9-the-economics-of-a-student) | ~2 h |
 
 | Tier | Where | What runs | In this lab |
@@ -81,7 +81,7 @@ simulated. `DISTILLAB_NO_TORCH=1` shows the recorded-run path, even on a machine
 | `hf/` | T1: `sft.py` (TRL `SFTTrainer`, LoRA option), `kd.py` (logit KD with the teacher in-process), `gkd.py` (TRL `GKDTrainer` and `DistillationTrainer`), `memory.py` (training memory from `config.json`). |
 | `metrics.py`, `report.py`, `env.py`, `__main__.py` | vLLM metric names and a parser, labelled tables and reports (MEASURED, SIMULATED, PREDICTED, ILLUSTRATIVE), tier detection, and the CLI. |
 
-Its siblings: the minimal core of the topic, [`../distill-core/`](../distill-core/). This lab never imports it. Some
+The siblings of this lab: the minimal core of the topic, [`../distill-core/`](../distill-core/). This lab never imports the core. Some
 formulas already have a home in the repo. This lab implements them again, and
 [`tests/test_repo_numbers.py`](tests/test_repo_numbers.py) compares them with that home. These formulas are:
 
@@ -119,11 +119,11 @@ make check                                              # all of the above + tes
 
 ## Caveats
 
-- **Measured, simulated, predicted, illustrative.** The lab measures the curves of the tiny models on your machine
-  (the recorded fallback says where it came from). The answers, slips and log-probabilities of the fake teacher come
+- **Measured, simulated, predicted, illustrative.** The lab measures the curves of the tiny models on your machine.
+  The recorded fallback says where its curves came from. The answers, slips and log-probabilities of the fake teacher come
   from a simulation. The fake teacher knows the answers to the generated problems, and it makes a slip with a
   probability that difficulty and temperature set. Serving costs and training memory are calculator predictions at
-  ideal bandwidth. Bundled traces and spec-decode counters are illustrative (the counters are synthetic at α = 0.7).
+  ideal bandwidth. Bundled traces and the synthetic spec-decode counters at α = 0.7 are illustrative.
   Every table says which.
 - **The toy is not a language model.** A 26K-parameter student on a sum task shows four mechanisms. Soft targets
   carry behaviour, and filters shape what the student inherits. Reverse KL can collapse, and the target accepts a

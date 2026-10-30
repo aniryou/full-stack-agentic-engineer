@@ -51,10 +51,10 @@ permits it, use Spot. Keep the duration short.
 
 ## Run it
 
-One command does the full cycle: apply, wait for the report, download to `results/gcp/`, destroy. No report
-within `TIMEOUT_MIN` (default 45) is also a failure. If something fails after the apply, the script copies the files
-that reached the bucket. Then it destroys all the resources, as it does after a successful run. `KEEP=1` keeps the
-resources instead:
+One command does the full cycle: apply, wait for the report, download to `results/gcp/`, destroy. If the script
+gets no report before the `TIMEOUT_MIN` limit (default 45), the run is also a failure. If something fails after the
+apply, the script copies the files that reached the bucket. Then it destroys all the resources, as it does after a
+successful run. `KEEP=1` keeps the resources instead:
 
 ```bash
 PROJECT=my-gpu-lab deploy/gcp/bench-on-gcp.sh
@@ -112,10 +112,11 @@ disks. Layer 03 covers how to get that capacity.
 * `boot_disk_type = pd-balanced` is correct for G2/A2/N1. Newer shapes (A3 Ultra, A4, ...) can need
   `hyperdisk-balanced`.
 * `torch_index_url` (default: CUDA 12.8 wheels) must agree with the driver of the image. CUDA 12.x needs R525+
-  through minor-version compatibility. Blackwell needs R570+. The newest PyTorch with cu128 wheels is 2.11 (Docker
-  Hub has no later `cuda12.8` tag). Thus this VM runs an older PyTorch than the Docker path.
+  through minor-version compatibility. Blackwell needs R570+. The newest PyTorch with cu128 wheels is 2.11. Docker
+  Hub shows the same limit: it has no `cuda12.8` tag for a PyTorch version after 2.11. Thus this VM runs an older
+  PyTorch than the Docker path.
 * `max_run_duration` counts only the time in the RUNNING state. It does not delete a VM that powered itself off.
 * L4 availability in `us-central1-a`, Spot pricing and discounts.
 
-The topic primer, [`../../../PRIMER.md`](../../../PRIMER.md), explains the concepts behind the numbers. Its §10
-"Getting hardware" covers the GCP families and how to get them.
+The topic primer, [`../../../PRIMER.md`](../../../PRIMER.md), explains the concepts behind the numbers. The primer's
+§10 "Getting hardware" covers the GCP families and how to get them.

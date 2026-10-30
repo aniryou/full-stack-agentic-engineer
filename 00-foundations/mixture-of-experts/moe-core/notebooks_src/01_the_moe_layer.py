@@ -15,7 +15,7 @@
 # $E/k$ times, and the compute per token almost does not change. This notebook shows the §9 row of the transformer
 # primer in concrete numbers.
 #
-# The families differ in details that change the numbers:
+# The families are different in details that change the numbers:
 # - softmax scores or sigmoid scores
 # - a router that renormalises the $k$ weights, or a router that does not
 # - a bias that selects experts but never weights them (DeepSeek-V3)
@@ -77,8 +77,8 @@ print("token of each slot (slot // k)   :", (order // 2).tolist())
 # - OLMoE (`norm_topk_prob=False`, also the default of transformers for Qwen2/Qwen3-MoE) keeps the raw softmax mass.
 #   But reports say that the released Qwen3 MoE configs set this flag true (verify: read the config of the
 #   checkpoint). Thus those configs give weights as Mixtral does.
-# - gpt-oss selects on the logits and does a softmax over only those $k$. This is *exactly* the renormalised softmax of
-#   Mixtral (the exponent ratios are the same).
+# - gpt-oss selects on the logits and does a softmax over only those $k$. The exponent ratios are the same. Thus the
+#   result is *exactly* the renormalised softmax of Mixtral.
 # - DeepSeek-V3 uses sigmoid scores, renormalises them and multiplies them by 2.5.
 # - Llama 4 keeps one expert, and its sigmoid score scales the *input* of the expert.
 
@@ -248,16 +248,16 @@ print(f"✅ same FLOPs, same parameters; {combos_coarse} expert sets vs {combos_
 # "All $E$ experts stay in memory, but each token calculates only $k$ of them. Thus a model like Mixtral holds 46.7B
 # parameters but runs 12.9B per token, and DeepSeek-V3 holds 671B and runs approximately 37B.
 #
-# "The routers differ: softmax or sigmoid, renormalised or not, and the selection-only bias of DeepSeek. The 'active'
-# numbers also differ: gpt-oss counts only the LM head, and DeepSeek counts both embedding tables. Kernels sort the
-# tokens by expert and do one grouped GEMM. Thus an expert that no token selected costs no FLOPs. But it still costs
-# HBM, and at inference that is the whole story of the next notebooks."
+# "The routers are different: softmax or sigmoid, renormalised or not, and the selection-only bias of DeepSeek. The
+# 'active' numbers are also different: gpt-oss counts only the LM head, and DeepSeek counts both embedding tables.
+# Kernels sort the tokens by expert and do one grouped GEMM. Thus an expert that no token selected costs no FLOPs. But
+# it still costs HBM, and at inference that is the whole story of the next notebooks."
 #
 # **Drill questions**
 # 1. *Why is Mixtral 46.7B and not 8 × 7B = 56B?* The model replicates only the MLPs. All experts share the attention,
 #    the norms and the embedding tables.
-# 2. *Two routers select the same experts. Why can their outputs be different?* The combine weights differ. A router
-#    renormalises them or does not (the default of Qwen3 is not). DeepSeek uses sigmoid × 2.5. Llama 4 applies them to the
-#    input.
+# 2. *Two routers select the same experts. Why can their outputs be different?* The combine weights are different. A
+#    router renormalises them or does not. The default setting of Qwen3 does not renormalise them. DeepSeek uses
+#    sigmoid × 2.5. Llama 4 applies them to the input.
 # 3. *What does a shared expert give you?* Common knowledge lives in one MLP that is always on, so the routed experts
 #    can specialise. It also adds a constant quantity of active parameters that every token pays for.

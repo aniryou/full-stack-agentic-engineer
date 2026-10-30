@@ -75,7 +75,7 @@ These are the simplifications:
   checks. It admits a preemptor in the same step in which it evicts the victims of that preemptor.
 - Gangs have one pod shape (no leader, no slices).
 - The least-waste expander ranks idle GPUs, not CPU and memory.
-- `simulate()` is one pool with no utilisation threshold.
+- `simulate()` uses one pool with no utilisation threshold.
 
 ## The notebooks
 

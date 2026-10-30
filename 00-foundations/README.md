@@ -1,6 +1,6 @@
 # 00 · Foundations
 
-Understand the model that the whole stack serves. After this layer, you can do these things:
+Know the model that the whole stack serves. After this layer, you can do these things:
 
 - Build a transformer from nothing.
 - Calculate the memory, bandwidth and latency of a model before you pay for a GPU.
@@ -22,7 +22,7 @@ Understand the model that the whole stack serves. After this layer, you can do t
    00 Foundations                     the model itself, beneath the stack: shapes, capacity, MoE, RL, distillation
 ```
 
-This layer is below the stack. It is the model that every layer above it stores, moves and serves.
+This layer is below the stack. Its subject is the model that every layer above it stores, moves and serves.
 
 *Tiers: T0 = laptop or Colab CPU, free. T1 = one small GPU (Colab/Kaggle T4 or a rented card). T2 = a multi-GPU box
 (Kaggle's free 2×T4, or rented for an hour). T3 = the Google Cloud deployment, optional.* The times are approximate.
@@ -35,7 +35,7 @@ modules 00.1–00.6).
 | [`gpu-capacity-planning/`](gpu-capacity-planning/README.md) | Compare the size of the weights and the KV cache with HBM. Calculate an approximate TTFT from the prefill FLOPs, and an approximate TPOT from the bandwidth. Get a GPU count from the binding constraint plus headroom. The topic has a [primer](gpu-capacity-planning/PRIMER.md), `capacity.py` and a practice notebook. | ~2 h | T0 |
 | [`model-landscape/`](model-landscape/open-weight-llms-primer.md) | Say what "open weight" gives you. Examine a licence. Put a model family in its place by size, architecture and deployment tier. The topic has the [open-weight primer](model-landscape/open-weight-llms-primer.md) and the [Mistral exercises](model-landscape/mistral-primer-exercises.md). | ~1 h | read |
 | [`mixture-of-experts/`](mixture-of-experts/README.md) | Explain how an MoE layer routes tokens, and why the routers must stay balanced. Count the total and active parameters from a config. Predict which experts a decode batch reads, and when the batch becomes compute-bound. Calculate the cost of the all-to-alls of expert parallelism. Compare the size of an MoE deployment with a dense one. The topic has a [PRIMER](mixture-of-experts/PRIMER.md), [`moe-core`](mixture-of-experts/moe-core/README.md) (numpy, 5 notebooks) and [`moe-lab`](mixture-of-experts/moe-lab/README.md). The lab has a small MoE in torch, router hooks and decode step time against batch in vLLM. It also has expert parallelism on two GPUs, and offload and 4-bit experts. It has 5 notebooks. | ~7 h primer + core, ~8.5 h lab | T0 to T2 (T3 optional) |
-| [`rl-and-thinking-models/`](rl-and-thinking-models/README.md) | Explain what an RL post-training step does: REINFORCE, the KL penalty, reward models, DPO, GRPO and the corrections to GRPO. Predict reward hacking, length bias and over-optimisation. Decide if a model must think longer or sample more. Calculate the size of a serving fleet for a thinking model, and operate the fleet. The topic has a [PRIMER](rl-and-thinking-models/PRIMER.md), [`rl-core`](rl-and-thinking-models/rl-core/README.md) (numpy, 5 notebooks) and [`thinking-lab`](rl-and-thinking-models/thinking-lab/README.md). The lab has GRPO on a small transformer in torch, Qwen3 in vLLM with a reasoning parser, and best-of-n and voting. It also has one GRPO step with vLLM rollouts. It has 5 notebooks. | ~12 h primer + core, ~10 h lab | T0 to T1 (T3 optional) |
+| [`rl-and-thinking-models/`](rl-and-thinking-models/README.md) | Explain what an RL post-training step does: REINFORCE, the KL penalty, reward models, DPO, GRPO and the corrections to GRPO. Predict reward hacking, length bias and over-optimisation. Decide if a model must think longer or sample more. Calculate the size of a serving fleet for a thinking model, and operate the fleet. The topic has a [PRIMER](rl-and-thinking-models/PRIMER.md), [`rl-core`](rl-and-thinking-models/rl-core/README.md) (numpy, 5 notebooks) and [`thinking-lab`](rl-and-thinking-models/thinking-lab/README.md). The lab has GRPO on a small transformer in torch, Qwen3 in vLLM with a reasoning parser, and best-of-n and majority vote. It also has one GRPO step with vLLM rollouts. It has 5 notebooks. | ~12 h primer + core, ~10 h lab | T0 to T1 (T3 optional) |
 | [`distillation/`](distillation/README.md) | Explain why a student learns more from the distribution of a teacher than from labels. Select between logit, sequence-level and on-policy distillation, with the divergence that each one minimises. Predict exposure bias, and what a distilled thinking model takes from its teacher. Train a draft model for speculative decoding. Measure a student honestly, and decide if it pays for itself. The topic has a [PRIMER](distillation/PRIMER.md), [`distill-core`](distillation/distill-core/README.md) (numpy, 5 notebooks) and [`distill-lab`](distillation/distill-lab/README.md). The lab has a small transformer distilled four ways in torch, and teacher data from a served model and a 0.5–0.6B student with TRL. It also has reasoning traces, and a distilled draft under the speculative decoding of vLLM. It shows if a student pays for itself. It has 5 notebooks. | ~11 h primer + core, ~10 h lab | T0 to T1 (T3 optional) |
 
 ## Start here
@@ -78,7 +78,7 @@ When you point the labs at a GPU, they measure on it.
 
 **Builds on** Python and numpy, and nothing else (CPU PyTorch for the tiny GPT). This layer is the first stop in the
 [spiral of the curriculum](../CURRICULUM.md#31-why-this-order), in this sequence: 00, 04, 01, 02, 04, 03, 05,
-06, 07. Its three newer topics come later in that spiral, at the point where their prerequisites are:
+06, 07. Its three newer topics come later in that spiral, after their prerequisites:
 
 - mixture-of-experts after the roofline of layer 01,
 - RL and thinking models after the serving-engine primer,
@@ -96,7 +96,7 @@ topic of layer 01 calculates step times from these numbers. The
 [`quantization`](../04-inference-engine/quantization/README.md) topic of layer 04 changes the bytes per parameter.
 
 The MoE topic depends on the layer 02
-[all-to-all](../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md#5-collectives). It supplies the layer 05
+[all-to-all](../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md#5-collectives). The MoE topic supplies the layer 05
 [wide-EP](../05-orchestrator/serving-orchestration/PRIMER.md#8-large-moe-topologies-wide-ep-in-brief) fleets. The
 workload of a thinking model changes the KV budget of the engine, the router and the cost per conversation of the
 gateway ([`06-gateway`](../06-gateway/README.md)). Distillation (00.6) supplies two layers above it. A draft for the

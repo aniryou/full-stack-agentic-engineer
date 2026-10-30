@@ -38,7 +38,7 @@ POLICY = ("Returns policy. Items may be returned within 30 days with proof of pu
 #     [recent turns … current turn]                        ← changes every turn
 #
 # The stable material comes first, and the volatile material comes last.
-# The reason is that a context cache matches an exact **leading** prefix.
+# The reason is that a context cache matches an exact prefix **from the start** of the prompt.
 
 # %%
 def memory_from_state(session: Session) -> list[str]:
@@ -59,7 +59,7 @@ for m in prompt:
 
 # %% [markdown]
 # When a prompt is high-cost, look at `context_report` first. It shows the tokens by role.
-# Here, the reference material has most of the tokens. This is fine **if** it is in the cache.
+# Here, the reference material has most of the tokens. This is fine **if** the reference material is in the cache.
 
 # %%
 print(json.dumps(context_report(prompt), indent=1))
@@ -68,7 +68,7 @@ print("cacheable prefix (instruction + static material):", builder.cacheable_pre
 # %% [markdown]
 # ## 2. Caching, measured
 #
-# `FakeLLM` reports `cached_tokens` for the longest leading prefix that it saw before. A real context cache bills in the same way.
+# `FakeLLM` reports `cached_tokens` for the longest prefix that it saw before. A real context cache bills in the same way.
 # Run four turns through two builders. One builder has the layout in §1.
 # The instruction of the other builder starts with a per-turn timestamp.
 # This is the classic way to destroy a cache and not know it.
@@ -399,7 +399,7 @@ print(f"✅ triage offers {len(triage)} of {len(ALL_TOOLS)} tools: {schema_token
 # Drop the **oldest whole turns** first, until `messages_tokens(result) <= max_tokens`.
 # **Never** drop the first (system) message or the current turn.
 # The current turn is the last user message and anything after it.
-# Do not drop the system message or the current turn, even if these messages alone exceed the budget. Return a new list. Do not change the input.
+# Do not drop the system message or the current turn, even if these messages alone are more than the budget. Return a new list. Do not change the input.
 
 # %% exercise
 def enforce_budget(messages: list[dict], max_tokens: int) -> list[dict]:

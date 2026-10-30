@@ -193,6 +193,96 @@ shorter everyday word that keeps the meaning.
 | whilst | while |
 | wrong | incorrect |
 
+The second pass (2026-10-30) adds the dictionary-level words below. The linter reports them under the same `word`
+rule. A technical name that shares the spelling stays (a product's display, the state of a machine, a fixed cost,
+an all-reduce, a major version): say so in `kept_warnings`.
+
+| Not approved | Use |
+|---|---|
+| activate | start, operate |
+| arise, take place | occur |
+| assist, assistance, facilitate | help |
+| attain, receive | get |
+| bring about, give rise to | cause |
+| cease, halt | stop |
+| conduct | do |
+| consider | think about, look at, examine |
+| construct | make |
+| deliver, transmit, emit | give, send, supply, write |
+| depict, exhibit, illustrate, represents | show, is |
+| detect, discover, encounter, notice | find, see |
+| differs | is different |
+| displays, displayed (the verb) | shows, shown |
+| eliminate | remove |
+| evaluate | examine, test, calculate |
+| exceed | be more than, go above |
+| expand | increase, extend |
+| imply | mean, show |
+| inspect | examine |
+| invoke | call |
+| lack | not have |
+| maintain, preserve | keep, hold |
+| maximize, minimize | make as large (small) as possible, keep to a minimum |
+| necessitate | make necessary |
+| observe | see, measure |
+| populate | fill |
+| possess | have |
+| reduce | decrease |
+| understand | know |
+| wish | want |
+| accommodate | hold, take |
+| adequate | sufficient |
+| although, though, whereas, nevertheless, nonetheless, despite, in spite of | but |
+| as a result, accordingly, thereby | thus |
+| whereby | by which |
+| a number of, numerous, multiple, various | some, many, different, more than one |
+| a variety of | different, many |
+| the majority of | most |
+| a handful of, a couple of | a few, two |
+| sole, solely, merely | only |
+| beneath | below |
+| upon | on, when |
+| via | through, by |
+| within | in |
+| unlike | different from |
+| in case of, in the event of, in the event that | if |
+| as long as | if, while |
+| with regard to, with respect to, concerning | about |
+| in terms of | (rewrite: as, for) |
+| currently, at present | now |
+| previously | before |
+| subsequent | next, later |
+| typically, commonly | usually |
+| nearly | almost |
+| roughly | approximately |
+| simultaneous, simultaneously | at the same time |
+| sequentially | in sequence |
+| meanwhile | during this time |
+| otherwise | if not |
+| respectively | (say each pair) |
+| certain | some, specified; make certain: make sure |
+| desired | necessary, specified, that you want |
+| essential, crucial, vital | necessary, important |
+| significant, significantly | large, important, much |
+| negligible | very small |
+| entire, entirely | all, full, complete, fully |
+| overall | total, in total |
+| manner | way |
+| optimal, optimum | best, the most satisfactory |
+| similar, similarly | almost the same, like, in the same way |
+| suitable | correct, applicable |
+| straightforward | simple, easy |
+| lengthy | long |
+| obvious, obviously, apparent | clear, clearly |
+| unable, capable of | cannot, can |
+| indeed, notably, fairly, somewhat, relatively, extremely | (remove) |
+| note that | (remove; say the fact) |
+| since | because (a cause); from, after (a time) |
+
+Parentheses hold a cross-reference ("(§3.2)", "(verify)", a unit or a value), not a clause with a verb in the
+middle of a sentence: the linter's `paren-clause` reports one. Make the comment a sentence of its own, after the
+sentence it comments on, or drop it when the sentence says it already.
+
 Approved words you will use often: make sure, necessary, possible, permit, let, cause, occur, thus, but, also,
 then, because, if, when, until, before, after, during, sufficient, approximately, correct, incorrect, applicable,
 available, different, same, other, each, all, some, many, much, more, most, less, large, small, long, short, fast,

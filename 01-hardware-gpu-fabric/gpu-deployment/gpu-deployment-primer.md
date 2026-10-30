@@ -280,7 +280,7 @@ flowchart TB
     P2[prefill worker]
     P3[prefill worker]
   end
-  P1 -- "the KV cache, over the fabric (RDMA)" --> D1
+  P1 -- "KV cache over RDMA" --> D1
   subgraph DP["decode pool: memory-bound, sized on its own"]
     direction LR
     D1[decode worker]

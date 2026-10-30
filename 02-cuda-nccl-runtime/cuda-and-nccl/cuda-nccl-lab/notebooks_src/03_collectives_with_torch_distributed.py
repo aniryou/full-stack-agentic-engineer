@@ -63,8 +63,8 @@ print("sendrecv       :", [c.tolist() for c in semantics.sendrecv(xs)], "(ring s
 # %% [markdown]
 # ## Exercise 3.1 — all-reduce is reduce-scatter followed by all-gather
 #
-# Write the two halves for a list of per-rank arrays (the buffer length is divisible by the number of
-# ranks). `my_reduce_scatter(xs)` returns, for rank $r$, chunk $r$ of the element-wise sum.
+# Write the two halves for a list of per-rank arrays. The buffer length is divisible by the number of
+# ranks. `my_reduce_scatter(xs)` returns, for rank $r$, chunk $r$ of the element-wise sum.
 # `my_all_gather(chunks)` returns, for each rank, the concatenation of all chunks in rank order.
 
 # %% exercise
@@ -113,14 +113,14 @@ for phase in ("rs", "ag"):
 # ## Exercise 3.2 — write the ring schedule yourself
 #
 # Write `my_ring_chunks(rank, step, n, phase)`. Do not look at `semantics.ring_chunks`. The function returns
-# `(send_chunk, recv_chunk)` for steps $1, \dots, n-1$ of phase `"rs"` (the receiver adds the data that comes
-# in) or `"ag"` (the receiver copies it). There are two hints. First, in a step, a rank receives exactly
-# what its left neighbour sends in that step. Second, the first all-gather send of a rank must be a chunk
-# that the rank has *finished*.
+# `(send_chunk, recv_chunk)` for steps $1, \dots, n-1$ of phase `"rs"` or `"ag"`. In phase `"rs"`, the
+# receiver adds the data that comes in, and in phase `"ag"`, the receiver copies it. The first hint is that,
+# in a step, a rank gets exactly what its left neighbour sends in that step. The second hint is that the
+# first all-gather send of a rank must be a chunk that the rank has *finished*.
 #
 # The check runs your schedule on real buffers. `semantics.ring_all_reduce(xs, chunks=my_ring_chunks)`
 # refuses a step where the sender and the receiver do not agree. The check then compares the result with
-# the all-reduce. It also counts the bytes that each rank sent. This is the busbw factor, and it comes from
+# the all-reduce. It also counts the bytes that each rank sent. This count is the busbw factor, and it comes from
 # your own schedule.
 
 # %% exercise
@@ -153,7 +153,7 @@ print("✅ your schedule all-reduces exactly, every link busy every step: busbw 
 # * It calculates the average across ranks.
 #
 # The pipes and gloo backends move bytes between CPU processes on this machine. Thus expect MB/s to a few
-# GB/s, and tens to hundreds of microseconds of latency. That is the cost of the transport, not of the
+# GB/s, and tens to hundreds of microseconds of latency. These values are the cost of the transport, not of the
 # algorithm.
 
 # %%
@@ -165,7 +165,7 @@ assert all(r.wrong == 0 for r in ar)
 # %% [markdown]
 # For comparison, the next cell runs a point-to-point ring shift (`sendrecv`, busbw factor 1) over the same
 # transport. For a ring all-reduce, the design of busbw makes it comparable to the bandwidth of one link. Thus,
-# at large sizes, we expect it to be of the same order as the send/recv bandwidth.
+# at large sizes, we expect the all-reduce busbw to be of the same order as the send/recv bandwidth.
 
 # %%
 sr = run(BACKEND, "sendrecv", NRANKS, sizes=sizes, iters=5, warmup=1)

@@ -10,16 +10,15 @@
 # ## The one-minute version
 #
 # * **Distillation trains a small model (the student) to match what a large one (the teacher) does**, not only
-#   what the labels say. The three families differ in what you ask the teacher for (PRIMER §1 "Why distil"):
+#   what the labels say. The three families are different in what you ask the teacher for (PRIMER §1 "Why distil"):
 #   * its *logits* on your data (logit KD),
-#   * its *samples* (sequence-level KD, which is SFT on the teacher's outputs),
+#   * its *samples* (sequence-level KD: SFT on the teacher's outputs),
 #   * or its *scores of the student's own samples* (on-policy distillation, GKD).
 # * **The setup.** A teacher of 101K parameters has learned to write running sums before it answers. These sums
 #   make it correct. A student of 26K parameters has a labelled set in which 80% of the answers do not show the
 #   steps, like an answer key. Every student gets the same architecture, the same initial weights, 1,500 steps of 64
 #   sequences and 1,000 prompts. Only the thing that we ask it to match changes.
-# * **The expected result** (the recorded run showed it, and a check cell later in this notebook examines your
-#   run). Hard labels teach the student to answer directly. It scores far below every distilled student (0.24 in the recorded run, where a
+# * **The expected result** (from the recorded run, with a check of your run later in this notebook). Hard labels teach the student to answer directly. It scores far below every distilled student (0.24 in the recorded run, where a
 #   guess scores 0.2). The teacher's logits on the *same* labelled sequences teach it to think first. This is because
 #   the soft target says "think" 70% of the time at the branch (PRIMER §2 "Soft targets, temperature and the
 #   choice of divergence"). SeqKD on verifier-filtered teacher samples beats the teacher itself. GKD copies the
@@ -122,9 +121,9 @@ print(f"✅ loss and gradient right; as T grows, T² x KL tends to {limit:.3f}: 
 # completions are SeqKD's data, and the run keeps a completion only when the verifier accepts it. Then the run trains
 # four students from the same initial weights.
 #
-# Logit KD uses $T$ = 2 and $\alpha = 0.9$ on the soft term. GKD uses $\lambda = 0.5$ (half the batches are the
-# student's own samples) and $\beta = 0.5$. These values are TRL's `GKDConfig` defaults. Every 100 steps, the run
-# measures each student on 256 held-out problems.
+# Logit KD uses $T$ = 2 and $\alpha = 0.9$ on the soft term. GKD uses $\lambda = 0.5$ and $\beta = 0.5$. The value
+# $\lambda = 0.5$ means that half the batches are the student's own samples. These two values are TRL's `GKDConfig`
+# defaults. Every 100 steps, the run measures each student on 256 held-out problems.
 
 # %%
 if HAVE_TORCH:
@@ -204,7 +203,7 @@ print(f"✅ [{LABEL}] the teacher's samples: {sq['full_before']:.0%} full scratc
 # %% [markdown]
 # This is the point of PRIMER §5 on a small scale. A student inherits the length distribution of *the traces that
 # you keep*, not of the teacher. The verifier kept the long traces because they were more often correct. If a
-# length filter points in the opposite direction (keep short traces, for lower-cost serving), it costs accuracy,
+# length filter points in the opposite direction and keeps short traces for lower-cost serving, it costs accuracy,
 # and notebook 03 measures this cost. Without a filter, we expect the SeqKD student to think like its teacher
 # (approximately 70%). The recorded experiment `seqkd_all` in the next cell shows what it did.
 
@@ -336,8 +335,8 @@ print("reverse KL collapsed to answering directly in this run" if collapsed else
 #
 # ## Worked example: exposure bias, measured
 #
-# A student that trains on prefixes from another source (the labelled set, or the teacher's samples) decodes on its
-# own. `T.exposure` measures the top-1 agreement of each student with the teacher at each position. It does this two
+# A student that trains on prefixes from another source, such as the labelled set or the teacher's samples, decodes
+# on its own. `T.exposure` measures the top-1 agreement of each student with the teacher at each position. It does this two
 # times: once with the teacher's samples as the prefix, and once with the student's own samples as the prefix.
 
 # %%

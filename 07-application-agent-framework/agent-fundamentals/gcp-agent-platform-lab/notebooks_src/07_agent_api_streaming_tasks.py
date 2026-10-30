@@ -104,7 +104,7 @@ BOB = {"Authorization": "Bearer " + authz.issue_access_token("bob", AGENT_URL, "
 # ## 2. The API, in one class
 #
 # `Response.body` is a dict for JSON, or an async iterator of SSE strings for a stream.
-# The class receives four mechanisms by **injection**, so that the exercises can replace them one at a time:
+# The class gets four mechanisms by **injection**, so that the exercises can replace them one at a time:
 #
 # - `serialize` (event to SSE)
 # - `idempotency` (dedupe)
@@ -661,5 +661,5 @@ print("✅", why)
 # - Return **`429` with `Retry-After`** for each tenant, because backpressure costs less than an incident.
 # - Put the **prompt+model version in the headers**, because the behaviour changes when they change.
 #
-# Then tell what is behind it: the session store with optimistic concurrency, the durable task record,
+# Then tell what is behind the API: the session store with optimistic concurrency, the durable task record,
 # and the event log that you can query. Support and audit will need that log.

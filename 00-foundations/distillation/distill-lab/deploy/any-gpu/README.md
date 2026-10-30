@@ -60,9 +60,9 @@ python -m distillab.hf.gkd --data _run_outputs/teacher_msgs.jsonl --out _run_out
 | `fp16=True, bf16=False` (T4) | A T4 has no bf16. TRL's `SFTConfig`, `GKDConfig` and `DistillationConfig` turn `bf16` on, unless you set `fp16`. The builders of the lab set both. |
 | trainable weights in fp32 | If you load fp16 weights and train with `fp16=True`, the run fails ("Attempting to unscale FP16 gradients."). `hf/sft.py` and `hf/kd.py` load fp32 (full) or an fp16 base + fp32 adapters (LoRA). |
 | a chunked KD loss | At 151,936 tokens, one fp32 `[4,096 tokens × vocab]` tensor is 2.49 GB. `--chunk 256` calculates the KL for 256 positions at a time. |
-| `--max-logprobs` | vLLM rejects `top_logprobs` above it (default 20). `-1` means the whole vocabulary. With `-1`, it is possible that the server runs out of memory. |
+| `--max-logprobs` | vLLM rejects `top_logprobs` above this value (default 20). `-1` means the whole vocabulary. With `-1`, it is possible that the server runs out of memory. |
 | `from trl.experimental.gkd import GKDTrainer` | GKD is experimental in TRL 1.x. `from trl import GKDTrainer` fails. `GKDConfig.temperature` applies only when the trainer samples. But the loss runs at T = 1. |
-| same `vocab_size` | The GKD of TRL and the draft model of vLLM both do a check on it. Qwen2.5 ≥ 7B has 152,064, and the small models have 151,936. |
+| same `vocab_size` | The GKD of TRL and the draft model of vLLM both do a check on this value. Qwen2.5 ≥ 7B has 152,064, and the small models have 151,936. |
 | transformers 5.x | `TrainingArguments.warmup_ratio` is gone. Version 5.x reads a `warmup_steps` below 1 as a ratio. `hf.sft.for_config` translates the kwargs of the lab for the major version that you have. |
 | data for `DistillationTrainer` | It needs a `prompt` column, and it generates its own completions: `python -m distillab.hf.gkd --trainer distillation --data _run_outputs/teacher_pc.jsonl --out _run_outputs/student-od` (the command converts a `messages` file). |
 
@@ -82,7 +82,7 @@ python -m distillab.hf.gkd --data _run_outputs/teacher_msgs.jsonl --out _run_out
 ## Cost and cleanup
 
 Stop the server with `Ctrl-C` (or `docker stop`). Colab and Kaggle cost only quota. You pay for rented machines
-until you *terminate* them, not until vLLM stops. Thus, terminate the pod or instance when the session ends.
+until you *delete* them, not until vLLM stops. Thus, delete the pod or instance when the session ends.
 
 Make a budget for the session. The generation of 2,000 × 4 samples from a 1.5B teacher on a T4 takes minutes. SFT
 of a 0.5B student on them takes tens of minutes (verify on your card).

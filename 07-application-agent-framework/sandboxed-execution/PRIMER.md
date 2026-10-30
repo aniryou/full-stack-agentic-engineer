@@ -23,14 +23,14 @@ A code tool takes an untrusted program that the model wrote, and runs it. If the
 
 ```mermaid
 flowchart TB
-  M([the model]) -->|"run_code: code, inputs,<br/>budgets, declared egress"| P["policy, deny by default<br/>enforced two times:<br/>executor and cluster"]
-  P -->|allow| S["the sandbox<br/>(one rung of the ladder)<br/>no credentials, no network,<br/>no persistent filesystem"]
-  S -->|"truncated output,<br/>exit reason, usage"| R["tool result<br/>ok, or error + hint"]
-  P -->|deny| R
+  M([the model]) -->|run_code| P["policy, deny by default<br/>enforced two times"]
+  P -->|allow| S["the sandbox<br/>no ambient authority"]
+  P -->|deny| R["tool result<br/>ok, or error + hint"]
+  S --> R
   R --> M
-  S -.->|"the only way out"| X["egress proxy, allowlist<br/>injects the credential<br/>the sandbox never holds"]
+  S -.-> X["egress proxy<br/>allowlist"]
   X --> H[allowed host]
-  P -.-> A[("audit log<br/>one event per execution")]
+  P -.-> A[("audit log")]
   S -.-> A
 ```
 
@@ -58,14 +58,14 @@ An agent reads text that it did not write: user messages, tool results, retrieve
 
 ```mermaid
 flowchart LR
-  T["untrusted text:<br/>user messages,<br/>tool results,<br/>retrieved documents,<br/>web pages, the output<br/>of other agents"] --> M(["the model<br/>emits a program"])
-  M --> C["run_code as<br/>subprocess.run<br/>in the process<br/>of the agent<br/>(UnsafeExecutor)"]
-  subgraph AMB["inherited by default: ambient authority"]
-    E["the environment:<br/>AWS_*, API keys,<br/>the metadata server<br/>169.254.169.254<br/>probe: read_env_secret"]
-    HD["the home directory:<br/>~/.ssh,<br/>~/.config/gcloud,<br/>~/.kube/config<br/>probe: read_ssh_key"]
-    F["the filesystem that<br/>the agent can write,<br/>and any mounted data"]
-    N["the network,<br/>in and out, with<br/>the agent's identity<br/>probe: egress_connect"]
-    U["unbounded CPU,<br/>memory, processes,<br/>disk and output<br/>probes: fork_bomb,<br/>disk_fill, cpu_spin,<br/>sleep_forever,<br/>output_flood"]
+  T["untrusted text"] --> M(["the model<br/>emits a program"])
+  M --> C["run_code as<br/>subprocess.run<br/>(UnsafeExecutor)"]
+  subgraph AMB["ambient authority"]
+    E["the environment"]
+    HD["the home directory"]
+    F["the filesystem"]
+    N["the network"]
+    U["unbounded resources"]
   end
   C --> E
   C --> HD
@@ -74,7 +74,7 @@ flowchart LR
   C --> U
 ```
 
-*An injection makes the model emit a program. With `subprocess.run` in the process of the agent, that program inherits the environment, the home directory, the filesystem, the network and unbounded resources. The probes of `sandboxcore.threats` make each item concrete.*
+*An injection makes the model emit a program. With `subprocess.run` in the process of the agent, that program inherits the environment, the home directory, the filesystem, the network and unbounded resources.*
 
 When the agent can **run code**, the target of the attacker changes. The target is no longer "make the model say something wrong". It is "make the model emit a program, and run it with whatever the runner holds". That is a jump in the kind of blast radius.
 
@@ -262,26 +262,32 @@ Treat the sandbox as an **API with a contract**, not as a place where you run th
 sequenceDiagram
     participant A as SandboxAgent
     participant P as SandboxPolicy
-    participant S as ProcessSandbox<br/>(the parent)
-    participant C as the child<br/>(untrusted code)
-    A->>P: evaluate(req): principal,<br/>budgets, declared egress
+    participant S as ProcessSandbox
+    A->>P: evaluate(req)
     alt deny
         P-->>A: DENY + reasons
     else allow
-        A->>P: clamp(req) to the<br/>budget ceiling
-        Note over A,S: ResultStore.run_once(key, run) claims<br/>the idempotency key before the run
-        A->>S: run(req)
-        S->>C: Popen: clean env,<br/>0700 workspace, new session,<br/>as root its own UID
-        C->>C: _LAUNCHER lowers<br/>the rlimits, then<br/>runs the code
-        C-->>S: stdout, stderr as they stream<br/>(keep output_bytes,<br/>count the rest)
-        S->>C: _kill_group at wall_s, pids<br/>or output_kill_bytes,<br/>else at the end
-        S->>S: sweep the UID, then the exit reason<br/>and reason_source: the parent verdict<br/>(PARENT_VERDICT_ORDER), else _classify
-        S-->>A: ExecutionResult: exit_reason,<br/>usage, artifacts, swept
+        A->>P: clamp(req)
+        A->>S: run(req) under<br/>ResultStore.run_once
+        S-->>A: ExecutionResult
     end
-    A->>A: as_tool_result()<br/>for the model:<br/>ok, or error + hint
+    A->>A: as_tool_result()
 ```
 
-*This figure shows the policy decision and then one execution under the contract. The parent starts the child with a clean environment and, as root, its own UID, and the child lowers its own limits. The parent reads the output as it streams, kills the group, sweeps the UID and returns an exit reason with its source.*
+*This figure shows the policy decision. If the policy permits the request, `ResultStore.run_once` claims the idempotency key before the run. Each path ends in `as_tool_result()`, which gives the model a result that it can act on.*
+
+```mermaid
+sequenceDiagram
+    participant S as ProcessSandbox<br/>(the parent)
+    participant C as the child<br/>(untrusted code)
+    S->>C: Popen: clean env, new session,<br/>0700 workspace, own UID
+    C->>C: _LAUNCHER lowers the<br/>rlimits, then runs the code
+    C-->>S: stdout, stderr as they stream
+    S->>C: _kill_group at wall_s, pids<br/>or output_kill_bytes, else at the end
+    S->>S: sweep the UID, then the<br/>exit reason and reason_source
+```
+
+*This figure shows one execution under the contract, inside `run(req)`. The parent starts the child with a clean environment and, as root, its own UID, and the child lowers its own limits. The parent reads the output as it streams, kills the group, sweeps the UID and returns an exit reason with its source.*
 
 **The request (`sandboxcore.ExecutionRequest`, `Budgets`).** The request contains code, inputs, a **budget for every resource the code can exhaust**, and the policy that applies. The budget is the part that carries the load:
 
@@ -354,17 +360,7 @@ Notebook 03 has this worked example: two deliveries of the same keyed request gi
 
 The process sandbox does not stop the network (§1, §2). Thus egress is its **own** control. That control is where the design actually contains exfiltration and SSRF.
 
-```mermaid
-flowchart TB
-  S["sandboxed code<br/>no network of its own,<br/>no secrets, HTTP_PROXY<br/>is advisory only"] -->|"plain HTTP only:<br/>GET http://host/path"| N["the network layer forces<br/>the path: an empty netns,<br/>--network none, or a<br/>default-deny NetworkPolicy<br/>(no DNS: the proxy<br/>resolves names)"]
-  N --> X{"ProxyPolicy<br/>.allows(host)?"}
-  X -->|no| D["403 to the caller before<br/>any request leaves,<br/>and the attempt is logged"]
-  X -->|yes| H["drop the caller's<br/>Authorization, Cookie<br/>and hop-by-hop headers,<br/>then inject the credential<br/>header outbound<br/>(ProxyPolicy.inject)"]
-  H --> U[host on the allowlist]
-  U -->|"a response, or a 3xx<br/>that is not followed"| R["redact the injected value<br/>if the response echoes it"]
-  R -->|"back to the sandbox"| S
-  H -.-> L[("audit log: the name of<br/>the injected header,<br/>never its value")]
-```
+![The egress path: the sandboxed code goes through the network layer to the proxy check, then to a 403 or to the credential injection.](figures/egress-proxy-path.svg)
 
 *This figure shows the egress path. The network layer leaves the sandbox one way out. The proxy compares the host with the allowlist, and then it injects the credential outbound. A 3xx goes back to the caller, and a new URL is a new request (§4, `tests/test_proxy.py`).*
 
@@ -411,20 +407,7 @@ Each object is a plain dict that validates against the Kubernetes 1.34 schemas (
 
 A schema check is not an admission check. Thus the same test also asserts a condition that the API server enforces and the schema cannot see. The condition is that each resource request is at most its limit. The builders use the conventions of `k8sgpu.manifests` in the GPU scheduling lab. This section is the design. The lab applies it on kind and GKE.
 
-```mermaid
-flowchart TB
-  POL["SandboxPolicy.render_k8s()<br/>one policy object, rendered<br/>to every enforcement point"]
-  POL --> J["Job, SandboxPolicy.job():<br/>backoffLimit 0,<br/>restartPolicy Never,<br/>activeDeadlineSeconds<br/>120 + 5 s,<br/>ttlSecondsAfterFinished<br/>300, for the cleanup"]
-  W(["warm pool: sandbox pods<br/>kept ready, kubectl exec<br/>into one (sub-second),<br/>delete after one use"])
-  J -->|"creates the Pod<br/>(PSA checks Pods,<br/>not the Job)"| POD
-  W --> POD["Pod: runtimeClassName<br/>gvisor, restricted<br/>securityContext, no<br/>service-account token,<br/>dnsPolicy None,<br/>hostAliases to the proxy,<br/>emptyDir sizeLimit,<br/>timeout -s KILL wall_s"]
-  POD --> ADM["API server admission,<br/>the deterministic backstop:<br/>Pod Security restricted<br/>(namespace labels),<br/>ResourceQuota, LimitRange,<br/>ValidatingAdmissionPolicy<br/>(validationActions Deny)"]
-  ADM -->|rejected| X["a pod without the<br/>controls never runs"]
-  ADM -->|admitted| K["on the sandbox node:<br/>kubelet with podPidsLimit,<br/>RuntimeClass gvisor,<br/>handler runsc<br/>(GKE makes its own)"]
-  K --> RUN[["the run container:<br/>python3 -I -c code<br/>under timeout,<br/>runAsUser 65534"]]
-  POD -.->|"its egress"| NP["NetworkPolicy, enforced<br/>by a CNI plugin:<br/>default-deny egress,<br/>then the proxy only,<br/>no DNS"]
-  NP --> SVC["egress-proxy Service<br/>at a pinned ClusterIP"]
-```
+![The enforcement points on Kubernetes: the Job or the warm pool creates the Pod, admission examines it, and the NetworkPolicy leaves only the proxy open.](figures/k8s-enforcement-points.svg)
 
 *One policy object renders to each enforcement point. The Job or the warm pool creates the Pod, and admission rejects a pod without the controls. On the node, the RuntimeClass selects gVisor, and the NetworkPolicy leaves only the proxy open (§5).*
 
@@ -584,22 +567,7 @@ Everything in the GPU scheduling primer (§1 what Kubernetes sees, §3 the sched
 
 Each execution must leave a record, as each tool call does.
 
-```mermaid
-flowchart TB
-  subgraph SRC["where the evidence comes from"]
-    AG["SandboxAgent._audit:<br/>sandbox.decision (deny)<br/>and sandbox.result<br/>(the exit reason, also<br/>after a crash or a kill)"]
-    NW["the network's own logs:<br/>egress proxy 403s and<br/>NetworkPolicy drops<br/>(collect these too)"]
-  end
-  AG --> L
-  NW --> L
-  L[("the audit trail: one<br/>AuditEvent per execution:<br/>agent, args_hash,<br/>policy_decision,<br/>budgets_used,<br/>exit_reason + its source")]
-  L --> C["AuditLog.counts(trusted_only=True)<br/>drops the reasons that<br/>the program itself claimed"]
-  C --> H["the exit-reason histogram"]
-  H -->|"cpu_time, wall_timeout,<br/>pids or output_limit<br/>rise: abuse"| K
-  H -->|"sustained memory or<br/>cpu_time: a miner or a<br/>runaway loop, a spike<br/>in pids: a fork bomb"| K["the response is<br/>a policy change:<br/>deny the principal,<br/>tighten the allowlist,<br/>no redeploy"]
-  L -->|"principal + args_hash:<br/>trace the incident to<br/>the content that caused it"| K
-  K -.-> SH["under load:<br/>shed run_code first"]
-```
+![The audit path: the agent and the network leave evidence in the audit trail, the histogram shows abuse, and the response is a policy change.](figures/audit-path.svg)
 
 *This figure shows the audit path. The deny path, the result path, the proxy and the NetworkPolicy all leave evidence. `AuditLog.counts(trusted_only=True)` removes the reasons that the program claimed, the histogram shows abuse, and the response is a policy change (§8).*
 

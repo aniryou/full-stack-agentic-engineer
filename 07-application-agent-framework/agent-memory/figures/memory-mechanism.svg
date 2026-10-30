@@ -24,7 +24,7 @@
     <text x="156" y="134" text-anchor="middle" font-weight="600">extract()</text>
     <text x="156" y="154" text-anchor="middle" font-size="11" fill="#97A59F">candidate records, after the turn</text>
     <rect x="40" y="200" width="232" height="88" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    <text x="156" y="222" text-anchor="middle" font-weight="600">the write policy, then the merge</text>
+    <text x="156" y="222" text-anchor="middle" font-weight="600">write policy, then merge</text>
     <text x="156" y="240" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">WritePolicy.check()</text>
     <text x="156" y="257" text-anchor="middle" font-size="11" fill="#97A59F">ADD · UPDATE · NOOP · ADD_HISTORY</text>
     <text x="156" y="273" text-anchor="middle" font-size="11" fill="#97A59F">QUARANTINE · REJECT</text>

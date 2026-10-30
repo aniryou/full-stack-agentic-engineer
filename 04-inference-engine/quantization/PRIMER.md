@@ -777,23 +777,30 @@ environments** (vLLM docs). The lab's notebook 01 runs these recipes at T1 on a 
 same layout from its own code.
 
 ```mermaid
-flowchart TB
+flowchart LR
   subgraph Q["the quantization environment"]
-    M["BF16 model"] --> O["llm-compressor oneshot(model, recipe)<br/>QuantizationModifier, GPTQModifier,<br/>AWQModifier, SmoothQuantModifier"]
-    C["calibration data<br/>(none for FP8_DYNAMIC and FP8_BLOCK)"] -.-> O
-    O --> K[("compressed-tensors checkpoint<br/>quantization_config in config.json<br/>weight_packed, weight_scale, k_scale, v_scale")]
+    direction LR
+    M["BF16 model"] --> O["llm-compressor<br/>oneshot()"]
+    C["calibration data<br/>(none for FP8_DYNAMIC<br/>and FP8_BLOCK)"] -.-> O
+    O --> K[("compressed-tensors<br/>checkpoint")]
   end
-  subgraph S["the serving environment"]
-    V["vLLM: detection<br/>quantization_config.quant_method"] --> G{"what does this GPU<br/>run the checkpoint as?"}
-    G -->|"quantized activations, and<br/>the GPU has that datapath"| N["W8A8 or W4A4 kernel:<br/>CUTLASS, DeepGEMM, FlashInfer"]
-    G -->|"16-bit activations, or<br/>no such datapath"| W["weight-only: Marlin,<br/>or Machete on Hopper<br/>(FP8 on an A100,<br/>NVFP4 below SM100)"]
-    G -->|"outside the capability<br/>range of the method"| E["the load fails<br/>(below the minimum:<br/>Minimum capability: …)"]
-  end
-  K --> V
-  P["other producers:<br/>GPTQModel, ModelOpt"] -.-> V
 ```
 
-*From a BF16 model to a served checkpoint, in two environments: llm-compressor applies the recipe with `oneshot()` and saves a compressed-tensors checkpoint. Then vLLM reads `quantization_config.quant_method` and selects the method, and its kernels decide what the checkpoint runs as on this GPU (§9).*
+*In the quantization environment, llm-compressor applies the recipe with `oneshot()` to a BF16 model. Then it saves a compressed-tensors checkpoint.*
+
+```mermaid
+flowchart LR
+  K[("compressed-tensors<br/>checkpoint")] --> V
+  P["other producers:<br/>GPTQModel,<br/>ModelOpt"] -.-> V
+  subgraph S["the serving environment"]
+    V["vLLM: detection<br/>quant_method"] --> G{"what does<br/>this GPU<br/>run it as?"}
+    G -->|"quantized<br/>activations, GPU<br/>has the datapath"| N["W8A8 or W4A4<br/>kernel"]
+    G -->|"16-bit activations,<br/>or no such<br/>datapath"| W["weight-only:<br/>Marlin, or Machete<br/>on Hopper"]
+    G -->|"outside the<br/>capability range"| E["the load fails:<br/>Minimum<br/>capability"]
+  end
+```
+
+*In the serving environment, vLLM reads `quantization_config.quant_method` and selects the method. Then its kernels decide what the checkpoint runs as on this GPU (§9).*
 
 **The format.** `config.json` carries a `quantization_config`:
 
@@ -866,12 +873,12 @@ SIMULATED with the assumptions of serving-engine §8 (80% bandwidth, 60% FLOPs, 
 `minengine.perf`, it gives the table of that section again, to the digit.
 
 ```mermaid
-flowchart TB
-  T["cost.table(gpu, model):<br/>one row per scheme<br/>and KV dtype, with<br/>what it runs as,<br/>the weights, decode,<br/>prefill and sessions<br/>(SIMULATED)"] --> A{"runs on this GPU,<br/>fits, and meets<br/>every target?"}
-  A -->|"no"| X["out: if it cannot run or fit,<br/>its note says why"]
-  A -->|"yes"| O["the rows that pass, in the order of typical accuracy cost:<br/>BF16, FP8 weight-only, FP8 W8A8, INT8 W8A8, INT4 W4A16, NVFP4<br/>(16-bit KV before 8-bit)"]
-  O --> C["cost.choose(): the first row, the least aggressive<br/>runnable scheme that meets every target"]
-  C --> M["measure the schemes for your model (§8),<br/>then change the order"]
+flowchart LR
+  T["cost.table():<br/>one row per<br/>scheme and<br/>KV dtype<br/>(SIMULATED)"] --> A{"runs, fits,<br/>meets every<br/>target?"}
+  A -->|"no"| X["out: if it cannot<br/>run or fit, its<br/>note says why"]
+  A -->|"yes"| O["the rows that<br/>pass, in the order<br/>of typical<br/>accuracy cost"]
+  O --> C["cost.choose():<br/>the first row,<br/>16-bit KV first"]
+  C --> M["measure<br/>the schemes for<br/>your model (§8)"]
   M -.->|"your order"| O
 ```
 

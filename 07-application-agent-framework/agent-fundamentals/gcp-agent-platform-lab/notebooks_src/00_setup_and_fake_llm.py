@@ -50,7 +50,7 @@ print("latency of the last call (ms):", round(r2.latency_ms, 1))
 #
 # A real model bills the *stable prefix* of a prompt at a large discount when the prefix repeats.
 # `FakeLLM` copies this behaviour. When calls start with the same messages, it reports those tokens as `cached_tokens`.
-# This is why the prompt **layout** (the stable material first) is a control for cost. Notebooks 04 and 12 measure it.
+# This discount is why the prompt **layout** (the stable material first) is a control for cost. Notebooks 04 and 12 measure it.
 
 # %%
 policy_text = "Refund policy: " + "items may be returned within 30 days with proof of purchase. " * 40
@@ -101,7 +101,7 @@ print("✅ cache broken as intended:", cached)
 # - When the latest user message contains keywords, it returns tool calls.
 # - When tool results are present, it returns a final answer from a template.
 #
-# It has no intelligence, and this is intentional. The lab is about the *harness* around the model.
+# `KeywordPlanner` has no intelligence, and this is intentional. The lab is about the *harness* around the model.
 # Production systems succeed or fail in the harness.
 
 # %%
@@ -184,7 +184,7 @@ print("✅ triage policy behaves like a tool-calling model")
 # %% [markdown]
 # ## 4. What the model recorded
 #
-# `FakeLLM.calls` keeps every request that it received. Exercises in later notebooks make assertions on it.
+# `FakeLLM.calls` keeps every request that it got. Exercises in later notebooks make assertions on it.
 # Two examples: "did the agent send the tool result back?" and "how many model calls did this turn cost?".
 
 # %%

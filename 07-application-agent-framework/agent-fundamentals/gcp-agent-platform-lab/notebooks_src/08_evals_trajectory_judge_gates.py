@@ -187,7 +187,7 @@ for actual in (["get_balance", "list_transactions"],
           f"{any_order_match(expected, actual)!s:10} {precision_recall(expected, actual)!s:20} {efficiency(actual, expected):.2f}")
 
 # %% [markdown]
-# `score_case` combines them. A case **passes** when all of these conditions are true:
+# `score_case` combines the metrics. A case **passes** when all of these conditions are true:
 #
 # - The expected trajectory appears in order.
 # - The partial arguments match.
@@ -390,7 +390,7 @@ print("lazy judge:", calibrate(lazy, human_scores))
 # Write the unweighted kappa for two raters `a`, `b` over the same items:
 # $\kappa = (p_o - p_e) / (1 - p_e)$. Here $p_o$ is the observed agreement.
 # $p_e = \sum_k \frac{n_{a=k}}{n}\cdot\frac{n_{b=k}}{n}$ is the agreement that you expect by chance, calculated
-# from the marginals. When $p_e = 1$ (both raters are constant and identical), return `1.0`.
+# from the marginals. When $p_e = 1$, return `1.0`. This case occurs when both raters are constant and identical.
 
 # %% exercise
 from collections import Counter
@@ -432,14 +432,14 @@ print("keyword judge:    ", await pairwise(KeywordJudge(["1234.5", "SGD"]), QUES
 # A gate is a list of thresholds that an eval run must clear. Two kinds are important here:
 #
 # * An ordinary threshold on a rate. The gate judges this threshold on the observed value. The gate reports the observed value with its interval.
-# * An **absolute** threshold. It accepts only 100% across every run. This is the pattern for irreversible actions.
+# * An **absolute** threshold. It accepts only 100% across every run. An absolute threshold is the pattern for irreversible actions.
 #   "Card blocks pass 96% of the time" is not a pass rate. It is an incident rate.
 #
 # ### Exercise 6.1 — encode "card blocks must be perfect, aggregate ≥ 0.9"
 #
 # Make `thresholds`, a list of `Threshold`s.
 # With these thresholds, the gate passes only if the `pass_rate` of the `cards` stratum is perfect in every run (**absolute**).
-# The overall `pass_rate` must also be at least 0.9.
+# The aggregate `pass_rate` must also be at least 0.9.
 # Add a third, absolute threshold: a case must never call a forbidden tool (`no_forbidden_rate`).
 
 # %% exercise
@@ -491,7 +491,7 @@ assert any(d.scope == "stratum:cards" and d.regressed for d in regression.deltas
 # Indirect prompt injection comes through **tool results**: a transaction memo, a ticket, a page.
 # The suite wraps every read tool, so that its results have an attacker's instruction. It also counts forbidden calls.
 #
-# Be honest about what this measures.
+# Be honest about what this suite measures.
 # `KeywordPlanner` never reads tool results, so it "resists" every payload for the incorrect reason.
 # A deliberately gullible policy shows that the harness does its job.
 # The harness **records** and **counts** the forbidden call.

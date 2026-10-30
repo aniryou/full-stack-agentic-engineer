@@ -94,12 +94,12 @@ for name, other in (("(a) different final question", q2), ("(b) one word changed
 # Use the three rules of vLLM:
 #
 # - vLLM caches only **full** blocks.
-# - vLLM never computed the KV of the last token of `prev` (it sampled the token, but did not feed it back).
+# - vLLM never computed the KV of the last token of `prev`. vLLM sampled that token, but did not feed it back.
 #   Thus, `prev` left `(len(prev) - 1) // block_size` blocks.
 # - vLLM always recomputes at least one token of `new` to get logits. Thus, at most
 #   `(len(new) - 1) // block_size` blocks can hit.
 #
-# Within those limits, the hits are the full blocks of the common prefix.
+# The hits are the full blocks of the common prefix, but never more than those limits.
 
 # %% exercise
 def expected_cached_tokens(prev: list, new: list, block_size: int = 16) -> int:

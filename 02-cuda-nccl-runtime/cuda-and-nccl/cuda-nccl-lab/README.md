@@ -10,14 +10,14 @@ After this lab, you can do these things:
 
 ## Start here
 
-1. Run `python3 -m pip install -r requirements.txt && python3 -m pytest -q`. 130 tests pass and 3 skip (they
-   need torch or numba-cuda). The run takes 15–30 s and uses only the simulator.
+1. Run `python3 -m pip install -r requirements.txt && python3 -m pytest -q`. 130 tests pass and 3 skip. Two of
+   the skipped tests need torch or numba-cuda, and one skips on every run. The run takes 15–30 s and uses only the simulator.
 2. Run `python3 -m gpurt.dist.bench --backend pipes --nranks 2 -e 4M`. This is a real ring all-reduce across two
    OS processes. It prints its result in the layout of nccl-tests, in about a second.
 3. Open [`notebooks/01_kernels_in_the_simulator.ipynb`](notebooks/01_kernels_in_the_simulator.ipynb). It runs real
-   CUDA kernels in the simulator of Numba. With any GPU (a free Colab T4 is sufficient),
+   CUDA kernels in the simulator of Numba. With any GPU,
    [`02_memory_bound_kernels_on_a_real_gpu`](notebooks/02_memory_bound_kernels_on_a_real_gpu.ipynb) measures the
-   time of the same source.
+   time of the same source. A free Colab T4 is sufficient for notebook 02.
 
 ## What you get
 
@@ -49,7 +49,7 @@ What each tier adds:
 | **T0** | laptop, Colab CPU, CI ($0) | Kernels in the CUDA simulator (correctness, thread indices, shared memory, barriers, and per-warp memory requests that the lab traces from the kernel itself). Collectives over a real multi-process ring (`pipes`) or gloo. nccl-tests, probe and DCGM samples. Every model prediction has a label that says so. |
 | **T1** | one GPU (Colab/Kaggle T4, L4, rented 24 GB GPU) | kernel timings with CUDA events, effective bandwidth against peak, launch overhead, CUDA Graphs against eager mode (torch), the live container probe with the driver API |
 | **T2** | 2+ GPUs (Kaggle 2×T4 free, PCIe only, or a rented NVLink box) | NCCL sweeps through `torchrun`, nccl-tests (pinned v2.20.0) against the same NCCL, and busbw against the link. On a GPU VM: dcgm-exporter in Docker, and MIG and MPS by hand. |
-| **T3** | GKE through Terraform (optional) | A smoke and probe Job, a CUDA sample, a 2-GPU nccl-tests Job on `g2-standard-24`, and time-sharing and MIG pools. DCGM metrics in Managed Prometheus. Alert rules as `ClusterRules`, which its Alertmanager routes. |
+| **T3** | GKE through Terraform (optional) | A smoke and probe Job, a CUDA sample, a 2-GPU nccl-tests Job on `g2-standard-24`, and time-sharing and MIG pools. DCGM metrics in Managed Prometheus. Alert rules as `ClusterRules`, which the managed Alertmanager of Managed Prometheus routes. |
 
 ## Run it
 
@@ -71,10 +71,10 @@ PyTorch. Then run `python -m gpurt.kernels.bench` and `torchrun --nproc_per_node
 [`deploy/any-gpu`](deploy/any-gpu/README.md) has the recipes for Colab, Kaggle 2×T4, RunPod/Vast/Lambda and Docker.
 
 **On GKE (T3)**: [`deploy/gcp`](deploy/gcp/README.md) creates the cluster with Terraform. Then `run.sh` in
-[`deploy/gke`](deploy/gke/README.md) runs each Job and saves its log under `out/`. With `DRY_RUN=1`, it only prints
+[`deploy/gke`](deploy/gke/README.md) runs each Job and saves its log under `out/`. With `DRY_RUN=1`, `run.sh` only prints
 the commands.
 
-**To rebuild and do the checks** (the builder makes `notebooks/` and `solutions/` from `notebooks_src/*.py`):
+**To rebuild and do the checks**: the builder makes `notebooks/` and `solutions/` from `notebooks_src/*.py`. Run these commands:
 
 ```bash
 python3 tools/build_notebooks.py                        # notebooks_src/*.py -> notebooks/ + solutions/
@@ -105,8 +105,8 @@ section *The library* names the primer section that it measures. Each notebook l
 * **Illustrative samples**: `gpurt/fixtures/*`. These are nccl-tests, dcgm-exporter and probe outputs in the
   documented formats of the tools. The first line of each sample gives its label. `tools/make_fixtures.py`
   generates the nccl-tests samples from a stated α-β model. Replace the samples with your own logs.
-* **(verify)**: datasheet peaks, driver-branch tables, image tags, GKE labels. These are dated facts. Examine them
-  again.
+* **(verify)**: datasheet peaks, driver-branch tables, image tags, GKE labels. These are facts with a date. Examine
+  them again.
 * **Cost.** T1 is free on Colab or Kaggle, and an hour on a rented NVLink box costs approximately $2–25 (verify).
   When the GKE cluster is idle, it costs one e2-standard-4 system node, a few dollars a day. GKE's free-tier credit
   covers the management fee of one zonal cluster (verify). The GPU pools of the cluster cost nothing until a pod asks
@@ -127,7 +127,7 @@ section *The library* names the primer section that it measures. Each notebook l
 | `gpurt/kernels/trace.py` | record every access that a simulated warp makes, then get the sectors per request from the kernel itself | §3 |
 | `gpurt/kernels/traffic.py` | the bytes/FLOPs that each kernel must move, datasheet peaks (verify) | §3 |
 | `gpurt/kernels/bench.py` | measure the kernel, not the infrastructure code: device data, CUDA events, warm-up (T1) | §2–§4 |
-| `gpurt/kernels/triton_kernels.py` | the same ideas in Triton, block-level programming (optional, T1) | §1, §3 |
+| `gpurt/kernels/triton_kernels.py` | the same ideas in Triton, with block-level programs (optional, T1) | §1, §3 |
 | `gpurt/launch.py` | launch-bound steps and CUDA Graphs: model (T0) and measurement (T1, torch) | §4 |
 | `gpurt/dist/busbw.py` | algbw against busbw, and the buffer size rule (16-byte per-rank chunks), exactly as nccl-tests v2.20.0 defines them | §5 |
 | `gpurt/dist/alphabeta.py` | `t = α + S/B`, the half-bandwidth size, ring costs | §5 |
@@ -141,11 +141,11 @@ section *The library* names the primer section that it measures. Each notebook l
 
 The same kernel source serves both tiers. The tests run it in the simulator. `tools/check_ptx.py` compiles every
 kernel to PTX for `sm_75` and `sm_89`, and it rejects float64 arithmetic. `make ptx-check` runs `tools/check_ptx.py`.
-`tests/test_ptx.py` also runs it when numba-cuda is installed, and skips without numba-cuda. The PTX compilation needs
+`tests/test_ptx.py` also runs `tools/check_ptx.py` when numba-cuda is available, and skips without numba-cuda. The PTX compilation needs
 no GPU, but the repository leaves the kernel runs on a GPU to you.
 
 One detail of the simulator is important. Numba's simulator creates the shared array of a block only at its first
-use, and without a lock. This can give two threads different arrays, but only in rare cases. When `gpurt.kernels`
+use, and without a lock. This creation without a lock can give two threads different arrays, but only in rare cases. When `gpurt.kernels`
 runs in simulator mode, it serialises that allocation.
 
 MIT licensed.

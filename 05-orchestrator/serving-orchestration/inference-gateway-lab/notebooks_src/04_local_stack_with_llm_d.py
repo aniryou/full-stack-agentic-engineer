@@ -20,8 +20,8 @@
 # | request classes | `RouterSettings.objectives` | `--objective` flags | `InferenceObjective` CRs | `--objective` flags |
 #
 # The EndpointPickerConfig is the same document everywhere. The kind Helm values contain the
-# `default-weighted` preset of the lab with no change. But the lab router and the EPP do not run it in
-# the same way, and this notebook makes you name the differences.
+# `default-weighted` preset of the lab with no change. But the lab router and the EPP do not run this config in
+# the same way. This notebook makes you name the differences.
 #
 # The simulator has the same *per-request* latency formula and the same 16-token prefix cache as the
 # fake backend. It does not have the same contention. The fake puts prefills in a queue behind each
@@ -155,7 +155,7 @@ print(f"✅ predicted TTFT alone on the simulator: {ttft * 1e3:.1f} ms vs {predi
 # 3. It deploys three simulator pods.
 # 4. It installs the `llm-d-router-standalone` Helm chart.
 #
-# The chart contains an EPP Deployment with an Envoy sidecar. The sidecar receives client traffic on
+# The chart contains an EPP Deployment with an Envoy sidecar. The sidecar gets client traffic on
 # :8081 and asks the EPP (ext-proc) where to send each request. The chart mounts
 # `router.epp.pluginsCustomConfig[<pluginsConfigFile>]` as the `--config-file` of the EPP. With
 # `DRY_RUN=1`, the script prints the steps and runs nothing:
@@ -235,8 +235,8 @@ print("✅ a: same; b, c, f: the lab differs; d, e: the lab refuses — measure 
 # %% [markdown]
 # ## Exercise 4.3 — what an InferencePool selects
 #
-# An `InferencePool` (v1) names its members with `selector.matchLabels`. Every label must match, and
-# the pods must be in the same namespace as the pool. The pool lists up to 8 `targetPorts`. For the EPP,
+# An `InferencePool` (v1) names its members with `selector.matchLabels`. Every label must match. The
+# pods must also be in the same namespace as the pool. The pool lists up to 8 `targetPorts`. For the EPP,
 # **each ready pod × each port is one endpoint** (`podIP:port`).
 #
 # Write `pool_endpoints(pool_spec, pods)`. Each pod is a dict
@@ -277,7 +277,7 @@ print("✅ one endpoint per ready matching pod per target port (e.g. one vLLM da
 # `core-metrics-extractor` (v0.10.0) of the EPP reads it:
 #
 # - For each gauge, it keeps **one** series: the series with the latest timestamp. The vLLM output
-#   has no timestamp, so this is the first series in the list.
+#   has no timestamp, so the kept series is the first series in the list.
 # - It adds no series together.
 # - The LoRA adapters come from the `running_lora_adapters` label of the `vllm:lora_requests_info`
 #   series with the **largest value**. The value is a timestamp.
@@ -339,12 +339,12 @@ print("✅ to the EPP this pod looks far less loaded than it is: rank 1 (9 waiti
 # field:
 #
 # - The fake backend always sends it.
-# - `llm-d-inference-sim` v0.11.2 sends it when `--enable-kvcache` is on (the stacks of the lab set
-#   it). The simulator counts the value in its own tokens and 16-token blocks.
-# - **vLLM sends it only when started with `--enable-prompt-tokens-details`** (the GPU and GKE paths
-#   of the lab set it).
+# - `llm-d-inference-sim` v0.11.2 sends it when `--enable-kvcache` is on. The stacks of the lab set
+#   this flag. The simulator counts the value in its own tokens and 16-token blocks.
+# - **vLLM sends it only when started with `--enable-prompt-tokens-details`**. The GPU and GKE paths
+#   of the lab set this flag.
 #
-# For an engine that does not send it, the result shows `n/a`, never 0%. For such an engine, the
+# For an engine that does not send the field, the result shows `n/a`, never 0%. For such an engine, the
 # vLLM counters `vllm:prefix_cache_hits_total` / `vllm:prefix_cache_queries_total` give the hit rate
 # instead (`igwlab.bench.engine_hit_rate`, the method of Exercise 1.4).
 

@@ -19,7 +19,7 @@
 # After this notebook, you can do these things:
 #
 # - Say which bound applies (per step and per kernel).
-# - Predict the step time within the roofline.
+# - Predict the step time with the roofline.
 # - Explain what quantization and MoE really change: the **bytes**.
 # - Explain why tiling and fusion give a gain on the memory hierarchy.
 #
@@ -71,7 +71,7 @@ for b in (1, 8, 32, 64, 128, cap):
 # As $\text{batch} \to \infty$, the weight read amortizes away. The average intensity of the step then tends to
 # $\text{FLOPs per token} \div \text{KV bytes per token}$. For this GQA model, that is about 32 FLOP/B at 4K context.
 # If you treat the step as one kernel, it can never reach the 295 of an H100 at 4K. The crossover of the whole step
-# exists only when the context is very short, and the HBM capacity for KV runs out first anyway. (Per kernel, the
+# exists only at the shortest contexts, and the HBM capacity for KV runs out first anyway. (Per kernel, the
 # picture is sharper: see "Per kernel, not per step" after Exercise 2.2.)
 
 # %%
@@ -86,8 +86,8 @@ print("memory cap at 4K context:", llm.max_batch_by_memory(m8, h100, 4096), "seq
 # ## Quantization moves bytes
 # FP8 (W8A8 + FP8 KV) halves every byte and doubles the peak. In the memory-bound regime, the gain is
 # exactly 2×. Weight-only INT4 (W4A16) decreases the weight bytes by 4×, but it does not change the KV. Thus its
-# speedup decreases as batch × context grows. It also lowers the batch at which decode becomes compute-bound
-# (the math still runs at the bf16 peak).
+# speedup decreases as batch × context grows. W4A16 also lowers the batch at which decode becomes compute-bound,
+# because the math still runs at the bf16 peak.
 
 # %%
 b1, b64 = llm.decode(m8, h100, 1, 2048), llm.decode(m8, h100, 64, 2048)
@@ -101,7 +101,7 @@ for name, kw in llm.SCHEMES.items():
 # ## MoE: which weights a step streams
 # The *total* parameters set the memory size, because every expert lives in HBM. The *active*
 # parameters set the FLOPs of a token. A decode step streams only the experts that its tokens hit. For Mixtral
-# (8 experts, top-2), that is few experts at batch 1, and almost all of them by batch 16. Fine-grained MoE
+# (8 experts, top-2), a step streams few experts at batch 1, and almost all of them by batch 16. Fine-grained MoE
 # (128 experts, top-8) keeps the benefit to larger batches.
 
 # %%
@@ -360,9 +360,9 @@ print(f"✅ best tile {best}: {rl.tile_intensity(*best):.0f} FLOP/B, below the 2
 # 1. *Do the 2.3× bf16 FLOPs of a B200 speed up our batch-32, 4K-context decode by 2.3×?* No. The decode
 #    is memory-bound. The gain is the bandwidth ratio (8 against 3.35 TB/s ≈ 2.4×), plus the capacity for a larger batch.
 # 2. *How do TTFT and ITL grow: TTFT with prompt length, ITL with batch?* TTFT is compute-bound: it is
-#    linear in tokens while the matmuls dominate. Then it is superlinear as the quadratic attention term grows
-#    (an 8K prompt takes 4.4× the 2K time, not 4×). ITL is nearly flat while the shared weight stream
+#    linear in tokens while the matmuls dominate. Then it is superlinear as the quadratic attention term grows.
+#    An 8K prompt takes 4.4× the 2K time, not 4×. ITL is almost flat while the shared weight stream
 #    dominates (small batch × short context). Then it grows approximately linearly with batch × context as the KV
-#    reads take over. At 2K context, it is 4.56 ms at batch 1, 9.61 ms at 64 and 21.16 ms at 208.
+#    reads take over. At 2K context, ITL is 4.56 ms at batch 1, 9.61 ms at 64 and 21.16 ms at 208.
 # 3. *We quantized to W4A16 and saw 1.5×, not 4×. Bug?* No. At batch 64 × 2K context, KV is half
 #    the bytes, and the KV stayed bf16. Quantize the KV cache (FP8) to move the rest.

@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="524" viewBox="0 0 1000 524" role="img" aria-label="The orchestrator side of one turn, from the push by Pub/Sub to the ack and the compaction." style="color: #E4EAE7">
+  <title>The orchestrator side of one turn, from the push by Pub/Sub to the ack and the compaction.</title>
+  <rect x="0" y="0" width="1000" height="524" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <rect x="170" y="160" width="822" height="220" rx="4" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <path d="M62 56 L62 508" stroke="#97A59F" stroke-width="1" stroke-dasharray="2 3" fill="none"/>
+    <path d="M252 56 L252 508" stroke="#97A59F" stroke-width="1" stroke-dasharray="2 3" fill="none"/>
+    <path d="M532 56 L532 508" stroke="#97A59F" stroke-width="1" stroke-dasharray="2 3" fill="none"/>
+    <path d="M682 56 L682 508" stroke="#97A59F" stroke-width="1" stroke-dasharray="2 3" fill="none"/>
+    <path d="M830 56 L830 508" stroke="#97A59F" stroke-width="1" stroke-dasharray="2 3" fill="none"/>
+    <path d="M945 56 L945 508" stroke="#97A59F" stroke-width="1" stroke-dasharray="2 3" fill="none"/>
+    <rect x="174" y="163" width="210" height="15" fill="#161E1C"/>
+    <text x="178" y="174" font-size="11" fill="#97A59F"><tspan font-weight="600">loop</tspan>  until final answer or budget</text>
+    <rect x="12.0" y="18" width="100" height="38" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="62" y="42" text-anchor="middle" font-weight="600">Pub/Sub</text>
+    <rect x="192.0" y="18" width="120" height="38" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="252" y="42" text-anchor="middle" font-weight="600" fill="#7ADACF">orchestrator</text>
+    <rect x="482.0" y="18" width="100" height="38" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="532" y="42" text-anchor="middle" font-weight="600">Redis</text>
+    <rect x="627.0" y="18" width="110" height="38" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="682" y="42" text-anchor="middle" font-weight="600">Firestore</text>
+    <rect x="780.0" y="18" width="100" height="38" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="830" y="42" text-anchor="middle" font-weight="600">Gemini</text>
+    <rect x="900.0" y="18" width="90" height="38" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="945" y="42" text-anchor="middle" font-weight="600">tools</text>
+    <path d="M65 90 L249 90" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+    <rect x="68" y="71" width="163" height="16" fill="#161E1C"/>
+    <text x="72" y="84" font-size="11.5">push /pubsub/turns (OIDC)</text>
+    <path d="M255 118 L529 118" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+    <rect x="258" y="99" width="126" height="16" fill="#161E1C"/>
+    <text x="262" y="112" font-size="11.5">SET NX lock:session</text>
+    <path d="M255 146 L679 146" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+    <rect x="258" y="127" width="213" height="16" fill="#161E1C"/>
+    <text x="262" y="140" font-size="11.5">load session + turn (checkpoints)</text>
+    <path d="M255 198 L827 198" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+    <rect x="258" y="179" width="163" height="16" fill="#161E1C"/>
+    <text x="262" y="192" font-size="11.5">generate_content (stream)</text>
+    <path d="M827 226 L255 226" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)" stroke-dasharray="4 3"/>
+    <rect x="649" y="207" width="175" height="16" fill="#161E1C"/>
+    <text x="820" y="220" text-anchor="end" font-size="11.5">deltas · tool calls · usage</text>
+    <path d="M255 254 L529 254" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+    <rect x="258" y="235" width="151" height="16" fill="#161E1C"/>
+    <text x="262" y="248" font-size="11.5">XADD step.model.delta …</text>
+    <path d="M255 282 L679 282" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+    <rect x="258" y="263" width="107" height="16" fill="#161E1C"/>
+    <text x="262" y="276" font-size="11.5">ArrayUnion(step)</text>
+    <path d="M255 310 L942 310" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+    <rect x="258" y="291" width="262" height="16" fill="#161E1C"/>
+    <text x="262" y="304" font-size="11.5">tool calls in parallel (idempotency keys)</text>
+    <path d="M942 338 L255 338" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)" stroke-dasharray="4 3"/>
+    <rect x="888" y="319" width="51" height="16" fill="#161E1C"/>
+    <text x="935" y="332" text-anchor="end" font-size="11.5">results</text>
+    <path d="M255 366 L679 366" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+    <rect x="258" y="347" width="107" height="16" fill="#161E1C"/>
+    <text x="262" y="360" font-size="11.5">ArrayUnion(step)</text>
+    <path d="M255 410 L679 410" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+    <rect x="258" y="391" width="270" height="16" fill="#161E1C"/>
+    <text x="262" y="404" font-size="11.5">save session (optimistic version) · save turn</text>
+    <path d="M255 438 L529 438" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+    <rect x="258" y="419" width="270" height="16" fill="#161E1C"/>
+    <text x="262" y="432" font-size="11.5">XADD turn.completed · inflight-1 · DEL lock</text>
+    <path d="M249 466 L65 466" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)" stroke-dasharray="4 3"/>
+    <rect x="182" y="447" width="64" height="16" fill="#161E1C"/>
+    <text x="242" y="460" text-anchor="end" font-size="11.5">200 (ack)</text>
+    <path d="M255 494 L827 494" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+    <rect x="258" y="475" width="270" height="16" fill="#161E1C"/>
+    <text x="262" y="488" font-size="11.5">summarise (compaction, off the critical path)</text>
+  </g>
+</svg>

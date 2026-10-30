@@ -6,7 +6,7 @@
 #
 # ## The one-minute version
 #
-# This is the 07.1 agent loop (the model, then tool calls, then results, then the model again). It has the
+# This is the 07.1 agent loop: the model, then tool calls, then results, then the model again. It has the
 # same tool contract (`{"ok": True, "data": ...}` or `{"ok": False, "error": kind, ...}`). The things that a
 # code tool adds are *outside the model* (PRIMER §3, §8, and identity primer §4.2, §6.2):
 #
@@ -263,7 +263,7 @@ import shutil; shutil.rmtree(STATE, ignore_errors=True)
 # denied egress or a series of stops at the CPU limit becomes an alert."
 #
 # **Drill 1.** *Can we not tell the model in its system prompt to ignore instructions in documents?* You
-# can, and we recommend it. But you cannot trust it.
+# can, and we recommend it. But you cannot trust that instruction.
 #
 # Prompt injection is a property of the medium. A sufficiently good injection wins the argument with the
 # system prompt sufficiently often to be important. The controls that count are outside the

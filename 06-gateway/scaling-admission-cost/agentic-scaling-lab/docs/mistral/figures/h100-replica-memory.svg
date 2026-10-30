@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="284" viewBox="0 0 880 284" role="img" aria-label="The memory of one H100 replica: the FP8 weights, the activations and the KV cache in 73.6 GB, and the limit that binds." style="color: #E4EAE7">
+  <title>The memory of one H100 replica: the FP8 weights, the activations and the KV cache in 73.6 GB, and the limit that binds.</title>
+  <rect x="0" y="0" width="880" height="284" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="40" y="32" font-weight="600">One H100 SXM · 80 GB of HBM · Ministral 3 14B</text>
+    <!-- the 0.92 share -->
+    <path d="M40 76 L40 66 L776 66 L776 76" fill="none" stroke="#97A59F" stroke-width="1.2"/>
+    <text x="408" y="58" text-anchor="middle" font-size="11.5" fill="#97A59F"><tspan font-family="JetBrains Mono, monospace" font-size="11">gpu_memory_utilization</tspan> 0.92 · 73.6 GB</text>
+    <!-- the bar, 10 px a GB -->
+    <rect x="40" y="82" width="157" height="70" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="118.5" y="112" text-anchor="middle" font-weight="600">FP8 weights</text>
+    <text x="118.5" y="131" text-anchor="middle" font-size="11.5" fill="#97A59F">15.7 GB</text>
+    <rect x="197" y="82" width="40" height="70" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="237" y="82" width="539" height="70" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="506.5" y="112" text-anchor="middle" font-weight="600">KV cache · 53.9 GB</text>
+    <text x="506.5" y="131" text-anchor="middle" font-size="11.5" fill="#7ADACF">about 329 k tokens at 160 KiB each</text>
+    <path d="M40 154 L40 162 M40 158 L840 158 M840 154 L840 162" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <!-- scale marks and the activations label -->
+    <g font-size="11" fill="#97A59F">
+      <text x="40" y="176" text-anchor="start">0</text>
+      <text x="840" y="176" text-anchor="end">80 GB</text>
+      <text x="217" y="194" text-anchor="middle">activations · 4 GB</text>
+    </g>
+    <path d="M217 154 L217 182" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <!-- what the KV cache holds, and the limit that binds -->
+    <path d="M506 152 L506 206" fill="none" stroke="#4CC5B7" stroke-width="1.2" marker-end="url(#arrA)"/>
+    <rect x="386" y="208" width="240" height="56" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="506" y="231" text-anchor="middle" font-weight="600">about 130 calls</text>
+    <text x="506" y="250" text-anchor="middle" font-size="11.5" fill="#97A59F">2,700-token prefix stored once</text>
+    <text x="658" y="240" text-anchor="middle" font-size="11" fill="#97A59F">against</text>
+    <rect x="690" y="208" width="150" height="56" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="765" y="231" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11.5" font-weight="600">max_num_seqs 128</text>
+    <text x="765" y="250" text-anchor="middle" font-size="11.5">the limit that binds</text>
+  </g>
+</svg>

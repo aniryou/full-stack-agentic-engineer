@@ -27,7 +27,7 @@ Do Parts A–D first. All of the answers are in Part E at the end. Thus, do not 
 
 Give each answer in one or two sentences. You do not need arithmetic.
 
-**A1.** A CPU and a GPU must both wait ~500 cycles for a DRAM access. Describe how each one uses that wait. Then say, as a result, on which hardware each one spends its transistor budget.
+**A1.** A CPU and a GPU must both wait ~500 cycles for a DRAM access. Describe how each one uses that wait. Then say, from this, on which hardware each one spends its transistor budget.
 
 **A2.** What is a warp? Why is the warp the unit that is really important, and not the thread?
 
@@ -129,7 +129,7 @@ A warp reads 32 float32 values from a row-major 1024×1024 matrix. HBM transacti
 
 ### B7 — Divergence
 
-In a warp, lane $i$ executes a loop that runs ${i+1}$ times (lane 0 runs it one time, lane 31 runs it 32 times).
+In a warp, lane $i$ executes a loop that runs ${i+1}$ times. Lane 0 runs it one time, and lane 31 runs it 32 times.
 
 (a) How many iterations of warp-time does this cost?
 
@@ -217,7 +217,7 @@ The GPU *accepts* the wait and hides it. It keeps thousands of other threads res
 
 **A2.** A warp is 32 threads that share a single instruction pointer and execute in lockstep. The warp is important because the hardware schedules it as one unit. It is also the unit that memory coalescing operates on. The cost is per warp, not per thread. Thus, when 32 threads do different things, the cost is the sum of their paths, not the maximum of their work.
 
-**A3.** The hardware manages L1. You have an effect on it only indirectly, through your access patterns. Shared memory is a software-managed scratchpad that you explicitly allocate, load and synchronise on. CPUs have no equivalent. Most of kernel optimisation is the decision about what data to stage there.
+**A3.** The hardware manages L1. You have an effect on it only indirectly, through your access patterns. Shared memory is a software-managed scratchpad that you explicitly allocate, load and synchronise on. CPUs have no equivalent. Most of kernel optimisation is the decision about what data to stage in shared memory.
 
 **A4.** Arithmetic intensity is the number of FLOPs done per byte moved from HBM, in FLOP/byte. It tells you if your ceiling is the ALUs or the memory bus. It tells you this before you write code. To find the answer, compare the arithmetic intensity with the crossover ratio of the machine (~295 FLOP/byte on an H100). If you are below the crossover, arithmetic optimisations cannot help you.
 
@@ -225,7 +225,7 @@ The GPU *accepts* the wait and hides it. It keeps thousands of other threads res
 
 **A6.** BF16 keeps the 8-bit exponent of FP32 and gives up mantissa bits. FP16 does the opposite. Training is much more sensitive to dynamic range than to precision (gradients underflow). Thus, training in BF16 is stable without loss scaling.
 
-**A7.** TMA is a dedicated DMA engine. One thread issues a descriptor, and the hardware moves an entire multidimensional tile. The hardware also generates the addresses and handles the boundaries. TMA removes the index arithmetic and the register pressure that, before TMA, were the largest part of the inner loop. The warp is then free to do only one thing: issue Tensor Core work.
+**A7.** TMA is a dedicated DMA engine. One thread issues a descriptor, and the hardware moves the multidimensional tile as one unit. The hardware also generates the addresses and handles the boundaries. TMA removes the index arithmetic and the register pressure that, before TMA, were the largest part of the inner loop. The warp is then free to do only one thing: issue Tensor Core work.
 
 **A8.** Scale-up makes the NVLink domain larger. In that domain, each GPU can use the memory of the other GPUs as almost local (1.8 TB/s). Scale-out adds nodes over links (InfiniBand or Ethernet) that are approximately an order of magnitude slower. Tensor parallelism needs an all-reduce *inside every layer*, so it needs scale-up. If you put it across a scale-out boundary, communication becomes the largest cost.
 
@@ -236,7 +236,7 @@ The GPU *accepts* the wait and hides it. It keeps thousands of other threads res
 - CUTLASS/CuTe. It gives C++ templates and a layout algebra for matmul-shaped problems.
 - CUDA C++. It gives full control and warp-level intrinsics.
 
-**A10.** SIMT describes what *one thread* does, and you think in terms of thread indices. CUDA Tile describes operations on *tiles and arrays*, in the NumPy style. The compiler then derives the thread mapping, the memory movement, the asynchrony and the Tensor Core selection. CUDA Tile is a complementary model, added next to SIMT. It is not a replacement.
+**A10.** SIMT describes what *one thread* does, and you think in thread indices. CUDA Tile describes operations on *tiles and arrays*, in the NumPy style. The compiler then derives the thread mapping, the memory movement, the asynchrony and the Tensor Core selection. CUDA Tile is a complementary model, added next to SIMT. It is not a replacement.
 
 ---
 
@@ -352,7 +352,7 @@ The next lever is precision. If accuracy permits, change from BF16 to FP8 or FP4
 
 - Increase the batch size (B3).
 - Quantise (B10).
-- Reduce the bytes-per-token in a different way, for example with speculative decoding or an MoE that activates a subset of weights.
+- Decrease the bytes-per-token in a different way, for example with speculative decoding or an MoE that uses only a subset of weights.
 
 **C4.** The kernel targets the Ampere execution model. The increase in peak on H100 comes from features that the kernel does not use. These features are TMA for tile movement, warpgroup-level MMA, warp specialisation and thread block clusters.
 
@@ -362,7 +362,7 @@ Also, over A100, H100 gained approximately 3× the FLOPS but only ~1.7× the ban
 
 "Percent of peak" tells you almost nothing here, because peak is a dense-matmul number. Compare the kernel with achieved bandwidth and with a CPU baseline instead.
 
-**C6.** Consumer cards have had no NVLink since the 40-series. Thus, your shards communicate over PCIe. Tensor parallelism needs an all-reduce inside every layer, and B8 shows the cost of that on PCIe. The alternatives are:
+**C6.** Consumer cards of the 40-series and later have no NVLink. Thus, your shards communicate over PCIe. Tensor parallelism needs an all-reduce inside every layer, and B8 shows the cost of that on PCIe. The alternatives are:
 
 - (i) Do not shard the model at all, because it fits. Run one GPU per model. Use the other three for concurrent replicas.
 - (ii) If you later need a model that does not fit, use pipeline parallelism. It is point-to-point and needs much less communication. Or quantise the model until it fits again.
@@ -375,9 +375,9 @@ Also, over A100, H100 gained approximately 3× the FLOPS but only ~1.7× the ban
 
 If you run them on the same hardware, either the ALUs do not get sufficient work during decode, or you waste bandwidth during prefill. Also, on shared hardware, long prefills block short decodes in the queue.
 
-Disaggregation lets you set the size of each pool independently. Prefill wants maximum FLOPS and does not need much memory bandwidth per token. Decode wants maximum HBM bandwidth and capacity for KV cache. NVIDIA went so far with this that it built a separate SKU for the prefill half, Rubin CPX. The KV cache that prefill makes must then go to the decode pool. That is why these designs are inside a fast scale-up domain.
+Disaggregation lets you set the size of each pool independently. Prefill wants maximum FLOPS and does not need much memory bandwidth per token. Decode wants maximum HBM bandwidth and capacity for KV cache. NVIDIA went so far with disaggregation that it built a separate SKU for the prefill half, Rubin CPX. The KV cache that prefill makes must then go to the decode pool. That is why these designs are inside a fast scale-up domain.
 
-**D2.** Simple attention materialises the full $N \times N$ score matrix in HBM. It writes the matrix, then reads it back for softmax. Then it writes again, and reads again for the value multiply. FlashAttention tiles the computation so that it makes, uses and discards each block of scores entirely in shared memory. It uses an online-softmax reformulation, so it never needs the full matrix.
+**D2.** Simple attention materialises the full $N \times N$ score matrix in HBM. It writes the matrix, then reads it back for softmax. Then it writes again, and reads again for the value multiply. FlashAttention tiles the computation so that it makes, uses and discards each block of scores fully in shared memory. It uses an online-softmax reformulation, so it never needs the full matrix.
 
 It recomputes some quantities, so it does more arithmetic. But it moves an order of magnitude fewer bytes. The kernel was memory-bound. Thus, an exchange of FLOPs for bytes is an exchange of an abundant resource for the scarce one. The general principle is this: **on a memory-bound kernel, redundant computation is free and data movement is the only real cost.** Recomputation in gradient checkpointing is the same trade.
 
@@ -389,7 +389,7 @@ These things *do* help you:
 - TMA and async pipelines, which help any tiled kernel.
 - The improved tools, because Triton and cuTile decrease the cost to write the custom kernels that irregular workloads need anyway.
 
-The progress helps the GNN half even less, because the GNN half is gather/scatter-bound and its structure makes it unable to use Tensor Cores (C5).
+The progress helps the GNN half even less, because the GNN half is gather/scatter-bound and its structure does not let it use Tensor Cores (C5).
 
 AMD's split is the direct result. From MI400, AMD ships MI450X for AI, with the FP32/FP64 logic removed. It also ships MI430X for HPC, with FP4/FP8/BF16 removed. Each chip gets back the die area of the logic that AMD removed.
 
@@ -413,4 +413,4 @@ In general, when more of your communication stays inside the scale-up domain, th
 - Quantisation to FP4 gives a 4× decode speedup. All of it comes from fewer bytes moved, and the added arithmetic throughput gives nothing (B10).
 - Only the interconnect, NVLink or PCIe, decides if tensor parallelism is viable or not viable (B8).
 
-In every case, the arithmetic was never the constraint. The best way to understand the chip is as a memory hierarchy with bandwidth at each level. The design problem is to keep data as high in that hierarchy as possible, for as long as possible. The ALUs are then, in effect, free. This is also why the headline specs on modern accelerators are HBM capacity and bandwidth. It is also why the roofline model predicts performance better than any FLOPS count.
+In every case, the arithmetic was never the constraint. The best way to think about the chip is as a memory hierarchy with bandwidth at each level. The design problem is to keep data as high in that hierarchy as possible, for the longest possible time. The ALUs are then, in effect, free. This is also why the headline specs on modern accelerators are HBM capacity and bandwidth. It is also why the roofline model predicts performance better than any FLOPS count.

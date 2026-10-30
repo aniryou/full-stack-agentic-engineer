@@ -54,7 +54,7 @@ cd ../gcp/terraform && terraform destroy
   preempt Spot nodes. Thus long jobs must write checkpoints. Layer 03 shows how to get the GPUs:
   reservations, DWS flex-start.
 * *DCGM + Managed Prometheus*: they give the profiling fields (`DCGM_FI_PROF_*`). With these fields,
-  you can understand what `GPU_UTIL` shows (primer §8, notebook 06).
+  you can know what `GPU_UTIL` shows (primer §8, notebook 06).
 * *Time-sharing and MIG pools off by default*: these pools are for one experiment. Set a pool to on for
   the experiment. Then set it to off again.
 

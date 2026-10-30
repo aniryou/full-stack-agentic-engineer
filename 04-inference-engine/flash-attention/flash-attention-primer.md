@@ -166,14 +166,14 @@ There is no approximation at any step. There is only a deferred normalization an
 Training needs gradients. The textbook backward pass for attention needs $P$, and $P$ is exactly the $N \times N$ matrix that the forward pass did not make. If the kernel stores $P$, the quadratic memory cost comes back immediately.
 
 ```mermaid
-flowchart TB
-  F["forward pass<br/>Q, K, V tiles in SRAM, online softmax"] --> O["keep O: N × d"]
-  F --> L["keep L = m + log(ℓ):<br/>N numbers, not N²"]
-  F -. "never written" .-> P["P: N × N"]
-  O --> B["backward pass"]
+flowchart LR
+  F["forward pass<br/>tiles in SRAM<br/>online softmax"] --> O["keep O<br/>N × d"]
+  F --> L["keep L =<br/>m + log(ℓ)<br/>N numbers, not N²"]
+  F -.-> P["P: N × N<br/>never written"]
+  O --> B["backward<br/>pass"]
   L --> B
-  B --> R["load the Q, K, V tiles<br/>into SRAM again"]
-  R --> G["calculate each S and P tile<br/>again with the saved L:<br/>no second reduction pass<br/>then the gradients"]
+  B --> R["load Q, K, V<br/>tiles into<br/>SRAM again"]
+  R --> G["calculate S, P tiles<br/>again with saved L<br/>then gradients"]
 ```
 
 *The forward pass keeps only $O$ and the log-sum-exp $L$ of each row, and it never writes $P$. The backward pass loads the $Q$, $K$ and $V$ tiles again, calculates each $S$ and $P$ tile again, and normalizes with the saved $L$. This costs more FLOPs than a stored $P$, but the GPU has unused arithmetic capacity, and bandwidth is scarce.*

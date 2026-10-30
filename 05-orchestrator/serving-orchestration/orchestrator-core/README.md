@@ -73,7 +73,7 @@ python3 tools/run_notebooks.py notebooks --expect-fail  # blanks must stop at th
 ## What the model leaves out
 
 Every number that `fleetsim` prints is **simulated**. It comes from an engine model that uses spec-sheet arithmetic
-(an 8B model on an L4 by default), and it is not a measurement. Use the model to get intuition and to examine
+(an 8B model on an L4 by default). The number is not a measurement. Use the model to get intuition and to examine
 designs. Read every simulated number with the items in this list in mind. The notebooks and the primer also state
 each item where it is important.
 
@@ -83,8 +83,8 @@ each item where it is important.
   optimistic by those quantities.
 - **No per-chunk efficiency loss.** A 256-token prefill chunk has the same cost per token as a 2,048-token chunk.
   Thus the chunk-budget sweep in notebook 04 is the optimistic end.
-- **Metric staleness is a maximum age.** The simulator reads a scraped snapshot again on the first look after it
-  expires. The simulator has no scrape jitter and no per-replica phase.
+- **Metric staleness is a maximum age.** The simulator reads a scraped snapshot again on the first look after the
+  snapshot expires. The simulator has no scrape jitter and no per-replica phase.
 - **P/D fleets have a constant size.** `Fleet` refuses an autoscaler or flow control together with a prefill pool.
   The cost of the KV transfer is for the blocks that the decode replica does not have at hand-off.
 - **KV tiers are exclusive** (the simulator demotes a block when it evicts it). Real offload keeps an inclusive copy in the lower tier.

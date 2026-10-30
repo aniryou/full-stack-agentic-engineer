@@ -105,7 +105,7 @@ except (ImportError, AttributeError):
 # gives every 32 values a power-of-two (E8M0) scale. NVFP4 gives every 16 values an E4M3 scale, plus one FP32 scale
 # per tensor.
 #
-# Compare them with INT4 at similar bits, on Gaussian weights and on heavy-tailed weights. The
+# Compare them with INT4 at approximately the same bits, on Gaussian weights and on heavy-tailed weights. The
 # heavy-tailed weights are Student-t with 3 degrees of freedom. In the tails, they are nearer to what real weight
 # rows look like.
 
@@ -361,7 +361,7 @@ print("✅ 0xfcba9810 - the value compressed-tensors' pack_to_int32 produces for
 # ## In a design review
 # **The two-minute version.** "A format is a grid and a scale. INT grids have equal spaces, thus their error is
 # absolute and each bit is ~6 dB. FP grids have spaces that are powers of two, thus their error is relative. E4M3
-# rounds within 6.25% anywhere in a $2^{15}$ range. This is why FP8 is the format for activations and KV, and why
+# rounds with an error of at most 6.25% anywhere in a $2^{15}$ range. This is why FP8 is the format for activations and KV, and why
 # a per-tensor FP8 scale is often sufficient.
 #
 # "At 4 bits, the grid alone is too coarse. Thus every 4-bit format carries small scales. INT4 with a 16-bit scale

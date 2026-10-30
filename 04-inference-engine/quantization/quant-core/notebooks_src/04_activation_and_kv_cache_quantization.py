@@ -43,7 +43,7 @@ rng = np.random.default_rng(0)
 # %% [markdown]
 # ## Worked example 1 — a W8A8 INT8 GEMM, exactly
 # Quantize $X$ per token and $W$ per output channel. Multiply the integer codes with integer accumulation. Then apply
-# $s_x \cdot s_w$. The result is equal to the fake-quantized product, to within rounding. This shows that the scales
+# $s_x \cdot s_w$. The result and the fake-quantized product are different only by rounding. This shows that the scales
 # do factor out.
 
 # %%
@@ -105,7 +105,7 @@ for label, Yb in (("block FP8 (1x128 act, 128x128 weight)", w8a8.block_fp8_matmu
     print(f"{label:38} relative output error {np.linalg.norm(Yb - refb) / np.linalg.norm(refb):.4f}")
 
 # %% [markdown]
-# For FP8, the granularity has almost no effect at these ranges (a 30× tile is far inside E4M3's $2^{14.8}$).
+# For FP8, the granularity has almost no effect at these ranges. A 30× tile is far inside the $2^{14.8}$ range of E4M3.
 # Per-token INT8 is more precise than any FP8 (7 bits against 3).
 #
 # Block scales are worth their cost in two cases.
@@ -118,8 +118,8 @@ for label, Yb in (("block FP8 (1x128 act, 128x128 weight)", w8a8.block_fp8_matmu
 # On Blackwell, NVFP4 W4A4 also quantizes activations. It uses E2M1 values with one E4M3 scale per **16** channels
 # of each token. An outlier channel sets the scale of its block at $\mathrm{amax}/6$.
 #
-# Consider an outlier that is 30× the typical value. A typical neighbour then goes to 6/30 = 0.2 on the E2M1 grid.
-# This is below 0.25, the value that rounds up to the smallest step of E2M1, 0.5. Thus most of the 15 neighbours
+# Think about an outlier that is 30× the typical value. A typical neighbour then goes to 6/30 = 0.2 on the E2M1 grid.
+# The value 0.2 is below 0.25, the value that rounds up to the smallest step of E2M1, 0.5. Thus most of the 15 neighbours
 # become **zero**. The input of the first up-projection of the tiny model has its four outlier channels in three of
 # its four 16-channel blocks:
 
@@ -172,7 +172,7 @@ for label, logits in (("NVFP4 weight-only (W4A16)", nvfp4_model(m, acts=False)),
 #   block),
 # - quantization-aware distillation (primer §7).
 #
-# The lab's notebook 05 does this again on its bundled model. There, the gap is even larger.
+# The lab's notebook 05 does this experiment again on its bundled model. There, the gap is larger than here.
 #
 # ## Worked example 5 — which layers stay in high precision
 # Recipes quantize the linears of the transformer blocks, and set `ignore=["lm_head"]`. Quantize the head of the tiny
@@ -189,7 +189,7 @@ print(f"all four hidden linears, INT4 per channel: KL {r['kl']:.4f}, acc {r['acc
 # %% [markdown]
 # One INT4 layer at the output costs 4.0 points. All four hidden linears together cost 6.0 points. Thus the head is the
 # most sensitive single layer. Its errors go directly to the logits, and no later layer averages them. In an LLM, the
-# head is also one large GEMM per sampled token (the vocabulary is 128K–152K rows). That is why a 16-bit head costs
+# head is also one large GEMM per sampled token (the vocabulary is 128K–152K rows). Thus a 16-bit head costs
 # bytes at decode (serving-engine §8: 1.05 GB of Llama-3.1-8B's 5.70 GB INT4 weights).
 #
 # The input **embedding** is a gather, not a GEMM. Its quantization saves memory but no compute. **Norms** and the
@@ -224,8 +224,8 @@ for f in (1e-3, 1e-2, 1.0, 1e2, 1e3):
 # source.
 #
 # ## Worked example 7 — below 8 bits: KIVI
-# A 2–4-bit KV cache needs finer scales. Keys have one scale and one minimum per **channel** per group of 32 tokens
-# (thus the outlier channels get their own scales). Values have them per **token** per group of 32 channels. The
+# A 2–4-bit KV cache needs finer scales. Keys have one scale and one minimum per **channel** per group of 32 tokens.
+# Thus the outlier channels get their own scales. Values have them per **token** per group of 32 channels. The
 # newest tokens stay 16-bit until a group is full (the residual window).
 
 # %%
@@ -247,7 +247,7 @@ for label, b in (("bf16 KV", 16), ("FP8 KV", 8), ("4-bit KIVI (5 bits/elem)", 5)
 # reason to find out which of the two a system implements.
 #
 # **Prefix caching with a quantized cache.** The engine uses a cached block again, in its stored form. The engine hashes
-# the tokens of the block as usual (serving-engine §5), and the block holds FP8 values. This works because the scales are static
+# the tokens of the block as usual (serving-engine §5), and the block holds FP8 values. This reuse works because the scales are static
 # per layer (or, for per-token scales, the engine stores them with the block). Thus a later request that reads the
 # block dequantizes it exactly as the request that wrote it did. If the scales of a scheme depend on the request that
 # *reads* the block, two requests cannot share the block.

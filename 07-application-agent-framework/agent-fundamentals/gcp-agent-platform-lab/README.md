@@ -98,7 +98,7 @@ September 2026, verify). The author wrote the adapter against the `google-genai`
 changed to 2.x in May 2026. Thus, *make sure that the adapter works before you trust it*.
 
 The details are in [`docs/GEMINI_ADAPTER.md`](docs/GEMINI_ADAPTER.md). The mapping to Google's Agent
-Development Kit (2.x on PyPI since May 2026, verify) is in [`docs/LAB_TO_ADK.md`](docs/LAB_TO_ADK.md).
+Development Kit (2.x on PyPI from May 2026, verify) is in [`docs/LAB_TO_ADK.md`](docs/LAB_TO_ADK.md).
 
 ## Honesty notes
 

@@ -81,15 +81,15 @@ for r in clean.records("acme", "u1", kind="semantic"):
 
 # %% [markdown]
 # Lisbon and Globex are **superseded, not deleted**. Their validity closes when Porto and Initech begin
-# (Graphiti keeps the same pair as `invalid_at` / `expired_at`). Thus the question "where did the user live on
+# (the same pair in Graphiti: `invalid_at` / `expired_at`). Thus the question "where did the user live on
 # 15 September?" still has an answer (`store.search(..., as_of=...)`). The job skipped the hedged allergy ("I
 # think…", confidence 0.6), because it is below the floor of the write policy.
 #
 # ## Worked example: kill it at the worst moment, then resume
 #
 # Worker A crashes in `apply:2`, *after* the write of the step and *before* its checkpoint. The notebook
-# schedules worker B immediately, and B finds that A still holds the lease. One minute later, the lease has
-# expired, and B takes over.
+# schedules worker B immediately, and B finds that A still holds the lease. One minute later, the lease
+# is expired, and B takes over.
 
 # %%
 store, clock = week_store(os.path.join(WORK, "crash.db"))
@@ -153,7 +153,7 @@ print("so the schedule is weekly:", next(c for c in C.gcp_commands() if "schedul
 # | nothing for the slot, or a multi-valued slot (`trip`) | `"ADD"` | `None` |
 # | the current value's trust outranks the new one's (human > user > tool > inferred) | `"FLAG"` | the current record |
 # | the new fact is *older* than the current one (a late episode) | `"ADD_HISTORY"` | the current record |
-# | all other cases | `"UPDATE"` (the new fact will supersede the current record) | the current record |
+# | all other cases | `"UPDATE"`: the new fact will supersede the current record | the current record |
 #
 # "Current" is the active record of the slot with the latest `valid_from`. Use `records.outranks(a, b)` and
 # `extract.SLOTS[slot].multi`.
@@ -200,7 +200,7 @@ print("✅ my_resolve agrees with memory.resolve on", len(cases), "cases, includ
 # attempts)`. In **one** SQL statement, do one of these:
 #
 # * Insert the lease.
-# * Take it over if it has expired.
+# * Take it over if it is expired.
 # * Renew it if `holder` already has it.
 # * Do nothing if the lease of another holder is still live.
 #
@@ -336,19 +336,19 @@ shutil.rmtree(WORK, ignore_errors=True)    # this notebook's databases: gone
 # job only distils the episodes of the week.
 #
 # "A lease row keeps two workers apart, and it expires when one worker stops. Every step writes a checkpoint,
-# thus a resume skips the model calls that it already paid for. Writes carry idempotency keys derived from the
+# thus a resume skips the model calls that the run already paid for. Writes carry idempotency keys derived from the
 # run. Thus the step that crashed after its write does not write two times.
 #
 # "Resolution is deterministic. A newer fact supersedes an older fact, and the old validity closes. A weaker
 # source never overwrites a stronger one, and the job marks the weaker fact with a flag. The job skips
 # extractions with low confidence. Consolidated episodes get a 30-day TTL.
 #
-# "We measured recall at a fixed budget before and after. We decided to answer from facts after an episode is
-# consolidated, because a raw episode can bring back a superseded value."
+# "We measured recall at a fixed budget before and after. We decided to answer from facts after the job
+# consolidates an episode, because a raw episode can bring back a superseded value."
 #
 # **Drill 1.** *The scheduler sent the trigger two times at 03:17. What occurs?* Both triggers calculate the
-# same run id. One takes the lease, and the other gets `LeaseHeld` (or, if the first finished, sees the run
-# `done`) and exits.
+# same run id. One takes the lease, and the other gets `LeaseHeld` and exits. If the first trigger already
+# finished the run, the other sees the run `done` and exits.
 #
 # **Drill 1b.** *Someone changed the schedule to daily. What breaks?* Nothing breaks visibly: the first trigger
 # of the week does the work, and the other six find the run `done`. That is the bug: a "daily" job that runs

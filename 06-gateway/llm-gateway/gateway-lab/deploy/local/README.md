@@ -27,6 +27,6 @@ Notebook [`01_a_gateway_over_http`](../../notebooks/01_a_gateway_over_http.ipynb
 Without Docker, it prints these commands and a bundled sample output in the documented format (illustrative):
 `gwlab/data/samples/compose_smoke.txt`.
 
-Everything that the fakes report is **simulated** (their responses carry `x-gwlab-simulated: true`). Before this
+Everything that the fakes report is **simulated**. Their responses carry `x-gwlab-simulated: true`. Before this
 stack runs on a machine other than your laptop, change `GWLAB_ADMIN_TOKEN` and `GWLAB_SALT_SECRET`. The first
 protects `/admin/*`. The gateway calculates the `cache_salt` of each tenant from the second.

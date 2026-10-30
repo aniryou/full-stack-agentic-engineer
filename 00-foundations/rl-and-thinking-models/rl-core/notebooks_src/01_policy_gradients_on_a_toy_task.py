@@ -98,7 +98,7 @@ print(f"after RL: P(balanced) = {pg.expected(pol, task, task.verify):.3f} exactl
 # $\mathbb{E}[\nabla \log \pi(y)] = 0$. What changes is the variance.
 #
 # Measure the variance at the start of a ThinkTask run. Then add a constant +5 to each reward. This constant
-# gives no information at all. But without a baseline, it multiplies the noise.
+# gives no information at all. But without a baseline, the constant multiplies the noise.
 
 # %%
 think = ThinkTask(e0=0.8, q=0.15, max_think=16)
@@ -109,16 +109,17 @@ for off in (0.0, 5.0):
     print(f"reward offset {off:+.0f}:  variance without baseline {v['none']:.3f}   with the batch mean {v['mean']:.3f}")
 
 # %% [markdown]
-# GRPO uses the batch-mean baseline (its group *is* the batch for one prompt, notebook 03). PPO learns a baseline
+# GRPO uses the batch-mean baseline. Its group *is* the batch for one prompt (notebook 03). PPO learns a baseline
 # instead. That baseline is a value model as large as the policy (notebook 02). Leave-one-out (RLOO) uses the
 # mean of the *other* samples. Its advantage is exactly $\frac{n}{n-1}$ times the mean-baseline advantage, in the
 # same direction.
 #
 # ## Worked example 5 — the KL penalty and its closed form
-# Maximise $\mathbb{E}[R] - \beta\,\mathrm{KL}(\pi \,\|\, \pi_{\text{ref}})$. Over all distributions, the answer is
+# Make $\mathbb{E}[R] - \beta\,\mathrm{KL}(\pi \,\|\, \pi_{\text{ref}})$ as large as possible. Over all
+# distributions, the answer is
 # $\pi^* = \pi_{\text{ref}} \exp(R/\beta)/Z$. Multiply the reference probability of each completion by
 # $\exp(R/\beta)$, and then renormalise. With a small $\beta$, the policy goes after the reward. With a large
-# $\beta$, the policy stays home.
+# $\beta$, the policy stays near the reference.
 
 # %%
 ref_p = ref.sequence_probs(task, seqs)
@@ -139,8 +140,8 @@ print(f"REINFORCE with β = 0.3 reaches P = {pg.expected(leashed, task, task.ver
 # does not invent. The closed form of $\pi^*$ is also the formula that DPO inverts in notebook 02.
 #
 # ## Worked example 6 — reward hacking: RL finds the verifier's bug
-# `buggy_verify` returns *pass* as soon as the depth goes negative (think of a test harness that counts an early
-# `sys.exit(0)` as a success). The SFT reference passes this check 72.7% of the time. But it is correct only
+# `buggy_verify` returns *pass* as soon as the depth goes negative. Think of a test harness that counts an early
+# `sys.exit(0)` as a success. The SFT reference passes this check 72.7% of the time. But it is correct only
 # 29.7% of the time.
 
 # %%
@@ -160,7 +161,7 @@ print(f"closed-form π* for the buggy reward at β = 0.3: truly balanced {pi_b @
 
 # %% [markdown]
 # The reward went *up* while the correctness went *down*. At depth 0, `)` is an instant pass, thus every state
-# learns it. With $\beta$ = 0, every policy that always passes is optimal. Gradient ascent reaches the policy
+# learns it. With $\beta$ = 0, every policy that always passes is an optimum. Gradient ascent reaches the policy
 # that is easiest to reach: the loophole.
 #
 # The KL-regularised optimum multiplies *every* string that passes by the same $\exp(1/\beta)$. Thus it keeps the
@@ -188,8 +189,8 @@ for cost in (0.0, 0.02):
 # %% [markdown]
 # With no cost, the thinking length grows toward the cap. This is the toy version of the growth in response
 # length that DeepSeek-R1-Zero reported (primer §5). With a per-token cost, the length grows only while a token of
-# thought buys more accuracy than it costs. Lengths move slowly in this table-of-softmaxes policy (each position
-# learns only after the policy reaches it). The direction is the lesson.
+# thought buys more accuracy than it costs. Lengths move slowly in this table-of-softmaxes policy,
+# because each position learns only after the policy reaches it. The direction is the lesson.
 #
 # ## Exercise 1.1 — the softmax gradient
 # For one state with logits `theta_row`, return $\partial \log \pi(a)/\partial \theta$ as a vector:

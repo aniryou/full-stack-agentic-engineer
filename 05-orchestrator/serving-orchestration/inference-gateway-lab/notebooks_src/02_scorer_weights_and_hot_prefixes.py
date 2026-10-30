@@ -25,7 +25,7 @@
 # - **scrape lag**: every request between two scrapes sees the same stale numbers. Thus all of these
 #   requests go as a herd to the replica that looked the most idle.
 # - **thresholds that ignore the workload**: an 80% affinity threshold never applies to a turn whose
-#   new tokens are more than 20% of its prompt. On the agents of this lab, that is the first resumed
+#   new tokens are more than 20% of its prompt. On the agents of this lab, such a turn is the first resumed
 #   turn of every session.
 #
 # Background:
@@ -75,7 +75,7 @@ assert p90["sticky-until-saturated"] < p90["default-weighted"] < p90["prefix-onl
 # two replicas are idle. `load-only` spreads the requests evenly, and the cost is that the replicas
 # prefill the histories again. The weighted and sticky policies both keep most of the hits, and they
 # also let the load move traffic off a busy replica. When a second replica has served the hot prefix,
-# the index lists it too, and both replicas become "sticky".
+# the index lists that replica too, and both replicas become "sticky".
 #
 # **This ranking belongs to this engine and this workload.** Here, `sticky-until-saturated` has a
 # clearly shorter tail (p90) than the 3:2:2 chart default. But the primer's simulated fleet
@@ -87,7 +87,7 @@ assert p90["sticky-until-saturated"] < p90["default-weighted"] < p90["prefix-onl
 # tokens. But the queue and KV scores of 3:2:2 see a request count and memory, not prefill work.
 #
 # On an engine with chunked prefill, other prompt lengths or a hotter prefix, the order can change to
-# the opposite. That is why you adjust the weights on a replay of your own traffic.
+# the opposite. For this reason, you adjust the weights on a replay of your own traffic.
 #
 # ## Exercise 2.1 — when does affinity lose?
 #
@@ -112,7 +112,7 @@ assert sticky_wins(3, 2, 2, 0.5, 0.0, 1.0) is False     # 1.5 + 0 + 2 = 3.5 < 4
 print("✅ sticky_wins: a half-cached replica with a half-full queue still beats a cold idle one (4.5 vs 4.0)")
 
 # %% [markdown]
-# It is easy to predict this incorrectly by eye. That is why the router records a per-scorer table
+# It is easy to predict this result incorrectly by eye. For this reason, the router records a per-scorer table
 # for every decision.
 #
 # ## Exercise 2.2 — the weight that makes affinity unconditional
@@ -248,8 +248,8 @@ print(f"✅ running x1 + active x2 fills the free slots exactly: max TTFT {ttfts
 # all 12 to a).
 #
 # The split is this clean only because the burst matches the free slots. The lesson is the
-# mechanism. This is why the EPP's recommended load scorers read in-flight state that the router
-# keeps itself (`inflight-load-producer`). It is also why a router fleet with several replicas
+# mechanism. Because of this mechanism, the EPP's recommended load scorers read in-flight state that the router
+# keeps itself (`inflight-load-producer`). The mechanism is also why a router fleet with several replicas
 # depends on scraped signals and flow control. The reason is that each of those router replicas
 # cannot see the in-flight requests of the others.
 
@@ -323,7 +323,7 @@ print("decisions the affinity filter narrowed to sticky replicas:", pinned, f"(o
 # With the lower threshold, the filter pins many more turns. The first resumed turn of every session
 # now counts as sticky. The hit rate changes less than that count suggests, and on a given run the
 # two hit rates can even be equal. When the filter keeps every replica, `token-load-scorer` charges
-# each replica only the *uncached* tokens of this request. Thus it usually selects the replica that
+# each replica only the *uncached* tokens of this request. Thus the scorer usually selects the replica that
 # holds the history anyway. The threshold is the explicit rule, and the prefix-aware load score is
 # the safety net behind it.
 
@@ -332,7 +332,7 @@ print("decisions the affinity filter narrowed to sticky replicas:", pinned, f"(o
 #
 # With flow control off (the llm-d default), admission is simple. When the pool is saturated, the
 # router rejects with HTTP 429 each request whose `InferenceObjective` has **priority < 0**. The
-# router routes all other requests. That is the only admission path that the lab router has.
+# router routes all other requests. This rule is the only admission path that the lab router has.
 #
 # With `featureGates: [flowControl]`, the real EPP instead holds requests in router-side queues by
 # priority band (with fairness and TTLs, [PRIMER §3](../../PRIMER.md)). The lab router accepts the
@@ -387,7 +387,7 @@ print("✅ saturation", round(pool_saturation(eps), 3), "-> sheds", shed({"premi
 #
 # "Thus load alone rarely pushes a hot prefix off its replica. The hot prefix spreads because other
 # replicas served it too (early ties, partial matches), and then several replicas are sticky. When
-# that is not sufficient, we use the TTFT-gated affinity filter of the optimized baseline. Pure
+# this spread is not sufficient, we use the TTFT-gated affinity filter of the optimized baseline. Pure
 # affinity overloads one replica. Pure load prefills every history again.
 #
 # "We never route on scraped metrics alone. They are up to one scrape interval stale, so a burst goes

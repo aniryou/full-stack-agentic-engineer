@@ -29,9 +29,9 @@ MOELAB_URL=http://127.0.0.1:8000 jupyter lab ../../notebooks
 | `--tensor-parallel-size 2` | 1 | Divides attention *and every expert* in half over 2 GPUs. There is one all-reduce after attention and one after the MoE. |
 | `--enable-expert-parallel` (`-ep`) | off | Puts each expert whole on one GPU, E/EP per GPU, EP = TP × DP. There is no EP-size flag. Without it, the experts are tensor-parallel over TP × DP GPUs. |
 | `--data-parallel-size 2` | 1 | Two attention replicas, each with its own requests and KV cache. With `-ep`, the replicas share the MoE layers, and the ranks do each step in lockstep. An idle rank runs dummy forward passes. |
-| `--all2all-backend` | `allgather_reducescatter` | How tokens get to experts when DP > 1. DeepEP (`deepep_low_latency`, `deepep_high_throughput`, `deepep_v2`) works only on SM90+ with NVLink/RDMA, not on a T4/L4. In v0.30.0, `pplx` and `naive` are removed. There is no `VLLM_ALL2ALL_BACKEND` variable. |
+| `--all2all-backend` | `allgather_reducescatter` | How tokens get to experts when DP > 1. DeepEP (`deepep_low_latency`, `deepep_high_throughput`, `deepep_v2`) works only on SM90+ with NVLink/RDMA, not on a T4/L4. vLLM removed `pplx` and `naive`. They are not in v0.30.0. There is no `VLLM_ALL2ALL_BACKEND` variable. |
 | `--expert-placement-strategy` | `linear` | `round_robin` puts the experts on GPUs by e mod EP. But vLLM applies it only to models with expert groups (DeepSeek-style). OLMoE goes back to linear (verify for your version). |
-| `--enable-eplb`, `--eplb-config` | off | Balances the experts again from the observed load, and optionally replicates them (`num_redundant_experts`). The defaults are `window_size` 1000 and `step_interval` 3000. |
+| `--enable-eplb`, `--eplb-config` | off | Balances the experts again from the measured load, and optionally replicates them (`num_redundant_experts`). The defaults are `window_size` 1000 and `step_interval` 3000. |
 | `--cpu-offload-gb N` | 0 | N GiB of weights per GPU stay in pinned CPU memory. The GPU reads them over PCIe in **every** forward pass (UVA), routed or not. |
 | `--cpu-offload-params experts` | all | Offloads only the parameters whose name has an `experts` segment (`mlp.experts.w2_weight`). A value of `expert` or `w2` does not match. |
 | `--enable-return-routed-experts` | off | Each choice carries `routed_experts`: base64 `.npy`, shape `(tokens − 1, layers, top_k)`. To include the prompt, request `"routed_experts_prompt_start": 0`. |
@@ -41,7 +41,7 @@ MOELAB_URL=http://127.0.0.1:8000 jupyter lab ../../notebooks
 `E=<experts>,N=<expert width per GPU>,device_name=<GPU>[,dtype=...].json`. The tree has none for T4, L4 or A10
 (main, Sep 2026). Thus, expect *"Using default MoE config. Performance might be
 sub-optimal!"* in the log. Generate a config with vLLM's `benchmarks/kernels/benchmark_moe.py`. Then set `VLLM_TUNED_CONFIG_FOLDER` to
-it (verify the script's flags for your version).
+the folder of that config (verify the script's flags for your version).
 
 ## Which models fit where (weights only; `python -m moelab fit` does the arithmetic)
 
@@ -97,8 +97,8 @@ os.environ["MOELAB_URL"] = "http://127.0.0.1:8000"    # notebooks 02, 03 and 05 
 (`python -m moelab fit --model olmoe-1b-7b --gpu T4`). Each offloaded GiB costs ~89 ms per step over PCIe Gen3
 (verify).
 
-An offload pins host memory. Colab's free runtime has roughly 12 GB of RAM (verify). Thus, keep
-`--cpu-offload-gb` well below it. On Kaggle's two T4s, `!bash deploy/any-gpu/bench_layouts.sh` from the lab
+An offload pins host memory. Colab's free runtime has approximately 12 GB of RAM (verify). Thus, keep
+`--cpu-offload-gb` well below that RAM. On Kaggle's two T4s, `!bash deploy/any-gpu/bench_layouts.sh` from the lab
 directory runs the TP against EP comparison. The cell at the end of notebook 04 also runs it. On the two T4s, OLMoE
 in fp16 uses about 6.5 GiB per GPU, and no offload is necessary.
 
@@ -114,6 +114,6 @@ in fp16 uses about 6.5 GiB per GPU, and no offload is necessary.
 
 ## Cost and cleanup
 
-Colab and Kaggle are free within their weekly GPU quotas (there is no guarantee). Rented machines bill until you
+Colab and Kaggle are free until you use all of their weekly GPU quotas (there is no guarantee). Rented machines bill until you
 **terminate** them, not when vLLM stops. Stop the server with `Ctrl-C`. Then terminate the pod or instance.
 `bench_layouts.sh` stops each server itself. When you finish, delete `./results`.

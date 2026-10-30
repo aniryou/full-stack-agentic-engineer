@@ -157,10 +157,10 @@ for mode in ("off", "on"):
     print(table(out, title=f"[{LABEL}] thinking {mode}"), "\n")
 
 # %% [markdown]
-# Read across a row. pass@k increases fastest, because it assumes that you can recognise the correct
-# answer. maj@k increases more slowly. It stops at the share of problems where the correct answer is
+# Read across a row. pass@k increases fastest, because it assumes that you know which answer is
+# correct. maj@k increases more slowly. It stops at the share of problems where the correct answer is
 # the *most common* one. On problems where an incorrect answer is the most common one, more votes
-# make it *more* certain.
+# *increase* the probability that maj@k selects that incorrect answer.
 #
 # Best-of-k with the noisy reward model increases at first, and then it can *decrease*. With more
 # samples, an incorrect sample has more chances to get the top score. That is reward

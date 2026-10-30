@@ -24,5 +24,5 @@ These rules keep the pipeline honest:
    The **Concept map** line names docs/PRIMER_MAP.md and the in-repo primer that goes deeper.
    End with a **The one-minute version** cell. That cell shows how to explain this topic in a design review.
 6. `make check` (or `python tools/run_notebooks.py solutions`) must pass. That is, every solution
-   notebook executes clean end to end. `python tools/run_notebooks.py notebooks --expect-fail`
+   notebook runs from start to end with no error. `python tools/run_notebooks.py notebooks --expect-fail`
    makes sure that the exercise variants stop at the first unsolved exercise.

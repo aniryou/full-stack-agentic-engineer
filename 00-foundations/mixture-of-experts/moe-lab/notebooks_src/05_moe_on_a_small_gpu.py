@@ -4,13 +4,13 @@
 # **Tier:** T1: one 16 GB T4 (free on Colab/Kaggle) or a 24 GB L4/RTX 4090. You run `vllm serve` with
 # `--cpu-offload-gb` or a 4-bit checkpoint. The notebook reads the start-up log and measures the step.
 # T0: the sizing arithmetic (**simulated**) and two start-up logs with the documented words of vLLM
-# (**illustrative**). The two logs come from the sizing of this notebook, thus they agree with it by
+# (**illustrative**). The two logs come from the sizing of this notebook, thus they agree with the sizing by
 # construction.
 #
 # ## The one-minute version
 #
 # * The **total** number of parameters sets the memory size. OLMoE-1B-7B runs 1.3 B parameters per
-#   token. But all 6.9 B (13.8 GB in 16-bit) must stay resident. On a 16 GB T4, this leaves no KV cache.
+#   token. But all 6.9 B (13.8 GB in 16-bit) must stay resident. On a 16 GB T4, these weights leave no KV cache.
 # * **4-bit experts** (GPTQ/AWQ INT4, or MXFP4 in gpt-oss) decrease the bytes of the experts by ~3.8x, with no
 #   PCIe traffic. They have an accuracy cost, and you measure it. They work only where kernels exist. The MXFP4
 #   path of vLLM needs compute capability 8.0 and bf16. A T4 does not have them.
@@ -276,7 +276,7 @@ print(f"✅ [simulated] one user: CPU experts; from batch {b_t4} on a T4 (Gen3) 
 # ```
 #
 # Then set `MOELAB_URL=http://127.0.0.1:8000`. Run the next cell. It parses the log that you saved, and it
-# measures the step at batch 1 and 8. llama-server also serves `/v1/completions`. To measure it the same
+# measures the step at batch 1 and 8. llama-server also serves `/v1/completions`. To measure llama-server the same
 # way, set `MOELAB_URL` to its port. We do not know if llama-server obeys `ignore_eos` (verify).
 
 # %%
@@ -332,7 +332,7 @@ print(rep.to_markdown())
 # default where the kernels exist. We use it after an accuracy check on our evals, and we keep the router in
 # 16-bit.
 #
-# "The CPU offload of vLLM keeps some weights in pinned host memory. It streams them over PCIe at each step.
+# "The CPU offload of vLLM keeps some weights in pinned host memory. It reads them over PCIe at each step.
 # This is a constant toll per step, and only a large batch amortises it.
 #
 # "The CPU experts of llama.cpp read only the touched experts and compute them on the CPU. That is the correct

@@ -2,16 +2,16 @@
 
 **Tier:** T1: one small GPU (a Colab or Kaggle T4 for free, or a rented 24 GB card for ~$0.3-0.7/hr).
 The purpose of T1 is to replace every *simulated* number from the fake server with a *measured*
-number. The notebooks detect a server in `SERVELAB_URL` and run the same code against it.
+number. The notebooks find a server in `SERVELAB_URL` and run the same code against it.
 
 `serve.sh` does these things:
 
-- It starts `vllm serve` with docker (when it can reach a daemon) or from pip.
+- It starts `vllm serve` with docker or from pip. It uses docker when it can reach a daemon.
 - It selects `--dtype half` below compute capability 8.0 (a T4).
 - It refuses GPUs below 7.5 (see "Which GPUs work, and what runs on a T4").
 - It prints each step (`DRY_RUN=1` prints only).
 
-The pin for everything here is **vLLM v0.30.0** (`vllm/vllm-openai:v0.30.0`, on Docker Hub since 2026-09-22). The
+The pin for everything here is **vLLM v0.30.0** (`vllm/vllm-openai:v0.30.0`, on Docker Hub from 2026-09-22). The
 flags and defaults in the next sections come from a check against the source of that release.
 
 ```bash
@@ -32,7 +32,7 @@ SERVELAB_URL=http://127.0.0.1:8000 jupyter lab ../../notebooks
 | `--tensor-parallel-size 2` | 1 (`TP=2`) | Two GPUs. Each GPU holds half of the weights and half of the KV heads (notebook 03, exercise 3.6). |
 | `--api-key` | unset | **Set it** on any machine with a public port. The bench sends `SERVELAB_API_KEY`. |
 | `--enable-prompt-tokens-details` | unset | It adds `usage.prompt_tokens_details.cached_tokens`. Thus the bench can report the prefix-cache hits of each request (notebook 04). |
-| `--attention-backend` | unset | vLLM selects one for each GPU (see the next section). Set it to one backend only to compare backends. It replaces the `VLLM_ATTENTION_BACKEND` environment variable. v0.30.0 no longer has that variable, and it no longer has `VLLM_USE_V1`. |
+| `--attention-backend` | unset | vLLM selects one for each GPU (see the next section). Set it to one backend only to compare backends. The flag replaces the `VLLM_ATTENTION_BACKEND` environment variable. v0.30.0 no longer has that variable, and it no longer has `VLLM_USE_V1`. |
 
 Prefix caching and chunked prefill are on by default in v0.30.0.
 
@@ -42,7 +42,7 @@ Prefix caching and chunked prefill are on by default in v0.30.0.
   depends on `[cu13]` packages, and the base of the image is CUDA 13.0.3. These builds compile kernels for sm_75 and
   newer only. A T4 (7.5) works. A V100 (7.0) and Kaggle's **P100 (6.0) do not**.
 * **Driver.** CUDA 13 needs an NVIDIA driver from the 580 series or newer (verify against NVIDIA's
-  CUDA compatibility table). Examine the driver before you install. If the driver is older, use an older vLLM
+  CUDA compatibility table). Examine the driver before you install vLLM. If the driver is older, use an older vLLM
   release built for CUDA 12 instead (verify which on its release notes).
 * **Attention on a T4.** vLLM v0.30.0 tries FlashAttention, then FlashInfer, then its Triton backend. It keeps the
   first backend that supports the GPU. FlashAttention needs sm_80+. In this release, vLLM holds FlashInfer at sm_80+,
@@ -77,8 +77,8 @@ Notebook 01 also reads the value from the `The current --gpu-memory-utilization=
 capacity lines back, use
 `from servelab.sizing import parse_startup_log; parse_startup_log(open("vllm.log").read())`.
 
-Free Colab sessions last up to ~12 h. They disconnect after approximately 90 minutes with no activity. The weekly GPU
-time is limited and not guaranteed (verify, see [`COMPUTE.md`](../../../../../COMPUTE.md)). Kaggle gives
+Free Colab sessions last up to ~12 h. They disconnect after approximately 90 minutes with no activity. Colab limits the weekly GPU
+time and does not guarantee it (verify, see [`COMPUTE.md`](../../../../../COMPUTE.md)). Kaggle gives
 about 30 GPU-hours a week (verify).
 
 ## Two GPUs: tensor parallelism on Kaggle's T4 x2 (T2)
@@ -91,7 +91,7 @@ subprocess.Popen("vllm serve Qwen/Qwen2.5-1.5B-Instruct --dtype half --max-model
 Or run `TP=2 ./serve.sh`. Then each T4 holds half of the weights and half of the KV heads. Every layer adds two
 all-reduces over PCIe (this box has no NVLink). Notebook 03 (exercise 3.6) predicts the two effects: more than two
 times the KV tokens, and much less than two times the decode speed. With `SERVELAB_START_VLLM=1` on a two-GPU
-machine, it also measures batch-1 ITL at TP=1 and TP=2. A 7B model in fp16 (15 GB) does not fit on one T4 at all,
+machine, the notebook also measures batch-1 ITL at TP=1 and TP=2. A 7B model in fp16 (15 GB) does not fit on one T4 at all,
 but with TP=2 it fits.
 
 The bandwidth and the latency of the collectives themselves are the subject of layer 02.

@@ -24,7 +24,7 @@ one time (~640 lines of code, ~1,130 with docstrings).
 
 *Tier T0 is a laptop or a Colab CPU, at no cost. Everything here runs with no GPU and no network, in seconds.*
 
-Each notebook opens with "The one-minute version". It works examples against the code and sets exercises. A check
+Each notebook opens with "The one-minute version". Each notebook then shows worked examples against the code and gives exercises. A check
 cell that prints ✅ comes after each exercise. Each notebook ends with "In a design review". The finished versions
 are in [`solutions/`](solutions/). With the primer, the work takes about 10 hours in all (module 04.9 in the
 curriculum of the repo).
@@ -32,7 +32,7 @@ curriculum of the repo).
 | Notebook | You will be able to… | Primer | Time | Tier |
 |---|---|---|---|---|
 | [`01_number_formats_and_error`](notebooks/01_number_formats_and_error.ipynb) | Enumerate INT, FP8 (E4M3/E5M2) and FP4 grids from their bits, and round onto them. Compare INT4, FP4, MXFP4 and NVFP4 on Gaussian and heavy-tailed weights. Predict SQNR from bits and crest factor (~6 dB per bit, 20 dB per 10× outlier). Count bits per weight and whole-model GB. Pack INT4 and FP4 codes as a checkpoint does. | §2, §3, §9 | ~1.5 h | T0 |
-| [`02_granularity_and_outliers`](notebooks/02_granularity_and_outliers.ipynb) | Reproduce serving-engine §8's six-scheme table. Show why per-channel scales repair the error of an outlier row, but not of an outlier input column. Measure what per-token INT8 does to activations with outlier channels (and what FP8 does instead). Select a static activation scale on calibration data. Use 128×128 block scales. | §2, §3 | ~1.5 h | T0 |
+| [`02_granularity_and_outliers`](notebooks/02_granularity_and_outliers.ipynb) | Reproduce serving-engine §8's six-scheme table. Show why per-channel scales repair the error of an outlier row, but not of an outlier input column. Measure what per-token INT8 does to activations with outlier channels, and what FP8 does instead. Select a static activation scale on calibration data. Use 128×128 block scales. | §2, §3 | ~1.5 h | T0 |
 | [`03_gptq_awq_and_smoothquant_from_scratch`](notebooks/03_gptq_awq_and_smoothquant_from_scratch.ipynb) | Implement GPTQ's column loop and AWQ's scale search. Fold SmoothQuant and AWQ scales into a model with no change to the model. Say which layers each method helps, and why. Measure how much calibration data is sufficient. | §4, §5 | ~2 h | T0 |
 | [`04_activation_and_kv_cache_quantization`](notebooks/04_activation_and_kv_cache_quantization.ipynb) | Implement a W8A8 GEMM epilogue. Compare static and dynamic activation scales. Show why the LM head stays 16-bit. Find how good FP8 KV is with and without calibrated scales. Implement KIVI's per-channel keys. Calculate the size of the cache. | §5, §6 | ~1.5 h | T0 |
 | [`05_choosing_a_scheme`](notebooks/05_choosing_a_scheme.ipynb) | Reproduce serving-engine §8's L4 table and vllm-internals §8.1's GEMM table. Find where W4A16 no longer pays for itself. Say what a checkpoint runs as on T4 to B200. Select schemes for a T4, for an L4, and for an H100 that serves a 70B. Calculate the price of a million tokens (simulated). | §1, §10 | ~1.5 h | T0 |
@@ -100,10 +100,10 @@ about 30 s. The tests that carry the correctness claims are these:
 - **GPTQ is GPTQ.** It matches a line-by-line transcription of the reference's blocked "lazy batch" loop to
   1e-9 per channel and whenever groups start on block boundaries. A group that starts
   mid-block takes its scale from weights that the reference has not updated yet, and the test shows that difference
-  too. When the inputs have no correlation, GPTQ reduces to RTN exactly. On correlated inputs, it beats RTN out of
+  too. When the inputs have no correlation, GPTQ becomes RTN exactly. On correlated inputs, GPTQ is better than RTN out of
   sample (`test_gptq.py`).
-- **Reparameterisations are exact.** SmoothQuant and AWQ folds keep the model's output the same, to within
-  1e-9. Also, α = 0 in AWQ's search is RTN (`test_awq_smoothquant.py`).
+- **Reparameterisations are exact.** SmoothQuant and AWQ folds keep the model's output the same, with a difference of
+  not more than 1e-9. Also, α = 0 in AWQ's search is RTN (`test_awq_smoothquant.py`).
 - **The W8A8 epilogue is exact.** Integer-accumulated INT8 GEMMs and per-block FP8 GEMMs equal the fake-quantized
   products (`test_w8a8_kv.py`).
 - **The primer says what the code computes.** The test calculates again every number that `../PRIMER.md`
@@ -117,7 +117,7 @@ about 30 s. The tests that carry the correctness claims are these:
 These parts are faithful to the sources, read at the commits that the Sources section of the primer gives (see
 also its Verify list):
 
-- GPTQ's update, damping and act-order (group scales: see `gptq.py`'s docstring).
+- GPTQ's update, damping and act-order. For the group scales, see `gptq.py`'s docstring.
 - AWQ's statistic, normalisation and 20-point grid, and SmoothQuant's scale formula.
 - compressed-tensors' INT conventions, NVFP4 global scale and INT4/FP4 pack layout. Also both MXFP4
   shared-exponent rules: the OCP spec's floor, and compressed-tensors' round-up at a mantissa of 1.75.

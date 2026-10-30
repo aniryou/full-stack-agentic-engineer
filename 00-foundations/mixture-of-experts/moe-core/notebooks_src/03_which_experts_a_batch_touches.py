@@ -63,8 +63,8 @@ for s in (0.0, 0.5, 1.0, 1.5):
 # ## Worked example 2 — the decode step on the roofline
 # `touched.decode_step` is the same one-kernel model as `roofline.llm.decode()` of layer 01. It takes the streamed
 # weights (attention, the touched experts, router, LM head, one embedding row per token) plus the KV read. It compares
-# them against the FLOPs of active × batch. Its result agrees with the §3.6 table of layer 01 to the byte (a test
-# makes sure of this).
+# them against the FLOPs of active × batch. Its result agrees with the §3.6 table of layer 01 to the byte. A test
+# makes sure of this agreement.
 
 # %%
 print(f"{'batch':>5s} {'Mixtral experts':>15s} {'step bytes':>11s} {'step ms':>8s} {'bound':>7s} {'tok/s':>8s} {'Qwen3 experts':>14s}")

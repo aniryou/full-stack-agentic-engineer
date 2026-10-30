@@ -198,7 +198,7 @@ print("→ on the PCIe box GPU2/GPU3 reach the only NIC across the sockets (SYS)
 # normally works. Across host bridges or sockets (`NODE`/`SYS`), it rarely works. Through the root complex (`PHB`), the
 # result changes with the platform. Many platforms and most VMs turn peer access off.
 #
-# Thus a `PHB` estimate from a saved topology is an **upper bound** if you do not ask the driver. This is a
+# Thus a `PHB` estimate from a saved topology is an **upper bound** if you do not ask the driver. The estimate is a
 # **model**. The measurement in section 6 is the number that you trust.
 
 # %%
@@ -320,11 +320,11 @@ for name, alpha, bw in fabrics:
         print(f"{name:<34} {batch:>5} {si(one, 's'):>15} {si(layers * 2 * one, 's'):>15} {2 * (p - 1) * alpha / one:>8.0%}")
 
 # %% [markdown]
-# At decode, the $\alpha$ term is nearly all of the time. Thus the $\alpha$ that you put in the formula *is* the
+# At decode, the $\alpha$ term is almost all of the time. Thus the $\alpha$ that you put in the formula *is* the
 # answer, and section 6 measured two values of it.
 #
 # Each step of a ring waits until the data from the step before
-# arrives. Only then can the step send that data on. This is a dependent chain, and it pays the full **latency** of a
+# arrives. Only then can the step send that data on. The steps make a dependent chain, and the chain pays the full **latency** of a
 # copy. Back-to-back copies of independent buffers overlap their constant costs. Thus the $\alpha$ of the **pipelined**
 # fit is smaller, and it gives a cost for the all-reduce that is too low.
 #

@@ -8,11 +8,11 @@
 # ## The one-minute version
 # An agent is *a workload that turns untrusted text into privileged actions* (the one line of the identity primer).
 # A `run_code` tool is the sharpest form of that. The model cannot see the difference between instructions and
-# data. It emits a program, and something runs that program. If the program runs with the environment, the home
+# data. It writes a program, and something runs that program. If the program runs with the environment, the home
 # directory and the network of the agent, a prompt injection is a shell on your infrastructure.
 #
 # This notebook makes that concrete. A small set of **probes** stands in for the programs that a hijacked model can
-# emit:
+# write:
 #
 # - read an environment secret,
 # - read a private key,
@@ -43,8 +43,8 @@ for p in PROBES:
 
 # %% [markdown]
 # ## Worked example 1 — the ambient-authority leak, unsandboxed
-# The `read_env_secret` probe reads `CLOUD_API_TOKEN`. The harness puts a fake token in the environment of the
-# executor. `UnsafeExecutor` runs the code in a child that **inherits this process's environment**. That is the
+# The `read_env_secret` probe reads `CLOUD_API_TOKEN`. The harness puts a fake token in the environment of the executor.
+# `UnsafeExecutor` runs the code in a child that **inherits this process's environment**. This inheritance is the
 # default when you only give the model output to `subprocess.run`. Watch the token come back directly.
 
 # %%
@@ -101,7 +101,7 @@ for p in PROBES:
 # root, or `drop_to_uid=None`), the key read and the escape also get through. Without one, the fork bomb also
 # gets through when the sandbox runs as root.
 #
-# Here, the sandbox never contains egress, because resource limits do not touch sockets. That is not a bug in the
+# Here, the sandbox never contains egress, because resource limits do not touch sockets. This gap is not a bug in the
 # sandbox. It is the boundary between the *process* layer and the *network* layer. Notebook 04 is about
 # this boundary.
 #
@@ -159,7 +159,7 @@ print("✅ RLIMIT_CPU measures CPU seconds; blocked or sleeping code needs a wal
 
 # %% [markdown]
 # ## Exercise 1.3 — predict what gets through without a separate UID
-# A laptop user runs the sandbox as themselves. That is `ProcessSandbox(SandboxConfig(drop_to_uid=None))`.
+# A laptop user runs the sandbox as themselves. This configuration is `ProcessSandbox(SandboxConfig(drop_to_uid=None))`.
 #
 # Write `uncontained(sandbox)`. It returns the **set of probe names that you expect the sandbox NOT to contain**.
 # Use only the `isolation_report()` of the sandbox. Do not run the probes. The check runs the suite and compares.

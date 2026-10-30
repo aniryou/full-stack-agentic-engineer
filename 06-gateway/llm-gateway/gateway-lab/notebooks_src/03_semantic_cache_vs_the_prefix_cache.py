@@ -17,10 +17,10 @@
 # | provider prompt cache | hosted API | ~90 % of the price of the cached input (scaling primer §3.4) | no risk to correctness |
 # | engine prefix cache | vLLM | prefill compute, thus TTFT (serving-engine PRIMER §5) | a timing side channel between tenants: `cache_salt` |
 #
-# The response caches are safe only for answers that do not depend on who asks or when. A gateway cannot find that from
-# the text. Thus the **route declares** the class of each request in `metadata.cache_class` (PRIMER §3.2). The gateway
-# caches only the classes on the allowlist. Shared classes (`faq`) go in a namespace per tenant, alias and system
-# prompt. Per-user classes (`account`) also have the user in the namespace.
+# The response caches are safe only for answers that do not depend on who asks or when. A gateway cannot find this
+# dependency from the text. Thus the **route declares** the class of each request in `metadata.cache_class`
+# (PRIMER §3.2). The gateway caches only the classes on the allowlist. Shared classes (`faq`) go in a namespace per
+# tenant, alias and system prompt. Per-user classes (`account`) also have the user in the namespace.
 #
 # The gateway caches only deterministic requests (`temperature: 0`) with no tools. A regex can still *veto* a declared
 # shared class that looks personal. The regex never makes anything cacheable.
@@ -99,7 +99,7 @@ for a, b in zip(rows[False], rows[True]):
 # Read the result as an engineer who selects a setting:
 #
 # - Below ~0.85, the cache serves a lot, and a large share of it is incorrect.
-# - The guard removes the false hits that differ only in a number or a code ("plan 4" against "plan 8", "E1042"
+# - The guard removes the false hits that are different only in a number or a code ("plan 4" against "plan 8", "E1042"
 #   against "E1043"). It does not remove "annual" against "monthly" plans.
 # - At 0.9, almost no incorrect answer gets through, and the cache serves only paraphrases that are almost verbatim.
 #
@@ -431,8 +431,8 @@ stack.stop()
 # dates and codes. A false hit is an incorrect answer that the gateway gives with confidence. Thus we prefer to serve
 # fewer hits."
 #
-# **Drill 1.** *The semantic cache answered one user with another user's order status. What went wrong?* The question
-# was personal, a class that must never share an answer, and the key had no user namespace. A lexical near-match
+# **Drill 1.** *The semantic cache answered one user with another user's order status. What was the cause?* The question
+# was personal, a class that must never share an answer. Also, the key had no user namespace. A lexical near-match
 # ("order 1234" against "order 1243") passed the threshold.
 #
 # Declare classes per route, and put the user in the key of the per-user classes. Put each tenant in its own namespace.

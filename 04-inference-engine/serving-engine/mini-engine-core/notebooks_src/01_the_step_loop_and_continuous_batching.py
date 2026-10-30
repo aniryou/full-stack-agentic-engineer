@@ -188,7 +188,7 @@ print("✅ peak blocks = ceil((P + O - 1) / B), e.g. P=8, O=1 ->", peak_blocks(8
 # ## Exercise 1.4 — static vs continuous batching, in general
 # Write the two step counters for decode-only requests with the given output lengths (FCFS order):
 #
-# * `static_steps(lens, slots)`: batches of `slots` requests, in order. Each batch takes as long as its longest
+# * `static_steps(lens, slots)`: batches of `slots` requests, in order. Each batch takes the same number of steps as its longest
 #   request.
 # * `continuous_steps(lens, slots)`: each slot takes the next request in the queue at the moment that the slot
 #   becomes free.
@@ -283,7 +283,7 @@ print("   a 70B model at 64 decodes:", perf.tp_allreduces(80, 8192, 64), "= (all
 # %% [markdown]
 # Attention divides in the same way. The Q/K/V projections are column-parallel **by head**: each rank owns whole
 # heads, and thus also their slice of the KV cache. The output projection is row-parallel, and its partial sums need
-# the second all-reduce of the layer. Each step has two all-reduces per layer on its critical path. That is why
+# the second all-reduce of the layer. Each step has two all-reduces per layer on its critical path. These all-reduces are the reason that
 # tensor parallelism stays inside one NVLink domain. To run it for real, you need two GPUs (tier T2,
 # `vllm-serving-lab`).
 #
@@ -307,7 +307,7 @@ print("   a 70B model at 64 decodes:", perf.tp_allreduces(80, 8192, 64), "= (all
 # **Drill questions**
 # 1. *Why does the engine not have prefill steps and decode steps?* Because the scheduler records only two counts: the
 #    computed tokens and the total tokens. A step mixes decode tokens and prefill chunks under one token budget.
-# 2. *Why is batching nearly free during decode?* Decode is memory-bound. The step time is the weight read. All
+# 2. *Why is batching almost free during decode?* Decode is memory-bound. The step time is the weight read. All
 #    requests in the batch share that read (Notebook 02 puts numbers on it).
 # 3. *A request's prompt is 8 tokens and it generates 1 token with block size 4. How many blocks?* Two. The
 #    only sampled token never goes back through the model, so it needs no slot.

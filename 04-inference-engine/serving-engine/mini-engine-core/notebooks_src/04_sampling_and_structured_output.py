@@ -60,7 +60,7 @@ for name, lg in [("flat  ", flat), ("peaked", peaked)]:
 
 # %% [markdown]
 # **top-k** keeps five tokens for any shape of the distribution. **top-p** and **min-p** adapt. They keep many
-# tokens when the model is unsure, and few tokens when it is confident. That is why they are the usual choice.
+# tokens when the model is unsure, and few tokens when it is confident. Thus they are the usual choice.
 # Temperature changes the shape, not the order of the tokens: the argmax is the same at each temperature.
 #
 # ## Worked example 2 — greedy loops, penalties break them
@@ -132,7 +132,7 @@ for o in outs:
 # ## Worked example 6 — a grammar over characters, a vocabulary of multi-character tokens
 # Take the JSON schema `{"type": "object", "properties": {"n": {"type": "integer", "minimum": 0}},
 # "required": ["n"]}` with no optional whitespace. The legal outputs are `{"n": 0}`, `{"n": 7}`, `{"n": 2026}`, …
-# (JSON does not permit leading zeros).
+# JSON does not permit leading zeros.
 #
 # A structured-output backend compiles the schema into an automaton over
 # **characters**. The next cell writes that automaton by hand. But the vocabulary, like the vocabulary of any BPE

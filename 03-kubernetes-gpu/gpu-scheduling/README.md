@@ -56,7 +56,7 @@ Read the primer section. Then do the core notebook. Then, as an option, do the l
 | 2 | §3 The scheduling cycle | `02_filter_score_and_fragmentation` | `03_why_is_my_pod_pending` (T0) |
 | 3 | §4 Gangs · §5 Topology-aware placement | `03_gangs_and_topology` | `02_kind_with_fake_gpus_and_kueue` (T0 + Docker, with a simulator fallback) |
 | 4 | §6 Queues, quotas and multi-tenancy with Kueue | `04_queues_quotas_and_preemption` | `02_kind_with_fake_gpus_and_kueue` |
-| 5 | §7 Getting capacity · §8 Startup latency | `05_autoscaling_and_obtainability` | `04_gke_pools_dws_and_computeclasses` (T3, and offline it plans and inspects) |
+| 5 | §7 Getting capacity · §8 Startup latency | `05_autoscaling_and_obtainability` | `04_gke_pools_dws_and_computeclasses` (T3, and offline it plans and examines) |
 | 6 | §9 Sharing GPUs at the cluster level · §10 Learning locally | `01_how_kubernetes_sees_a_gpu`, exercise 1.6 (time-slicing replicas) | §9: [`deploy/gpu-vm`](k8s-gpu-lab/deploy/gpu-vm/) (time-slicing with the real device plugin, T1) and [`deploy/gke/50-time-sharing-l4.yaml`](k8s-gpu-lab/deploy/gke/50-time-sharing-l4.yaml) (GKE time-sharing, T3). §10: [`deploy/kind`](k8s-gpu-lab/deploy/kind/) (T0 + Docker) |
 
 Finish with the primer's "In a design review" section. It has a walkthrough and drill questions.

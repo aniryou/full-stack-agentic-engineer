@@ -172,7 +172,7 @@ print(table(rows, title="simulated: 8 aggregated L4 replicas, chunk budget sweep
 
 # %% [markdown]
 # On this model and GPU, the chunk-budget knob gives results as good as the best split. This solution uses one pool,
-# no network, and no ratio to maintain. Two things that the step model leaves out make this result the optimistic end:
+# no network, and no ratio to keep in balance. Two things that the step model leaves out make this result the optimistic end:
 #
 # * The step model has no per-chunk efficiency loss. Real engines lose some prefill efficiency at small chunks.
 # * The prefill compute of the step model is linear in tokens. The step model has no attention FLOPs, which add about
@@ -184,7 +184,7 @@ print(table(rows, title="simulated: 8 aggregated L4 replicas, chunk budget sweep
 # ## Exercise 4.4 — disaggregate only the prompts worth it
 # In practice, traffic mixes short chat turns with long RAG prompts. In llm-d, the endpoint picker decides for each
 # request. First, it selects the decode pod. Then its `prefix-based-pd-decider` examines the cache of that decode pod.
-# It sends the prompt to a prefill pod only if at least `nonCachedTokens` tokens of the prompt are not in that cache.
+# The decider sends the prompt to a prefill pod only if at least `nonCachedTokens` tokens of the prompt are not in that cache.
 #
 # In this notebook, `pd_threshold` holds the value of `nonCachedTokens`. The sidecar of the decode pod does what the
 # decision says.
@@ -193,7 +193,7 @@ print(table(rows, title="simulated: 8 aggregated L4 replicas, chunk budget sweep
 #
 # * `0` (disaggregate everything).
 # * `2048` (only long prompts).
-# * `100_000` (never: the prefill pool is idle).
+# * `100_000` (never). Then the prefill pool is idle.
 
 # %% exercise
 best_threshold = None
@@ -231,7 +231,7 @@ print("✅ conditional disaggregation: pay the hop only where the stall it remov
 #
 # **Drills**
 # 1. *When does disaggregation make things worse?* Short prompts make it worse: there is no stall to remove, and the
-#    hop is extra. Slow links make it worse: the transfer takes about as long as the prefill. A split that does not
+#    hop is extra. Slow links make it worse: the transfer takes about the same time as the prefill. A split that does not
 #    match the input/output ratio and small fleets also make it worse.
 # 2. *How do you size the pools?* Calculate the prefill replicas from the prompt tokens/s at a utilisation cap.
 #    Calculate the decode replicas from the output tokens/s at the ITL SLO, with the KV capacity as a limit.

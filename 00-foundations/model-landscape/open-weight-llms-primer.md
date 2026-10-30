@@ -76,6 +76,16 @@ The closed reference points for calibration are Claude Opus 5 (AA Intelligence I
 - **Per-head Muon** is the optimizer. K3 also has **quantization-aware training from the SFT stage** (not post-hoc), and Moonshot releases the checkpoint in MXFP4. Thus the quantized checkpoint loses much less quality than a post-training quant does.
 - The net effect is approximately **2.5x the scaling efficiency of K2**. Moonshot converts compute into capability, and does not only add parameters.
 
+```mermaid
+flowchart LR
+  T(["token"]) --> SH["Shared experts<br/>full hidden width"]
+  T --> D["down-projection"]
+  D -->|"dispatch"| E["Routed experts<br/>16 active of 896<br/>latent space"]
+  E -->|"aggregation"| U["up-projection"]
+```
+
+*This figure shows the Stable LatentMoE of Kimi K3. The shared experts run at the full hidden width. The routed experts operate in a narrower latent space between a down-projection and an up-projection.*
+
 **Deployment reality:** the model is ~594 GB quantized and ~1.56 TB at BF16. It runs only at cluster scale. Most teams will use it through a hosted endpoint.
 
 **License watch:** Modified MIT. Attribution obligations start above approximately 100M monthly users or $20M monthly revenue.
@@ -432,15 +442,15 @@ The ladder is now standard: SFT, then RL with verifiable rewards (the GRPO linea
 **The pattern that wins: routing, not replacement.** A closed frontier model plans and does the new, high-stakes reasoning. Mid-size open models do the high-volume, private, latency-sensitive 80% (extraction, classification, code review, triage, sub-agent tasks). Small open models run always-on agents at the edge. NVIDIA's own reference architecture describes exactly this orchestrator/specialist split. In it, Nemotron 3 Ultra or GPT-5.6 is the orchestrator, and Nemotron 3.5 Lightning does the execution.
 
 ```mermaid
-flowchart TB
-  W(["requests"]) --> P{"route by the kind of task"}
-  P -->|"the new, high-stakes reasoning"| C["Closed frontier model: the orchestrator, which plans"]
-  P -->|"the high-volume, private, latency-sensitive 80%"| M["Mid-size open models: extraction, classification, code review, triage, sub-agent tasks"]
-  P -->|"always-on agents at the edge"| S["Small open models"]
-  C -.->|"the plan, then execution by the specialists"| M
+flowchart LR
+  W(["requests"]) --> P{"route by the<br/>kind of task"}
+  P -->|"high-stakes reasoning"| C["Closed frontier model<br/>orchestrator"]
+  P -->|"high-volume 80%"| M["Mid-size<br/>open models"]
+  P -->|"agents at the edge"| S["Small<br/>open models"]
+  C -.->|"the plan"| M
 ```
 
-*The pattern of §9: routing, not replacement. A closed frontier model plans and does the new, high-stakes reasoning. Mid-size open models do the high-volume, private, latency-sensitive work, and small open models run the always-on agents at the edge.*
+*The pattern of §9: routing, not replacement. A closed frontier model plans and does the new, high-stakes reasoning. Mid-size open models do the high-volume, private, latency-sensitive work, and small open models run the always-on agents at the edge. The dashed edge is the plan of the orchestrator, and the mid-size open models do the execution.*
 
 **A four-gate decision framework**
 

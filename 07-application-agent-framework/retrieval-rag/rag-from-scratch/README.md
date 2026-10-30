@@ -5,7 +5,7 @@ mechanism is a short function in plain Python. You write the function yourself, 
 examines it. The core mechanisms are cosine search, BM25, RRF, reranking, chunking, recall@k / MRR and an
 iterative multi-hop loop.
 
-The embedding model does the heavy work, and nobody learns anything from it. It is a black box. Everything that
+The embedding model does the heavy work, and nobody learns anything from it. The model is a black box. Everything that
 teaches is ~40 lines, and you can read it in one session.
 
 **Time and tier:** ~8 h (rough). The lab is part of module 07.4, together with the other retrieval labs and primers (~28 h in all), in [`CURRICULUM.md`](../../../CURRICULUM.md). T0 is a laptop or a Colab CPU, at no cost. It needs only numpy, and it uses a hashing embedder (see the table in Setup). T0 + torch, or Colab, adds the real embedding and reranker models.

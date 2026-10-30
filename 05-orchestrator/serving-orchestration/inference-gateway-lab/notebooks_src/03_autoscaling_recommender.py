@@ -13,7 +13,7 @@
 # \text{desired} = \left\lceil \frac{\mathrm{ready\_pods} \times \mathrm{current\_average}}{\text{target}} \right\rceil,
 # $$
 #
-# and the controller keeps the current replica count when the ratio is within ±10%. Then it applies
+# and the controller keeps the current replica count when the ratio is in the ±10% band. Then it applies
 # these limits, in this sequence:
 #
 # - **stabilization**: a scale-down goes no lower than the highest recommendation of the last 300 s.
@@ -21,7 +21,7 @@
 # - min/max: the result stays between `minReplicas` and `maxReplicas`.
 #
 # For LLM servers, the question is *which metric*. GPU utilization reads 100% as soon as a
-# continuous-batching engine has any work. Thus it cannot tell the difference between 3 replicas and
+# continuous-batching engine has any work. Thus this metric cannot tell the difference between 3 replicas and
 # 30. Use the demand signals that the engine exposes: `vllm:num_requests_waiting` (queue) **and**
 # `vllm:num_requests_running` (occupied batch slots). The queue alone is a trap. When the capacity
 # catches up, the queue drains to 0, the HPA proposes the minimum, and the pool oscillates.
@@ -79,7 +79,7 @@ print("2 ready + 1 starting, 12 waiting    ->",
 #    at **0**.
 # 3. If some pods have **no metric**, give each of them a value. On a scale-*down*, assume that each
 #    is exactly **at target**. On a scale-*up*, assume **0**. Then calculate again.
-# 4. After 2–3, keep the current count if the new ratio is within the ±10 % band **or points the
+# 4. After 2–3, keep the current count if the new ratio is in the ±10 % band **or points the
 #    other way**. In the second case, the fill flipped the direction. Also keep the current count if
 #    the new count moves against the direction.
 #
@@ -364,7 +364,7 @@ print("✅ queue + running: steady", min(steady), "-", max(steady), "ready repli
 
 # %% [markdown]
 # With both signals, the pool still overshoots the ~8 replicas that are necessary. The reason is the
-# backlog that builds up during the 120 s cold start. It keeps the queue proposal high until the new
+# backlog that builds up during the 120 s cold start. This backlog keeps the queue proposal high until the new
 # replicas are ready. These are the levers:
 #
 # - faster cold starts (image streaming and weight caching, see layer 03),
@@ -404,7 +404,7 @@ assert list(drains) == sorted(drains) and len(set(worst)) == 1
 # targets come from the 32 batch slots of that deployment (running: 75 % of them, waiting: Exercise
 # 3.4). They do not come from the 8 slots of the fake engine. On GKE, the metric names are the
 # Managed Prometheus series as the Custom Metrics Stackdriver Adapter exposes them (the names have
-# the tag VERIFY). The cell makes sure that this is exactly what `deploy/gke/hpa.yaml` contains.
+# the tag VERIFY). The cell makes sure that this manifest is exactly what `deploy/gke/hpa.yaml` contains.
 
 # %%
 gp = "prometheus.googleapis.com|{}|gauge"
@@ -438,14 +438,14 @@ except ImportError:
 #
 # **Two-minute walkthrough.** "We scale vLLM on two per-pod metrics from its own `/metrics`. The
 # targets come from the engine that we deploy: 32 batch slots (`--max-num-seqs`, set explicitly). The
-# first metric is running requests, with target 24, which is 75 % of the slots. It holds capacity
+# first metric is running requests, with target 24, which is 75 % of the slots. This metric holds capacity
 # when the queue has drained. Without it, the queue alone proposes the minimum at full load and
 # collapses the pool.
 #
 # "The second metric is waiting requests, with target 5, from Little's law. A request in the queue
-# needs a slot, and slots become free at 32 per ~3 s (an assumption that we measure again). Thus 5
-# requests in the queue cost ~0.5 s of our TTFT budget. The HPA takes the larger proposal. We do not
-# use GPU utilization, because it is 100% whenever any request runs.
+# needs a slot, and slots become free at 32 per ~3 s. Thus 5 requests in the queue cost ~0.5 s of our
+# TTFT budget. The rate of 32 per ~3 s is an assumption that we measure again. The HPA takes the
+# larger proposal. We do not use GPU utilization, because it is 100% whenever any request runs.
 #
 # "Scale-up adds one pod a minute. The reason is that each pod needs a new L4 Spot node, and quota
 # and Spot obtainability limit those nodes in any case. A slower ramp gives fewer GPU-hours for a
@@ -461,7 +461,7 @@ except ImportError:
 #    The default limit is $\max(4+4, 8) = 8$, so the answer is 8.
 # 2. *Why did the pool decrease to one replica while the load was still high?* The only metric was
 #    the queue. With sufficient capacity, the queue is 0, and a queue of 0 makes the HPA propose the
-#    minimum. Add a demand signal (running slots, KV usage, or router in-flight requests).
+#    minimum. Add a demand signal (occupied batch slots, KV usage, or router in-flight requests).
 # 3. *Why do new pods that still load the model not make the HPA scale up even more?* On a scale-up, the
-#    controller counts pods that are not ready as zero load. This decreases the average and damps the
+#    controller counts pods that are not ready as zero load. These zeros decrease the average and damp the
 #    proposal.

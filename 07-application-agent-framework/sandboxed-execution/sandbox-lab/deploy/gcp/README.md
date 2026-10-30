@@ -16,11 +16,11 @@ Docker Hub. Then [`../gke/apply.sh`](../gke/) installs the sandbox platform.
 
 **Cost.** You pay for what you use. Prices change. Find them for your region and mark them (verify):
 
-- The `e2-standard-2` of the system pool runs for as long as the cluster exists (roughly $0.07/h on
+- The `e2-standard-2` of the system pool runs while the cluster exists (approximately $0.07/h on
   demand in us-central1, verify).
 - The free tier covers the GKE management fee for one zonal cluster per billing account (verify).
 - The gVisor pool costs nothing at zero nodes. While executions run, it costs a Spot `e2-standard-2`
-  per node (Spot is 60-91 % off on-demand, verify).
+  per node. Spot is 60-91 % off on-demand (verify).
 - GKE Sandbox has no surcharge of its own (verify).
 - Artifact Registry storage for one ~50 MB image and Managed Prometheus ingestion are cents per month
   at lab volume (verify).
@@ -49,8 +49,8 @@ To see the `gcloud` equivalent of the cluster and the pool, run
 ## Design notes
 
 * **`type = "GVISOR"`**: the provider validates the value, and the comparison is case-sensitive. The
-  `gcloud` flag is lowercase (`--sandbox type=gvisor`). GKE Sandbox needs a second node pool (the first
-  pool cannot be a GKE Sandbox pool). GKE itself adds the node label and taint
+  `gcloud` flag is lowercase (`--sandbox type=gvisor`). GKE Sandbox needs a second node pool. The first
+  pool cannot be a GKE Sandbox pool. GKE itself adds the node label and taint
   `sandbox.gke.io/runtime=gvisor` and creates RuntimeClass `gvisor` (verify). Thus this directory
   declares no taint, and pods need only `runtimeClassName: gvisor`.
 * **No internet egress by default**: the nodes are private and there is no NAT. The only destinations

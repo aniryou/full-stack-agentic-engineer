@@ -19,7 +19,7 @@ That one trade-off explains almost everything else:
 | Hides memory latency with | large caches, prefetch, OoO | a switch to another thread |
 | Fails badly when | the work is embarrassingly parallel | the work has many branches and is serial |
 
-The key phrase is **latency hiding by oversubscription**. A CPU tries to prevent waits for memory. A GPU accepts the wait. It keeps thousands of other threads resident, so that it always has other work to issue. This is why "occupancy" is a GPU concept and not a CPU concept.
+The key phrase is **latency hiding by oversubscription**. A CPU tries to prevent waits for memory. A GPU accepts the wait. It keeps thousands of other threads resident, so that it always has other work to issue. Thus "occupancy" is a GPU concept and not a CPU concept.
 
 ![A CPU core stalls while it waits for memory, and a GPU SM issues another resident warp during the wait, so its arithmetic units always have work.](figures/latency-hiding-oversubscription.svg)
 
@@ -38,7 +38,7 @@ grid  →  thread blocks  →  warps (32 threads)  →  threads
 ```
 
 - **Thread**: one lane of execution, with its own registers.
-- **Warp**: 32 threads that execute *in lockstep*. This is the real unit of scheduling. AMD calls its equivalent a *wavefront* (64 lanes, or 32 on RDNA).
+- **Warp**: 32 threads that execute *in lockstep*. The warp is the real unit of scheduling. AMD calls its equivalent a *wavefront* (64 lanes, or 32 on RDNA).
 - **Thread block** (CTA): a group of warps. The hardware makes sure that these warps run on the same physical core. The warps can share fast scratchpad memory, and they can synchronise at a barrier.
 - **Grid**: all the blocks in the launch.
 
@@ -60,7 +60,7 @@ if (threadIdx.x % 2 == 0) { A(); } else { B(); }
 
 This code does not run A and B in parallel. The warp first executes A, with the odd lanes masked off. Then it executes B, with the even lanes masked off. You pay for both. This is **warp divergence**. It is the first performance trap that everyone finds.
 
-Since Volta (2017), each thread has its own program counter. Thus divergent threads can make independent forward progress and converge again. The cost model did not change, but a class of deadlocks disappeared.
+From Volta (2017) onward, each thread has its own program counter. Thus divergent threads can make independent forward progress and converge again. The cost model did not change, but a class of deadlocks disappeared.
 
 ### What changed recently
 
@@ -82,7 +82,7 @@ If you learn only one section, learn this one.
 | HBM (global) | 80 GB | 3.35 TB/s | ~500 cycles |
 | Host RAM over PCIe | ~TB | ~64 GB/s | ~microseconds |
 
-Two things are important. First, each step down is approximately an order of magnitude worse. Second, **shared memory is a software-managed scratchpad**, not a cache. You move data into it explicitly. CPUs have nothing equivalent. Most of the work of "optimising a CUDA kernel" is to learn to use this scratchpad well.
+Two things are important. First, each step down is approximately an order of magnitude worse. Second, **shared memory is a software-managed scratchpad**, not a cache. You move data into it explicitly. CPUs have nothing equivalent. Most of the work to "optimise a CUDA kernel" is to learn to use this scratchpad well.
 
 ### Coalescing
 
@@ -111,7 +111,7 @@ These are the positions of common operations:
 - **Large dense matmul**: the intensity increases with the tile size. This is the one operation that saturates the ALUs.
 - **LLM decoding, batch size 1**: you read every weight in the model to make one token. At 2 FLOPs per parameter and 2 bytes per parameter, the intensity is **1 FLOP per byte** at BF16 (2 at FP8, 4 at FP4). This operation is memory-bound to an extreme degree. This memory limit is the reason that a 70B model at batch 1 runs at a fraction of a percent of peak FLOPS.
 
-Think about that last point carefully. **Most inference is bandwidth-bound, not compute-bound.** This is why HBM capacity and bandwidth, not TFLOPS, are the headline numbers on modern accelerators. It is also why batching, quantisation, and KV-cache compression are the levers that change throughput in practice.
+Think about that last point carefully. **Most inference is bandwidth-bound, not compute-bound.** This bandwidth limit is why HBM capacity and bandwidth, not TFLOPS, are the headline numbers on modern accelerators. It is also why batching, quantisation, and KV-cache compression are the levers that change throughput in practice.
 
 ---
 
@@ -129,7 +129,7 @@ The size of the change:
 | BF16 Tensor Core | ~990 TFLOP/s |
 | FP8 Tensor Core | ~1,980 TFLOP/s |
 
-A kernel that does not use Tensor Cores leaves approximately 95% of the chip unused. This is the main reason that hand-written CUDA from the pre-Volta era is no longer competitive with library code. It is also the reason that almost nobody writes matmuls from scratch now.
+A kernel that does not use Tensor Cores leaves approximately 95% of the chip unused. This loss is the main reason that hand-written CUDA from the pre-Volta era is no longer competitive with library code. It is also the reason that almost nobody writes matmuls from scratch now.
 
 ### The precision ladder
 
@@ -138,7 +138,7 @@ Each generation added a narrower number format. The reason is that neural networ
 - **FP32**: the baseline.
 - **TF32** (Ampere): a 19-bit internal format. It is a drop-in replacement for FP32 matmul, and it is ~8× faster.
 - **FP16 / BF16** (Volta / Ampere): BF16 keeps the exponent range of FP32 and gives up mantissa. This makes it much more robust in training. BF16 won.
-- **FP8** (Hopper): two variants, E4M3 for weights and activations, and E5M2 for gradients. FP8 needs per-tensor scaling to control the range. The "Transformer Engine" does this scaling automatically.
+- **FP8** (Hopper): two variants, E4M3 for weights and activations, and E5M2 for gradients. FP8 needs a scale for each tensor to control the range. The "Transformer Engine" sets these scales automatically.
 - **FP4 / MXFP4** (Blackwell): a 4-bit format with a shared exponent for each small block of values. The name of this method is *microscaling*. The headline inference numbers of Blackwell are FP4 numbers.
 
 The pattern is consistent. When the precision halves, the throughput approximately doubles and the memory traffic halves. You are usually memory-bound. Thus the second effect often has more importance than the first.
@@ -147,13 +147,13 @@ The pattern is consistent. When the precision halves, the throughput approximate
 
 All of this trend aims at low-precision dense linear algebra. Some workloads need FP64 (traditional HPC, stiff PDE solvers). In other workloads (GNNs, sparse meshes, neighbour lists), irregular gather/scatter is the largest part of the work. Both groups of workloads get much less benefit. GNN message passing, in particular, is memory-latency-bound and does not map cleanly to Tensor Cores.
 
-AMD made this split explicit. From the MI400 generation, AMD divides its line into an AI part (FP4/FP8/BF16) and an HPC part (FP32/FP64). It removes the logic of the other part from each die to get the area back. If you work on physics-informed models, monitor this divergence in the hardware roadmap. The reason is that the FP64 story becomes worse on the AI parts, without much notice.
+AMD made this split explicit. From the MI400 generation, AMD divides its line into an AI part (FP4/FP8/BF16) and an HPC part (FP32/FP64). It removes the logic of the other part from each die to get the area back. If you work on physics-informed models, monitor this split in the hardware roadmap. The reason is that the FP64 story becomes worse on the AI parts, without much warning.
 
 ---
 
 ## 5. The modern kernel: asynchrony and specialisation
 
-The other large change since the classic CUDA era is about the structure of a fast kernel. A fast kernel is now an explicitly *pipelined* program, not a loop that loads and computes.
+The other large change after the classic CUDA era is about the structure of a fast kernel. A fast kernel is now an explicitly *pipelined* program, not a loop that loads and computes.
 
 - **Async copy** (Ampere): a copy from HBM to shared memory that does not go through registers. Thus the compute on tile $n$ overlaps with the load of tile ${n+1}$.
 - **TMA, the Tensor Memory Accelerator** (Hopper): a dedicated DMA engine. A single thread issues a descriptor. Then the hardware moves a full multidimensional tile, and it controls the addresses and the boundary conditions. This removes a large quantity of index arithmetic from the inner loop.
@@ -180,7 +180,7 @@ Modern frontier work does not use a GPU as the unit of compute. The unit is a ra
 ### Interconnect tiers
 
 - **Within a node**: **NVLink**. These are direct GPU-to-GPU links at 1.8 TB/s per GPU on Blackwell. That is approximately 14× a PCIe Gen5 x16 slot. NVSwitch chips make NVLink an all-to-all fabric, not point-to-point.
-- **Across nodes**: InfiniBand or high-end Ethernet, at approximately 400–800 Gb/s per GPU, 50–100 GB/s each way. Per direction and within one generation, that is approximately 9× below NVLink. The 1.8 TB/s of NVLink is the sum of both directions. Refer to the [roofline primer §5.1](../roofline-and-fabric/PRIMER.md#51-the-link-ladder).
+- **Across nodes**: InfiniBand or high-end Ethernet, at approximately 400–800 Gb/s per GPU, 50–100 GB/s each way. Per direction and in one generation, that is approximately 9× below NVLink. The 1.8 TB/s of NVLink is the sum of both directions. Refer to the [roofline primer §5.1](../roofline-and-fabric/PRIMER.md#51-the-link-ladder).
 
 That gap defines the standard vocabulary. **Scale-up** means to make the NVLink domain larger. The NVLink domain is the set of GPUs that can use the memory of each other as almost local memory. **Scale-out** means to add nodes over the slower network.
 
@@ -188,7 +188,7 @@ The main hardware trend of the last two years is that scale-up domains become mu
 
 ![Inside a node, NVSwitch makes NVLink an all-to-all fabric between the GPUs, the NVLink domain; between nodes, the NICs carry about 9 times less bandwidth per direction, within one generation, over InfiniBand or high-end Ethernet.](figures/scale-up-scale-out.svg)
 
-*Inside a node, NVSwitch makes NVLink an all-to-all fabric between the GPUs: that set of GPUs is the NVLink domain. Between nodes, the NICs carry approximately 9× less bandwidth per direction, within one generation, over InfiniBand or high-end Ethernet. Scale-up makes the NVLink domain larger, and scale-out adds nodes over the slower network (§6).*
+*Inside a node, NVSwitch makes NVLink an all-to-all fabric between the GPUs: that set of GPUs is the NVLink domain. Between nodes, the NICs carry approximately 9× less bandwidth per direction, in one generation, over InfiniBand or high-end Ethernet. Scale-up makes the NVLink domain larger, and scale-out adds nodes over the slower network (§6).*
 
 ### Parallelism strategies
 
@@ -200,7 +200,7 @@ You divide a model across GPUs along different axes. Each choice causes a differ
 | **Tensor parallel** | individual matrices | all-reduce *inside* every layer, so it needs NVLink |
 | **Pipeline parallel** | layers across devices | point-to-point, but it causes bubbles |
 | **Expert parallel** | MoE experts | all-to-all routing of tokens |
-| **Context parallel** | the sequence | for attention on an extremely long context |
+| **Context parallel** | the sequence | for attention on a context of extreme length |
 
 In practice, training runs use three or four of these strategies together. **NCCL** implements the collective operations themselves (all-reduce, all-gather, reduce-scatter, all-to-all). To adjust NCCL is a real part of the work in large-scale training.
 
@@ -211,7 +211,7 @@ In practice, training runs use three or four of these strategies together. **NCC
 The layers, from highest to lowest:
 
 1. **PyTorch eager.** Most work still starts here. Every operation dispatches to a pre-written kernel. The cost is a round trip to HBM between operations.
-2. **`torch.compile`.** It traces your model and generates fused kernels through the Inductor backend, which emits Triton. It is usually the first thing to try. It often gets a large fraction of the available gain for no effort.
+2. **`torch.compile`.** It traces your model and generates fused kernels through the Inductor backend, which writes Triton code. It is usually the first thing to try. It often gets a large fraction of the available gain for no effort.
 3. **Triton.** A Python DSL. In it, you write kernels at the level of *blocks of elements*, not individual threads. The compiler does the coalescing, the shared memory allocation, and the scheduling in a block. Most custom kernel work occurs here today. Triton is a much easier start than CUDA C++.
 4. **CUTLASS / CuTe.** The C++ template library of NVIDIA for matmul-shaped problems. The layout algebra of CuTe is the serious tool to express tiling and data movement. CUTLASS and CuTe are difficult to learn. But engineers build production matmul and attention kernels from them.
 5. **CUDA C++ with inline PTX.** This is still the lowest level when you need something that the higher layers do not express.
@@ -220,15 +220,15 @@ The layers, from highest to lowest:
 
 With CUDA 13.0 (August 2025), NVIDIA started to build **CUDA Tile**, a *second* programming model next to SIMT. This work continues. You do not describe what one thread does. Instead, you describe operations on tiles and arrays, in NumPy style. The compiler does the thread mapping, the memory movement, the asynchrony, and the Tensor Core selection.
 
-NVIDIA ships CUDA Tile as **cuTile** for Python. Since CUDA 13.3, cuTile is also available for C++. A new Tile IR supports cuTile, and other compilers can target this IR. CUDA 13.2 extended Tile support back to Ampere and Ada.
+NVIDIA ships CUDA Tile as **cuTile** for Python. From CUDA 13.3 onward, cuTile is also available for C++. A new Tile IR supports cuTile, and other compilers can target this IR. CUDA 13.2 extended Tile support back to Ampere and Ada.
 
-CUDA Tile is important for you specifically. It is the first structural change to the CUDA programming model in twenty years. It targets exactly the gap between "PyTorch is too slow here" and "I do not want to hand-write warp-level PTX". In concept, it comes near to Triton. That is a reasonable sign that kernel programming moves toward block/tile-level abstraction as its stable level.
+CUDA Tile is important for you specifically. It is the first structural change to the CUDA programming model in twenty years. It targets exactly the gap between "PyTorch is too slow here" and "I do not want to hand-write warp-level PTX". In concept, it comes near to Triton. That is a reasonable sign that kernel code moves toward block/tile-level abstraction as its stable level.
 
 ### Serving and inference
 
 - **vLLM** and **SGLang** are the standard serving engines. Their central innovation is PagedAttention. PagedAttention applies virtual-memory paging to the KV cache to remove fragmentation.
 - **TensorRT-LLM** is NVIDIA's own engine. It is faster on NVIDIA hardware and less flexible.
-- **Disaggregated serving** is the current architectural direction. It runs *prefill* (compute-bound, processes the whole prompt) and *decode* (memory-bound, one token at a time) on separate pools of hardware. The reason is that the two phases have opposite bottlenecks. NVIDIA even builds a distinct SKU for this, Rubin CPX. Rubin CPX aims at prefill with extremely large contexts.
+- **Disaggregated serving** is the current architectural direction. It runs *prefill* (compute-bound, processes the whole prompt) and *decode* (memory-bound, one token at a time) on separate pools of hardware. The reason is that the two phases have opposite bottlenecks. NVIDIA even builds a distinct SKU for this, Rubin CPX. Rubin CPX aims at prefill with contexts of extreme length.
 
 ### Non-NVIDIA
 

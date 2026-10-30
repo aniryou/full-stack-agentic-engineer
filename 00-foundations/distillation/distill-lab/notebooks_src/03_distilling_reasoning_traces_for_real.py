@@ -9,7 +9,7 @@
 #
 # ## The one-minute version
 #
-# * **A student trained on reasoning traces inherits the procedure and the length distribution of the traces you
+# * **A student trained on reasoning traces inherits the procedure and the length distribution of the traces that you
 #   keep.** The serving workload of a thinking model (rl-and-thinking-models PRIMER §7) comes with them: long,
 #   heavy-tailed outputs (PRIMER §5 "Distilling reasoning").
 # * **Two filters set it.** The *verifier* keeps correct traces. This increases the accuracy that the student
@@ -19,7 +19,7 @@
 #   72.6 on AIME 2024 against 47.0 for RL on the same base. Qwen3's on-policy distillation used about a tenth of
 #   RL's GPU hours (1,800 against 17,920, Table 21). Those numbers come from rl-and-thinking-models PRIMER §5 and the
 #   fact sheet (verify). This notebook does not repeat them. Distillation cannot add knowledge that the student
-#   lacks.
+#   does not have.
 # * **Thinking tokens are output tokens,** so you pay for a trace dataset at the output price.
 
 # %%
@@ -57,7 +57,7 @@ print(table(TR.accuracy_by_length(TRACES, [0, 50, 100, 200, 400, 1000]), title="
 # %% [markdown]
 # In the fake teacher, a longer trace holds more re-checks, and each re-check can catch a slip. Thus a longer trace is
 # more often correct. In real models, hard problems also take longer. This can make long traces *less* often correct
-# on average. Read the accuracy by length within one difficulty before you conclude that more thinking tokens
+# on average. Read the accuracy by length for one difficulty before you conclude that more thinking tokens
 # help.
 #
 # ## Exercise 3.1 — how much of the bill the tail holds
@@ -197,7 +197,7 @@ else:
 # Every trace that the capped student saw was *correct*, but it scores near chance. It never saw the procedure that
 # makes answers correct. Short traces that the verifier accepted, for a problem that needs long reasoning, are mostly
 # guesses that were correct by chance. That is the budget trade of PRIMER §5 in its sharpest form. With real models,
-# the curve is smoother: moderate caps cost a few points of accuracy and save a large share of the tokens. Measure it
+# the curve is smoother: moderate caps cost a few points of accuracy and save a large share of the tokens. Measure the curve
 # on your eval set before you ship a capped student.
 #
 # ## Worked example: before and after, measured the same way
@@ -250,19 +250,19 @@ print("lm-eval for a thinking student:", " ".join(A.lm_eval_command("Qwen/Qwen3-
 # student lower-cost, but it removes the examples of the hard problems first.
 #
 # "On our toy, a cap below the length that the procedure needs left only correct guesses, and the student scored at
-# chance. We selected the cap from a trade table (kept traces, mean length, coverage of the hardest problems). We set
+# chance. We selected the cap from a trade table of kept traces, mean length and coverage of the hardest problems. We set
 # `max_tokens` from the p99 of the kept distribution. We examined the student's accuracy with intervals on a hard
 # slice. Distillation beats small-model RL when a strong teacher exists (R1's 32B distill against RL on the same
-# base). But it does not add knowledge that the student lacks."
+# base). But it does not add knowledge that the student does not have."
 #
 # **Drill 1.** *We put a cap of 1,000 tokens on traces to halve serving cost, and accuracy on hard problems
 # collapsed. Why?* The traces of the hard problems were the long ones, so the cap removed their examples and kept
 # the lucky short ones. Examine the coverage of the hardest problems per cap. Or keep long traces for hard problems,
 # and put a cap only on the easy ones.
 #
-# **Drill 2.** *Is it better if the student's traces are as long as the teacher's?* Only if the length gives accuracy on
-# your workload. The student inherits the traces that you keep. Thus shorter correct traces (a budget-aware filter,
-# or a teacher run with a thinking budget) give a lower-cost student. Measure the accuracy cost.
+# **Drill 2.** *Is it better if the student's traces are the same length as the teacher's?* Only if the length gives accuracy on
+# your workload. The student inherits the traces that you keep. Thus shorter correct traces, from a budget-aware filter
+# or a teacher run with a thinking budget, give a lower-cost student. Measure the accuracy cost.
 #
 # **Drill 3.** *Distil or RL for a 1.5B model?* If a stronger teacher is available, distil first. It costs less and
 # gives better results at small scale, as R1's and Qwen3's reports found. RL after distillation can help (Qwen3

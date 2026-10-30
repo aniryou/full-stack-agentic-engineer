@@ -1,8 +1,8 @@
 # %% [markdown]
 # # 04 · busbw and the α-β fit: reading nccl-tests like a performance engineer
 #
-# **Tier:** T0. It works on the bundled nccl-tests sample (**illustrative**: `tools/make_fixtures.py`
-# generated it from a stated α-β model, and it is not a measurement on hardware). It also works on a sweep
+# **Tier:** T0. It works on the bundled nccl-tests sample, which is **illustrative**. `tools/make_fixtures.py`
+# generated the sample from a stated α-β model, and the sample is not a measurement on hardware. It also works on a sweep
 # of this machine itself, with the backend of notebook 03. If you bring your own logs from a GPU box
 # (`deploy/any-gpu/run_nccl_tests.sh`, `deploy/gke` Job), the same cells read them. That is the T1/T2 use.
 #
@@ -10,8 +10,8 @@
 #
 # * You can calculate each column of nccl-tests again: **$\text{algbw} = \text{size}/\text{time}$**,
 #   **$\text{busbw} = \text{algbw} \times \operatorname{factor}(\text{op}, n)$**.
-# * A size sweep has two regimes: a **latency floor** (the time does not change with size) and a
-#   **bandwidth plateau** (busbw does not change). The α-β fit $t = \alpha + S/B$ gives the two, and the
+# * A size sweep has two regimes: a **latency floor** and a **bandwidth plateau**. On the latency floor, the
+#   time does not change with size. On the plateau, busbw does not change. The α-β fit $t = \alpha + S/B$ gives the two, and the
 #   **half-bandwidth size $S_{1/2} = \alpha \cdot B$** is the boundary between them.
 # * Compare the plateau busbw with the **link**: NVLink hundreds of GB/s per GPU, PCIe Gen4 x16 about
 #   25 GB/s in practice. If the plateau is far below the link, NCCL does not use the path that you think.
@@ -40,7 +40,7 @@ for r in res.rows[:3] + res.rows[-3:]:
 # ## Exercise 4.1 — recompute the columns
 #
 # Write `recompute(size_bytes, time_us, op, n)`. It returns `(algbw, busbw)` in GB/s (1e9). The check
-# compares the result with each printed row (each printed value has two decimals after rounding).
+# compares the result with each printed row. Each printed value has two decimals after rounding.
 
 # %% exercise
 def recompute(size_bytes: int, time_us: float, op: str, n: int) -> tuple[float, float]:
@@ -69,8 +69,8 @@ for r in res.rows[::2]:
 # %% [markdown]
 # ## Exercise 4.2 — fit α and B yourself
 #
-# Fit $t = \alpha + S/B$ to (size, time) by least squares on the **relative** error. Minimise
-# $\sum ((\alpha + \beta \cdot S - t)/t)^2$ with $\beta = 1/B$. The relative error gives a 20 µs point and a 5 ms
+# Fit $t = \alpha + S/B$ to (size, time) by least squares on the **relative** error. Make
+# $\sum ((\alpha + \beta \cdot S - t)/t)^2$ as small as possible, with $\beta = 1/B$. The relative error gives a 20 µs point and a 5 ms
 # point the same weight. Divide each row of the linear system $[1, S] \cdot [\alpha, \beta] = t$ by $t$. Use
 # `np.linalg.lstsq`. Return `(alpha_s, bw_Bps)`.
 
@@ -169,7 +169,7 @@ print(f"✅ {msg // 1024} KiB per all-reduce is latency-bound: {t_us / 1e3:.2f} 
       f"({share:.0%} of a 30 ms budget); α alone is {160 * model.alpha_s * 1e3:.2f} ms of it")
 
 # %% [markdown]
-# That is why engines work to decrease **$\alpha$** for decode. The methods are:
+# This all-reduce time is why engines work to decrease **$\alpha$** for decode. The methods are:
 #
 # * fewer, fused all-reduces
 # * algorithms with fewer steps (one-shot/two-shot kernels, trees, NVLink SHARP in the switch)
@@ -226,7 +226,7 @@ for log in sorted(Path("..").glob("out/*.log")) + sorted(Path("..").glob("deploy
 # ## In a design review
 #
 # **Two minutes.** To read an nccl-tests table, I calculate it again. algbw is size over time. For
-# all-reduce, busbw is algbw times $2(n-1)/n$: the per-link rate that an optimal ring needs. Thus busbw
+# all-reduce, busbw is algbw times $2(n-1)/n$: the per-link rate that the best possible ring needs. Thus busbw
 # compares with the link for any number of GPUs.
 #
 # I fit $t = \alpha + S/B$ to the sweep. $\alpha$ is the latency floor, and $B$ is the plateau.

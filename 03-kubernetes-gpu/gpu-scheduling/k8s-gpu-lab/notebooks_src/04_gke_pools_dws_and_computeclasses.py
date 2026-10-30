@@ -2,7 +2,7 @@
 # # 04 · GKE: node pools, DWS flex-start and ComputeClasses — capacity is something you ask for
 #
 # **Tier:** T3 walkthrough. The cluster is GKE, from `deploy/gcp/terraform`. A Spot L4 node costs
-# approximately $0.25/h while a pod needs it (verify). Offline, everything here is **plan and inspect**.
+# approximately $0.25/h while a pod needs it (verify). Offline, everything here is **plan and examine**.
 # Read the Terraform, calculate its price, model the capacity choices, and render the manifests. With a
 # GKE `kubectl` context, the last section examines the live objects.
 #
@@ -13,7 +13,7 @@
 # | how | price | you get | good for |
 # |---|---|---|---|
 # | on-demand | list | what is in stock (scarce shapes stock out) | serving, short jobs |
-# | Spot | 60-91 % off | the cloud can reclaim it with ~30 s notice | batch jobs with checkpoints, more replicas |
+# | Spot | 60-91 % off | the cloud can reclaim it after a ~30 s warning | batch jobs with checkpoints, more replicas |
 # | DWS flex-start (queued) | discounted (verify) | *all N nodes at once* after a queue, ≤ 7 days | gangs of scarce GPUs |
 # | reservation / calendar | list or committed | guaranteed, billed when idle | deadlines, steady load |
 #
@@ -64,7 +64,7 @@ for cmd in gke.gcloud_equivalents({**v, "enable_flex_start_pool": True, "enable_
 # A gang has an interruption when the cloud reclaims **any** of its nodes. Thus, the rates add:
 # 8 nodes at 0.02 reclaims per node-hour = 0.16 per hour. This rate and the 0.005 per node-hour of
 # primer §7.2 are both illustrative. Real reclaim rates change with the zone, the shape and the hour.
-# Each interruption costs the work since the last checkpoint, plus a restart.
+# Each interruption costs the work after the last checkpoint, plus a restart.
 #
 # Let the interruptions be Poisson at rate $\lambda$, with checkpoints every $\tau$ hours and a restart
 # cost $R$. Then one $\tau$-hour segment takes $(1/\lambda + R)(e^{\lambda\tau} - 1)$ hours on average.
@@ -137,7 +137,7 @@ print(f"Young's interval sqrt(2C/λ) = {capacity.young_interval_h(C, 0.16):.2f} 
 # 3. not an interruptible server,
 # 4. the lowest cost.
 #
-# If two options have equal costs, the more certain start wins, and then the shorter wait.
+# If two options have equal costs, the option with the higher `on time` probability wins, and then the shorter wait.
 # `capacity.defensible()` lists every option that the model cannot tell apart from the best option.
 # All prices and rates are assumptions, marked *verify*. Change them and look at how the ranking moves.
 
@@ -153,10 +153,10 @@ for label, need in needs.items():
 
 # %% [markdown]
 # ## Exercise 4.2 — will the queue deliver in time?
-# The 3-day pretraining needs 72 h of work and must finish within 96 h. Thus, the capacity has 24 h of
+# The 3-day pretraining needs 72 h of work and must finish in 96 h or less. Thus, the capacity has 24 h of
 # slack to arrive. Write `p_start_within(slack_h, mean_wait_h)`. It returns the probability that an
 # exponential wait with that mean is at most `slack_h`. Then calculate `max_mean_wait`. It is the
-# largest mean queue wait that still gives a start within 24 h with 95 % probability.
+# largest mean queue wait that still gives a start in 24 h or less with 95 % probability.
 
 # %% exercise
 def p_start_within(slack_h: float, mean_wait_h: float) -> float:
@@ -192,7 +192,7 @@ print("defensible:", capacity.defensible(needs["pretrain-3d"], options=slow_queu
 # `why`.
 #
 # The 3-day pretraining cannot write checkpoints. This is an unusual constraint, and it is hard
-# on purpose. The job must also finish within 96 hours. If the model gives a tie, both answers pass.
+# on purpose. The job must also finish in 96 hours or less. If the model gives a tie, both answers pass.
 # The reason is the important part.
 
 # %% exercise
@@ -224,7 +224,7 @@ print(f"✅ defensible picks: {choice}. 8-node no-checkpoint Spot would need ~{s
 # %% [markdown]
 # ## ComputeClass: the fallback ladder as an object
 # A custom **ComputeClass** replaces one node pool per capacity type. It lists the ways to get a node,
-# in order. GKE's node-pool auto-creation tries them from top to bottom. With `activeMigration`, it
+# in order. GKE's node-pool auto-creation tries them from top to bottom. With `activeMigration`, GKE
 # also moves pods back up the ladder when the preferred capacity comes back. A pod selects the class
 # with `nodeSelector: {cloud.google.com/compute-class: <name>}`. The field names come from GKE's CRD
 # (verify with `kubectl explain computeclass.spec`).
@@ -350,7 +350,7 @@ print(f"✅ one L4 = {alloc_1} schedulable GPUs; all {pods_on_one_node} pods of 
 # - the image (`vllm/vllm-openai:v0.30.0` is 8.7 GB compressed for amd64, from its registry manifest
 #   on 2026-09-26),
 # - the weights,
-# - the engine start-up (what an engine does before it serves: serving-engine primer §1,
+# - the engine start-up, that is, the work of an engine before it serves (serving-engine primer §1,
 #   `04-inference-engine/serving-engine/PRIMER.md`).
 #
 # The defaults in the next cell are illustrative. They are different from the example of primer §8 on
@@ -424,7 +424,7 @@ if not ctx.startswith("gke_"):
 # stockout causes a fallback, not a page to a person.
 #
 # The training gang must start whole, so put it in a queue. Kueue reserves quota and creates a
-# ProvisioningRequest. Then DWS flex-start supplies all nodes at once, for up to 7 days. This works
+# ProvisioningRequest. Then DWS flex-start supplies all nodes at once, for up to 7 days. This plan works
 # *if* the queue for that shape is short relative to the slack.
 #
 # A deadline changes the wait in the

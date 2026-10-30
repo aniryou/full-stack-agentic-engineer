@@ -66,7 +66,7 @@ the data in `gpurt.dcgm.EXPORTED_BY` from the upstream files on 2026-09-26 (veri
 
 | Exporter | Missing fields | Rules that can never fire |
 |---|---|---|
-| stock dcgm-exporter (`default-counters.csv`) | `DCGM_FI_DEV_CLOCKS_EVENT_REASONS`. Also `DCGM_FI_PROF_SM_ACTIVE` and `SM_OCCUPANCY`, which are commented out. | `GpuThermalThrottling`, `GpuHardwareSlowdown`, `GpuBusyButUnderfilled` |
+| stock dcgm-exporter (`default-counters.csv`) | `DCGM_FI_DEV_CLOCKS_EVENT_REASONS`. Also `DCGM_FI_PROF_SM_ACTIVE` and `SM_OCCUPANCY`. The file has these two fields only as comments. | `GpuThermalThrottling`, `GpuHardwareSlowdown`, `GpuBusyButUnderfilled` |
 | GKE-managed DCGM (field list: verify). The GMP DCGM example from Google lists no XID, row-remap, clock-event or DRAM fields. | Probably the health fields | Probably every `GpuXid*`, row-remap and clock rule |
 | self-managed exporter with [`../any-gpu/dcgm-counters.csv`](../any-gpu/dcgm-counters.csv) | none | none |
 
@@ -78,13 +78,13 @@ is the `prometheus-engine` `examples/nvidia-dcgm` DaemonSet from Google. It runs
 `gmp-public`, and a `PodMonitoring` scrapes it (verify). Replace its `counters.csv` ConfigMap with
 `../any-gpu/dcgm-counters.csv`. Also disable the managed package, to prevent duplicate series (verify).
 
-**Why `ClusterRules`:** on GMP, a namespaced `Rules` object evaluates only the metrics from its own
+**Why `ClusterRules`:** on GMP, a namespaced `Rules` object examines only the metrics from its own
 namespace. The exporter runs in a system namespace (or `gmp-public`), never in `gpu-lab`. The
 cluster-scoped `ClusterRules` sees the whole cluster. The target labels of the scraper (`namespace`,
 `pod`) have priority. Thus the workload labels of the exporter arrive as
 `exported_namespace`/`exported_pod` (verify). The rules select on these labels.
 
-**Where alerts go:** rules only evaluate. The rule-evaluator of GMP sends firing alerts to an
+**Where alerts go:** the rules only examine the metrics. The rule-evaluator of GMP sends firing alerts to an
 Alertmanager, not to Cloud Monitoring alerting policies. The managed Alertmanager reads its
 configuration from a Secret in `gmp-public` (verify the name/key). Edit the receivers in
 `alertmanager/alertmanager.example.yaml`. Then run this command:

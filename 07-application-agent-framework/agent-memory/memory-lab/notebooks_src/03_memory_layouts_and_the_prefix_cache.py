@@ -26,9 +26,9 @@
 # the text of the user, not in front of it. Thus on the next turn, the previous user message is still an exact
 # prefix.
 #
-# The engine must prefill the missed tokens again. On your own engine, this costs TTFT (here a roofline
+# The engine must prefill the missed tokens again. On your own engine, that prefill costs TTFT (here a roofline
 # estimate, the model of `minengine.perf.step_cost`). On a hosted API, it costs dollars. There, the provider
-# bills cached input at a tenth of the price (`scalelab.capacity.cost_per_call`). But it does this only when a
+# bills cached input at a tenth of the price (`scalelab.capacity.cost_per_call`). But the provider does this only when a
 # request reaches the caching minimum of the provider (4,096 tokens on Gemini 3.x, scaling primer §5.5,
 # verify).
 #
@@ -61,7 +61,7 @@ print("target:", URL, "|", LABEL)
 # Each layout gets the same user (a few facts, forty episodic notes) and the same eight turns. Each turn is a
 # question about the user plus ~250 tokens of pasted notes. This is how tool results and documents make the
 # history of an agent grow. Each run sends a new random `cache_salt`, thus each run starts cold, even on a
-# server that has seen the system prompt. `predicted` is `expected_cached_tokens` applied to the tokenizer of
+# server that saw the system prompt before. `predicted` is `expected_cached_tokens` applied to the tokenizer of
 # the fake server. At T1 the tokenizer is that of the model, thus the notebook does not show the prediction.
 
 # %%
@@ -74,7 +74,7 @@ print(cb.summary(runs))
 # ## Worked example: the engine's own counters agree
 #
 # `vllm:prefix_cache_hits_total / vllm:prefix_cache_queries_total` over a window of two scrapes is the hit
-# rate of the engine in tokens. This is the value that you monitor on a dashboard. If all is correct, it is
+# rate of the engine in tokens. This is the value that you monitor on a dashboard. If all is correct, the value is
 # equal to the sum of the per-request `cached_tokens` over the same window.
 
 # %%
@@ -94,7 +94,7 @@ assert real or math.isclose(hit_rate(before, after), again.hit_rate, rel_tol=1e-
 # * `"before_history"`: the memory `block` as a system message right after those, then `history`, then the
 #   user message.
 # * `"tail"`: `history`, then one user message `f"{block}\n\n{user}"`. The block is in front of the text of
-#   the user. ADK's `PreloadMemoryTool` inserts it there.
+#   the user. ADK's `PreloadMemoryTool` inserts the block there.
 # * `"tail_after"`: `history`, then `f"{user}\n\n{block}"` (the block added at the end).
 #
 # With `block=None`, every layout is only system (+ pinned) + history + user.
@@ -176,7 +176,7 @@ print(f"✅ the prompts part at token {i} (inside the memory block, which starts
 # request on an idle engine, in milliseconds: `step_cost(GPUS[gpu], LLMS[llm], [(cached, prompt - cached)])["t"]`
 # (at least one new token). This is the roofline of `minengine.perf.step_cost`, written again in `cachebench`:
 # $\max\bigl(\tfrac{\text{bytes}}{0.8 \cdot \text{BW}}, \tfrac{\text{FLOPs}}{0.6 \cdot \text{peak}}\bigr) + 2\ \text{ms}$.
-# The check makes sure that it gives the same numbers as the model of the serving engine.
+# The check makes sure that your function gives the same numbers as the model of the serving engine.
 
 # %% exercise
 def ttft_ms(prompt_tokens, cached_tokens, gpu="L4", llm="qwen2.5-1.5b"):
@@ -209,7 +209,7 @@ print(f"✅ [SIMULATED roofline] 2,000 tokens cold vs 1,800 cached on an L4: 78.
 #   `prompt_tokens >= price.min_cached_prompt`. If not, use 0. `price.min_cached_prompt` is the caching
 #   minimum of the provider (4,096 on Gemini 3.x).
 #
-# The check runs it two times. The first run uses the prices of `gemini-3.5-flash` with that minimum. The
+# The check runs your function two times. The first run uses the prices of `gemini-3.5-flash` with that minimum. The
 # second run uses a provider that bills every engine hit as cached (`min_cached_prompt=0`).
 #
 # The check also reproduces the call of scaling primer §3.4. In that call, 5,000 input tokens with 2,700
@@ -275,10 +275,12 @@ print(f"✅ [SIMULATED] unsalted: tenant B's first request hit {unsalted[1]} tok
 # %% [markdown]
 # ## T1: measure it on vLLM
 #
-# Start vLLM with prefix-caching counters per request. Then point this notebook at it, and run it again from
-# the top. The **hit rates** in the cells before become measurements. The `predicted` column becomes empty,
-# because the tokenizer is that of the model. The prefill column stays the roofline model. Pass `gpu=` and
-# `llm=` for the card and the model that you serve.
+# Start vLLM with prefix-caching counters per request. Then point this notebook at that server. Run the
+# notebook again from the top.
+#
+# The **hit rates** in the cells before become measurements. The `predicted` column becomes empty, because the
+# tokenizer is that of the model. The prefill column stays the roofline model. Pass `gpu=` and `llm=` for the
+# card and the model that you serve.
 #
 # The dollars stay list prices, and the summary gives a label to each column. To measure time, send a
 # streaming request and measure the time to its first token. Keep the salt per run, so that one run does not
@@ -308,7 +310,7 @@ if fake:
 #
 # "In the simulated session of this notebook, that layout gets a 38% hit rate. The same memory at the tail of
 # the prompt gets 67% (77% when the block comes after the user's text). The prefill time on our own engine is
-# also about two times larger (a roofline estimate, while the T1 run measures the hit rates).
+# also about two times larger. That time is a roofline estimate, but the T1 run measures the hit rates.
 #
 # "On a hosted API, these prompts are below the caching minimum of the provider. Thus the bill almost does
 # not change until the prompt reaches that minimum. The cost is the latency and the GPU time.
@@ -322,7 +324,7 @@ if fake:
 # The block went in before the history. Thus the prefix changed every turn, and the engine prefilled the
 # conversation again each time. Do these steps:
 #
-# * Move per-turn memory to the tail (or use a pinned per-session profile).
+# * Move per-turn memory to the tail, or use a pinned per-session profile.
 # * Limit it to the recall knee (notebook 05).
 # * Make sure with `cached_tokens` that the change works.
 #

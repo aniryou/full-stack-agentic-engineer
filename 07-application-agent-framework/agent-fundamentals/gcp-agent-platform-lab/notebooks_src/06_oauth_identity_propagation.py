@@ -63,7 +63,7 @@ def show(title: str, token: str) -> None:
 # ## 1. Hop 1 — the user signs in
 #
 # Alice signs in to the assistant through SSO (OIDC). After that, the app holds a token **for the app**.
-# Its audience is the assistant, not a tool. Mint that token directly here. This is the stand-in for the login.
+# Its audience is the assistant, not a tool. Mint that token directly here. This step is the stand-in for the login.
 
 # %%
 app_token = authz.issue_access_token("alice", audience=AGENT_APP_URL, scope="openid profile chat")
@@ -203,7 +203,7 @@ print("cancel →", (await mcp.call_tool("cancel_order", {"order_id": "ORD-1"}))
 #
 # - The IdP verifies the inbound token.
 # - The IdP makes sure that `orders-mcp` is the audience of that token.
-#   You can exchange what you *received*, not what you observed.
+#   You can exchange a token that came *to you*, not a token that you saw.
 # - The IdP issues a downstream token with the **same `sub`**, the ledger as audience, and an `act` claim that names the server.
 #
 # The ledger in the next cell still has a legacy `ledger:admin` path for a shared service account. Monitor this path.
@@ -350,7 +350,7 @@ print("✅ audience, expiry and garbage all rejected; a good token yields claims
 # 2. If the `resource_url` of the caller is not equal to the `aud` of the subject token, raise `InvalidGrant`.
 #    Only the recipient can exchange the token.
 # 3. Calculate the requested scopes: `scope.split()`, or the scopes of the subject token when `scope` is `None`.
-#    If they are not all within the scopes of the subject token **or** the `delegated_scopes` of the caller, raise `InvalidScope`.
+#    If they are not all in the scopes of the subject token **or** the `delegated_scopes` of the caller, raise `InvalidScope`.
 # 4. Make `act = {"sub": client_id}`. If the subject token already has an `act`, put that `act` under the new one.
 # 5. Mint the token with `self.issue_access_token(sub, audience, " ".join(sorted(requested)), ttl_s=..., extra={"act": act}, client_id=client_id)`.
 #    The lifetime is `min(self.token_ttl_s, exp - now)`, so that the delegated token never lives longer than the token of the user.
@@ -399,10 +399,10 @@ print("✅ same sub, nested act, bounded lifetime, recipient-only, no widening")
 # %% [markdown]
 # ### Exercise 8.3 — implement the step-up
 #
-# `handle_insufficient_scope(client, error, grant, subject)` receives the `Forbidden` error from the MCP client.
+# `handle_insufficient_scope(client, error, grant, subject)` gets the `Forbidden` error from the MCP client.
 # Parse its `WWW-Authenticate` header with `parse_www_authenticate`.
 # If `error` is not `insufficient_scope`, raise the original error again.
-# Otherwise, call `authorize_with_pkce(client, grant.issuer, grant.resource, subject,
+# If `error` is `insufficient_scope`, call `authorize_with_pkce(client, grant.issuer, grant.resource, subject,
 # <current scopes ∪ required scopes>)`. Then return the new grant.
 
 # %% exercise

@@ -40,6 +40,24 @@ A full class of modern questions has no exact-match formulation. Some examples a
 
 Neural networks answer these questions. They map objects into a high-dimensional vector space, where geometric proximity approximates semantic similarity. Then the database question becomes this: for a query vector, find the $k$ stored vectors that are nearest to it. This is nearest-neighbor search.
 
+```mermaid
+flowchart LR
+  X(["an input: text,<br/>image, code"]) --> M["embedding<br/>model"]
+  M --> V[("stored<br/>vectors")]
+  Q([a query]) --> M2["the same<br/>model"]
+  M2 --> QV["query vector"]
+  subgraph NN["nearest-neighbor search"]
+    direction LR
+    E["exact k-NN:<br/>brute force"]
+    A["ANN index"]
+  end
+  QV --> NN
+  V --> NN
+  NN --> K(["the k nearest<br/>vectors"])
+```
+
+*An embedding model maps each input to a stored vector, and the same model maps the query to a query vector (§2). Then nearest-neighbor search returns the k stored vectors nearest to the query vector. Exact k-NN compares the query with every vector, and an ANN index gives up some recall for speed (§4).*
+
 Nearest-neighbor search in hundreds or thousands of dimensions defeats every classic index. There is no total order to use, so B-trees fail. There is no exact key to hash, so hash indexes fail. There are no discrete tokens to invert, so inverted indexes fail. Only brute force stays: you compare the query with every vector. That costs $O(N \cdot d)$ per query, which is fine for 100k vectors, but not for 100 million at 1,000 queries per second.
 
 Vector databases exist to solve two problems at the same time:
@@ -192,29 +210,30 @@ There are two lessons. First, dimensionality and precision dominate the bill. Se
 An ANN library (Faiss, hnswlib, USearch) gives you an in-memory index and a search call. A vector *database* must handle everything that occurs after the demo.
 
 ```mermaid
-flowchart TB
-  subgraph W["the write path (§8)"]
-    U([upsert or delete]) --> L[("write-ahead log<br/>+ snapshots")]
-    L --> G["growing segment:<br/>small and mutable"]
-    G -->|seal| S["immutable indexed<br/>segments"]
-    L -->|delete| D["tombstone: filtered<br/>out at query time"]
-    D -.-> S
-    S -->|"merge in the background"| C["compaction and vacuum"]
-  end
-  subgraph R["the read path (§9)"]
-    Q([query vector + filter]) --> E{"estimated filter<br/>selectivity?"}
-    E -->|"small subset"| B["brute force over<br/>the permitted ids"]
-    E -->|"large subset"| T["in-traversal filtered<br/>graph search"]
-    E -->|"aligned with a<br/>partition key"| P["partition-scoped<br/>search"]
-    B --> F["fan out across the<br/>segments, merge the<br/>per-segment top-k,<br/>drop the tombstones"]
-    T --> F
-    P --> F
-    F --> O([results + payload])
-  end
-  C ~~~ Q
+flowchart LR
+  U([upsert or delete]) --> L[("write-ahead log<br/>+ snapshots")]
+  L --> G["growing<br/>segment"]
+  G -->|seal| S["immutable indexed<br/>segments"]
+  L -->|delete| D["tombstone"]
+  D -.-> S
+  S -->|"merge in the<br/>background"| C["compaction<br/>and vacuum"]
 ```
 
-*This figure shows the write path and the read path of a vector database (§8, §9). A write goes through the log into a small mutable segment, which the engine seals and later merges, and a delete leaves a tombstone. For each query, the engine selects a filter strategy from the estimated filter selectivity, then fans out across the segments and merges the top-k.*
+*This figure shows the write path of a vector database (§8). A write goes through the log into a small mutable segment, which the engine seals and later merges. A delete leaves a tombstone, which the engine filters out at query time.*
+
+```mermaid
+flowchart LR
+  Q(["query vector<br/>+ filter"]) --> E{"estimated filter<br/>selectivity?"}
+  E -->|"small subset"| B["brute force over<br/>the permitted ids"]
+  E -->|"large subset"| T["in-traversal filtered<br/>graph search"]
+  E -->|"aligned with a<br/>partition key"| P["partition-scoped<br/>search"]
+  B --> F["fan out across<br/>the segments,<br/>merge the top-k"]
+  T --> F
+  P --> F
+  F --> O(["results<br/>+ payload"])
+```
+
+*This figure shows the read path of a vector database (§9). For each query, the engine selects a filter strategy from the estimated filter selectivity. Then it fans out across the segments, merges the per-segment top-k and drops the tombstones.*
 
 ### 8. What the database layer adds
 
@@ -285,27 +304,9 @@ Dense vectors are strong on semantics and weak on exact tokens: product codes, n
 
 ### 12. The retrieval pipeline end to end
 
-```mermaid
-flowchart TB
-  subgraph I["ingest"]
-    SRC[("the raw source:<br/>the system of record")] --> PC["parse and clean"]
-    PC --> CH["chunk (§13) and attach<br/>metadata: source, tenant,<br/>ACL, timestamps,<br/>section titles"]
-    CH --> EM["embed in batches, and<br/>record the model<br/>name and version"]
-    EM --> UP["upsert with idempotent ids<br/>(a hash of the source<br/>+ the chunk position)"]
-  end
-  UP --> DB[("the vector database:<br/>vectors, payload,<br/>filter indexes")]
-  subgraph Q["query"]
-    QI([a query]) --> RW["optional rewrite:<br/>LLM expansion or<br/>decomposition, HyDE,<br/>multi-query"]
-    RW --> QE["embed with the same<br/>model and its query<br/>prefix, if any: 20–50 ms"]
-    QE --> RT["retrieve candidates:<br/>dense ANN (plus sparse)<br/>with filters, k' ≈ 50–200:<br/>5–30 ms"]
-    RT --> FU["fuse the lists (RRF),<br/>remove duplicates,<br/>apply business rules"]
-    FU --> RR["rerank to the final<br/>k ≈ 5–20: 50–200 ms"]
-    RR --> CX["assemble the context, log<br/>the query, the candidates<br/>and the outcomes (§14)"]
-  end
-  RT <--> DB
-```
+![The retrieval pipeline of §12: the ingest path parses, chunks, embeds and upserts the source content into the vector database, and the query path embeds the query, retrieves candidates from the database, fuses the lists, reranks the candidates and logs the outcomes.](figures/retrieval-pipeline.svg)
 
-*This figure shows the pipeline of §12 end to end, and the typical p95 latency budget of three query steps. The ingest path keeps the raw source as the system of record and writes vectors with the name and version of the model. The query path embeds the query with the same model, retrieves candidates with filters, fuses the lists, reranks the candidates and logs the outcomes.*
+*This figure shows the pipeline of §12 end to end, and the typical p95 latency budget of three query steps. The ingest path keeps the raw source as the system of record and writes vectors with the name and version of the model. The query path embeds the query with the same model, retrieves candidates with filters, fuses the lists, reranks the candidates and logs the outcomes. The reranker usually dominates the latency.*
 
 **Ingest**
 

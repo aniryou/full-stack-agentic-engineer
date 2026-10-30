@@ -229,8 +229,8 @@ print("   and one snapshot must never be restored into two tenants (PRIMER §2, 
 # manifests are the ones that I validated on kind, with one field changed."
 #
 # **Drill 1.** *`terraform validate` fails on the sandbox pool. The value looks correct.* The provider
-# validates `sandbox_config.type` against exactly `"GVISOR"`. `"gvisor"` (the value that `gcloud` accepts)
-# fails. It is the most frequent typo in a GKE Sandbox module.
+# validates `sandbox_config.type` against exactly `"GVISOR"`. `"gvisor"` fails, but it is the value that
+# `gcloud` accepts. This lowercase value is the most frequent typo in a GKE Sandbox module.
 #
 # **Drill 2.** *We added a NetworkPolicy to block 169.254.169.254, and the pod still reached it.*
 # NetworkPolicy never blocks traffic to the node of the pod itself, and the metadata server is node-local.

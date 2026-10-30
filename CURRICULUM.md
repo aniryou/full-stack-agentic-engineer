@@ -155,36 +155,46 @@ Hours are estimates, as above.
 *Min tier* is what the step needs; *best* is where its measurements are real.
 
 ```mermaid
-flowchart TB
-  subgraph R1["Round 1 · the model and the engine, all at T0 (steps 1 to 5)"]
-    direction LR
-    S1["00.1 to 00.3<br/>transformer, capacity planning, model landscape"] --> S3["04.0<br/>kv-cache, paged-attention, flash-attention, kernel-core"] --> S4["04.1 to 04.6<br/>serving-engine PRIMER §1–8, mini-engine-core"] --> S5["04.1<br/>vllm-serving-lab 01–02"]
+flowchart LR
+  subgraph R1["Round 1 · steps 1 to 5"]
+    direction TB
+    S1["00.1 to 00.3<br/>foundations"] --> S3["04.0<br/>kernel topics"] --> S4["04.1 to 04.6<br/>serving-engine<br/>§1–8"] --> S5["04.1<br/>vllm-serving-lab<br/>01–02"]
   end
-  subgraph R2["Round 2 · down to the hardware for the why (steps 6 to 11)"]
-    direction LR
-    S6["01.0 to 01.5<br/>GPU primers, roofline-and-fabric, gpu-bench-lab"] --> S9["00.4<br/>mixture-of-experts"] --> S10["02.1 to 02.5<br/>cuda-and-nccl"]
+  subgraph R2["Round 2 · steps 6 to 11"]
+    direction TB
+    S6["01.0 to 01.5<br/>GPU primers,<br/>roofline"] --> S9["00.4<br/>mixture-of-<br/>experts"] --> S10["02.1 to 02.5<br/>cuda-and-nccl"]
   end
-  subgraph R3["Round 3 · back to the engine with a GPU, then post-training (steps 12 to 17)"]
-    direction LR
-    S12["04.2 to 04.7<br/>serving-engine PRIMER §9–12, vllm-serving-lab 03–05"] --> S13["04.9<br/>quantization"] --> S14["04.8<br/>vllm-internals, FlashAttention deep dive"] --> S15["00.5<br/>rl-and-thinking-models"] --> S16["00.6<br/>distillation"] --> S17["04.7<br/>Cloud Run GPU, T3"]
+  subgraph R3["Round 3 · steps 12 to 17"]
+    direction TB
+    S12["04.2 to 04.7 §9–12<br/>serving lab 03–05"] --> S13["04.9 · quantization"] --> S14["04.8 · deep dives"] --> S15["00.5 · RL and<br/>thinking models"] --> S16["00.6 · distillation"] --> S17["04.7 · Cloud Run"]
   end
-  subgraph R4["Round 4 · up to the fleet (steps 18 to 23)"]
-    direction LR
-    S18["03.1 to 03.6<br/>gpu-scheduling"] --> S21["05.1 to 05.6<br/>serving-orchestration"]
+  subgraph R4["Round 4 · steps 18 to 23"]
+    direction TB
+    S18["03.1 to 03.6<br/>gpu-scheduling"] --> S21["05.1 to 05.6<br/>serving-<br/>orchestration"]
   end
-  subgraph R5["Round 5 · the gateway (steps 24 to 26)"]
-    direction LR
-    S24["06.1 to 06.5<br/>scaling, admission and cost"] --> S25["06.6<br/>identity and security"] --> S26["06.7<br/>llm-gateway"]
-  end
-  subgraph R6["Round 6 · the agent, the workload that drives it all (steps 27 to 31)"]
-    direction LR
-    S27["07.1, 07.2<br/>agent loop, platform lab"] --> S28["07.5<br/>sandboxed execution"] --> S29["07.3<br/>durable execution"] --> S30["07.4<br/>retrieval"] --> S31["07.6<br/>agent memory"]
-  end
-  R1 --> R2 --> R3 --> R4 --> R5 --> R6
+  R1 --> R2 --> R3 --> R4
 ```
 
-*The path at a glance: the 31 steps of the table below, grouped into the rounds of the spiral (§3.1). Each box names
-the modules and the material; the table gives the hours and the tiers.*
+*Rounds 1 to 4: the model and the engine at T0, the hardware, the engine with a GPU, post-training, and the
+fleet. Step 17 (04.7) is the Cloud Run GPU step, best at T3. Each box names the modules and
+their topic, and the table below gives the material, the hours and the tiers.*
+
+```mermaid
+flowchart TB
+  R4P(["after round 4"]) --> R5
+  subgraph R5["Round 5 · steps 24 to 26"]
+    direction LR
+    S24["06.1 to 06.5<br/>scaling, admission<br/>and cost"] --> S25["06.6<br/>identity and<br/>security"] --> S26["06.7<br/>llm-gateway"]
+  end
+  subgraph R6["Round 6 · steps 27 to 31"]
+    direction LR
+    S27["07.1, 07.2<br/>agent loop,<br/>platform lab"] --> S28["07.5<br/>sandboxed<br/>execution"] --> S29["07.3<br/>durable<br/>execution"] --> S30["07.4<br/>retrieval"] --> S31["07.6<br/>agent memory"]
+  end
+  R5 --> R6
+```
+
+*Rounds 5 and 6 (steps 24 to 31) come after round 4: the gateway, then the agent, the workload that drives it all.
+The two figures together show the 31 steps of the table below, grouped into the rounds of the spiral (§3.1).*
 
 | Step | Layer | Modules | Material | Hours | Min tier | Best |
 |---:|---|---|---|---:|---|---|

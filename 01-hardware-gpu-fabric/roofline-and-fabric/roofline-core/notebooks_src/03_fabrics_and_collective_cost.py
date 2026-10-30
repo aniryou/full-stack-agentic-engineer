@@ -19,7 +19,7 @@
 # **bandwidth-bound**: what matters is $\beta$. The bandwidth term of the ring (~$2n/\beta$) does not decrease as
 # the TP degree grows, but the compute of each GPU does decrease.
 #
-# Past the node, $\beta$ per GPU decreases ~9× from NVLink to a 400 Gb/s NIC. That is the quantitative reason
+# Past the node, $\beta$ per GPU decreases ~9× from NVLink to a 400 Gb/s NIC. This drop is the quantitative reason
 # for two things:
 #
 # - Tensor parallelism stays inside the NVLink domain.
@@ -82,7 +82,7 @@ print(f"   if every ring hop crossed a 400 Gb/s NIC (8 GPUs in 8 nodes): {fabric
 # %% [markdown]
 # ## TP=16 across two nodes
 # NCCL does not push a cross-node all-reduce through one NIC. On a rail-optimized cluster, it spreads
-# the traffic over every rail (a ring channel per NIC, or its tree algorithm). The core represents that as a
+# the traffic over every rail (a ring channel per NIC, or its tree algorithm). In the core, this all-reduce is a
 # hierarchical all-reduce (`fabric.tp_comm_time_across_nodes`):
 #
 # 1. A reduce-scatter inside each node over NVLink.
@@ -128,7 +128,7 @@ for down in (32, 48):
 # ## GPUDirect: remove the host bounce
 # Without GPUDirect RDMA, a message from a GPU to a remote GPU goes through host memory. The system copies it to
 # host memory, sends it, and copies it up again. Store-and-forward pays for each hop in sequence. A pipelined
-# direct path pays only for the slowest hop (plus one chunk per other hop). It also keeps the CPU and host memory
+# direct path pays only for the slowest hop (plus one chunk per other hop). The direct path also keeps the CPU and host memory
 # out of the data path.
 
 # %%
@@ -295,7 +295,7 @@ print("✅ 1:1 needs 48 switches (32 leaves + 16 spines); 3:1 needs 28 but keeps
 # ## Exercise 3.5 — read nvidia-smi topo -m
 # Here is a topology matrix in the documented format. It is for a hypothetical 2-socket, 4-GPU,
 # 2-NIC server (**illustrative, not captured from a machine**). Write `best_pair(matrix)`. It returns the GPU pair
-# with the best connection (use `fabric.topo_rank`, lower is better). Also write `closest_nic(matrix, gpu)`.
+# with the best connection. Use `fabric.topo_rank`: lower is better. Also write `closest_nic(matrix, gpu)`.
 
 # %%
 matrix = {
@@ -343,7 +343,7 @@ print("✅ put a 2-GPU TP job on GPU0+GPU1 (NV12), never GPU1+GPU2 (SYS: across 
 # **Drill.**
 # 1. *Why not TP=16 across two 8-GPU H100 nodes?* Communication becomes larger than compute. With rails (the traffic
 #    spread over every NIC), a 4K-token prefill step spends ~75 ms in all-reduce. Its compute per GPU is ~37 ms
-#    (TP=8 on NVLink: 46 ms against 74 ms), thus the step is barely faster for twice the GPUs. With one NIC per
+#    (TP=8 on NVLink: 46 ms against 74 ms). Thus the step is barely faster for twice the GPUs. With one NIC per
 #    node, the all-reduce takes ~263 ms, and as a flat ring through the NICs, ~427 ms. Use PP=2 × TP=8, FP8 to fit in one node, or a
 #    larger NVLink domain.
 # 2. *nccl-tests shows busbw of 20 GB/s at 64 KB. Is the fabric broken?* No. At 64 KB, the collective is

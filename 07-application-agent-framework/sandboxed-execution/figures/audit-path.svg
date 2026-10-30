@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="840" height="504" viewBox="0 0 840 504" role="img" aria-label="The audit path: the agent and the network leave evidence in the audit trail, the histogram shows abuse, and the response is a policy change." style="color: #E4EAE7">
+  <title>The audit path: the agent and the network leave evidence in the audit trail, the histogram shows abuse, and the response is a policy change.</title>
+  <rect x="0" y="0" width="840" height="504" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <!-- where the evidence comes from -->
+    <rect x="24" y="20" width="440" height="134" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="244" y="40" text-anchor="middle" font-size="11.5" fill="#97A59F">where the evidence comes from</text>
+    <rect x="40" y="52" width="194" height="90" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="137" y="74" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11.5" font-weight="600">SandboxAgent._audit</text>
+    <text x="137" y="93" text-anchor="middle" font-size="11" fill="#97A59F">sandbox.decision (deny)</text>
+    <text x="137" y="110" text-anchor="middle" font-size="11" fill="#97A59F">and sandbox.result, also</text>
+    <text x="137" y="127" text-anchor="middle" font-size="11" fill="#97A59F">after a crash or a kill</text>
+    <rect x="254" y="52" width="194" height="90" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="351" y="74" text-anchor="middle" font-weight="600">the network's own logs</text>
+    <text x="351" y="93" text-anchor="middle" font-size="11" fill="#97A59F">egress proxy 403s</text>
+    <text x="351" y="110" text-anchor="middle" font-size="11" fill="#97A59F">NetworkPolicy drops</text>
+    <text x="351" y="127" text-anchor="middle" font-size="11" fill="#97A59F">collect these too</text>
+
+    <!-- the audit trail (the subject) -->
+    <path d="M144 192 L144 288 A100 8 0 0 0 344 288 L344 192" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <ellipse cx="244" cy="192" rx="100" ry="8" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="244" y="220" text-anchor="middle" font-weight="600">the audit trail</text>
+    <text x="244" y="238" text-anchor="middle" font-size="11.5" fill="#7ADACF">one AuditEvent</text>
+    <text x="244" y="254" text-anchor="middle" font-size="11.5" fill="#7ADACF">per execution</text>
+    <text x="244" y="274" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" fill="#7ADACF">exit_reason + its source</text>
+
+    <!-- the metrics -->
+    <rect x="134" y="324" width="220" height="68" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="244" y="346" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" font-weight="600">AuditLog.counts</text>
+    <text x="244" y="362" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">(trusted_only=True)</text>
+    <text x="244" y="380" text-anchor="middle" font-size="11" fill="#97A59F">drops the claimed reasons</text>
+    <rect x="134" y="418" width="220" height="42" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="244" y="444" text-anchor="middle" font-weight="600">the exit-reason histogram</text>
+
+    <!-- the response -->
+    <rect x="590" y="60" width="230" height="58" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="705" y="83" text-anchor="middle" font-size="11" fill="#97A59F">under load:</text>
+    <text x="705" y="103" text-anchor="middle" font-weight="600">shed run_code first</text>
+    <rect x="590" y="196" width="230" height="92" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="705" y="220" text-anchor="middle" font-weight="600">a policy change</text>
+    <text x="705" y="239" text-anchor="middle" font-size="11" fill="#97A59F">deny the principal,</text>
+    <text x="705" y="256" text-anchor="middle" font-size="11" fill="#97A59F">tighten the allowlist,</text>
+    <text x="705" y="273" text-anchor="middle" font-size="11" fill="#97A59F">no redeploy</text>
+
+    <!-- edges -->
+    <g stroke="#97A59F" stroke-width="1.2" fill="none">
+      <path d="M137 142 L212 182" marker-end="url(#arr)"/>
+      <path d="M351 142 L276 182" marker-end="url(#arr)"/>
+      <path d="M244 296 L244 322" marker-end="url(#arr)"/>
+      <path d="M244 392 L244 416" marker-end="url(#arr)"/>
+      <path d="M344 240 L588 240" marker-end="url(#arr)"/>
+      <path d="M354 430 L650 430 L650 290" marker-end="url(#arr)"/>
+      <path d="M354 450 L750 450 L750 290" marker-end="url(#arr)"/>
+      <path d="M705 196 L705 120" marker-end="url(#arr)" stroke-dasharray="4 3"/>
+    </g>
+    <g font-size="11" fill="#97A59F">
+      <text x="466" y="231" text-anchor="middle" font-family="JetBrains Mono, monospace">principal + args_hash</text>
+      <text x="466" y="257" text-anchor="middle">trace the incident to</text>
+      <text x="466" y="272" text-anchor="middle">the content that caused it</text>
+      <text x="366" y="408">cpu_time, wall_timeout, pids or</text>
+      <text x="366" y="422">output_limit rise: abuse</text>
+      <text x="366" y="470">sustained memory or cpu_time: a miner</text>
+      <text x="366" y="485">or a runaway loop, a spike in pids: a fork bomb</text>
+    </g>
+  </g>
+</svg>

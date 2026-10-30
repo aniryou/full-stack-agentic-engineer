@@ -326,6 +326,6 @@ target.stop()
 # them, or the student never sees them (PRIMER §5).
 #
 # **Drill 3.** *Can a Qwen2.5-7B teacher logit-distil into Qwen2.5-0.5B?* Not as it is. The `vocab_size` is 152,064
-# against 151,936. TRL's GKD and vLLM's draft check both reject the pair, although the token ids agree. Use SeqKD
+# against 151,936. The token ids agree, but TRL's GKD and vLLM's draft check both reject the pair. Use SeqKD
 # (text is tokenizer-agnostic), a same-size-class teacher, or a cross-tokenizer method such as TRL's GOLD (PRIMER §6
 # "Feature distillation, pruning and vocabulary mismatch").

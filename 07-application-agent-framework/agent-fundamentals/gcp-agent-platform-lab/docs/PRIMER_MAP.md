@@ -2,7 +2,7 @@
 
 This lab is self-contained. A notebook teaches each concept in the table, and a library module
 that you can read implements it. The last column points to the primers in other parts of this
-repo that go deeper into the same idea. There is no dedicated agent-platform primer yet. Until
+repo that go deeper into the same idea. There is no primer for the agent platform yet. Until
 there is one, read this map and the notebooks' own introductions.
 
 The primers that the table refers to, with links relative to this file:
