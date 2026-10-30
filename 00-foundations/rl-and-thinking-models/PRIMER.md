@@ -3,8 +3,8 @@
 *A primer for 00-foundations. Snapshot: September 2026. Each product fact has a date and the mark (verify). Each
 formula has a worked number and names the function in [`rl-core/`](rl-core/) (package `rlcore`) that calculates it.*
 
-*The numbers on the toy tasks are exact (the core goes through every possible output) or come from seeded
-simulations. The serving numbers come from a model, not from measurements. That model is the formulas of the
+*The numbers on the toy tasks are exact or come from seeded simulations. For an exact number, the core goes
+through every possible output. The serving numbers come from a model, not from measurements. That model is the formulas of the
 capacity primer plus a roofline step.*
 
 This primer explains four things:
@@ -154,7 +154,7 @@ $$
 
 When the log-probability of one token increases, the log-probabilities of all the other tokens decrease in
 proportion (the row sums to zero). Each training method in this primer is a weighted sum of these per-token
-gradients. The methods differ only in the weights. Under the uniform policy, an 8-token completion has
+gradients. The methods are different only in the weights. Under the uniform policy, an 8-token completion has
 log π(y) = 8·log(1/2) = −5.545.
 
 **REINFORCE.** The gradient of the expected reward comes from $\nabla \pi = \pi \nabla \log \pi$ (Williams 1992,
@@ -173,7 +173,7 @@ you subtract any baseline $b$ that does not depend on the sample, the gradient s
 changes. `pg.grad_variance()` at the start of a ThinkTask run gives 0.054 with no baseline, 0.029 with the batch
 mean.
 
-Add a constant +5 to every reward. This adds no information at all. Then the no-baseline variance becomes 3.678
+Add a constant +5 to every reward. The constant adds no information at all. Then the no-baseline variance becomes 3.678
 while the baselined one stays 0.029. ${R - b}$ is the **advantage**. These are the baselines in use:
 
 | Baseline | Used by | Note |
@@ -182,8 +182,8 @@ while the baselined one stays 0.029. ${R - b}$ is the **advantage**. These are t
 | leave-one-out mean | RLOO | exactly n/(n − 1) times the mean-baseline advantage, thus the same direction |
 | learned value V(s), per token | PPO (§3) | a second network as large as the policy |
 
-**The KL penalty to a reference model.** Maximise
-$\mathbb{E}[R] - \beta \cdot \mathrm{KL}(\pi \parallel \pi_{\text{ref}})$. Here $\pi_{\text{ref}}$ is the frozen SFT
+**The KL penalty to a reference model.** Make
+$\mathbb{E}[R] - \beta \cdot \mathrm{KL}(\pi \parallel \pi_{\text{ref}})$ as large as possible. Here $\pi_{\text{ref}}$ is the frozen SFT
 model. As reward shaping, the objective uses the shaped reward $R - \beta \cdot (\log \pi(y) - \log \pi_{\text{ref}}(y))$. The penalty part of this shaped reward has exactly
 the gradient of $-\beta \cdot \mathrm{KL}$, because $\mathbb{E}[\nabla \log \pi] = 0$ (the PPO-RLHF form). GRPO puts
 the penalty in the loss instead (§4).
@@ -204,11 +204,11 @@ strings):
 
 The penalty exists for three reasons:
 
-- The reward is trustworthy only near the data that it was built on.
+- The reward is trustworthy only near the data that it comes from.
 - Fluency and language come from the reference.
 - The penalty slows the collapse onto one answer.
 
-What the penalty implies: $\pi^*$ can only move mass among the completions that $\pi_{\text{ref}}$ already produces.
+What the penalty means: $\pi^*$ can only move mass among the completions that $\pi_{\text{ref}}$ already produces.
 A completion with $\pi_{\text{ref}}(y) = 0$ stays at 0 for every $\beta$. RL sharpens. It does not invent.
 
 **Reward hacking.** RL optimises exactly the reward that you write down. The core's `buggy_verify` returns *pass* at
@@ -226,13 +226,13 @@ example 6):
 | β = 0.3 | 0.959 | 0.354 | 0.25 | 0.20 |
 
 At depth 0, `)` is an instant pass from every state, so gradient ascent finds it. The KL-regularised optimum
-multiplies every string that passes by the same $\exp(1/\beta)$. Thus it keeps the reference's share of honest
+multiplies every string that passes by the same $\exp(1/\beta)$. Thus the optimum keeps the reference's share of honest
 strings among the strings that pass: 40.9% as β → 0 (notebook 01, exercise 1.6). The penalty is a leash, not a
 correction. The corrections are the verifier and evals of the true objective. DeepSeek-R1 used rule-based rewards
 and did not use neural reward models, partly for this reason (verify).
 
 **Length bias.** RL also increases the length of anything that the reward does not charge for. In `ThinkTask`, the
-policy emits "think" tokens until it answers, and $P(\text{correct} \mid L) = 1 - e_0 (1 - q)^L$ (§6 explains the
+policy generates "think" tokens until it answers, and $P(\text{correct} \mid L) = 1 - e_0 (1 - q)^L$ (§6 explains the
 form). With $\text{reward} = \text{correct} - c \cdot L$, the optimum is where the marginal gain of a token equals
 its cost (`ThinkTask.optimal_length()`):
 
@@ -259,7 +259,7 @@ $$
 Thus a reward model is logistic regression on (chosen − rejected). A fit to 4,000 synthetic comparisons from
 $r = 1.5 x_1 - 0.5 x_2$ recovers (1.57, −0.54) (notebook 02). The comparisons identify only differences:
 σ(2 − 1) = 0.7311 = σ(12 − 11). A reward model has no zero point. For this reason, TRL's `RewardTrainer` has
-`center_rewards_coefficient`, and scores from different runs do not compare.
+`center_rewards_coefficient`, and you cannot compare scores from different runs.
 
 **RLHF with PPO, in brief.** The InstructGPT recipe is SFT, then a reward model fit on human comparisons, then PPO
 against that reward model with a per-token KL penalty. PPO has these parts:
@@ -267,7 +267,7 @@ against that reward model with a per-token KL penalty. PPO has these parts:
 - the **clipped ratio** $-\min\big(\rho A, \operatorname{clip}(\rho, 1 - \varepsilon, 1 + \varepsilon) A\big)$,
   with $\rho = \pi/\pi_{\text{old}}$. It lets several gradient steps use one batch of samples again, and the policy
   does not move far (§4 gives a worked example).
-- a **value model** ${V(s)}$, typically as large as the policy. It gives each token its own baseline through
+- a **value model** ${V(s)}$, usually as large as the policy. It gives each token its own baseline through
   **generalised advantage estimation** (`pref.gae()`):
 
 $$
@@ -277,7 +277,7 @@ $$
 rewards (0, 0, 1), values (0.5, 0.6, 0.8), γ = 1: λ = 0 → (0.1, 0.2, 0.2); λ = 0.5 → (0.25, 0.3, 0.2);
 λ = 1 → (0.5, 0.4, 0.2)
 
-$\lambda = 0$ trusts $V$ (low variance, but biased when $V$ is incorrect). $\lambda = 1$ trusts the sampled return.
+$\lambda = 0$ trusts $V$. Then the advantage has a low variance, but it has a bias when $V$ is incorrect. $\lambda = 1$ trusts the sampled return.
 In RLHF, the reward-model score sits on the last token, and $-\beta \log(\pi/\pi_{\text{ref}})$ sits on every token.
 Four networks are in memory: the policy, the reference, the reward model and the value model. DPO and GRPO each
 remove part of this cost.
@@ -322,7 +322,7 @@ L_{\text{DPO}}(\theta) &= -\mathbb{E} \log \sigma\Big(\beta \Big[\big(\log \pi_\
 $$
 
 Train the policy directly on pairs, with no reward model and no sampling. TRL's `DPOTrainer`
-(`loss_type="sigmoid"`, default β = 0.1, log-probabilities summed over completion tokens) calculates exactly this.
+(`loss_type="sigmoid"`, default β = 0.1, log-probabilities summed over completion tokens) calculates exactly this loss.
 Worked number: with β = 0.1, the chosen log-ratio +1 and the rejected −1 give −log σ(0.2) = 0.598139; zero margin
 gives ln 2 = 0.693147. Every run starts at that point.
 
@@ -373,7 +373,7 @@ the chosen strings *decreased*.
 decrease true quality by 0.3 per 100 tokens. The reference rarely pads. Annotators prefer quality *and* length:
 $P(A \succ B) = \sigma(\Delta\text{quality} + 0.6 \cdot \Delta\text{length}/100)$ (`pref.length_biased_prefs()`).
 
-A reward model fit on 3,000 such pairs learns r̂ = 1.01·quality + 0.61·length/100, and it learns it faithfully. The
+A reward model fit on 3,000 such pairs learns r̂ = 1.01·quality + 0.61·length/100, and it learns this function faithfully. The
 table shows what occurs when you optimise that reward model harder (smaller β, closed form):
 
 | β | ref | 10 | 1 | 0.5 | 0.3 | 0.1 |
@@ -411,7 +411,7 @@ makes the group statistics of GRPO work. On-policy distillation is the dense-rew
 token that the student samples ([distillation §4](../distillation/PRIMER.md#4-on-policy-distillation)).
 
 **GRPO.** For each prompt, sample a group of $G$ completions from $\pi_{\text{old}}$ and score them. Give every token
-of completion $i$ the same advantage. This is the GRPO of DeepSeekMath, which R1 adopted. TRL's `GRPOTrainer` implements the same method.
+of completion $i$ the same advantage. This is the GRPO of DeepSeekMath, which R1 used. TRL's `GRPOTrainer` implements the same method.
 
 ![One GRPO update: a group of G completions from one prompt, a verifier score per completion, group-normalised advantages that every token of a completion shares, and the clipped surrogate with the k3 KL term.](figures/grpo-group-update.svg)
 
@@ -488,13 +488,13 @@ truncated answers too (the argument of Dr. GRPO).
 
 `grpo.expected_update()` averages 600 one-group updates at a constant ThinkTask policy. The policy answers with
 probability 0.1 per step, which gives 18.5% of completions truncated at 16 tokens. The function compares the
-direction with the exact gradient of accuracy: cosine 0.67 for `"grpo"`, 0.99 for `"dapo"`, 1.00 for `"dr_grpo"`.
+direction of that average with the exact gradient of accuracy: cosine 0.67 for `"grpo"`, 0.99 for `"dapo"`, 1.00 for `"dr_grpo"`.
 Along the per-sequence update, truncation *rises*, and thinking grows two to four times faster. Along the other
 updates, truncation decreases.
 
 Dr. GRPO also removes the division by the std (`scale_rewards="none"`). Take a prompt that the policy solves 7 times
 in 8. The one miss gets −2.47, a miss on a 50/50 prompt −0.94. Thus the division by the std gives more weight to
-prompts that the policy nearly always solves or nearly never solves (a "difficulty bias").
+prompts that the policy almost always solves or almost never solves (a "difficulty bias").
 
 ### DAPO's fixes and TRL's defaults
 
@@ -530,8 +530,8 @@ The DAPO run used 512 prompts × 16 responses and a maximum generation of 20,480
 
 - $G\times$ generation, the dominant cost (§1),
 - a forward pass for the log-probabilities of $\pi_{\text{ref}}$, if $\beta > 0$,
-- the same for $\pi_{\text{old}}$, if $\mu > 1$ (or the trainer takes them from the rollout engine, and this is
-  where train–inference mismatch enters, §8),
+- the same for $\pi_{\text{old}}$, if $\mu > 1$. Instead, the trainer can take these log-probabilities from the rollout
+  engine. In that case, train–inference mismatch enters (§8),
 - one forward + backward pass of the policy.
 
 The memory holds the policy with gradients and optimizer state, the reference if $\beta > 0$, and the rollout
@@ -572,7 +572,7 @@ But not all growth is capability. A per-sequence loss average makes incorrect an
 argues that part of the length growth in R1-Zero-like training is this artefact. Thus examine accuracy by length
 before you give the credit to longer traces.
 
-**The DeepSeek-R1 recipe** (two SFT stages and two RL stages, and R1 is 671B total / 37B activated, verify):
+**The DeepSeek-R1 recipe** trains R1, a model of 671B total / 37B active parameters, in two SFT stages and two RL stages (verify):
 
 | Stage | Data | Purpose |
 |---|---|---|
@@ -602,7 +602,7 @@ from the outputs alone. The [distillation primer](../distillation/PRIMER.md) wor
 - what a distilled thinking model inherits ([§5](../distillation/PRIMER.md#5-distilling-reasoning)).
 
 **Hybrid thinking modes and chat-template switches.** The original release of Qwen3 is hybrid. The `enable_thinking`
-switch of the chat template (default True) makes it think or not think. `enable_thinking=False` appends an empty
+switch of the chat template (default True) makes the model think or not think. `enable_thinking=False` appends an empty
 `<think>\n\n</think>\n\n` block to the generation prompt. With the soft switches `/think` and `/no_think` in a
 message, the model obeys the latest instruction.
 
@@ -681,9 +681,9 @@ flowchart LR
 | gain per 1K tokens | +0.461 | +0.224 | +0.115 | +0.047 | +0.015 | +0.004 |
 
 Accuracy levels off near 0.65, the share of attempts that start on a workable approach. Thinking cannot rescue a
-dead end. Also, a fixed budget over-thinks. Compare it with a model that stops when it cracks a question. The
+dead end. Also, a fixed budget over-thinks. Compare the fixed budget with a model that stops when it cracks a question. The
 fixed budget spends 41% of a fixed 4,000-token think after the model already has the answer (notebook 04,
-exercise 4.6). This is the case for adaptive budgets.
+exercise 4.6). This waste is the reason to use adaptive budgets.
 
 **Parallel: best-of-n, verifiers and votes.** With a perfect verifier, $n$ samples give $1 - (1 - p)^n$. A reward
 model sees correctness through noise (`ttc.best_of_n_accuracy()`, Monte Carlo, 20,000 trials, p = 0.3). At n = 16,
@@ -701,7 +701,7 @@ answer (`ttc.majority_accuracy()`, exact). Take one question, where a sample is 
 | four scattered incorrect answers (0.15 each) | 0.400 | 0.780 | 0.925 |
 
 As $n \to \infty$, the vote is correct if and only if $p$ is more than the share of each incorrect answer. But the
-limit can be slow. Against a narrow misconception, the vote still helps at 15 votes. It drops below one sample's
+limit can be slow. Against a narrow misconception, the vote still helps at 15 votes. The vote drops below one sample's
 accuracy only past about 130. A dominant misconception makes every extra vote cost accuracy. The GSM8K
 self-consistency task of lm-eval reports maj@64 from 64 samples at temperature 0.2 (verify).
 
@@ -722,16 +722,16 @@ n = 10, k = 5, its expectation is 0.3485 against a truth of 0.4095. The unbiased
 metric of τ-bench, and the metric for the judgement of an agent flow. For n = 16, c = 4, the result is
 pass@4 = 0.728022 but pass^4 = 0.000549 (`ttc.pass_hat_k()`). More samples raise pass@k and do nothing for pass^k.
 
-Report each metric with confidence intervals. Use the Wilson interval of the 07 platform lab's evals notebook
+Report each metric with confidence intervals. Use the Wilson interval from the evals notebook of the 07 platform lab
 (`agentlab.evals.wilson_interval`,
 [`08_evals_trajectory_judge_gates`](../../07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks_src/08_evals_trajectory_judge_gates.py)).
 
 **Search with process reward models, in brief.** An outcome reward scores the final answer, and a **process reward
-model** (PRM) scores each step. This lets you do a beam search or a lookahead over partial solutions, and rerank whole
+model** (PRM) scores each step. A PRM lets you do a beam search or a lookahead over partial solutions, and rerank whole
 solutions (Lightman et al. 2023, Snell et al. 2024).
 
 R1's authors report PRMs and MCTS as unsuccessful for large-scale RL. Steps are hard to define, labels are high-cost,
-and reward hacking is the result. But the authors also note that PRMs stay useful for reranking and guided search
+and reward hacking is the result. But the authors also say that PRMs stay useful for reranking and guided search
 (verify).
 
 **Compute-optimal allocation.** Divide a per-question budget as $n \cdot (L + 50) \le B$ (`ttc.allocate()`):
@@ -744,13 +744,13 @@ and reward hacking is the result. But the authors also note that PRMs stay usefu
 
 When length is the only difficulty, n short attempts equal one long attempt minus the answer overheads (the crack
 rate is memoryless). Thus thinking wins. When attempts can come to a dead end, a verifier makes sampling the better
-buy as the budget grows. A vote pays only when single samples usually win the vote. Here, that starts at 16,000
+buy as the budget grows. A vote pays only when single samples usually win the vote. Here, the vote starts to pay at 16,000
 tokens.
 
-**A smaller model with more samples**: take a model that costs a fifth as much per token (and is weaker on both
-axes). Give it five times the tokens. With a verifier, it beats the larger model at equal compute (0.586 vs 0.502 at 1K
+**A smaller model with more samples**: take a model that costs a fifth as much per token and is weaker on both
+axes. Give it five times the tokens. With a verifier, it beats the larger model at equal compute (0.586 vs 0.502 at 1K
 large-model tokens). With a vote, it loses (0.465 vs 0.479 at 1K, 0.573 vs 0.705 at 4K). The task, and the presence
-of a checker, decide if it wins. Measure it on your evals.
+of a checker, decide if it wins. Measure both models on your evals.
 
 ## 7. What thinking does to serving
 
@@ -790,7 +790,7 @@ restates those formulas (Little's law, then GPUs per constraint). It reproduces 
 $\max(\text{bytes}/\text{bandwidth}, \text{FLOPs}/\text{peak})$. Like the primer, `workload.plan()` assumes that **every output
 token takes the SLO's TPOT**. Thus a request lives TTFT + out × 40 ms, whatever the load is.
 
-`workload.plan_steady()` drops that assumption. In it, the lifetime of a request comes from the step at which the
+`workload.plan_steady()` drops that assumption. In `plan_steady()`, the lifetime of a request comes from the step at which the
 fleet actually runs. That step depends on the batch that the lifetime produces.
 
 Read Little's law backwards: $N = \text{rps} \cdot (\text{TTFT} + \text{out} \cdot \text{step}(b))/b$ GPUs hold a
@@ -814,29 +814,29 @@ Thus it calculates prefill separately, as in `plan()`.
 | where it settles: batch per GPU; step; lifetime | 20.6; 8.0 ms; 2.47 s | 154.1; 18.5 ms; 55.49 s | 154.1; 18.5 ms; 55.49 s |
 
 The convention has a paradox in its last column. A 20 ms SLO halves the lifetime that the convention assumes. Thus
-it needs *fewer* GPUs (3) than the looser 40 ms SLO (6). A fleet does not run at its SLO.
+the 20 ms SLO needs *fewer* GPUs (3) than the looser 40 ms SLO (6). A fleet does not run at its SLO.
 
 At 3 GPUs, the batch settles at 154 per GPU and a step takes 18.5 ms, under both SLOs. Thus both SLOs need 3 GPUs.
 The need of the tight SLO is the larger one (2.87 vs 2.75), as it should be. The convention calculates the fleet for
-the slowest step that the SLO permits. This gives a safe margin for bursts, but it is the incorrect tool to compare
+the slowest step that the SLO permits. This convention gives a safe margin for bursts, but it is the incorrect tool to compare
 SLOs.
 
 With either method, ten times the output needs eighteen times the GPUs for memory. The numbers are 5.12 vs 0.283 at
 the SLO's TPOT, 2.75 vs 0.15 at the step the fleet runs at. Concurrency grows with the output, and each live session
-holds 1.8× the KV. This is the 18.2× of KV-token-steps from earlier in this section. Little's
+holds 1.8× the KV. This combined growth is the 18.2× of KV-token-steps from earlier in this section. Little's
 law makes the 18.2× visible in the GPU count.
 
-If you use only the primer's `decode_aggregate`, it puts all 1,000 live requests of the convention in one batch. That is 246 GB of KV on
+If you use only the primer's `decode_aggregate`, it puts all 1,000 live requests of the convention in one batch. That batch needs 246 GB of KV on
 an 80 GB card. Decode *throughput* is not the binding constraint.
 
 **ITL is the binding SLO; TTFT less so.** Thinking does not change the prompt, and thus TTFT stays the same. But the
 user waits for the *answer*. With 2,700 thinking tokens at the SLO's 40 ms each, the first answer token arrives
-108.07 s after the request. This is `workload.request_duration_s()` with the thinking tokens as output. The wait is
+108.07 s after the request. This time comes from `workload.request_duration_s()` with the thinking tokens as output. The wait is
 still 49.9 s at the 18.5 ms step that the 3-GPU fleet runs at.
 
 The UX answer is to stream the reasoning, or a summary of it. The capacity answer is that ITL, not tokens/s, sets how
 many sessions a GPU can hold. With a 20 ms ITL SLO, a GPU holds 174 sessions (`workload.max_batch_for_itl()`). This
-is fewer than the 195 that fit in HBM. Thus ITL binds first (2.87 GPUs against memory's 2.75 in `plan_steady()`).
+count is smaller than the 195 that fit in HBM. Thus ITL binds first (2.87 GPUs against memory's 2.75 in `plan_steady()`).
 
 Measure with the method of the serving-engine primer §11:
 
@@ -883,7 +883,7 @@ reasoning from answer tokens, and both are in `vllm:generation_tokens`. For each
 
 **Budget enforcement: `max_tokens` vs budget forcing.** In `workload.budget_outcome()`, each question needs
 $L_{\text{req}} \sim \operatorname{lognormal}(1{,}500, \sigma = 1)$ thinking tokens, and the answer is 300 tokens.
-Truncation returns no answer. Budget forcing answers with what it has. It is correct 30% of the time when the think
+Truncation returns no answer. Budget forcing answers with what it has. The forced answer is correct 30% of the time when the think
 has not cracked the question ($e_0 = 0.7$):
 
 | Limit (tokens) | 2,048 | 4,096 | 8,192 | 16,384 |
@@ -910,7 +910,7 @@ The results:
 - thinking only on hard requests: 0.920 at $0.016859,
 - no thinking: 0.755 at $0.009278.
 
-That is routing by effort at the gateway. The 06 layer's
+To think only on hard requests is routing by effort at the gateway. The 06 layer's
 [scaling primer](../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) gives
 output (thinking included) a price of six times input on its model. It sets thinking levels per task (§3.4, §5.5).
 Its [Mistral primer](../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/mistral/01-scaling-primer.md)
@@ -919,7 +919,7 @@ a classifier, or a low-cost first pass, that knows which requests are hard.
 
 **Speculative decoding on long outputs.** Speculation pays on a decode-dominant workload
 ([serving-engine primer §7](../../04-inference-engine/serving-engine/PRIMER.md#7-speculative-decoding)). One target
-pass emits $(1 - \alpha^{k+1})/(1 - \alpha)$ tokens: 3.36 at α = 0.8, k = 4 (`minengine.spec.expected_tokens()`).
+pass gives $(1 - \alpha^{k+1})/(1 - \alpha)$ tokens: 3.36 at α = 0.8, k = 4 (`minengine.spec.expected_tokens()`).
 The output distribution does not change.
 
 The limits are the same as in that primer. At high concurrency, the extra positions of the verify pass cost real
@@ -963,7 +963,7 @@ longer 1. Then the clip (§4) and the corrections by importance sampling do real
 **Why serving skills transfer.** The rollout side is a serving problem with a different SLO: throughput per step
 instead of latency per user. It has the same levers:
 
-- KV capacity and preemption (a GRPO batch is G long samples per prompt),
+- KV capacity and preemption, for a GRPO batch of G long samples per prompt,
 - a shared prefix (the G samples share their prompt),
 - batching and the long tail,
 - CUDA Graphs and the load of the weights,
@@ -980,7 +980,7 @@ generate. The consequences:
 Reward design and evals are the same discipline as in the platform lab of 07
 ([`08_evals_trajectory_judge_gates`](../../07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks_src/08_evals_trajectory_judge_gates.py):
 golden sets, run-to-run noise, Wilson intervals, release gates). The training reward is a proxy. The eval is how you
-see that the policy exploits it.
+see that the policy exploits the proxy.
 
 ## 9. Where to run it
 
@@ -993,11 +993,11 @@ see that the policy exploits it.
 
 A T4 has 15 GiB usable, no bf16 and no FP8. The minimum for vLLM 0.30 is compute capability 7.5, and on a T4 vLLM uses
 the Triton attention backend (verify). The 04 lab's `servelab.sizing.size()` predicts 6,969 KV blocks for Qwen3-0.6B
-at `max_model_len=8192` on a T4. That is 13.6 concurrent 8K-token requests. `servelab.sizing.size()` predicts no room at all for
+at `max_model_len=8192` on a T4. These blocks are sufficient for 13.6 concurrent 8K-token requests. `servelab.sizing.size()` predicts no room at all for
 Qwen3-8B in fp16.
 
 Kaggle's free 2×T4 does not change the picture for thinking models. A rented 24 GB L4 or RTX 4090 runs a 4B thinking
-model with room for long traces. You can rent it as a container on RunPod or Vast.ai, or as a VM on Lambda or a GCP
+model with room for long traces. You can rent such a GPU as a container on RunPod or Vast.ai, or as a VM on Lambda or a GCP
 `g2-standard-4` Spot L4. GCP is one target, never a prerequisite. The lab adds no Terraform of its own and points at
 the Terraform of the 04 serving lab. For prices, quotas and obtainability, see [`COMPUTE.md`](../../COMPUTE.md).
 
@@ -1018,7 +1018,7 @@ reward model. We also use a length-controlled eval, because the biases of the an
 "Most of an RL step is generation. Thus the rollout side is a problem of inference serving, and async rollouts trade
 throughput for staleness.
 
-"With this training, models learned to think, and that changes serving. The traffic is output-heavy and
+"With this training, models learned to think, and thinking changes serving. The traffic is output-heavy and
 heavy-tailed. Concurrency scales with output length, and KV per session grows while the model thinks. Thus memory
 and the ITL SLO set the GPU count. In the capacity primer's example, ten times the output needs eighteen times the
 GPUs for memory. This is true under both assumptions: a request takes the SLO's TPOT per token, or it takes the step
@@ -1030,7 +1030,7 @@ correct answer."
 
 **Drill questions**
 
-1. *Training reward climbed to 99% and the held-out eval fell. What happened and what do you change?* Reward
+1. *Training reward climbed to 99% and the held-out eval fell. What occurred and what do you change?* Reward
    hacking: the policy found where the reward and the objective disagree. In the core, a verifier's early exit took
    true accuracy from 29.7% to 4.9%, while the reward reached 99.4%. Examine high-reward failures. Repair the
    verifier or the reward model. Use the eval as a gate. A larger β only limits the damage.
@@ -1039,17 +1039,17 @@ correct answer."
    is a classification loss on the policy's own log-ratios. DPO gives up exploration (offline pairs only). It
    optimises margins, not likelihoods (the chosen log-ratio decreases). It leaves no reward model to rerank or monitor
    with.
-3. *Our GRPO run's responses keep getting longer and more hit `max_completion_length`. First checks?* First, examine
+3. *Our GRPO run's responses continue to get longer and more hit `max_completion_length`. First checks?* First, examine
    `loss_type`. A per-sequence average gives less weight to long completions. In the core, its update has cosine
    0.67 with the true gradient and increases truncation. Then examine `mask_truncated_completions` and a soft
    overlong penalty. Also examine if the reward charges anything for length.
-4. *We turned on thinking for our assistant at the same QPS. What happens to the fleet?* Concurrency scales with
+4. *We turned on thinking for our assistant at the same QPS. What occurs to the fleet?* Concurrency scales with
    output length, and KV per session scales with average context. Thus memory binds. In the capacity primer's
    example, 10× output needed 18× the GPUs for memory. The numbers are 5.12 against 0.28 at the SLO's TPOT, 2.75
    against 0.15 at the step the fleet runs at. That is 3 H100s instead of 1. Also, a tight ITL SLO caps the batch
    before HBM does. Be careful when you calculate the fleet at the SLO's TPOT to compare SLOs. That method makes the looser
    SLO seem to cost more. TTFT does not change, but the time to the first answer token changes.
-5. *Users get empty answers from the thinking model. Why, and the fix?* `max_tokens` counts reasoning. Some
+5. *Users get empty answers from the thinking model. Why, and the solution?* `max_tokens` counts reasoning. Some
    requests still think at the cap. They return `finish_reason="length"` with empty content (17.7% at a 4K cap in
    §7's model). Increase `max_tokens`/`max_model_len` for the tail. Enforce cost with `thinking_token_budget` or a
    two-call budget.
@@ -1089,9 +1089,9 @@ correct answer."
 | Overlong shaping | a mask on truncated completions and a soft penalty near the length cap (DAPO) |
 | Dr. GRPO | GRPO with a constant loss normaliser and no division by the std |
 | Rollout | the generation of completions for training, with an inference engine |
-| Reward hacking | the policy maximises the reward in a way that the designer did not intend |
+| Reward hacking | the policy makes the reward as large as possible in a way that the designer did not intend |
 | Over-optimisation | the proxy reward increases while the true objective decreases, as the policy moves away |
-| Thinking model | a model that emits a reasoning block before its answer, trained (or distilled) to do so |
+| Thinking model | a model that generates a reasoning block before its answer, trained (or distilled) to do so |
 | Rejection-sampling SFT | fine-tuning on the model's own samples that passed a check |
 | Distillation (of traces) | SFT of a smaller model on a stronger model's outputs |
 | Thinking budget | a cap on reasoning tokens. After the cap, the model must answer |
@@ -1189,7 +1189,7 @@ them again against the versions that you pin.
 - **DeepSeek-R1:**
   - R1-Zero AIME 2024 from 15.6% to 71.0% (86.7% majority),
   - the four-stage recipe, and the ~600k + ~200k sample counts,
-  - 671B total / 37B activated,
+  - 671B total / 37B active parameters,
   - the distill results (Qwen-1.5B 28.9, and Qwen-32B 72.6 against RL-on-32B-base 47.0),
   - rule-based rewards only,
   - PRM and MCTS listed as unsuccessful,
