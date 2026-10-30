@@ -787,13 +787,13 @@ largest batch that meets an **ITL of 10 ms** (100 tokens/s per user) and fits in
 | L4 on demand, bf16 — misses the SLO | 20 (HBM-bound) | 67.9 ms | 294 | 14.7 | $0.660 | $1.10 |
 
 ```mermaid
-flowchart TB
-  SLO(["ITL SLO: 10 ms, 100 tokens/s per user"]) --> B["best_batch_under_itl()<br/>the largest batch that meets the ITL and fits in HBM<br/>68 (bf16), 193 (FP8)"]
-  B --> T["decode(): tokens/s<br/>6,847 (bf16), 19,345 (FP8)"]
-  P["$/GPU-hr<br/>H100 on demand ~$11<br/>Spot ~$3.7 (verify)"] --> C
-  T --> C["cost_per_million_tokens()<br/>$/GPU-hr × GPUs ÷ (tokens/s × 3600 × utilisation) × 10⁶"]
-  U["utilisation()<br/>mean load ÷ peak: 60%"] --> C
-  C --> R["$/M output tokens, H100 on demand<br/>bf16: $0.446 at 100%, $0.744 at 60%<br/>FP8: $0.158 at 100%, $0.263 at 60%"]
+flowchart LR
+  SLO(["ITL SLO<br/>10 ms"]) --> B["best_batch_under_itl()<br/>batch"]
+  B --> T["decode()<br/>tokens/s"]
+  P["$/GPU-hr"] --> C
+  T --> C["cost_per_million_tokens()"]
+  U["utilisation()"] --> C
+  C --> R["$/M output tokens"]
 ```
 
 *The ITL SLO and the HBM capacity set the batch, and the decode step sets the tokens per second. The price per GPU-hour and the utilisation then set the cost of a token (§8.1 and §8.2).*

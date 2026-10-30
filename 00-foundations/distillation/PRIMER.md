@@ -359,23 +359,29 @@ TRL's `GKDTrainer` minimises $\mathrm{JSD}(\beta)$ and mixes the data sources pe
 `onpolicy.gkd_train()` has the same loop.
 
 ```mermaid
-flowchart TB
-  P([prompts]) --> C{"λ coin flip, per batch"}
-  C -->|"with probability λ"| S["Student samples a continuation (on-policy)"]
-  C -->|"otherwise, seq_kd=True"| T["Teacher generates"]
-  C -->|"otherwise, seq_kd=False"| D[("the completion from the dataset")]
-  S --> X["the text of the batch"]
+flowchart LR
+  P([prompts]) --> C{"λ coin flip,<br/>per batch"}
+  C -->|"probability λ"| S["Student samples<br/>on-policy"]
+  C -->|"seq_kd=True"| T["Teacher<br/>generates"]
+  C -->|"seq_kd=False"| D[("completion<br/>from the dataset")]
+  S --> X["text of<br/>the batch"]
   T --> X
   D --> X
-  X --> TS["Teacher: its full next-token distribution at every position"]
-  X --> SS["Student: its distribution at the same positions"]
-  TS --> J["JSD(β)<br/>β = 0: forward KL<br/>β = 1: reverse KL"]
-  SS --> J
-  J -->|"gradient on the student's logits"| U[["update the student"]]
-  U -.->|"next batch"| C
 ```
 
-*The GKD loop of TRL's `GKDTrainer`, the same loop as `onpolicy.gkd_train()`. A coin flip with probability λ selects the source of each batch. Then the teacher gives its full next-token distribution at every position of that text, and the student minimises JSD(β) there. At β = 1, the per-token reward of the policy-gradient view gives the same gradient in expectation (`onpolicy.token_pg_identity()`).*
+*The GKD loop of TRL's `GKDTrainer`, the same loop as `onpolicy.gkd_train()`, part 1. A coin flip with probability λ selects the source of each batch.*
+
+```mermaid
+flowchart LR
+  X["text of<br/>the batch"] --> TS["Teacher:<br/>full next-token<br/>distribution"]
+  X --> SS["Student:<br/>its distribution"]
+  TS --> J["JSD(β)<br/>β = 0: forward KL<br/>β = 1: reverse KL"]
+  SS --> J
+  J -->|"gradient"| U[["update<br/>the student"]]
+  U -.->|"next batch"| C{"λ coin flip,<br/>per batch"}
+```
+
+*Part 2 of the GKD loop. The teacher gives its full next-token distribution at every position of that text, and the student minimises JSD(β) there. At β = 1, the per-token reward of the policy-gradient view gives the same gradient in expectation (`onpolicy.token_pg_identity()`).*
 
 **Exposure bias removed.** Continue the training of the §3 KD student with GKD at λ = 1 for 300 steps (notebook
 02):
@@ -499,15 +505,15 @@ The toy of the core uses the ThinkTask formula of rlcore. The model thinks $L$ t
 answer is correct with probability $1 - e_0 \cdot (1 - q)^L$ ($e_0 = 0.8,\; q = 0.1$, at most 32 tokens).
 
 ```mermaid
-flowchart TB
-  T["Teacher: a thinking policy from RL (reasoning.reinforce, 16,000 rollouts)"] -->|"1,000 traces: the thinking length L, correct or not"| F{"the filter (reasoning.distil)"}
-  F -->|"keep all, the correct only, or the correct with L ≤ 16 or 12"| M["LengthPolicy.fit(): the stop rule, the fraction of traces that stopped at each length, among the traces that reached it"]
-  M --> S["Student: the procedure and the thinking length<br/>of the kept traces"]
-  S --> W["the serving workload: decode-heavy, heavy-tailed"]
-  S --> K["its accuracy comes from its own knowledge q"]
+flowchart LR
+  T["Teacher<br/>RL policy<br/>16,000 rollouts"] -->|"1,000 traces"| F{"filter"}
+  F -->|"kept traces"| M["LengthPolicy<br/>.fit()<br/>the stop rule"]
+  M --> S["Student<br/>procedure and<br/>thinking length"]
+  S --> W["serving workload<br/>decode-heavy<br/>heavy-tailed"]
+  S --> K["accuracy from<br/>its own<br/>knowledge q"]
 ```
 
-*The trace pipeline of §5. The teacher's traces go through a filter, and `LengthPolicy.fit()` reads the stop rule from the lengths that stay. The student copies that rule, that is the procedure and the thinking length, but its accuracy comes from its own knowledge $q$.*
+*The trace pipeline of §5. The teacher's traces go through a filter (`reasoning.distil()`), and `LengthPolicy.fit()` reads the stop rule from the lengths that stay. The student copies that rule, that is the procedure and the thinking length, but its accuracy comes from its own knowledge $q$.*
 
 A policy is a rule that decides when to stop. SFT on traces is maximum likelihood, and it has a closed form for this
 rule. At each length, the closed form is the fraction of traces that stopped at that length, among the traces that

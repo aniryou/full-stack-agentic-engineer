@@ -432,12 +432,12 @@ The ladder is now standard: SFT, then RL with verifiable rewards (the GRPO linea
 **The pattern that wins: routing, not replacement.** A closed frontier model plans and does the new, high-stakes reasoning. Mid-size open models do the high-volume, private, latency-sensitive 80% (extraction, classification, code review, triage, sub-agent tasks). Small open models run always-on agents at the edge. NVIDIA's own reference architecture describes exactly this orchestrator/specialist split. In it, Nemotron 3 Ultra or GPT-5.6 is the orchestrator, and Nemotron 3.5 Lightning does the execution.
 
 ```mermaid
-flowchart TB
-  W(["requests"]) --> P{"route by the kind of task"}
-  P -->|"the new, high-stakes reasoning"| C["Closed frontier model: the orchestrator, which plans"]
-  P -->|"the high-volume, private, latency-sensitive 80%"| M["Mid-size open models: extraction, classification, code review, triage, sub-agent tasks"]
-  P -->|"always-on agents at the edge"| S["Small open models"]
-  C -.->|"the plan, then execution by the specialists"| M
+flowchart LR
+  W(["requests"]) --> P{"route by the<br/>kind of task"}
+  P -->|"high-stakes reasoning"| C["Closed frontier model<br/>orchestrator"]
+  P -->|"high-volume 80%"| M["Mid-size<br/>open models"]
+  P -->|"edge agents"| S["Small<br/>open models"]
+  C -.->|"the plan"| M
 ```
 
 *The pattern of §9: routing, not replacement. A closed frontier model plans and does the new, high-stakes reasoning. Mid-size open models do the high-volume, private, latency-sensitive work, and small open models run the always-on agents at the edge.*

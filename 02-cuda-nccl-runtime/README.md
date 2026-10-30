@@ -56,7 +56,7 @@ python3 -m pip install -r requirements.txt && python3 -m pytest -q    # 130 pass
 python3 -m gpurt.dist.bench --backend pipes --nranks 2 -e 4M          # a real ring all-reduce, no GPU
 ```
 
-You can also open any notebook in Colab through its link in the "Run in Colab" section. Its first cell clones the repo and installs the lab.
+You can also open any notebook in Colab through its link in the "Run in Colab" section. The first cell of the notebook clones the repo and installs the lab.
 
 ## How it fits
 
