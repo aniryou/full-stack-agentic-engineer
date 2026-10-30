@@ -53,9 +53,9 @@ approximate. They come from the curriculum of the repository ([`CURRICULUM.md`](
 
 | Path | What it is | Tier |
 |---|---|---|
-| [`PRIMER.md`](roofline-and-fabric/PRIMER.md) | It has ten sections. The first four are spec-sheet literacy, the roofline model, LLM inference on the roofline (prefill against decode, KV reads, quantization, MoE) and the memory hierarchy. Then come fabrics in numbers (α-β, the cost of a tensor-parallel all-reduce, rails and bisection, GPUDirect, `nvidia-smi topo -m`). After them come storage and cold start, reliability at scale, the cost of a token, the September 2026 accelerator landscape and how to get hardware. Then the primer gives a walkthrough for a design review, and drills. Every computed number comes from `roofline-core`. | read |
+| [`PRIMER.md`](roofline-and-fabric/PRIMER.md) | It has ten sections. The first four are spec-sheet literacy, the roofline model, LLM inference on the roofline and the memory hierarchy. The third section looks at prefill against decode, KV reads, quantization and MoE. Then come fabrics in numbers (α-β, the cost of a tensor-parallel all-reduce, rails and bisection, GPUDirect, `nvidia-smi topo -m`). After them come storage and cold start, reliability at scale, the cost of a token, the September 2026 accelerator landscape and how to get hardware. Then the primer gives a walkthrough for a design review, and drills. Every computed number comes from `roofline-core`. | read |
 | [`roofline-core/`](roofline-and-fabric/roofline-core/README.md) | It is the minimal implementation, in the package `roofline`. It uses only the standard library. Its modules are `specs`, `roofline`, `llm`, `fabric`, `storage`, `reliability` and `cost`. It also has four fill-in notebooks. They **predict** the performance that you can expect from the hardware. | T0 |
-| [`gpu-bench-lab/`](roofline-and-fabric/gpu-bench-lab/README.md) | Its motto is "measure the machine you have". The package is `gpubench`. A numpy backend measures the roofline, memory bandwidth and disk throughput of your own CPU (T0). On one GPU, a PyTorch backend measures GEMM by dtype, HBM bandwidth, pinned against pageable copies and how fast the weights load (T1). On several GPUs, it measures the P2P bandwidth matrix (T2). The lab has `nvidia-smi` topology and inventory parsers, with bundled sample output. It has deploys for any GPU box (Docker, Colab, Kaggle, rented GPUs) and for Google Cloud. For Google Cloud, Terraform makes one Spot L4 VM that runs the suite, uploads the report to a bucket and then stops (T3). Four notebooks **measure** what the core predicts. | T0 to T3 |
+| [`gpu-bench-lab/`](roofline-and-fabric/gpu-bench-lab/README.md) | Its motto is "measure the machine you have". The package is `gpubench`. A numpy backend measures the roofline, memory bandwidth and disk throughput of your own CPU (T0). On one GPU, a PyTorch backend measures GEMM by dtype, HBM bandwidth, pinned against pageable copies and how fast the weights load (T1). On several GPUs, the PyTorch backend measures the P2P bandwidth matrix (T2). The lab has `nvidia-smi` topology and inventory parsers, with bundled sample output. It has deploys for any GPU box (Docker, Colab, Kaggle, rented GPUs) and for Google Cloud. For Google Cloud, Terraform makes one Spot L4 VM that runs the suite, uploads the report to a bucket and then stops (T3). Four notebooks **measure** what the core predicts. | T0 to T3 |
 
 Do the topic one section at a time. For each section, read, predict and then measure. Each section of the primer
 goes with one core notebook and one lab notebook:
@@ -83,14 +83,14 @@ at the end of this page.
 | **T0** | laptop, Colab CPU, CI | Read the primer. Do all four core notebooks. Run the numpy backend of the lab (the roofline and the disk throughput of your CPU). Parse the `nvidia-smi` sample output. | $0 |
 | **T1** | one GPU: Colab/Kaggle T4 (free), a rented 24 GB GPU, GCP L4 Spot | Measure a real GPU roofline by dtype, HBM bandwidth, pinned against pageable copies and how fast the weights load. | free to ~$0.7/hr |
 | **T2** | ≥ 2 GPUs: Kaggle 2×T4 (free, PCIe only), 2–8× A100/H100 SXM on RunPod/Vast/Lambda, GCP `a2-highgpu-2g` | Measure P2P bandwidth over PCIe against NVLink. Run `nvidia-smi topo -m` on a real machine. | ~$0–25 per session |
-| **T3** | Google Cloud, via the lab's Terraform | Run the suite on a Spot L4 VM with auto-stop. The VM uploads the report to a bucket. | pay per use (~$0.1–0.3/hr on Spot) |
+| **T3** | Google Cloud, through the lab's Terraform | Run the suite on a Spot L4 VM with auto-stop. The VM uploads the report to a bucket. | pay per use (~$0.1–0.3/hr on Spot) |
 
 ## How it fits
 
 **Needed first:** [`00-foundations/gpu-capacity-planning`](../00-foundations/gpu-capacity-planning/PRIMER.md) (the
 calculation of capacity, TTFT/TPOT budgets), and the topics `gpu-primer/` and `gpu-deployment/` of this layer. The
-[spiral of the curriculum](../CURRICULUM.md#31-why-this-order) goes to the concepts of layer 04 before this layer, and
-it does this intentionally. The order is 00, 04, 01, 02, and then 04 again with a GPU. When you know the step loop of
+[spiral of the curriculum](../CURRICULUM.md#31-why-this-order) intentionally goes to the concepts of layer 04 before
+this layer. The order is 00, 04, 01, 02, and then 04 again with a GPU. When you know the step loop of
 the engine, each hardware number has a use. The roofline itself needs only 00.
 
 **Leads to** three layers:

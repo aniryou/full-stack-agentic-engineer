@@ -16,7 +16,7 @@ Give short answers. If you cannot answer in one or two sentences, read the appli
 
 **A2.** Which phase of generation is compute-bound, and which phase is memory-bandwidth-bound? Why?
 
-**A3.** Why does an increase in batch size help decode throughput so much, but give prefill a relatively small gain?
+**A3.** Why does an increase in batch size help decode throughput so much, but give prefill only a small gain?
 
 **A4.** Weights are a fixed cost. What is the variable cost, and which quantities does it increase with?
 
@@ -156,7 +156,7 @@ Write two to four sentences for each scenario. Give your reasons, not only your 
 
 ### Part A
 
-**A1.** Scale-up connects GPUs *within* a tightly-coupled domain (one node or rack) with memory-like semantics. A GPU can read the HBM of another GPU at near-local speed. The technology is NVLink/NVSwitch.
+**A1.** Scale-up connects GPUs *in* a tightly-coupled domain (one node or rack) with memory-like semantics. A GPU can read the HBM of another GPU at near-local speed. The technology is NVLink/NVSwitch.
 
 Scale-out connects domains *across* the data centre with message-passing semantics. The technology is InfiniBand or RoCE. The bandwidth difference is approximately an order of magnitude. The latency difference is larger.
 
@@ -172,9 +172,9 @@ Decode is memory-bandwidth-bound. It must read the full weight set from HBM to m
 
 **A6.** Approximately 2 GB per billion parameters at BF16. Approximately 1 GB per billion at FP8.
 
-**A7.** PagedAttention solves memory fragmentation. It does not set aside one contiguous block for each request, with the size of the maximum possible length. In its place, it allocates KV cache in fixed-size blocks. The concept comes from virtual memory paging in an operating system. Typically, it gives 2–4× more concurrent requests from the same memory.
+**A7.** PagedAttention solves memory fragmentation. It does not set aside one contiguous block for each request, with the size of the maximum possible length. In its place, it allocates KV cache in fixed-size blocks. The concept comes from virtual memory paging in an operating system. Usually, it gives 2–4× more concurrent requests from the same memory.
 
-**A8.** The mechanism is a long prefill that occupies the GPU and blocks decode steps for other users. The first solution is chunked prefill. Chunked prefill divides the long prefill into pieces and interleaves them with decode. If that is not sufficient at scale, use prefill/decode disaggregation.
+**A8.** The mechanism is a long prefill that occupies the GPU and blocks decode steps for other users. The first solution is chunked prefill. Chunked prefill divides the long prefill into pieces and interleaves them with decode. If chunked prefill is not sufficient at scale, use prefill/decode disaggregation.
 
 **A9.** Decode is memory-bound. Thus the compute units have spare capacity. Speculative decoding uses that idle compute to verify several draft tokens in a single forward pass. It changes surplus FLOPs into lower latency.
 
@@ -227,7 +227,7 @@ Decode is memory-bandwidth-bound. It must read the full weight set from HBM to m
 
 (c) 152,000 ÷ 2,000 ≈ **76 concurrent requests**
 
-(d) FP8 KV decreases the per-token cost by half. Thus you get approximately **152 concurrent requests**. Note that this is a larger concurrency gain than most hardware upgrades give, and its price is one config flag.
+(d) FP8 KV decreases the per-token cost by half. Thus you get approximately **152 concurrent requests**. This concurrency gain is larger than the gain from most hardware upgrades. Its price is one config flag.
 
 **B4.**
 
@@ -259,7 +259,7 @@ The Hopper pair gives the same answer. NVLink 4 has 450 GB/s per direction, and 
 
 (d) Yes, with a large margin. The transfer uses less than 10% of the budget. These conditions can change the answer:
 
-- much longer contexts (KV increases linearly, thus a 64K-token prompt is 16× this)
+- much longer contexts: KV increases linearly, thus the KV cache of a 64K-token prompt is 16× the 1.34 GB of this request
 - a tighter TTFT SLO
 - a contended fabric
 - a transfer path that goes through the CPU in place of RDMA
@@ -272,7 +272,7 @@ The Hopper pair gives the same answer. NVLink 4 has 450 GB/s per direction, and 
 
 (c) **80% reduction**
 
-(d) Agent workloads have long, stable system prompts. These prompts contain tool definitions, instructions and retrieved context. They repeat across very large numbers of requests, and often across many turns of the same session. The shared prefix is a large fraction of the total input. Thus the cache hit rate is high, and the gain is near the theoretical maximum. Ordinary chat workloads share much less.
+(d) Agent workloads have long, stable system prompts. These prompts contain tool definitions, instructions and retrieved context. They repeat across large numbers of requests, and often across many turns of the same session. The shared prefix is a large fraction of the total input. Thus the cache hit rate is high, and the gain is near the theoretical maximum. Ordinary chat workloads share much less.
 
 **B8.**
 
@@ -280,7 +280,7 @@ The Hopper pair gives the same answer. NVLink 4 has 450 GB/s per direction, and 
 
 (b) 70% of that ≈ **29 trillion parameters**
 
-(c) 335 GB is approximately **1.6% of the rack's memory**. Do not think of the remainder as wasted spare capacity. It gives you very large KV cache pools. Thus you get high concurrency and long context. The economics of frontier-model serving actually come from these pools.
+(c) 335 GB is approximately **1.6% of the rack's memory**. Do not think of the remainder as wasted spare capacity. The remainder gives you large KV cache pools. Thus you get high concurrency and long context. The economics of frontier-model serving actually come from these pools.
 
 ---
 
@@ -290,15 +290,15 @@ The Hopper pair gives the same answer. NVLink 4 has 450 GB/s per direction, and 
 
 - continuous batching and paged attention (the mandatory baseline)
 - FP8 KV cache (approximately doubles concurrency)
-- chunked prefill (without it, 4,000-token prompts at 200 concurrency will cause a large increase in p95 TTFT)
+- chunked prefill: without it, 4,000-token prompts at 200 concurrency will cause a large increase in p95 TTFT
 
 Prefix caching is a strong fourth optimisation if there is a shared system prompt.
 
 **C2.** With TP=16, layer-level all-reduce operations must cross the scale-out fabric. That fabric gives each GPU approximately 9× less bandwidth per direction than NVLink (B5), and higher latency. Also, TP synchronises many times per token. Thus the throughput will collapse.
 
-In its place, use TP=8 within each node and PP=2 across the two nodes. Pipeline parallelism sends only boundary activations, and the fabric carries them easily.
+In its place, use TP=8 in each node and PP=2 across the two nodes. Pipeline parallelism sends only boundary activations, and the fabric carries them easily.
 
-**C3.** The cause is the cold start, and most of the cold start is the load of a very large checkpoint over the network. With twelve minutes, the autoscaler responds long after the traffic spike is over. Thus it does not operate as autoscaling at all. Solutions:
+**C3.** The cause is the cold start, and most of the cold start is the load of a large checkpoint over the network. With a start time of twelve minutes, the autoscaler responds long after the traffic spike is over. Thus it does not operate as autoscaling at all. Solutions:
 
 - Keep warm standby replicas, with a size that matches your expected burst.
 - Move checkpoints to fast local NVMe or a node-local cache, so that loads do not come from object storage.
@@ -311,23 +311,23 @@ Goodput (requests/sec that meet the SLO) shows this problem. A report of p95/p99
 **C5.** The key ratio is sustained utilisation. To be better than rental, ownership usually needs more than approximately 60–70% sustained utilisation. The buy case usually omits two costs:
 
 - Facilities: power delivery and a liquid cooling retrofit. These costs occur because current-generation racks are more than 40 kW, and Rubin-class systems have no air-cooled option.
-- The depreciation that comes from an annual architecture cadence. This depreciation occurs because hardware that you buy today competes with much better hardware within a year.
+- The depreciation that comes from an annual architecture cadence. This depreciation occurs because hardware that you buy today competes with much better hardware in a year or less.
 
 **C6.** Get the fundamentals first: continuous batching, paged attention, prefix caching, FP8 KV cache. These give the largest gains for almost every workload, and they need no topology changes. If you need more, the next step is same-node disaggregation across NVLink, because it has no KV transfer problem at all. Multi-node disaggregation adds a distributed KV transfer path, a control plane and the burden of pinned versions. It gives a return only at genuine scale.
 
 **C7.** 405B at FP8 = 405 GB of weights. 8×80 GB = 640 GB total. If you keep ~15% for overhead, approximately 545 GB is usable. Thus after the weights, you have approximately 140 GB for KV cache, which is workable.
 
-Configuration: **TP=8 within the single node**, fully inside the NVLink domain. A single replica needs no pipeline or data parallelism. To scale, add replicas (DP across nodes). Do not make TP wider.
+Configuration: **TP=8 in the single node**, fully inside the NVLink domain. A single replica needs no pipeline or data parallelism. To scale, add replicas (DP across nodes). Do not make TP wider.
 
 ---
 
 ## Self-assessment
 
-| Score | Reading |
+| Score | What it shows |
 |---|---|
 | Part A mostly correct | You have the vocabulary. Move to B. |
-| Part B correct within ~10% | You can size a deployment. This is the practical bar. |
-| B4 and B5 correct with reasoning | You understand *why* the architecture has its shape. |
+| Part B correct to ~10% | You can size a deployment. This is the practical bar. |
+| B4 and B5 correct with reasoning | You know *why* the architecture has its shape. |
 | Part C defensible | You can make deployment decisions. You do not only do the steps of a recipe. |
 
 If B3 or B4 gave you problems, read §2 and §3 again. Everything else in the primer comes from those two sections.

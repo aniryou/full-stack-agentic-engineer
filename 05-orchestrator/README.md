@@ -44,7 +44,7 @@ is a multi-GPU box that you rent for an hour. T3 is the Google Cloud deployment,
 
 | Path | What it is | Tier |
 |---|---|---|
-| [`PRIMER.md`](serving-orchestration/PRIMER.md) | The ten sections of the primer tell why a layer above the engine is necessary. They give routing signals and algorithms (power of two choices, bounded-load hashing, and the filters, then the scorers, then the picker of the endpoint picker). They explain flow control and priorities, and autoscaling (the exact HPA algorithm, which signal, cold start, scale to zero). They also explain prefill/decode disaggregation, KV cache beyond HBM, multi-model and LoRA routing, and wide-EP. Then they give the Kubernetes-native stack (InferencePool, llm-d Router, GKE Inference Gateway, Dynamo) and where to run it. The primer also has a design-review walkthrough, drills, a glossary, sources and a dated verify list. | read |
+| [`PRIMER.md`](serving-orchestration/PRIMER.md) | The ten sections of the primer tell why a layer above the engine is necessary. They give routing signals and algorithms (power of two choices, bounded-load hashing, and the filters, then the scorers, then the picker of the endpoint picker). They explain flow control and priorities, and these parts of autoscaling: the exact HPA algorithm, which signal, cold start and scale to zero. They also explain prefill/decode disaggregation, KV cache beyond HBM, multi-model and LoRA routing, and wide-EP. Then they give the Kubernetes-native stack (InferencePool, llm-d Router, GKE Inference Gateway, Dynamo) and where to run it. The primer also has a design-review walkthrough, drills, a glossary, sources and a dated verify list. | read |
 | [`orchestrator-core/`](serving-orchestration/orchestrator-core/) | This is the minimal implementation, package `fleetsim`. It is a discrete-event simulator of workloads, replicas with prefix caches, routers, flow control, the HPA, P/D and KV tiers. It uses the standard library only. It has five fill-in notebooks that **predict**. | T0 |
 | [`inference-gateway-lab/`](serving-orchestration/inference-gateway-lab/) | The detailed lab, package `igwlab`, has an async router in front of emulated or real vLLM backends. The router re-implements the decision logic of the endpoint picker. The lab also has the HPA recommender, ported from kube-controller-manager, and a shared-prefix agent benchmark. It has deploy paths for docker compose, kind with the llm-d Router, any GPU box and GKE Inference Gateway (Terraform). It has five notebooks that **run** these parts. | T0 to T3 |
 
@@ -83,7 +83,7 @@ every routing and caching decision in this layer.
 ## Caveats
 
 - Every number that the simulator prints is **simulated** (an engine model from spec-sheet arithmetic). The T0
-  latencies of the lab come from real HTTP requests to engines with emulated timing. Both compare designs. Neither
+  latencies of the lab come from real HTTP requests to engines with emulated times. Both compare designs. Neither
   is a GPU measurement.
 - Product versions, GKE details and prices are as of September 2026, and they have the tag `(verify)`. The
   [Verify list](serving-orchestration/PRIMER.md#verify-list) of the primer collects them.

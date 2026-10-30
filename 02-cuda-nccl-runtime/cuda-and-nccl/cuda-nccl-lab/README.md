@@ -10,8 +10,8 @@ After this lab, you can do these things:
 
 ## Start here
 
-1. Run `python3 -m pip install -r requirements.txt && python3 -m pytest -q`. 130 tests pass and 3 skip (they
-   need torch or numba-cuda). The run takes 15–30 s and uses only the simulator.
+1. Run `python3 -m pip install -r requirements.txt && python3 -m pytest -q`. 130 tests pass and 3 skip. Two of
+   the skipped tests need torch or numba-cuda, and one skips on every run. The run takes 15–30 s and uses only the simulator.
 2. Run `python3 -m gpurt.dist.bench --backend pipes --nranks 2 -e 4M`. This is a real ring all-reduce across two
    OS processes. It prints its result in the layout of nccl-tests, in about a second.
 3. Open [`notebooks/01_kernels_in_the_simulator.ipynb`](notebooks/01_kernels_in_the_simulator.ipynb). It runs real
