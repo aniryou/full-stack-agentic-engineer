@@ -213,7 +213,7 @@ def spec_allreduce_busbw_vs_size() -> dict:
              "label": f"k* = {k_nvls}: busbw {bus_nvls:.0f} GB/s"},
             {"kind": "point", "x": GIB, "y": _r(bus_ring, 3), "style": "accent", "anchor": "end", "dy": 16,
              "label": f"1 GiB: busbw {bus_ring:.0f} GB/s"},
-            {"kind": "point", "x": GIB, "y": _r(alg_ring, 3), "style": "muted", "anchor": "end", "dy": 16,
+            {"kind": "point", "x": GIB, "y": _r(alg_ring, 3), "style": "muted", "anchor": "end", "dy": -9,
              "label": f"algbw {alg_ring:.0f} GB/s"},
         ],
         "legend": "bottom-right",
@@ -236,10 +236,11 @@ def spec_ring_allreduce_regimes() -> dict:
     t_gib = C.model_time("all_reduce", "ring", GIB, P, ALPHA, BW) * 1e3
     return {
         "kind": "line",
-        # the alt text of the figure in PRIMER §5.5, which keeps its line
-        "title": ("Ring all-reduce time against message size on 8 H100s in the alpha-beta model: flat near the "
-                  "latency term below the 7.2 MB crossover, where the 512 KiB all-reduce of decode sits, and "
-                  "growing with the bandwidth term above it, where the 128 MiB all-reduce of prefill sits."),
+        # the alt text of this figure in PRIMER §5.5, which keeps its line (tests/test_figures.py compares them)
+        "title": (f"Ring all-reduce time against message size on {P} H100s in the alpha-beta model: flat near the "
+                  f"latency term below the {xover / 1e6:.1f} MB crossover, where the {_bytes_label(s_dec)} "
+                  f"all-reduce of decode sits, and growing with the bandwidth term above it, where the "
+                  f"{_bytes_label(s_pre)} all-reduce of prefill sits."),
         "height": 380,
         "x": {"label": "message size S (log scale)", "scale": "log", "min": SIZES[0], "max": SIZES[-1],
               "ticks": SIZE_TICKS, "tick_labels": [_bytes_label(s) for s in SIZE_TICKS]},

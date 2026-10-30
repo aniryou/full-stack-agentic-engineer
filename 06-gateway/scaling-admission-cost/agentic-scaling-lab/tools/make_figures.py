@@ -72,7 +72,7 @@ def spec_inflight_turns() -> dict:
         "series": [
             {"name": f"{base.turn_seconds:g}-second turn", "x": xs,
              "y": [_r(p["concurrency"]["average"]["inflight_turns"]) for p in fast], "style": "accent"},
-            {"name": "12-second turn", "x": xs,
+            {"name": f"{SLOW_TURN_S:g}-second turn", "x": xs,
              "y": [_r(p["concurrency"]["average"]["inflight_turns"]) for p in slow], "style": "violet"},
         ],
         "marks": [
@@ -122,7 +122,7 @@ def spec_cost_per_conversation() -> dict:
     }
 
 
-# --- §3.5: the price of a used burndown token on PT against the utilisation of the GSUs, per term, against PayGo ----
+# --- §3.5: the price per M burndown tokens on PT against the utilisation of the GSUs, per term, and PayGo ----------
 
 TERMS = {"1w": ("1 week", "muted"), "1m": ("1 month", "violet"), "3m": ("3 months", "yellow"), "1y": ("1 year", "accent")}
 

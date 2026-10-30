@@ -1,64 +1,71 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="480" viewBox="0 0 900 480" role="img" aria-label="The H100 roofline in dense bf16 on log-log axes: the memory-bound slope at 3.35 TB/s meets the 989 TFLOP/s ceiling at the ridge of 295 FLOP/B; the kernels of the table and the decode and prefill steps of section 3 sit at their intensities." style="color: #E4EAE7">
-  <title>The H100 roofline in dense bf16 on log-log axes: the memory-bound slope at 3.35 TB/s meets the 989 TFLOP/s ceiling at the ridge of 295 FLOP/B; the kernels of the table and the decode and prefill steps of section 3 sit at their intensities.</title>
-  <rect x="0" y="0" width="900" height="480" rx="8" fill="#161E1C"/>
-  <defs>
-    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
-    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
-  </defs>
-  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
-    <text x="24" y="32" font-weight="600">H100 SXM, dense bf16: attainable FLOP/s = min(peak, intensity × bandwidth)</text>
-    <line x1="90" y1="400" x2="850" y2="400" stroke="#E4EAE7" stroke-width="1"/>
-    <line x1="90" y1="60" x2="90" y2="400" stroke="#E4EAE7" stroke-width="1"/>
-    <line x1="90.0" y1="400" x2="90.0" y2="405" stroke="#E4EAE7" stroke-width="1"/>
-    <text x="90.0" y="420" text-anchor="middle" font-size="11" fill="#97A59F">0.1</text>
-    <line x1="242.0" y1="400" x2="242.0" y2="405" stroke="#E4EAE7" stroke-width="1"/>
-    <text x="242.0" y="420" text-anchor="middle" font-size="11" fill="#97A59F">1</text>
-    <line x1="394.0" y1="400" x2="394.0" y2="405" stroke="#E4EAE7" stroke-width="1"/>
-    <text x="394.0" y="420" text-anchor="middle" font-size="11" fill="#97A59F">10</text>
-    <line x1="546.0" y1="400" x2="546.0" y2="405" stroke="#E4EAE7" stroke-width="1"/>
-    <text x="546.0" y="420" text-anchor="middle" font-size="11" fill="#97A59F">100</text>
-    <line x1="698.0" y1="400" x2="698.0" y2="405" stroke="#E4EAE7" stroke-width="1"/>
-    <text x="698.0" y="420" text-anchor="middle" font-size="11" fill="#97A59F">1,000</text>
-    <line x1="850.0" y1="400" x2="850.0" y2="405" stroke="#E4EAE7" stroke-width="1"/>
-    <text x="850.0" y="420" text-anchor="middle" font-size="11" fill="#97A59F">10,000</text>
-    <line x1="85" y1="342.33497464227844" x2="90" y2="342.33497464227844" stroke="#E4EAE7" stroke-width="1"/>
-    <text x="81" y="346.3" text-anchor="end" font-size="11" fill="#97A59F">1</text>
-    <line x1="85" y1="259.83497464227844" x2="90" y2="259.83497464227844" stroke="#E4EAE7" stroke-width="1"/>
-    <text x="81" y="263.8" text-anchor="end" font-size="11" fill="#97A59F">10</text>
-    <line x1="85" y1="177.33497464227844" x2="90" y2="177.33497464227844" stroke="#E4EAE7" stroke-width="1"/>
-    <text x="81" y="181.3" text-anchor="end" font-size="11" fill="#97A59F">100</text>
-    <line x1="85" y1="94.83497464227844" x2="90" y2="94.83497464227844" stroke="#E4EAE7" stroke-width="1"/>
-    <text x="81" y="98.8" text-anchor="end" font-size="11" fill="#97A59F">1,000</text>
-    <text x="470.0" y="444" text-anchor="middle" font-size="11.5" fill="#97A59F">arithmetic intensity I (FLOP per byte, log scale)</text>
-    <text x="26" y="235.0" text-anchor="middle" font-size="11.5" fill="#97A59F" transform="rotate(-90 26 235.0)">attainable TFLOP/s (log scale)</text>
-    <path d="M90.0 381.5 L617.5 95.2 L850 95.2" fill="none" stroke="#4CC5B7" stroke-width="2"/>
-    <line x1="617.5" y1="95.2" x2="617.5" y2="400" stroke="#97A59F" stroke-width="1.2" stroke-dasharray="4 3"/>
-    <text x="624.5" y="390" font-size="11.5" fill="#97A59F">ridge: 295 FLOP/B</text>
-    <text x="608.5" y="83.2" text-anchor="end" font-size="11.5" fill="#7ADACF">peak: 989 TFLOP/s</text>
-    <text x="410" y="268" font-size="11.5" fill="#7ADACF">slope = bandwidth: 3.35 TB/s</text>
-    <text x="250" y="125" text-anchor="middle" font-size="12.5" font-weight="600" fill="#97A59F">memory-bound</text>
-    <text x="250" y="142" text-anchor="middle" font-size="11" fill="#97A59F">move fewer bytes</text>
-    <text x="735" y="250" text-anchor="middle" font-size="12.5" font-weight="600" fill="#97A59F">compute-bound</text>
-    <text x="735" y="267" text-anchor="middle" font-size="11" fill="#97A59F">buy FLOPs, narrower precision</text>
-    <circle cx="123.7" cy="363.1" r="4.5" fill="#E4EAE7"/>
-    <text x="133.7" y="383.5" font-size="11.5" fill="#E4EAE7">vector add z = x + y: 0.17</text>
-    <circle cx="150.5" cy="348.7" r="4.5" fill="#E4EAE7"/>
-    <text x="160.5" y="362.0" font-size="11.5" fill="#E4EAE7">sum of n fp32: 0.25</text>
-    <circle cx="242.0" cy="299.0" r="4.5" fill="#E4EAE7"/>
-    <text x="233.0" y="291.0" text-anchor="end" font-size="11.5" fill="#E4EAE7">GEMV, 1 token: 1.0</text>
-    <circle cx="248.3" cy="295.6" r="4.5" fill="#4CC5B7"/>
-    <text x="236.3" y="272.6" text-anchor="end" font-size="11.5" fill="#7ADACF">decode, batch 1: 1.1</text>
-    <circle cx="470.8" cy="174.8" r="4.5" fill="#4CC5B7"/>
-    <text x="480.8" y="190.8" font-size="11.5" fill="#7ADACF">decode, batch 64: 32.0</text>
-    <circle cx="514.4" cy="151.1" r="4.5" fill="#E4EAE7"/>
-    <text x="505.4" y="144.1" text-anchor="end" font-size="11.5" fill="#E4EAE7">GEMM 64 × 4096 × 4096: 62</text>
-    <circle cx="718.5" cy="95.2" r="4.5" fill="#E4EAE7"/>
-    <text x="718.5" y="119.2" text-anchor="middle" font-size="11.5" fill="#E4EAE7">GEMM 4096³: 1,365</text>
-    <circle cx="741.8" cy="95.2" r="4.5" fill="#4CC5B7"/>
-    <text x="741.8" y="81.2" text-anchor="middle" font-size="11.5" fill="#7ADACF">prefill, 2,048 tokens: 1,941</text>
-    <circle cx="30.0" cy="462.0" r="4.5" fill="#E4EAE7"/>
-    <text x="40" y="466" font-size="11" fill="#97A59F">kernels of the table above (compulsory traffic)</text>
-    <circle cx="330.0" cy="462.0" r="4.5" fill="#4CC5B7"/>
-    <text x="340" y="466" font-size="11" fill="#7ADACF">LLM steps of §3 (Llama-3.1-8B, 2K context)</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="440" viewBox="0 0 960 440" role="img" aria-label="The roofline of the H100 and the L4 in dense bf16 on log axes: attainable TFLOP/s against arithmetic intensity, with the kernels of the table and the decode and prefill steps of section 3 on the H100." style="color: #E4EAE7">
+  <title>The roofline of the H100 and the L4 in dense bf16 on log axes: attainable TFLOP/s against arithmetic intensity, with the kernels of the table and the decode and prefill steps of section 3 on the H100.</title>
+  <desc>{"height":440,"kind":"line","legend":"bottom-right","marks":[{"anchor":"start","dy":17,"kind":"point","label":"vector add: 0.17","style":"plain","x":0.166667,"y":0.558333},{"anchor":"start","dy":4,"kind":"point","label":"sum of n fp32: 0.25","style":"plain","x":0.25,"y":0.8375},{"anchor":"end","dy":-8,"kind":"point","label":"GEMV, 1 token: 1.0","style":"plain","x":0.999512,"y":3.34837},{"anchor":"end","dy":-24,"kind":"point","label":"GEMM 64 × 4096 × 4096: 62","style":"plain","x":62.0606,"y":207.903},{"anchor":"middle","dy":20,"kind":"point","label":"GEMM 4096³: 1,365","style":"plain","x":1365.33,"y":989.4},{"anchor":"start","dy":17,"kind":"point","label":"decode, batch 1: 1.1","style":"accent","x":1.05274,"y":3.52666},{"anchor":"end","dy":-8,"kind":"point","label":"decode, batch 64: 32.0","style":"accent","x":31.9693,"y":107.097},{"anchor":"middle","dy":-10,"kind":"point","label":"prefill, 2,048 tokens: 1,941","style":"accent","x":1941.11,"y":989.4},{"anchor":"end","kind":"vline","label":"H100 ridge: 295 FLOP/B","style":"warm","x":295.343},{"anchor":"start","kind":"text","style":"muted","text":"L4 ridge: 403 FLOP/B","x":451.733,"y":60.5},{"anchor":"middle","kind":"text","style":"muted","text":"memory-bound","x":4.0,"y":1500.0},{"anchor":"middle","kind":"text","style":"muted","text":"compute-bound","x":3000.0,"y":3500.0}],"note":"computed by roofline.roofline.attainable, roofline.llm.decode and prefill (roofline-core)","series":[{"name":"H100: 989 TFLOP/s, 3.35 TB/s","style":"accent","x":[0.1,1.0,10.0,100.0,295.343,1000.0,10000.0],"y":[0.335,3.35,33.5,335.0,989.399,989.4,989.4]},{"dash":true,"name":"L4: 121 TFLOP/s, 0.3 TB/s","style":"muted","x":[0.1,1.0,10.0,100.0,403.333,1000.0,10000.0],"y":[0.03,0.3,3.0,30.0,121.0,121.0,121.0]}],"title":"The roofline of the H100 and the L4 in dense bf16 on log axes: attainable TFLOP/s against arithmetic intensity, with the kernels of the table and the decode and prefill steps of section 3 on the H100.","width":960,"x":{"label":"arithmetic intensity (FLOP/byte)","max":10000,"min":0.1,"scale":"log","ticks":[0.1,1,10,100,1000,10000]},"y":{"label":"attainable TFLOP/s","max":10000,"min":0.01,"scale":"log","ticks":[0.01,0.1,1,10,100,1000,10000]}}</desc>
+  <rect x="0" y="0" width="960" height="440" rx="8" fill="#161E1C"/>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12" fill="currentColor">
+    <g stroke="#27322E" stroke-width="1">
+      <line x1="66.0" y1="370.0" x2="938.0" y2="370.0"/>
+      <line x1="66.0" y1="312.0" x2="938.0" y2="312.0"/>
+      <line x1="66.0" y1="254.0" x2="938.0" y2="254.0"/>
+      <line x1="66.0" y1="196.0" x2="938.0" y2="196.0"/>
+      <line x1="66.0" y1="138.0" x2="938.0" y2="138.0"/>
+      <line x1="66.0" y1="80.0" x2="938.0" y2="80.0"/>
+      <line x1="66.0" y1="22.0" x2="938.0" y2="22.0"/>
+    </g>
+    <g stroke="#55635E" stroke-width="1.2">
+      <line x1="66.0" y1="370.0" x2="938.0" y2="370.0"/>
+      <line x1="66.0" y1="370.0" x2="66.0" y2="22.0"/>
+    </g>
+    <g font-size="11" fill="#97A59F">
+      <text x="58.0" y="373.5" text-anchor="end">0.01</text>
+      <text x="58.0" y="315.5" text-anchor="end">0.1</text>
+      <text x="58.0" y="257.5" text-anchor="end">1</text>
+      <text x="58.0" y="199.5" text-anchor="end">10</text>
+      <text x="58.0" y="141.5" text-anchor="end">100</text>
+      <text x="58.0" y="83.5" text-anchor="end">1,000</text>
+      <text x="58.0" y="25.5" text-anchor="end">10,000</text>
+      <text x="66.0" y="386.0" text-anchor="middle">0.1</text>
+      <text x="240.4" y="386.0" text-anchor="middle">1</text>
+      <text x="414.8" y="386.0" text-anchor="middle">10</text>
+      <text x="589.2" y="386.0" text-anchor="middle">100</text>
+      <text x="763.6" y="386.0" text-anchor="middle">1,000</text>
+      <text x="938.0" y="386.0" text-anchor="middle">10,000</text>
+    </g>
+    <text x="502.0" y="412.0" text-anchor="middle" fill="#97A59F">arithmetic intensity (FLOP/byte)</text>
+    <text x="16" y="196.0" text-anchor="middle" fill="#97A59F" transform="rotate(-90 16 196.0)">attainable TFLOP/s</text>
+    <clipPath id="plot"><rect x="65.0" y="16.0" width="874.0" height="355.0"/></clipPath>
+    <g clip-path="url(#plot)">
+      <path d="M66.0 281.5 L240.4 223.5 L414.8 165.5 L589.2 107.5 L671.2 80.3 L763.6 80.3 L938.0 80.3" fill="none" stroke="#4CC5B7" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="M66.0 342.3 L240.4 284.3 L414.8 226.3 L589.2 168.3 L694.8 133.2 L763.6 133.2 L938.0 133.2" fill="none" stroke="#97A59F" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="6 4"/>
+    </g>
+    <circle cx="104.7" cy="268.7" r="4.5" fill="#E4EAE7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="113.7" y="285.7" text-anchor="start" font-size="11" fill="#E4EAE7">vector add: 0.17</text>
+    <circle cx="135.4" cy="258.5" r="4.5" fill="#E4EAE7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="144.4" y="262.5" text-anchor="start" font-size="11" fill="#E4EAE7">sum of n fp32: 0.25</text>
+    <circle cx="240.4" cy="223.6" r="4.5" fill="#E4EAE7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="231.4" y="215.6" text-anchor="end" font-size="11" fill="#E4EAE7">GEMV, 1 token: 1.0</text>
+    <circle cx="553.1" cy="119.6" r="4.5" fill="#E4EAE7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="544.1" y="95.6" text-anchor="end" font-size="11" fill="#E4EAE7">GEMM 64 × 4096 × 4096: 62</text>
+    <circle cx="787.2" cy="80.3" r="4.5" fill="#E4EAE7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="787.2" y="100.3" text-anchor="middle" font-size="11" fill="#E4EAE7">GEMM 4096³: 1,365</text>
+    <circle cx="244.3" cy="222.3" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="253.3" y="239.3" text-anchor="start" font-size="11" fill="#4CC5B7">decode, batch 1: 1.1</text>
+    <circle cx="502.8" cy="136.3" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="493.8" y="128.3" text-anchor="end" font-size="11" fill="#4CC5B7">decode, batch 64: 32.0</text>
+    <circle cx="813.8" cy="80.3" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="813.8" y="70.3" text-anchor="middle" font-size="11" fill="#4CC5B7">prefill, 2,048 tokens: 1,941</text>
+    <line x1="671.2" y1="22.0" x2="671.2" y2="370.0" stroke="#E39A62" stroke-width="1.2" stroke-dasharray="4 3"/>
+    <text x="666.2" y="34.0" text-anchor="end" font-size="11" fill="#E39A62">H100 ridge: 295 FLOP/B</text>
+    <text x="703.4" y="150.7" text-anchor="start" font-size="11" fill="#97A59F">L4 ridge: 403 FLOP/B</text>
+    <text x="345.4" y="69.8" text-anchor="middle" font-size="11" fill="#97A59F">memory-bound</text>
+    <text x="846.8" y="48.4" text-anchor="middle" font-size="11" fill="#97A59F">compute-bound</text>
+    <g font-size="11.5">
+      <rect x="705.7" y="318.0" width="224.3" height="44.0" rx="5" fill="#161E1C" fill-opacity="0.9" stroke="#27322E"/>
+      <line x1="715.7" y1="331.0" x2="733.7" y2="331.0" stroke="#4CC5B7" stroke-width="2"/>
+      <text x="739.7" y="335.0" fill="currentColor">H100: 989 TFLOP/s, 3.35 TB/s</text>
+      <line x1="715.7" y1="348.0" x2="733.7" y2="348.0" stroke="#97A59F" stroke-width="2" stroke-dasharray="6 4"/>
+      <text x="739.7" y="352.0" fill="currentColor">L4: 121 TFLOP/s, 0.3 TB/s</text>
+    </g>
+    <text x="10" y="433.0" font-size="10.5" fill="#97A59F" font-family="JetBrains Mono, monospace">computed by roofline.roofline.attainable, roofline.llm.decode and prefill (roofline-core)</text>
   </g>
 </svg>

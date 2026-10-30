@@ -15,7 +15,6 @@ Standard library only.
 from __future__ import annotations
 
 import importlib.util
-import math
 import pathlib
 import sys
 
@@ -67,7 +66,7 @@ def spec_roofline() -> dict:
         (rl.elementwise(n, 2), "vector add: {:.2f}", "start", 17),
         (rl.reduction(n, 4), "sum of n fp32: {:.2f}", "start", 4),
         (rl.gemm(1, 4096, 4096), "GEMV, 1 token: {:.1f}", "end", -8),
-        (rl.gemm(64, 4096, 4096), "GEMM 64 × 4096 × 4096: {:.0f}", "end", -8),
+        (rl.gemm(64, 4096, 4096), "GEMM 64 × 4096 × 4096: {:.0f}", "end", -24),
         (rl.gemm(4096, 4096, 4096), "GEMM 4096³: {:,.0f}", "middle", 20),
     ]
     marks = []
@@ -76,7 +75,7 @@ def spec_roofline() -> dict:
                       "label": fmt.format(k.intensity), "style": "plain", "anchor": anchor, "dy": dy})
     steps = [  # (step, label, anchor, dy) -- §3.2 and two rows of the §3.3 table (2K context)
         (llm.decode(M8, H100, 1, 2048), "decode, batch 1: {:.1f}", "start", 17),
-        (llm.decode(M8, H100, 64, 2048), "decode, batch 64: {:.1f}", "start", 17),
+        (llm.decode(M8, H100, 64, 2048), "decode, batch 64: {:.1f}", "end", -8),
         (llm.prefill(M8, H100, 2048), "prefill, 2,048 tokens: {:,.0f}", "middle", -10),
     ]
     for s, fmt, anchor, dy in steps:
@@ -159,7 +158,7 @@ def spec_allreduce() -> dict:
     """An all-reduce over 8 GPUs against its size: a ring and recursive doubling on NVLink 4, a ring on a NIC."""
     nv, nic = fabric.LINKS["nvlink4"], fabric.LINKS["ib-ndr"]
     p = 8
-    xs = [sig(10 ** (3 + i / 4)) for i in range(25)] + [GIB]          # 1 KB to 1 GB, four points a decade, 1 GiB
+    xs = [sig(10 ** (4 + i / 4)) for i in range(21)] + [GIB]          # 10 KB to 1 GB, four points a decade, 1 GiB
     xs = sorted(set(xs))
     ser = [
         ("NVLink 4, ring", [sig(fabric.ring_allreduce_time(n, p, nv) * 1e3) for n in xs], "accent", False),
@@ -172,9 +171,9 @@ def spec_allreduce() -> dict:
     dec, pre = fabric.tp_allreduce_bytes(M70, 1), fabric.tp_allreduce_bytes(M70, 4096)
     marks = [
         {"kind": "point", "x": sig(x_nv), "y": sig(fabric.ring_allreduce_time(x_nv, p, nv) * 1e3),
-         "label": f"terms meet: {x_nv / 1e6:.1f} MB", "style": "accent", "anchor": "start", "dy": 16},
+         "label": f"crossover: {x_nv / 1e6:.1f} MB", "style": "accent", "anchor": "start", "dy": 16},
         {"kind": "point", "x": sig(x_nic), "y": sig(fabric.ring_allreduce_time(x_nic, p, nic) * 1e3),
-         "label": f"terms meet: {x_nic / 1e6:.1f} MB", "style": "warm", "anchor": "end", "dy": -9},
+         "label": f"crossover: {x_nic / 1e6:.1f} MB", "style": "warm", "anchor": "end", "dy": -9},
         {"kind": "point", "x": GIB, "y": sig(t_gib * 1e3), "label": f"1 GiB: {t_gib * 1e3:.2f} ms",
          "style": "accent", "anchor": "start", "dy": 4},
         {"kind": "vline", "x": dec, "label": f"70B decode message: {dec // 1024} KiB", "style": "muted"},
@@ -187,9 +186,9 @@ def spec_allreduce() -> dict:
                   "doubling over NVLink 4, and a ring through 400 Gb/s NICs."),
         "width": 880, "height": 400,
         "x": {"label": "message size (bytes)", "scale": "log",
-              "ticks": [1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10],
-              "tick_labels": ["1 KB", "10 KB", "100 KB", "1 MB", "10 MB", "100 MB", "1 GB", "10 GB"],
-              "min": 1e3, "max": 1e10},
+              "ticks": [1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10],
+              "tick_labels": ["10 KB", "100 KB", "1 MB", "10 MB", "100 MB", "1 GB", "10 GB"],
+              "min": 1e4, "max": 1e10},
         "y": {"label": "all-reduce time (ms)", "scale": "log", "ticks": [0.001, 0.01, 0.1, 1, 10, 100],
               "min": 0.001, "max": 100},
         "series": [{"name": n, "x": xs, "y": ys, "style": st, "dash": d} for n, ys, st, d in ser],
@@ -207,7 +206,7 @@ def spec_checkpoint_waste() -> dict:
     ms = reliability.cluster_mtbf(m_gpu, 16384) * 3600
     restart = 600                                                                  # the assumed 10-minute restart
     w = reliability.wasted_fraction
-    xs_min = [sig(2 * 60 ** (i / 48)) for i in range(49)]                          # 2 to 120 min, log-spaced
+    xs_min = [sig(2 * 90 ** (i / 48)) for i in range(49)]                          # 2 to 180 min, log-spaced
     cases = [("δ = 60 s", 60, 0, "accent", False), ("δ = 10 s", 10, 0, "violet", False),
              ("δ = 60 s, R = 10 min", 60, restart, "warm", True)]
     series = [{"name": name, "x": xs_min, "y": [sig(100 * w(t * 60, d, ms, r)) for t in xs_min],
@@ -231,8 +230,8 @@ def spec_checkpoint_waste() -> dict:
         "title": ("The share of wall-clock time that a 16,384-GPU job loses against its checkpoint interval, for "
                   "a 60 s and a 10 s checkpoint and for a 60 s checkpoint with a 10-minute restart."),
         "width": 880, "height": 400,
-        "x": {"label": "checkpoint interval τ (min)", "scale": "log", "ticks": [2, 5, 10, 20, 60, 120],
-              "min": 2, "max": 120},
+        "x": {"label": "checkpoint interval τ (min)", "scale": "log", "ticks": [2, 5, 10, 20, 60, 180],
+              "min": 2, "max": 180},
         "y": {"label": "waste (% of wall-clock time)", "min": 0, "max": 30, "ticks": [0, 5, 10, 15, 20, 25, 30]},
         "series": series,
         "marks": marks,
