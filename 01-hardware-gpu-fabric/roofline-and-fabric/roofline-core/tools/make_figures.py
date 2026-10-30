@@ -123,7 +123,7 @@ def spec_decode_step() -> dict:
         step.append(sig(s.time * 1e3))
         weights.append(sig(sp.gemms.time * 1e3))
         kv.append(sig(sp.attention.time * 1e3))
-    place = {1: ("start", 22), 8: ("start", -14), 32: ("start", 18), 64: ("end", -10), 128: ("end", -10),
+    place = {1: ("start", 22), 8: ("middle", -16), 32: ("start", 18), 64: ("end", -10), 128: ("end", -10),
              cap: ("end", -6)}
     marks = []
     for b in (1, 8, 32, 64, 128, cap):

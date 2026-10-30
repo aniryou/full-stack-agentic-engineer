@@ -215,9 +215,9 @@ def spec_allreduce_busbw_vs_size() -> dict:
             {"kind": "point", "x": GIB, "y": _r(alg_ring, 3), "style": "muted", "anchor": "end", "dy": -9,
              "label": f"algbw {alg_ring:.0f} GB/s"},
         ] + [
-            {"kind": "point", "x": s, "y": _r(v, 3), "style": "accent", "anchor": "start", "dy": 18,
+            {"kind": "point", "x": s, "y": _r(v, 3), "style": "accent", "anchor": "start", "dy": dy,
              "label": f"{_bytes_label(s)}: {v:.2f} GB/s"}
-            for s, v in rows
+            for (s, v), dy in zip(rows, (18, 30))
         ],
         "legend": "bottom-right",
         "note": "computed by gpusim.collectives.model_time, algbw, busbw and pipeline_chunks (cuda-nccl-core)",

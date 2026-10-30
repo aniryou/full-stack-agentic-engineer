@@ -518,7 +518,7 @@ Second, busbw well below the link rate inside one node usually means that NCCL d
 
 ![All-reduce bandwidth against message size on 8 H100s in the alpha-beta model: the ring busbw goes up to the 450 GB/s link rate and is 447 GB/s at 1 GiB, and the NVLS busbw is 744 GB/s at 1 GiB, above the link rate.](figures/allreduce-busbw-vs-size.svg)
 
-*The chart shows the all-reduce bandwidth of 8 H100s against the message size, in the alpha-beta model. The ring busbw goes up to the link rate of 450 GB/s, and the NVLS busbw goes above it. `gpusim.collectives` computes the three lines with `model_time()`, `algbw()` and `busbw()`, and `cuda-nccl-core/tests/test_figures.py` pins the chart.*
+*The chart shows the all-reduce bandwidth of 8 H100s against the message size, in the alpha-beta model. The ring busbw goes through the sweep rows of §5.5 up to the link rate of 450 GB/s, and the NVLS busbw goes above it. `gpusim.collectives` computes the three lines with `model_time()`, `algbw()` and `busbw()`, and `cuda-nccl-core/tests/test_figures.py` pins the chart.*
 
 ### 5.5 Latency-bound or bandwidth-bound
 
@@ -538,7 +538,7 @@ nccl-tests (`sweep()`, `format_sweep()`):
 
 ![Ring all-reduce time against message size on 8 H100s in the alpha-beta model: flat near the latency term below the 7.2 MB crossover, where the 512 KiB all-reduce of decode sits, and growing with the bandwidth term above it, where the 128 MiB all-reduce of prefill sits.](figures/ring-allreduce-regimes.svg)
 
-*The chart shows the time of a ring all-reduce on 8 H100s against the message size, on log axes. Below the crossover of 7.2 MB, the latency term sets the time, and above it the bandwidth term sets the time. `gpusim.collectives.model_time()` computes the three lines, and `cuda-nccl-core/tests/test_figures.py` pins the chart.*
+*The chart shows the time of a ring all-reduce on 8 H100s against the message size, on log axes. Below the crossover of 7.2 MB, the latency term sets the time, and above it the bandwidth term sets the time. The 512 KiB all-reduce of decode is below the crossover, and the 128 MiB all-reduce of prefill is above it. `gpusim.collectives.model_time()` and `cost_terms()` compute the three lines, and `cuda-nccl-core/tests/test_figures.py` pins the chart.*
 
 Below $S^{\ast}$, a ring all-reduce costs approximately $2(p-1) \cdot \alpha$ for any message size. Thus the
 algorithm that wins is the one with the fewest steps. At 512 KiB on 8 GPUs, the model gives these times: two-shot

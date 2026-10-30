@@ -125,7 +125,7 @@ Six times larger per token, for a model only 1.6× bigger. That gap is the effec
 
 ![The fp16 KV cache grows with the tokens that it holds: 128 KiB per token for Llama 3 8B, 800 KiB for Llama 2 13B.](figures/kv-bytes-vs-tokens.svg)
 
-*The chart shows the fp16 KV cache against the tokens that it holds, `seq_len × batch`, for Llama 3 8B and Llama 2 13B. The Llama 2 13B cache is six times larger at every token count. The marked points are the rows of the table, and the dashed line shows the weights of Llama 3 8B. `kerncore.kv.kv_cache_bytes` calculates the values, and `kernel-core/tests/test_figures.py` pins the chart.*
+*The chart shows the fp16 KV cache against the tokens that it holds, `seq_len × batch`, for Llama 3 8B and Llama 2 13B. The Llama 2 13B cache is six times larger at every token count. The marked points are the rows of the table, and the horizontal line shows the weights of Llama 3 8B. `kerncore.kv.kv_cache_bytes` calculates the values, and `kernel-core/tests/test_figures.py` pins the chart.*
 
 **Second-order effect:** at 128K context, decode reads ~16 GB of weights *plus* ~17 GB of cache per token. That is two times the traffic, so you get roughly **half the tokens per second** of a short context. Long context costs you capacity *and* speed.
 
@@ -136,6 +136,10 @@ Six times larger per token, for a model only 1.6× bigger. That gap is the effec
 To know the size is one task. To allocate the memory is a different task. The simple implementation reserves contiguous memory for `max_sequence_length` tokens per request, at the start. It does this because the cache grows during generation, and you do not want to reallocate the memory in the middle of the stream. But a request that has a 4K output setting and stops after 200 tokens wastes 95% of its reservation. In early serving stacks, the measured waste was 60–80%.
 
 **PagedAttention** (the idea behind vLLM) takes the virtual-memory method of operating systems. The engine divides the cache into fixed-size blocks — say 16 tokens each. It allocates the blocks on demand and stores them non-contiguously. A block table for each request maps logical positions to physical blocks.
+
+![A contiguous reservation wastes 95% when the request stops after 200 tokens, and PagedAttention maps the blocks of each request through a block table.](figures/paged-blocks-vs-contiguous.svg)
+
+*In the top bar, the warm part is the 95% of the reservation that the request does not use. In the bottom row, the block table of each request maps logical positions to physical blocks of 16 tokens. Requests A and B point at the same physical blocks 2 and 5 for their system prompt, so the engine stores one copy.*
 
 Waste drops to well under 4%. Also, the blocks become *shareable*: two requests with the same system prompt can point at the same physical blocks. The engine then does not store two copies.
 

@@ -18,6 +18,15 @@ make_figures = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(make_figures)
 
 NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
+CHARTS = {"occupancy-vs-registers.svg", "step-time-vs-kernel-length.svg", "allreduce-busbw-vs-size.svg",
+          "ring-allreduce-regimes.svg"}
+
+
+def test_the_figures_table_lists_every_chart():
+    """The parametrized tests below run over FIGURES; an entry lost from the table would skip its chart."""
+    assert set(make_figures.FIGURES) == CHARTS
+    in_dir = {p.name for p in make_figures.FIGDIR.glob("*.svg") if "<desc" in p.read_text(encoding="utf-8")}
+    assert in_dir == CHARTS, f"charts with a spec in figures/ that FIGURES does not list: {sorted(in_dir - CHARTS)}"
 
 
 @pytest.mark.parametrize("name", sorted(make_figures.FIGURES))
@@ -40,4 +49,6 @@ def test_every_number_in_a_mark_label_is_printed_in_the_primer(name):
     for mark in make_figures.FIGURES[name]().get("marks", []):
         label = mark.get("label") or mark.get("text") or ""
         for number in NUMBER.findall(label):
-            assert number in text, f"{name}: {label!r} has {number}, which PRIMER.md does not print"
+            # the whole number, not a part of a longer one ("788" is not found inside "1,788" or "7.88")
+            whole = re.compile(rf"(?<![\d.,]){re.escape(number)}(?![\d]|[.,]\d)")
+            assert whole.search(text), f"{name}: {label!r} has {number}, which PRIMER.md does not print"
