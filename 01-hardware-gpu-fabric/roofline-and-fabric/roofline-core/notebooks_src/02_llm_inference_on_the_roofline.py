@@ -5,6 +5,10 @@
 # run a small model on a T4/L4 with `04-inference-engine/serving-engine/vllm-serving-lab` (T1).
 # Then compare the result with the ceilings that this notebook calculates.
 #
+# ![One decode step of Llama-3.1-8B on an H100 in bf16 at 2K context against the batch: the weight stream takes the same time at every batch, and the KV read grows with the batch up to the HBM limit.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/01-hardware-gpu-fabric/roofline-and-fabric/figures/decode-step-weights-vs-kv.svg)
+#
+# *Figure from `../PRIMER.md`, §3.3 (Decode): the weight stream (dashed) takes the same time at every batch. The KV read grows with the batch. At the HBM limit, the KV read takes more time than the weight stream.*
+#
 # ## The one-minute version
 # One engine step streams every weight from HBM one time, whatever the number of tokens in the step. But
 # the FLOPs grow with the tokens. Thus the arithmetic intensity of a step is approximately **its token count**

@@ -4,6 +4,10 @@
 # **Tier:** T0. It is arithmetic with stated assumptions, with no GPU. The measured counterpart for the load of
 # weights is `gpu-bench-lab` notebook `04_weights_loading_and_cold_start` (T0 on your disk, T1 with a GPU).
 #
+# ![The share of wall-clock time that a 16,384-GPU job loses at each checkpoint interval, for a 60 s and a 10 s checkpoint and for a 60 s checkpoint with a 10-minute restart.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/01-hardware-gpu-fabric/roofline-and-fabric/figures/checkpoint-waste-vs-interval.svg)
+#
+# *Figure from `../PRIMER.md`, §7.2 (How often to checkpoint: Young/Daly): each curve has its least waste at its $\tau^{*}$. The restart $R$ moves the curve up, not to the side.*
+#
 # ## The one-minute version
 # Three fleet-level numbers come straight from the hardware. **Cold start**: weight bytes ÷ the
 # slowest bandwidth on the path, plus provisioning, image pull and engine init. Parallel and
