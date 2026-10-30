@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="316" viewBox="0 0 900 316" role="img" aria-label="On a time axis, a 5 s deadline ends before the code of a cold Job starts, but the rendered deadline of 120 + 5 s does not." style="color: #E4EAE7">
+  <title>On a time axis, a 5 s deadline ends before the code of a cold Job starts, but the rendered deadline of 120 + 5 s does not.</title>
+  <rect x="0" y="0" width="900" height="316" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="26" font-size="11" fill="#97A59F">one cold execution on a busy cluster, not to scale</text>
+
+    <!-- the two points where a deadline starts (drawn first, so the bars cover them) -->
+    <g stroke="#97A59F" stroke-width="1" stroke-dasharray="4 3" fill="none">
+      <path d="M220 58 L220 284"/>
+      <path d="M450 58 L450 284"/>
+    </g>
+    <g font-size="11" fill="#97A59F" text-anchor="middle">
+      <text x="220" y="50">the Job starts</text>
+      <text x="450" y="50">the kubelet admits the Pod</text>
+    </g>
+
+    <!-- lane A: the phases of a cold execution -->
+    <text x="24" y="81" font-weight="600">a cold execution</text>
+    <text x="24" y="98" font-size="11" fill="#97A59F">on a busy cluster</text>
+    <g text-anchor="middle">
+      <rect x="220" y="62" width="110" height="46" rx="6" fill="#161E1C" stroke="currentColor" stroke-width="1.2"/>
+      <text x="275" y="90">scheduling</text>
+      <rect x="330" y="62" width="120" height="46" rx="6" fill="#161E1C" stroke="currentColor" stroke-width="1.2"/>
+      <text x="390" y="90">node scale-up</text>
+      <rect x="450" y="62" width="110" height="46" rx="6" fill="#161E1C" stroke="currentColor" stroke-width="1.2"/>
+      <text x="505" y="90">image pull</text>
+      <rect x="560" y="62" width="210" height="46" rx="6" fill="#161E1C" stroke="currentColor" stroke-width="1.2"/>
+      <text x="665" y="81" font-weight="600">the code runs</text>
+      <text x="665" y="98" font-family="JetBrains Mono, monospace" font-size="11">timeout -s KILL &lt;wall_s&gt;</text>
+    </g>
+    <path d="M220 114 L220 120 L560 120 L560 114" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <text x="228" y="136" font-size="11" fill="#97A59F">the cold start, ~42–50 s p50 (§6)</text>
+
+    <!-- lane B: a Job deadline of 5 s -->
+    <text x="24" y="164" font-weight="600">Job deadline: 5 s</text>
+    <text x="24" y="180" font-size="11" fill="#97A59F">from the Job start</text>
+    <rect x="220" y="154" width="50" height="26" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="282" y="171" font-size="11.5" fill="#97A59F">ends <tspan font-family="JetBrains Mono, monospace" font-size="11" fill="currentColor">DeadlineExceeded</tspan></text>
+
+    <!-- lane C: a Pod deadline of 5 s -->
+    <text x="24" y="208" font-weight="600">Pod deadline: 5 s</text>
+    <text x="24" y="224" font-size="11" fill="#97A59F">from the kubelet admission</text>
+    <rect x="450" y="198" width="50" height="26" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="512" y="215" font-size="11.5" fill="#97A59F">ends <tspan font-family="JetBrains Mono, monospace" font-size="11" fill="currentColor">DeadlineExceeded</tspan></text>
+
+    <!-- lane D: the deadline that SandboxPolicy.job() renders (the subject) -->
+    <text x="24" y="253" font-weight="600">the rendered Job</text>
+    <text x="24" y="269" font-family="JetBrains Mono, monospace" font-size="11" fill="#97A59F">SandboxPolicy.job()</text>
+    <rect x="220" y="242" width="640" height="28" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="540" y="260" text-anchor="middle" font-size="11.5" fill="#7ADACF">a startup allowance plus the wall budget, 120 + 5 s</text>
+
+    <!-- the time axis -->
+    <path d="M220 292 L860 292" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <text x="866" y="296" font-size="11" fill="#97A59F">time</text>
+  </g>
+</svg>

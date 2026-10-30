@@ -84,7 +84,7 @@ flowchart LR
   E -->|"aggregation"| U["up-projection"]
 ```
 
-*This figure shows the Stable LatentMoE of Kimi K3. The shared experts run at the full hidden width. The routed experts operate in a narrower latent space between a down-projection and an up-projection.*
+*Look at the lower path first. The routed experts, 16 active of 896, operate in a narrower latent space between the down-projection and the up-projection. The shared experts on the upper path run at the full hidden width.*
 
 **Deployment reality:** the model is ~594 GB quantized and ~1.56 TB at BF16. It runs only at cluster scale. Most teams will use it through a hosted endpoint.
 
@@ -103,6 +103,15 @@ flowchart LR
 - **Muon optimizer**. DeepSeek used 32T training tokens. It trained separate domain specialists and then merged them.
 - **Engram** (conditional memory through scalable lookup): many people expected it in V4, but it is **not** in the final architecture. This fact is a useful correction to much of the early coverage.
 - Open kernels: DeepGEMM / MegaMoE. They give a fine-grained overlap of communication and computation in expert-parallel work.
+
+```mermaid
+flowchart LR
+  H(["Hyper-connections<br/>parallel residual streams"]) --> M{"constraint on the<br/>matrices that mix<br/>the streams?"}
+  M -->|"no constraint"| F["signal amplification<br/>above 3000x<br/>divergence at 27B"]
+  M -->|"mHC"| S["Sinkhorn–Knopp projection<br/>amplification ~1.6x<br/>~6.7% training overhead"]
+```
+
+*Follow the two edges out of the diamond. Without a constraint, the matrices that mix the streams amplify the signal above 3000x. The mHC design projects them with Sinkhorn–Knopp and holds the amplification to ~1.6x for ~6.7% training overhead.*
 
 **Economics:** V4-Pro costs ~$0.435 in / $0.87 out per million, and V4-Flash costs ~$0.14 / $0.28. That is approximately 30x below closed-frontier output pricing. V4-Flash is the practical self-host target. V4-Pro fits a single 8-GPU B200 node. But to serve it at competitive latency, you must have cluster economics.
 
@@ -450,7 +459,7 @@ flowchart LR
   C -.->|"the plan"| M
 ```
 
-*The pattern of §9: routing, not replacement. A closed frontier model plans and does the new, high-stakes reasoning. Mid-size open models do the high-volume, private, latency-sensitive work, and small open models run the always-on agents at the edge. The dashed edge is the plan of the orchestrator, and the mid-size open models do the execution.*
+*Start at the diamond: the routing sends each kind of task to one tier, and no tier replaces another. The dashed edge is the plan of the closed orchestrator, and the mid-size open models do the execution.*
 
 **A four-gate decision framework**
 

@@ -95,8 +95,7 @@ def spec_concurrency_vs_max_model_len() -> dict:
     return {
         "kind": "line",
         "title": ("The maximum concurrency of Llama-3.1-8B in BF16 against max_model_len on an L4 and an H100: "
-                  f"the L4 line goes below one request at about {auto / 1000:.1f}k tokens, before the "
-                  f"{default_len:,}-token default."),
+                  f"the L4 goes below 1× at about {auto / 1000:.1f}k tokens."),
         "height": 400,
         "x": {"label": "max_model_len (tokens)", "scale": "log", "ticks": [4096, 8192, 16384, 32768, 65536, 131072],
               "min": 4096, "max": 131072},
@@ -126,9 +125,8 @@ def spec_profiling_activations_vs_budget() -> dict:
     l4_pt, h100_pt = act(*l4_default), act(*h100_default)
     return {
         "kind": "line",
-        "title": ("The activation peak of the profiling pass, as the serving lab estimates it for Llama-3.1-8B in "
-                  f"BF16, against max_num_batched_tokens, for a {l4_default[1]:,}-row and a "
-                  f"{h100_default[1]:,}-row sampler."),
+        "title": ("The estimated activation peak of the profiling pass against max_num_batched_tokens for "
+                  f"Llama-3.1-8B in BF16, with {l4_default[1]:,} and {h100_default[1]:,} sampler rows."),
         "x": {"label": "max_num_batched_tokens (tokens in the profiling forward)", "scale": "log",
               "ticks": [512, 1024, 2048, 4096, 8192, 16384]},
         "y": {"label": "activations + sampler logits (GiB)", "min": 0, "max": 2.5,

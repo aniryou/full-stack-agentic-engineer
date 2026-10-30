@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="360" viewBox="0 0 880 360" role="img" aria-label="The share of the bytes of one decode step that the KV read takes, against the cached tokens in the batch, for the 8B-shaped model of section 6.5 in bf16." style="color: #E4EAE7">
+  <title>The share of the bytes of one decode step that the KV read takes, against the cached tokens in the batch, for the 8B-shaped model of section 6.5 in bf16.</title>
+  <desc>{"kind":"line","legend":"none","marks":[{"anchor":"end","kind":"vline","label":"KV bytes = weight bytes: ≈ 122,500 tokens","label_pos":"top","style":"warm","x":122528.0},{"anchor":"start","dy":-9,"kind":"point","label":"1 × 2k: 1.6%","style":"accent","x":2048,"y":1.64398},{"anchor":"end","dy":-9,"kind":"point","label":"1 × 32k: 21%","style":"accent","x":32768,"y":21.1003},{"anchor":"end","dy":-9,"kind":"point","label":"32 × 2k: 35%","style":"accent","x":65536,"y":34.8477},{"anchor":"start","dy":16,"kind":"point","label":"1 × 128k: 52%","style":"accent","x":131072,"y":51.6845},{"anchor":"end","dy":-9,"kind":"point","label":"32 × 8k, 8 × 32k: 68%","style":"accent","x":262144,"y":68.1474}],"note":"computed by fa_calculators.decode_attention_bytes; weights: 8.03 B parameters in bf16","series":[{"name":"KV read / (KV read + weights read)","style":"accent","x":[1024,1218,1448,1722,2048,2435,2896,3444,4096,4871,5793,6889,8192,9742,11585,13777,16384,19484,23170,27554,32768,38968,46341,55109,65536,77936,92682,110218,131072,155872,185364,220436,262144,311744,370728,440872,524288,623487,741455,881744,1048576],"y":[0.8288,0.984274,1.16797,1.38591,1.64398,1.94858,2.30897,2.73394,3.23477,3.82342,4.51446,5.3231,6.26683,7.36523,8.63823,10.1075,11.7945,13.72,15.9027,18.3593,21.1003,24.1294,27.442,31.0234,34.8477,38.8778,43.0658,47.3555,51.6845,55.9885,60.2042,64.2738,68.1474,71.7854,75.1593,78.252,81.0567,83.5757,85.8182,87.7993,89.5374]}],"title":"The share of the bytes of one decode step that the KV read takes, against the cached tokens in the batch, for the 8B-shaped model of section 6.5 in bf16.","x":{"label":"cached tokens in the batch (batch × context)","max":1048576,"min":1024,"scale":"log","tick_labels":["1k","4k","16k","64k","256k","1024k"],"ticks":[1024,4096,16384,65536,262144,1048576]},"y":{"label":"KV share of the step's bytes (%)","max":100,"min":0,"ticks":[0,20,40,60,80,100]}}</desc>
+  <rect x="0" y="0" width="880" height="360" rx="8" fill="#161E1C"/>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12" fill="currentColor">
+    <g stroke="#27322E" stroke-width="1">
+      <line x1="66.0" y1="290.0" x2="858.0" y2="290.0"/>
+      <line x1="66.0" y1="236.4" x2="858.0" y2="236.4"/>
+      <line x1="66.0" y1="182.8" x2="858.0" y2="182.8"/>
+      <line x1="66.0" y1="129.2" x2="858.0" y2="129.2"/>
+      <line x1="66.0" y1="75.6" x2="858.0" y2="75.6"/>
+      <line x1="66.0" y1="22.0" x2="858.0" y2="22.0"/>
+    </g>
+    <g stroke="#55635E" stroke-width="1.2">
+      <line x1="66.0" y1="290.0" x2="858.0" y2="290.0"/>
+      <line x1="66.0" y1="290.0" x2="66.0" y2="22.0"/>
+    </g>
+    <g font-size="11" fill="#97A59F">
+      <text x="58.0" y="293.5" text-anchor="end">0</text>
+      <text x="58.0" y="239.9" text-anchor="end">20</text>
+      <text x="58.0" y="186.3" text-anchor="end">40</text>
+      <text x="58.0" y="132.7" text-anchor="end">60</text>
+      <text x="58.0" y="79.1" text-anchor="end">80</text>
+      <text x="58.0" y="25.5" text-anchor="end">100</text>
+      <text x="66.0" y="306.0" text-anchor="middle">1k</text>
+      <text x="224.4" y="306.0" text-anchor="middle">4k</text>
+      <text x="382.8" y="306.0" text-anchor="middle">16k</text>
+      <text x="541.2" y="306.0" text-anchor="middle">64k</text>
+      <text x="699.6" y="306.0" text-anchor="middle">256k</text>
+      <text x="858.0" y="306.0" text-anchor="middle">1024k</text>
+    </g>
+    <text x="462.0" y="332.0" text-anchor="middle" fill="#97A59F">cached tokens in the batch (batch × context)</text>
+    <text x="16" y="156.0" text-anchor="middle" fill="#97A59F" transform="rotate(-90 16 156.0)">KV share of the step's bytes (%)</text>
+    <clipPath id="plot"><rect x="65.0" y="16.0" width="794.0" height="275.0"/></clipPath>
+    <g clip-path="url(#plot)">
+      <path d="M66.0 287.8 L85.8 287.4 L105.6 286.9 L125.4 286.3 L145.2 285.6 L165.0 284.8 L184.8 283.8 L204.6 282.7 L224.4 281.3 L244.2 279.8 L264.0 277.9 L283.8 275.7 L303.6 273.2 L323.4 270.3 L343.2 266.8 L363.0 262.9 L382.8 258.4 L402.6 253.2 L422.4 247.4 L442.2 240.8 L462.0 233.5 L481.8 225.3 L501.6 216.5 L521.4 206.9 L541.2 196.6 L561.0 185.8 L580.8 174.6 L600.6 163.1 L620.4 151.5 L640.2 140.0 L660.0 128.7 L679.8 117.7 L699.6 107.4 L719.4 97.6 L739.2 88.6 L759.0 80.3 L778.8 72.8 L798.6 66.0 L818.4 60.0 L838.2 54.7 L858.0 50.0" fill="none" stroke="#4CC5B7" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    </g>
+    <line x1="612.7" y1="22.0" x2="612.7" y2="290.0" stroke="#E39A62" stroke-width="1.2" stroke-dasharray="4 3"/>
+    <text x="607.7" y="34.0" text-anchor="end" font-size="11" fill="#E39A62">KV bytes = weight bytes: ≈ 122,500 tokens</text>
+    <circle cx="145.2" cy="285.6" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="154.2" y="276.6" text-anchor="start" font-size="11" fill="#4CC5B7">1 × 2k: 1.6%</text>
+    <circle cx="462.0" cy="233.5" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="453.0" y="224.5" text-anchor="end" font-size="11" fill="#4CC5B7">1 × 32k: 21%</text>
+    <circle cx="541.2" cy="196.6" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="532.2" y="187.6" text-anchor="end" font-size="11" fill="#4CC5B7">32 × 2k: 35%</text>
+    <circle cx="620.4" cy="151.5" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="629.4" y="167.5" text-anchor="start" font-size="11" fill="#4CC5B7">1 × 128k: 52%</text>
+    <circle cx="699.6" cy="107.4" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="690.6" y="98.4" text-anchor="end" font-size="11" fill="#4CC5B7">32 × 8k, 8 × 32k: 68%</text>
+    <text x="10" y="353.0" font-size="10.5" fill="#97A59F" font-family="JetBrains Mono, monospace">computed by fa_calculators.decode_attention_bytes; weights: 8.03 B parameters in bf16</text>
+  </g>
+</svg>

@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="380" viewBox="0 0 880 380" role="img" aria-label="Accuracy against the output limit when max_tokens truncates and when a thinking budget forces the answer, for lognormal thinking lengths with median 1,500 and a 300-token answer." style="color: #E4EAE7">
+  <title>Accuracy against the output limit when max_tokens truncates and when a thinking budget forces the answer, for lognormal thinking lengths with median 1,500 and a 300-token answer.</title>
+  <desc>{"height":380,"kind":"line","legend":"top-left","marks":[{"anchor":"end","kind":"vline","label":"max_tokens = 15,908","label_pos":"top","style":"muted","x":15908},{"anchor":"end","dy":-9,"kind":"point","label":"0.876","style":"accent","x":4096,"y":0.87639498},{"anchor":"start","dy":16,"kind":"point","label":"0.823","style":"plain","x":4096,"y":0.8234214},{"anchor":"end","dy":16,"kind":"point","label":"0.177","style":"warm","x":4096,"y":0.1765786}],"note":"computed by rlcore.workload.budget_outcome (median 1,500, sigma = 1, e0 = 0.7)","series":[{"name":"thinking budget (limit − 300): accuracy","style":"accent","x":[1024,1117,1218,1328,1448,1579,1722,1878,2048,2233,2435,2656,2896,3158,3444,3756,4096,4467,4871,5312,5793,6317,6889,7512,8192,8933,9742,10624,11585,12634,13777,15024,15908,16384,17867,19484,21247,23170,25268,27554,30048,32768],"y":[0.463222857,0.490212824,0.518193564,0.546939725,0.576194615,0.605677507,0.635094405,0.664150478,0.692562582,0.720070579,0.74656945,0.771929811,0.795829587,0.818297673,0.839251536,0.858629177,0.87639498,0.892582158,0.907192353,0.92031379,0.932000569,0.9423217,0.951388431,0.959277603,0.966107004,0.971966257,0.976965837,0.981194466,0.984743398,0.987705648,0.990155774,0.992170246,0.993292476,0.993813797,0.995144747,0.996214655,0.997068445,0.997745088,0.998277488,0.998692827,0.999014903,0.999262722]},{"name":"max_tokens: accuracy","style":"plain","x":[1024,1117,1218,1328,1448,1579,1722,1878,2048,2233,2435,2656,2896,3158,3444,3756,4096,4467,4871,5312,5793,6317,6889,7512,8192,8933,9742,10624,11585,12634,13777,15024,15908,16384,17867,19484,21247,23170,25268,27554,30048,32768],"y":[0.23317551,0.271732606,0.311705091,0.352771036,0.394563736,0.436682154,0.478706293,0.520214968,0.560803689,0.600100828,0.637956356,0.674185444,0.708327982,0.740425247,0.770359337,0.798041682,0.8234214,0.846545941,0.867417647,0.886162557,0.902857956,0.917602429,0.930554901,0.941825147,0.951581435,0.959951796,0.967094053,0.973134952,0.978204854,0.98243664,0.98593682,0.988814637,0.990417824,0.991162567,0.993063924,0.994592364,0.995812064,0.996778697,0.997539269,0.99813261,0.998592718,0.998946745]},{"dash":true,"name":"max_tokens: truncated, no answer","style":"warm","x":[1024,1117,1218,1328,1448,1579,1722,1878,2048,2233,2435,2656,2896,3158,3444,3756,4096,4467,4871,5312,5793,6317,6889,7512,8192,8933,9742,10624,11585,12634,13777,15024,15908,16384,17867,19484,21247,23170,25268,27554,30048,32768],"y":[0.76682449,0.728267394,0.688294909,0.647228964,0.605436264,0.563317846,0.521293707,0.479785032,0.439196311,0.399899172,0.362043644,0.325814556,0.291672018,0.259574753,0.229640663,0.201958318,0.1765786,0.153454059,0.132582353,0.113837443,0.0971420445,0.0823975709,0.069445099,0.0581748533,0.0484185652,0.0400482042,0.0329059474,0.0268650479,0.0217951463,0.0175633598,0.0140631797,0.0111853627,0.00958217647,0.00883743285,0.00693607607,0.00540763554,0.0041879356,0.00322130314,0.0024607312,0.00186739019,0.00140728167,0.00105325451]}],"title":"Accuracy against the output limit when max_tokens truncates and when a thinking budget forces the answer, for lognormal thinking lengths with median 1,500 and a 300-token answer.","x":{"label":"output limit (tokens, log scale)","max":32768,"min":1024,"scale":"log","ticks":[1024,2048,4096,8192,16384,32768]},"y":{"label":"share of requests","max":1.3,"min":0,"ticks":[0,0.25,0.5,0.75,1.0]}}</desc>
+  <rect x="0" y="0" width="880" height="380" rx="8" fill="#161E1C"/>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12" fill="currentColor">
+    <g stroke="#27322E" stroke-width="1">
+      <line x1="66.0" y1="310.0" x2="858.0" y2="310.0"/>
+      <line x1="66.0" y1="254.6" x2="858.0" y2="254.6"/>
+      <line x1="66.0" y1="199.2" x2="858.0" y2="199.2"/>
+      <line x1="66.0" y1="143.8" x2="858.0" y2="143.8"/>
+      <line x1="66.0" y1="88.5" x2="858.0" y2="88.5"/>
+    </g>
+    <g stroke="#55635E" stroke-width="1.2">
+      <line x1="66.0" y1="310.0" x2="858.0" y2="310.0"/>
+      <line x1="66.0" y1="310.0" x2="66.0" y2="22.0"/>
+    </g>
+    <g font-size="11" fill="#97A59F">
+      <text x="58.0" y="313.5" text-anchor="end">0</text>
+      <text x="58.0" y="258.1" text-anchor="end">0.25</text>
+      <text x="58.0" y="202.7" text-anchor="end">0.5</text>
+      <text x="58.0" y="147.3" text-anchor="end">0.75</text>
+      <text x="58.0" y="92.0" text-anchor="end">1</text>
+      <text x="66.0" y="326.0" text-anchor="middle">1,024</text>
+      <text x="224.4" y="326.0" text-anchor="middle">2,048</text>
+      <text x="382.8" y="326.0" text-anchor="middle">4,096</text>
+      <text x="541.2" y="326.0" text-anchor="middle">8,192</text>
+      <text x="699.6" y="326.0" text-anchor="middle">16,384</text>
+      <text x="858.0" y="326.0" text-anchor="middle">32,768</text>
+    </g>
+    <text x="462.0" y="352.0" text-anchor="middle" fill="#97A59F">output limit (tokens, log scale)</text>
+    <text x="16" y="166.0" text-anchor="middle" fill="#97A59F" transform="rotate(-90 16 166.0)">share of requests</text>
+    <clipPath id="plot"><rect x="65.0" y="16.0" width="794.0" height="295.0"/></clipPath>
+    <g clip-path="url(#plot)">
+      <path d="M66.0 207.4 L85.9 201.4 L105.6 195.2 L125.4 188.8 L145.2 182.4 L165.0 175.8 L184.8 169.3 L204.6 162.9 L224.4 156.6 L244.2 150.5 L264.0 144.6 L283.8 139.0 L303.6 133.7 L323.4 128.7 L343.2 124.1 L363.0 119.8 L382.8 115.8 L402.6 112.3 L422.4 109.0 L442.2 106.1 L462.0 103.5 L481.8 101.2 L501.6 99.2 L521.4 97.5 L541.2 96.0 L561.0 94.7 L580.8 93.6 L600.6 92.6 L620.4 91.8 L640.2 91.2 L660.0 90.6 L679.8 90.2 L692.9 89.9 L699.6 89.8 L719.4 89.5 L739.2 89.3 L759.0 89.1 L778.8 89.0 L798.6 88.8 L818.4 88.8 L838.2 88.7 L858.0 88.6" fill="none" stroke="#4CC5B7" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="M66.0 258.3 L85.9 249.8 L105.6 240.9 L125.4 231.8 L145.2 222.6 L165.0 213.3 L184.8 203.9 L204.6 194.8 L224.4 185.8 L244.2 177.1 L264.0 168.7 L283.8 160.6 L303.6 153.1 L323.4 146.0 L343.2 139.3 L363.0 133.2 L382.8 127.6 L402.6 122.5 L422.4 117.8 L442.2 113.7 L462.0 110.0 L481.8 106.7 L501.6 103.8 L521.4 101.3 L541.2 99.2 L561.0 97.3 L580.8 95.8 L600.6 94.4 L620.4 93.3 L640.2 92.4 L660.0 91.6 L679.8 90.9 L692.9 90.6 L699.6 90.4 L719.4 90.0 L739.2 89.7 L759.0 89.4 L778.8 89.2 L798.6 89.0 L818.4 88.9 L838.2 88.8 L858.0 88.7" fill="none" stroke="#E4EAE7" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="M66.0 140.1 L85.9 148.7 L105.6 157.5 L125.4 166.6 L145.2 175.9 L165.0 185.2 L184.8 194.5 L204.6 203.7 L224.4 212.7 L244.2 221.4 L264.0 229.8 L283.8 237.8 L303.6 245.4 L323.4 252.5 L343.2 259.1 L363.0 265.3 L382.8 270.9 L402.6 276.0 L422.4 280.6 L442.2 284.8 L462.0 288.5 L481.8 291.7 L501.6 294.6 L521.4 297.1 L541.2 299.3 L561.0 301.1 L580.8 302.7 L600.6 304.0 L620.4 305.2 L640.2 306.1 L660.0 306.9 L679.8 307.5 L692.9 307.9 L699.6 308.0 L719.4 308.5 L739.2 308.8 L759.0 309.1 L778.8 309.3 L798.6 309.5 L818.4 309.6 L838.2 309.7 L858.0 309.8" fill="none" stroke="#E39A62" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="6 4"/>
+    </g>
+    <line x1="692.9" y1="22.0" x2="692.9" y2="310.0" stroke="#97A59F" stroke-width="1.2" stroke-dasharray="4 3"/>
+    <text x="687.9" y="34.0" text-anchor="end" font-size="11" fill="#97A59F">max_tokens = 15,908</text>
+    <circle cx="382.8" cy="115.8" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="373.8" y="106.8" text-anchor="end" font-size="11" fill="#4CC5B7">0.876</text>
+    <circle cx="382.8" cy="127.6" r="4.5" fill="#E4EAE7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="391.8" y="143.6" text-anchor="start" font-size="11" fill="#E4EAE7">0.823</text>
+    <circle cx="382.8" cy="270.9" r="4.5" fill="#E39A62" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="373.8" y="286.9" text-anchor="end" font-size="11" fill="#E39A62">0.177</text>
+    <g font-size="11.5">
+      <rect x="76.0" y="30.0" width="295.2" height="61.0" rx="5" fill="#161E1C" fill-opacity="0.9" stroke="#27322E"/>
+      <line x1="86.0" y1="43.0" x2="104.0" y2="43.0" stroke="#4CC5B7" stroke-width="2"/>
+      <text x="110.0" y="47.0" fill="currentColor">thinking budget (limit − 300): accuracy</text>
+      <line x1="86.0" y1="60.0" x2="104.0" y2="60.0" stroke="#E4EAE7" stroke-width="2"/>
+      <text x="110.0" y="64.0" fill="currentColor">max_tokens: accuracy</text>
+      <line x1="86.0" y1="77.0" x2="104.0" y2="77.0" stroke="#E39A62" stroke-width="2" stroke-dasharray="6 4"/>
+      <text x="110.0" y="81.0" fill="currentColor">max_tokens: truncated, no answer</text>
+    </g>
+    <text x="10" y="373.0" font-size="10.5" fill="#97A59F" font-family="JetBrains Mono, monospace">computed by rlcore.workload.budget_outcome (median 1,500, sigma = 1, e0 = 0.7)</text>
+  </g>
+</svg>

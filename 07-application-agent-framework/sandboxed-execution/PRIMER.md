@@ -140,9 +140,9 @@ A code tool that meets all four still lets a hijacked model *compute*. But a com
 
 There is no single "sandbox." There is a ladder of boundaries. Each boundary defends against more, and each costs more. Select the rung by the threat that you defend against and by the cost that you can pay for each execution.
 
-![The isolation ladder as stacks: at each rung the boundary between the untrusted code and the host kernel moves down, from a separate process to namespaces, a hardened container, the gVisor Sentry and a microVM with its own guest kernel, and the start cost rises.](figures/isolation-ladder.svg)
+![The isolation ladder as five stacks: each rung adds a boundary between the untrusted code and the host kernel, and the start cost rises.](figures/isolation-ladder.svg)
 
-*This figure shows rungs 1 to 4 of the ladder as stacks. The accent box is the boundary that each rung adds. The warm box is a host kernel that the code shares. The last row is the start cost of each rung (§6 has the full table).*
+*This figure shows rungs 1 to 4 of the ladder as stacks. The accent box is the boundary that each rung adds, and the warm box is a host kernel that the code shares. The last row is the start cost of each rung (§6 has the full table).*
 
 ### In-process and process rungs
 
@@ -223,6 +223,19 @@ It does **not** defend against Spectre-style side channels, attacks in higher la
 gVisor has the same idea at the sandbox level (`runsc checkpoint` / `runsc restore`). The part of a cold start that a restore saves depends on the image and the warm-up. Measure it. This primer gives no number for it `(verify)`.
 
 The rule: **a restore of the same snapshot more than one time is insecure**. Firecracker itself says so. Each clone starts with the same RNG state, the same identifiers and any tokens that the snapshot held. A restore of this kind stays insecure unless the guest re-seeds (VMGenID, Linux ≥ 5.18) and makes new secrets after the restore. Never take a snapshot of a sandbox after it held the data of a tenant. Never restore one snapshot into two tenants.
+
+```mermaid
+flowchart LR
+  B["boot, warm<br/>one time"] --> S[("snapshot")]
+  S -->|restore| C1["clone 1"]
+  S -->|restore| C2["clone 2"]
+  C1 --> D{"re-seed,<br/>new secrets?"}
+  C2 --> D
+  D -->|no| I["insecure:<br/>same RNG state,<br/>identifiers, tokens"]
+  D -->|yes| R["new secrets<br/>in each clone"]
+```
+
+*Read from the left: one snapshot gives many clones, and each clone starts with the same RNG state, identifiers and tokens. The restore stays insecure unless the guest re-seeds (VMGenID) and makes new secrets after the restore. Never restore one snapshot into two tenants (§2, Firecracker `docs/snapshotting/snapshot-support.md`).*
 
 **Rung 5: a full VM or a separate machine.** This rung is the strongest and the slowest. A boot takes seconds, and you must manage a whole OS. It is for the highest-risk or noisiest workloads, or for a place where a compliance boundary makes it necessary.
 
@@ -362,7 +375,7 @@ The process sandbox does not stop the network (§1, §2). Thus egress is its **o
 
 ![The egress path: the sandboxed code goes through the network layer to the proxy check, then to a 403 or to the credential injection.](figures/egress-proxy-path.svg)
 
-*This figure shows the egress path. The network layer leaves the sandbox one way out. The proxy compares the host with the allowlist, and then it injects the credential outbound. A 3xx goes back to the caller, and a new URL is a new request (§4, `tests/test_proxy.py`).*
+*The network layer leaves the sandbox one way out. The proxy compares the host with the allowlist, and then it injects the credential outbound. A 3xx goes back to the caller, and a new URL is a new request (§4, `tests/test_proxy.py`).*
 
 **Deny by default, allowlist by host.** The sandbox has no network of its own. When code has a valid need for an outside host, it goes through an **egress proxy** inside the trust boundary. `sandboxcore.EgressProxy` compares the host of the URL with an allowlist (`ProxyPolicy.allows`). A host that is not on the allowlist gets 403 before any request leaves, and the proxy logs the attempt. This is the SSRF/exfiltration guard: "any tool that takes a URL" needs an egress allowlist (identity primer §6.1).
 
@@ -430,6 +443,10 @@ The startup-latency chain in §8 of the GPU scheduling primer is the same idea f
 The rendered Job also sets `automountServiceAccountToken: false`, so no cloud credential comes in on the service-account token.
 
 **Deadlines count the cold start.** The `activeDeadlineSeconds` of the Job runs from the start of the Job, and this time includes scheduling, node scale-up and the image pull. The `activeDeadlineSeconds` of a Pod itself runs from the time when the kubelet admits it, before the pull. Suppose that you set either one to the 5-second wall budget of the code. Then each cold execution on a busy cluster (§6: ~42–50 s p50) ends `DeadlineExceeded` before its code starts.
+
+![On a time axis, a 5 s deadline ends before the code of a cold Job starts, but the rendered deadline of 120 + 5 s does not.](figures/job-deadline-timeline.svg)
+
+*Look first at where each deadline starts: the Job deadline counts from the Job start, and the Pod deadline counts from the kubelet admission. A deadline of 5 s ends `DeadlineExceeded` in the warm bars, before the code starts. The rendered Job (`SandboxPolicy.job()`) has a deadline of 120 + 5 s, and `timeout -s KILL` enforces the wall budget inside the pod.*
 
 Thus the deadline of the rendered Job is a **startup allowance plus the wall budget** (120 + 5 s by default, `SandboxPolicy.startup_allowance_s`). The enforcement of the wall budget itself is **inside** the pod: the command runs under `timeout -s KILL <wall_s>`. The pods of the lab run the wrapper of the lab, which enforces each budget in the same way.
 
@@ -506,9 +523,9 @@ Because of the jump from ~35 ms (a process) to ~45 s (a fresh pod on a busy clus
 - A **reuse** pool (one warm sandbox serves execution after execution) holds a slot for the run only. It is faster and lower-cost. But state carries between executions, and the one-shot default of §3 exists to prevent that.
 - **Cold-on-demand** uses no pool. It starts a sandbox per request when the request arrives, and puts the whole cold start on the path of each request.
 
-![On a time axis, one slot of each pool: a replace-after-use slot runs for 2 s and then warms a replacement for 3 s off the request path, a reuse slot runs execution after execution, and cold-on-demand puts the 3 s cold start on the path of every request.](figures/pool-slot-timeline.svg)
+![On a time axis, one slot of each pool: replace-after-use, reuse and cold-on-demand, with the run, the warm-up and the cold start.](figures/pool-slot-timeline.svg)
 
-*This figure shows the three pools on a time axis, for one slot. In a replace-after-use pool the replacement warms off the request path, but each execution holds the slot for 5 sandbox-seconds. In a reuse pool an execution holds the slot for the run only. Cold-on-demand puts the cold start on the path of each request.*
+*This figure shows the three pools on a time axis, for one slot. In a replace-after-use pool the replacement warms off the request path, but each execution holds the slot for 5 sandbox-seconds. In a reuse pool an execution holds the slot for the run only, and cold-on-demand puts the cold start on the path of each request.*
 
 **Little's law gives the mean, not the size.** Busy sandboxes = arrival rate × execution time (`pool.busy_sandboxes`). Warming replacements = rate × cold start (`pool.warming_sandboxes`). A worked example: $\lambda = 5$ executions/s, $t_{\text{exec}} = 2$ s and $t_{\text{cold}} = 3$ s give **10 busy + 15 warming = 25 slots occupied on average** (`pool.mean_occupancy`). That is the offered load $a = \lambda(t_{\text{exec}} + t_{\text{cold}})$ in Erlangs, and it is a floor. A pool of exactly 25 has no spare slot when many arrivals occur together: `pool.erlang_c(25, 25)` is 1.0, and the queue never becomes empty.
 
@@ -533,7 +550,7 @@ Erlang C assumes exponential hold times. A cold start of constant length varies 
 
 ![The share of requests that wait for a warm sandbox against the pool size, for a replace-after-use pool and a reuse pool at 5 executions/s.](figures/pool-wait-vs-slots.svg)
 
-*The chart shows $P(\text{wait})$ against the slot count $c$ for the replace-after-use pool and the reuse pool at $\lambda = 5$ executions/s. Each curve stays at 1.0 up to the mean occupancy $a$ of its pool. The curves go below the wait target 0.2 at 31 slots and at 14 slots. `pool.erlang_c()` in the core computes the two curves, and `tests/test_figures.py` pins the chart.*
+*Each curve of $P(\text{wait})$ against the slot count $c$ stays at 1.0 up to the mean occupancy $a$ of its pool. At $\lambda = 5$ executions/s, the replace-after-use curve goes below the wait target 0.2 at 31 slots, and the reuse curve goes below it at 14 slots. `pool.erlang_c()` in the core computes the two curves, and `tests/test_figures.py` pins the chart.*
 
 **Where the arrival rate comes from.** It comes from the workload, through the arithmetic of §3.2 of the scaling primer: **27.1 tool calls/s at peak**. If a fifth of them are `run_code`, $\lambda \approx$ **5.4/s** (27.1 × 0.2 = 5.42). That rate gives a mean occupancy of 27.1 and **34** replace-after-use slots for $P(\text{wait}) \le 0.2$.
 
@@ -573,7 +590,7 @@ Each execution must leave a record, as each tool call does.
 
 ![The audit path: the agent and the network leave evidence in the audit trail, the histogram shows abuse, and the response is a policy change.](figures/audit-path.svg)
 
-*This figure shows the audit path. The deny path, the result path, the proxy and the NetworkPolicy all leave evidence. `AuditLog.counts(trusted_only=True)` removes the reasons that the program claimed, the histogram shows abuse, and the response is a policy change (§8).*
+*The deny path, the result path, the proxy and the NetworkPolicy all leave evidence in the audit trail, the accent cylinder. `AuditLog.counts(trusted_only=True)` removes the reasons that the program claimed, and the histogram shows abuse. The response, in the group on the right, is a policy change, and under load the admission control sheds `run_code` first (§8).*
 
 **One structured event per execution.** `sandboxcore.audit.AuditEvent` is a mirror of the audit event in §9 of the identity primer. That section asks for a "minimum viable audit … trace ID, invocation ID, user, agent identity, authority mode, tool, argument hash, policy decision and reasons, approver, result hash, latency, provenance".
 

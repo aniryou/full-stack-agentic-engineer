@@ -822,6 +822,10 @@ request: X.XXx". That concurrency is `num_blocks / ceil(max_model_len / block_si
 (`get_max_concurrency_for_kv_cache_config`). It is a worst case, because real requests are shorter, and a shared
 prefix increases the concurrency more.
 
+![The maximum concurrency of Llama-3.1-8B in BF16 against max_model_len on an L4 and an H100: the L4 goes below 1× at about 37.8k tokens.](figures/concurrency-vs-max-model-len.svg)
+
+*The chart shows the maximum concurrency of the two columns of the table against `max_model_len`. The L4 line goes below the 1× line at about 37.8k tokens, and below that line the engine does not start. `servelab.sizing.size` computes the two lines, and `tests/test_figures.py` in the serving lab pins the chart.*
+
 ### 4.8 Hybrid models: several KV cache groups
 
 When layers need different cache behaviour (full attention, sliding window, Mamba state, cross-attention),
@@ -1676,6 +1680,10 @@ The defaults are for `vllm serve` at `5840d95`. "GPU-dependent" values come from
 | `--enable-lora`, `--max-loras`, `--max-lora-rank` | off, 1, 16 | Section 9 | — | higher (LoRA kernels) | adapter mix | slots |
 | `--kv-offloading-size` / `--kv-transfer-config` | unset | CPU tier / P/D connector (Section 10) | lower on reuse | less interference (P/D) | higher hit rate | host RAM |
 | `--attention-backend` | auto (Section 6.3) | forces a backend | — | — | — | — |
+
+![The estimated activation peak of the profiling pass against max_num_batched_tokens for Llama-3.1-8B in BF16, with 256 and 1,024 sampler rows.](figures/profiling-activations-vs-budget.svg)
+
+*The chart shows the Memory column of the `--max-num-batched-tokens` and `--max-num-seqs` rows, as the serving lab estimates it for the example of §4.7. The engine subtracts this activation peak from the KV pool, thus a larger budget or more sampler rows give fewer KV blocks. `servelab.sizing.overhead_estimate` computes the two lines, and `tests/test_figures.py` in the serving lab pins the chart.*
 
 A reviewer expects this one-line summary:
 
