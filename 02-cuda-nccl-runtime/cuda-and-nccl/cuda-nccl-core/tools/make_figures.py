@@ -47,6 +47,7 @@ svgchart = _load_svgchart()
 L4_CC = occ.DEVICES["L4"]["cc"]
 THREADS = 256
 REGS = 64
+REGS80 = 80                              # §2.3: at 80 registers an SM holds 24 warps, not 25
 SMEM = 48 * 1024
 
 # §4.2: 384 kernels, an eager launch of 5 us, one graph launch of 10 us; 2 us and 20 us kernels
@@ -107,6 +108,7 @@ def spec_occupancy_vs_registers() -> dict:
     sx, sy = _steps(regs, smem)
     at64 = occ.occupancy(THREADS, REGS, 0, L4_CC)
     at64s = occ.occupancy(THREADS, REGS, SMEM, L4_CC)
+    at80 = occ.occupancy(THREADS, REGS80, 0, L4_CC)
     wpb = at64.warps_per_block
     yticks = [_r(100 * w / sm.max_warps, 3) for w in range(0, sm.max_warps + 1, wpb)]
     return {
@@ -126,6 +128,8 @@ def spec_occupancy_vs_registers() -> dict:
         "marks": [
             {"kind": "point", "x": REGS, "y": pct(at64), "style": "accent", "dy": -10,
              "label": f"{REGS} registers: {at64.blocks_per_sm} blocks, {at64.occupancy:.0%}"},
+            {"kind": "point", "x": REGS80, "y": pct(at80), "style": "accent", "anchor": "start", "dy": -10,
+             "label": f"{REGS80} registers: {at80.active_warps} warps"},
             {"kind": "point", "x": REGS, "y": pct(at64s), "style": "warm", "dy": 20,
              "label": f"{REGS} registers and {SMEM // KIB} KB: {at64s.occupancy:.0%}"},
         ],
@@ -208,10 +212,10 @@ def spec_allreduce_busbw_vs_size() -> dict:
         "marks": [
             {"kind": "hline", "y": BW / 1e9, "style": "warm", "label": f"link rate B = {BW / 1e9:.0f} GB/s"},
             {"kind": "hline", "y": ceiling, "style": "muted", "label": f"NVLS ceiling 2(p−1)/p · B = {ceiling:.0f} GB/s"},
-            {"kind": "point", "x": GIB, "y": _r(bus_nvls, 3), "style": "violet", "anchor": "end", "dy": 36,
-             "label": f"k* = {k_nvls}: busbw {bus_nvls:.0f} GB/s"},
-            {"kind": "point", "x": GIB, "y": _r(bus_ring, 3), "style": "accent", "anchor": "end", "dy": 16,
-             "label": f"1 GiB: busbw {bus_ring:.0f} GB/s"},
+            {"kind": "point", "x": GIB, "y": _r(bus_nvls, 3), "style": "violet", "anchor": "end", "dy": 50,
+             "label": f"NVLS, k* = {k_nvls}: busbw {bus_nvls:.0f} GB/s"},
+            {"kind": "point", "x": GIB, "y": _r(bus_ring, 3), "style": "accent", "anchor": "end", "dy": 22,
+             "label": f"ring busbw {bus_ring:.0f} GB/s"},
             {"kind": "point", "x": GIB, "y": _r(alg_ring, 3), "style": "muted", "anchor": "end", "dy": -9,
              "label": f"algbw {alg_ring:.0f} GB/s"},
         ] + [

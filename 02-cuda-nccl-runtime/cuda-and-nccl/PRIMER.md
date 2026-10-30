@@ -107,7 +107,7 @@ driver **535.183.01**. That driver supports CUDA 12.2.
 
 ![The two compatibility gates on the example of section 1.2: gate 1 compares the CUDA that the host driver supports with the CUDA the app was built with, and gate 2 matches the SASS or PTX in the fatbin against the compute capability of the GPU.](figures/two-gates-compatibility.svg)
 
-*The figure shows the two gates on the example of §1.2 (`gpusim.compat.check()`). The driver supports CUDA 12.2, and the app, built with CUDA 12.4, has SASS for sm_80 and sm_90. Gate 1 passes by minor-version compatibility, and gate 2 passes with the SASS for sm_90. The teal boxes show this path, and the orange boxes show the failures and their error codes.*
+*Read the top row first: gate 1 compares the CUDA runtime with the host driver, and gate 2 matches the fatbin against the GPU (`gpusim.compat.check()`). On the example of §1.2, both gates pass, and the teal boxes show this path. The orange boxes at the bottom give the failures and their error codes.*
 
 ### 1.3 Gate 2: kernel image and GPU
 
@@ -235,7 +235,7 @@ Then 2 blocks fit in 100 KB: **33%**.
 
 ![A grid of blocks of warps of threads, and one SM of an L4 whose four sub-partitions hold 8 warps each at 2,048 registers per warp: 32 of 48 warps resident, 4 blocks, 67% occupancy.](figures/launch-hierarchy-occupancy.svg)
 
-*The figure shows the launch hierarchy and one SM of an L4 (`gpusim.occupancy.occupancy()`). Each block of 256 threads is 8 warps. Each sub-partition has 16,384 registers, which hold 8 warps of 2,048 registers. Thus 32 of the 48 warps are resident: 4 blocks, 67% occupancy, and the registers set the limit.*
+*Read the top row from left to right: a grid has blocks, and each block of 256 threads is 8 warps. In the SM below, 8 warps of 2,048 registers fill the 16,384 registers of each sub-partition, and the dashed slots stay empty. The bottom box gives the result: 32 of the 48 warps, 4 blocks, 67% occupancy (`gpusim.occupancy.occupancy()`).*
 
 The division into sub-partitions is important. At 80 registers, ⌊16,384 / 2,560⌋ = 6 warps per partition. Thus an
 SM holds 24 warps, not ⌊65,536 / 2,560⌋ = 25.
@@ -401,7 +401,7 @@ assumed: an eager launch costs 5 µs, launching a whole graph 10 µs
 
 ![In eager mode each 5 µs launch precedes a 2 µs kernel, so the GPU is idle 60% of the time; a CUDA Graph costs one 10 µs launch and then runs the kernels back to back.](figures/eager-vs-graph-timeline.svg)
 
-*The figure shows the first microseconds of the model in `gpusim.tiling.step_time()`. In eager mode, each launch costs the CPU 5 µs, and the 2 µs kernels leave the GPU idle 60% of the time. A CUDA Graph costs one launch of 10 µs, and then the kernels run back to back. For 384 kernels, that is 778 µs against 1,922 µs, or 2.5×.*
+*Time goes from left to right, and each dashed arrow is a launch that enqueues a kernel (`gpusim.tiling.step_time()`). In eager mode, each launch costs the CPU 5 µs, and the 2 µs kernels leave the GPU idle 60% of the time. A CUDA Graph costs one 10 µs launch, and then the kernels run back to back: 778 µs against 1,922 µs for 384 kernels.*
 
 A decode step at small batch is exactly the first case. It has hundreds of small GEMMs, norms, rotary embeddings,
 attention and sampling kernels. Many of them are a few microseconds long.
@@ -538,7 +538,7 @@ nccl-tests (`sweep()`, `format_sweep()`):
 
 ![Ring all-reduce time against message size on 8 H100s in the alpha-beta model: flat near the latency term below the 7.2 MB crossover, where the 512 KiB all-reduce of decode sits, and growing with the bandwidth term above it, where the 128 MiB all-reduce of prefill sits.](figures/ring-allreduce-regimes.svg)
 
-*The chart shows the time of a ring all-reduce on 8 H100s against the message size, on log axes. Below the crossover of 7.2 MB, the latency term sets the time, and above it the bandwidth term sets the time. The 512 KiB all-reduce of decode is below the crossover, and the 128 MiB all-reduce of prefill is above it. `gpusim.collectives.model_time()` and `cost_terms()` compute the three lines, and `cuda-nccl-core/tests/test_figures.py` pins the chart.*
+*On log axes, the latency term sets the time below the 7.2 MB crossover, where the 512 KiB all-reduce of decode is. Above the crossover, the bandwidth term sets the time, and the 128 MiB all-reduce of prefill is there. `gpusim.collectives.model_time()` and `cost_terms()` compute the three lines, and `cuda-nccl-core/tests/test_figures.py` pins the chart.*
 
 Below $S^{\ast}$, a ring all-reduce costs approximately $2(p-1) \cdot \alpha$ for any message size. Thus the
 algorithm that wins is the one with the fewest steps. At 512 KiB on 8 GPUs, the model gives these times: two-shot
@@ -711,7 +711,7 @@ things: small models, dev notebooks, low-QPS endpoints, CI.
 
 ![Three ways to share a GPU over time: MIG partitions the SMs into fixed instances, MPS overlaps the kernels of all tenants at the same time, and time-slicing runs one context at a time with a switch between turns.](figures/sharing-mig-mps-timeslicing.svg)
 
-*The figure shows the three ways to share a GPU, with time from left to right and SM capacity from bottom to top. MIG gives each tenant its own slice of the hardware (§7.2). MPS runs the kernels of all tenants at the same time (§7.3). In the third panel (§7.4), the GPU runs one context at a time, and each switch between turns costs time.*
+*In each panel, time goes from left to right and SM capacity from bottom to top. MIG gives each tenant a slice of the hardware (§7.2), and MPS runs the kernels of all tenants at the same time (§7.3). In the third panel, the GPU runs one context at a time, and each narrow bar marked s is a context switch (§7.4).*
 
 ### 7.2 MIG: partitions
 

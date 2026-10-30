@@ -129,18 +129,21 @@ def spec_experts_touched_vs_batch() -> dict:
     # §5: "Mixtral touches 7.5 of its 8 experts per layer from batch 10, Qwen3 120 of 128 from batch 43", and the
     # DeepSeek-V3 counts at 8, 32 and 128 tokens; §3.7 and §5: Qwen3 touches 82.4 of 128 at batch 16
     marks = [
-        {"kind": "point", "x": b_mix, "y": share(MIX, b_mix), "style": "accent", "anchor": "end", "dy": -6,
-         "label": f"7.5 of 8 from batch {b_mix}"},
+        {"kind": "point", "x": b_mix, "y": share(MIX, b_mix), "style": "accent"},
+        {"kind": "text", "x": b_mix, "y": 103, "text": f"7.5 of 8 from batch {b_mix}", "style": "accent",
+         "anchor": "end"},
         {"kind": "point", "x": 16, "y": share(Q3, 16), "style": "plain", "anchor": "end", "dy": -6,
          "label": f"{n(Q3, 16):.1f} of 128 at batch 16"},
-        {"kind": "point", "x": b_q3, "y": share(Q3, b_q3), "style": "plain", "anchor": "end", "dy": -8,
-         "label": f"120 of 128 from batch {b_q3}"},
+        {"kind": "point", "x": b_q3, "y": share(Q3, b_q3), "style": "plain"},
+        {"kind": "text", "x": b_q3, "y": 103, "text": f"120 of 128 from batch {b_q3}", "style": "plain",
+         "anchor": "end"},
         {"kind": "point", "x": 8, "y": share(DS, 8), "style": "muted", "anchor": "start", "dy": 16,
          "label": f"{n(DS, 8):.1f} of 256 at batch 8"},
         {"kind": "point", "x": 32, "y": share(DS, 32), "style": "muted", "anchor": "start", "dy": 16,
          "label": f"{n(DS, 32):.1f} at batch 32"},
-        {"kind": "point", "x": 128, "y": share(DS, 128), "style": "muted", "anchor": "end", "dy": 18,
-         "label": f"{n(DS, 128):.1f} at batch 128"},
+        {"kind": "point", "x": 128, "y": share(DS, 128), "style": "muted"},
+        {"kind": "text", "x": 128, "y": 88, "text": f"{n(DS, 128):.1f} at batch 128", "style": "muted",
+         "anchor": "middle"},
     ]
     return {
         "kind": "line",
@@ -172,22 +175,22 @@ def spec_dispatch_time_vs_tokens() -> dict:
         pt(8, NVLINK, "accent", "start", 18, f"8 tokens: {t_us(8, NVLINK):.1f} µs"),
         pt(8, IB, "warm", "end", -9, f"8 tokens: {t_us(8, IB):.1f} µs"),
         pt(256, NVLINK, "accent", "start", 16, f"256 tokens: {t_us(256, NVLINK):.0f} µs direct"),
-        pt(4096, NVLINK, "accent", "start", 16, f"4,096 tokens: {t_us(4096, NVLINK):,.1f} µs"),
+        pt(4096, NVLINK, "accent", "end", -9, f"{t_us(4096, NVLINK):,.1f} µs"),
         pt(4096, IB, "warm", "end", -9, f"4,096 tokens: {t_us(4096, IB):,.1f} µs"),
     ]
     return {
         "kind": "line",
-        "title": "Time of one Mixtral dispatch all-to-all on 8 GPUs against the tokens per GPU, on NVLink 4 and on "
-                 "400 Gb/s InfiniBand.",
+        "title": "Time of one direct Mixtral dispatch all-to-all on 8 GPUs against the tokens per GPU, on NVLink 4 "
+                 "and on 400 Gb/s InfiniBand.",
         "height": 400,
-        "x": {"label": "tokens per GPU (log scale)", "scale": "log", "ticks": [1, 8, 64, 512, 4096],
+        "x": {"label": "tokens per GPU (log scale)", "scale": "log", "min": 1, "max": 8192, "ticks": [1, 8, 64, 512, 4096],
               "tick_labels": ["1", "8", "64", "512", "4,096"]},
         "y": {"label": "dispatch time per MoE layer (µs, log scale)", "scale": "log", "min": 1, "max": 10_000,
               "ticks": [1, 10, 100, 1000, 10_000], "tick_labels": ["1", "10", "100", "1,000", "10,000"]},
         "series": series,
         "marks": marks,
         "legend": "top-left",
-        "note": "computed by moecore.ep.a2a_time and ep.dispatch_bytes (hidden 4,096, top-2, BF16; simulated)",
+        "note": "computed by moecore.ep.a2a_time and ep.dispatch_bytes (hidden 4,096, top-2, BF16, simulated)",
     }
 
 

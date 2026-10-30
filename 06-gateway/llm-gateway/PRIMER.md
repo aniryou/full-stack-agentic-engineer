@@ -53,17 +53,17 @@ flowchart TB
         direction LR
         IF["if the request runs:<br/>key, budget, token<br/>limits, guardrail"] --> WHICH["which target serves it:<br/>an alias resolves to<br/>a fallback chain"]
     end
-    GW -- "provider keys,<br/>injected on the way out" --> HOSTED["hosted providers:<br/>OpenAI, Anthropic,<br/>Gemini"]
+    GW -- "provider keys,<br/>injected on the way out" --> HOSTED["hosted<br/>providers"]
     GW -- "one target,<br/>one breaker" --> POOL
     subgraph POOL["a self-hosted pool"]
         direction TB
-        RTR["the 05 router<br/>selects the replica"] --> ENG["the 04 engine<br/>batches the requests"]
+        RTR["the 05 router:<br/>which replica"] --> ENG["the 04 engine:<br/>the batch"]
     end
     GW -. "reads and writes" .-> STATE
     subgraph STATE["state outside the process"]
         direction TB
         STORE[("shared store:<br/>limits, caches")]
-        SECRETS[("secret manager:<br/>provider keys")]
+        SECRETS[("secret<br/>manager:<br/>provider keys")]
         LEDGER[("ledger rows<br/>and spans")]
     end
 ```
@@ -232,6 +232,18 @@ parts with `thought: true`. In vLLM, the reasoning text has the name `reasoning`
 that it gets. OpenAI's schema has neither field. `providers.normalize_stream()` changes the Anthropic and Gemini streams
 into canonical chunks.
 
+```mermaid
+flowchart LR
+    EV(["Anthropic<br/>named events"]) --> N["providers.<br/>normalize_stream()"]
+    N -- "text_delta,<br/>input_json_delta,<br/>thinking_delta" --> CH["canonical<br/>chunks"]
+    N -- "the final<br/>message_delta" --> U["one usage chunk:<br/>1,550 completion,<br/>1,200 reasoning"]
+    N -- "a cut stream:<br/>no final<br/>message_delta" --> EST["no usage chunk:<br/>the gateway's estimate<br/>from the deltas"]
+```
+
+*`providers.normalize_stream()` changes the named events of an Anthropic stream into canonical chunks. Only the final
+`message_delta` gives a usage chunk with all the counts. For a cut stream, the gateway makes an estimate from the
+relayed deltas and marks the row as estimated (§5.2).*
+
 The counts do normalise, but only at the end. Anthropic's usage is cumulative, and the final `message_delta` carries
 all of it. This includes `output_tokens_details.thinking_tokens` when the API sends that field. The field is
 optional in the SDK's `MessageDeltaUsage`. Thus the §1.5 stream normalises to the same 1,550 completion and 1,200
@@ -285,13 +297,13 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    NEXT{"an ordered target<br/>left?"} -- "none" --> NONE["every target<br/>failed: 503"]
+    NEXT{"an ordered<br/>target left?"} -- "none" --> NONE["every target<br/>failed: 503"]
     NEXT -- "the next one" --> B{"its breaker<br/>open?"}
     B -- "yes: skip it" --> NEXT
-    B -- "no, or one probe<br/>after the cooldown" --> CALL["call the<br/>provider"]
-    CALL -- "200, first byte" --> OK["relay the<br/>stream"]
+    B -- "no, or one<br/>probe after<br/>the cooldown" --> CALL["call the<br/>provider"]
+    CALL -- "200,<br/>first byte" --> OK["relay the<br/>stream"]
     CALL -- "a failure that<br/>falls through" --> NEXT
-    CALL -- "a failure that must<br/>not fall through" --> STOP["an error to<br/>the client"]
+    CALL -- "a failure that<br/>must not<br/>fall through" --> STOP["an error to<br/>the client"]
 ```
 
 *The walk takes the targets in that order. The breaker of §2.4 skips a target that is down, with no wait. After a
@@ -390,7 +402,7 @@ sufficient for the traffic that they will take.
 
 ![Failed requests of a fallback chain against its number of targets, with no common-mode failure, with a gateway at 99.95 %, and with a 0.1 % common-mode failure.](figures/chain-availability-common-mode.svg)
 
-*The y axis is the share of failed requests, on a log scale. The labels give the availability, as the prose prints
+*The y axis is the share of failed requests on a log scale, and the labels give the availability as the prose prints
 it. Each fallback at 99.0 % divides the independent failures by 100, but a common-mode failure stays as a floor.
 `routing.chain_availability()` in the core computes each point, and `tests/test_figures.py` pins the chart.*
 
@@ -626,7 +638,7 @@ sequenceDiagram
         G-->>C: chunk
     end
     P-->>G: the usage chunk, then [DONE]
-    G->>L: debit the rest of the usage, then<br/>finish() releases the unused reservation
+    G->>L: debit the rest of the usage,<br/>then finish() releases<br/>the unused reservation
     G-->>C: the usage chunk if asked,<br/>then [DONE]
 ```
 
@@ -693,7 +705,7 @@ smallest with none.
 ![Tokens served and the peak window, as a share of the limit, against the output reservation of the token limiter.](figures/token-reservation-sweep.svg)
 
 *A smaller reservation serves more of the limit, but its peak window also increases. At 1,024 and 2,048 tokens, the
-peak window goes above the limit. The labels on the peak line give the seconds over the limit.
+peak window goes above the limit, and the labels on the peak line give the seconds over it.
 `ratelimit.simulate()` computes each point on the §4.3 workload, and `tests/test_figures.py` pins the chart.*
 
 Find the size of the reservation by simulation on your own output distribution. Where a provider 429 is not
@@ -732,12 +744,12 @@ has the TTFT, the duration and the trace id.
 
 ```mermaid
 flowchart LR
-    U["the provider's<br/>usage"] --> PR["metering.price_call()"]
+    U["the provider's<br/>usage"] --> PR["metering.<br/>price_call()"]
     EST["a cut stream:<br/>an estimate"] --> PR
-    PR --> ROW["one LedgerRow<br/>per request"]
+    PR --> ROW["one<br/>LedgerRow<br/>per request"]
     ROW --> LED[("Ledger:<br/>billing-grade")]
     LED --> CB["chargeback<br/>per tenant"]
-    LED --> REC["Ledger.reconcile()"]
+    LED --> REC["Ledger.<br/>reconcile()"]
     ROW -. "the same<br/>trace id" .-> TR["otel.Tracer"]
     TR --> SP[("OTLP/JSON<br/>spans")]
 ```

@@ -49,9 +49,9 @@ This primer links to these primers, and it does not repeat them:
 
 ![Bytes one decode step reads against the batch for Mixtral-8x7B and for a dense model of its active size, on an H200 at 1K context.](figures/decode-step-bytes-vs-batch.svg)
 
-*This chart shows the bytes that one decode step reads against the batch, for Mixtral-8x7B on an H200 at 1K
-context (`touched.decode_step()`, simulated). At batch 1 the step reads 2.00 of 8 experts per layer, the same
-cost as a dense model of the active size. By batch 16 it reads almost all of the 93.4 GB of weights.*
+*`touched.decode_step()` computes the bytes of one decode step against the batch on an H200 at 1K context
+(simulated), and `tests/test_figures.py` pins the chart. At batch 1, Mixtral-8x7B reads almost the same bytes as a
+dense model of its active size. By batch 16, Mixtral reads almost all of its 93.4 GB of weights.*
 
 ---
 
@@ -461,9 +461,9 @@ every expert at every step.
 
 ![The share of the experts that one layer touches, against the batch, for Mixtral-8x7B, Qwen3-30B-A3B and DeepSeek-V3.](figures/experts-touched-vs-batch.svg)
 
-*This chart shows the share of the E experts that one layer touches, against the batch, for three granularities
-(`touched.experts_touched()`). Mixtral reads almost all of its 8 experts from batch 10. The fine experts of
-Qwen3-30B-A3B and DeepSeek-V3 keep the decrease in bytes up to larger batches.*
+*`touched.experts_touched()` computes the share of the E experts that one layer touches against the batch, and
+`tests/test_figures.py` pins the chart. Mixtral reads almost all of its 8 experts from batch 10. The fine experts
+of Qwen3-30B-A3B and DeepSeek-V3 keep the decrease in bytes up to larger batches.*
 
 **Skewed against uniform.** Skew (§3.7) touches fewer experts. Qwen3 at batch 16 under Zipf s = 1.0 reads 58.0 experts per
 layer instead of 82.4, a 1.36× faster step on one GPU. This number comes from the simulation (notebook 03, exercise
@@ -551,6 +551,12 @@ direct all-to-all (simulated, layer 01's illustrative links):
 | 8 (decode) | 400 Gb/s IB | 0.12 MiB, 7.3 µs | 0.45 MiB, 13.3 µs | 0.88 MiB, 21.1 µs |
 | 4,096 (prefill) | NVLink 4 | 64 MiB, 132.5 µs | 231 MiB, 473.0 µs | 448 MiB, 915.4 µs |
 | 4,096 (prefill) | 400 Gb/s IB | 64 MiB, 1,179.4 µs | 231 MiB, 4,243.9 µs | 448 MiB, 8,225.8 µs |
+
+![Time of one direct Mixtral dispatch all-to-all on 8 GPUs against the tokens per GPU, on NVLink 4 and on 400 Gb/s InfiniBand.](figures/dispatch-time-vs-tokens.svg)
+
+*`ep.a2a_time()` computes the time of one Mixtral dispatch against the tokens per GPU for two links (simulated),
+and `tests/test_figures.py` pins the chart. At decode sizes, the latency α sets the time. At prefill sizes, the
+bytes set the time, and IB is approximately 9× slower than NVLink 4.*
 
 Decode is latency-bound: α is most of the time. Prefill is bandwidth-bound, and across 400 Gb/s NICs it is approximately
 9× slower than on NVLink. These are the numbers behind the rule of the deployment primer: "tensor and expert

@@ -798,10 +798,9 @@ largest batch that meets an **ITL of 10 ms** (100 tokens/s per user) and fits in
 flowchart LR
   SLO(["ITL SLO<br/>10 ms"]) --> B["best_batch_under_itl()<br/>meets the ITL<br/>fits in HBM"]
   B --> T["decode()<br/>tokens/s"]
-  P["$/GPU-hr"] --> C
-  T --> C["cost_per_million_tokens()"]
+  P(["$/GPU-hr"]) --> C
+  T --> C["cost_per_million_tokens()<br/>$/M output tokens"]
   U["utilisation()"] --> C
-  C --> R["$/M output tokens"]
 ```
 
 *The ITL SLO and the HBM capacity set the batch, and the decode step sets the tokens per second. The price per GPU-hour and the utilisation then set the cost of a token (§8.1 and §8.2).*

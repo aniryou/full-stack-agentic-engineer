@@ -70,7 +70,7 @@ def spec_roofline() -> dict:
         (rl.gemm(4096, 4096, 4096), "GEMM 4096 × 4096 × 4096: {:,.0f}", "middle", 20),
     ]
     steps = [  # (step, label, anchor, dy) -- §3.2 and two rows of the §3.3 table (2K context)
-        (llm.decode(M8, H100, 1, 2048), "decode, batch 1: {:.1f}", "start", 17),
+        (llm.decode(M8, H100, 1, 2048), "decode, batch 1: {:.1f}", "start", 12),
         (llm.decode(M8, H100, 64, 2048), "decode, batch 64: {:.1f}", "end", -8),
         (llm.prefill(M8, H100, 2048), "prefill, 2,048 tokens: {:,.0f}", "middle", -10),
     ]

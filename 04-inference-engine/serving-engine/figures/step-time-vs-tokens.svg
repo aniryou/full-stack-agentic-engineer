@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="360" viewBox="0 0 880 360" role="img" aria-label="The simulated time of one step of Llama-3.1-8B on an H100 against the tokens in the step, with the memory term and the compute term of the roofline." style="color: #E4EAE7">
+  <title>The simulated time of one step of Llama-3.1-8B on an H100 against the tokens in the step, with the memory term and the compute term of the roofline.</title>
+  <desc>{"kind":"line","legend":"top-left","marks":[{"kind":"vline","label":"knee: ~221 tokens","style":"warm","x":221.418},{"anchor":"start","dy":-10,"kind":"point","label":"1 token: 7.6 ms","style":"accent","x":1,"y":7.6005},{"anchor":"middle","dy":-12,"kind":"point","label":"64: 7.6 ms","style":"accent","x":64,"y":7.6036},{"anchor":"start","dy":20,"kind":"point","label":"256: 8.1 ms","style":"accent","x":256,"y":8.0528},{"anchor":"start","dy":18,"kind":"point","label":"512: 14.2 ms","style":"accent","x":512,"y":14.1617},{"anchor":"start","dy":16,"kind":"point","label":"2,048: 52.0 ms","style":"accent","x":2048,"y":52.031},{"anchor":"end","dy":-4,"kind":"point","label":"8,192: 224 ms","style":"accent","x":8192,"y":224.3537}],"note":"SIMULATED: computed by minengine.perf.step_cost and knee_tokens (60% FLOPs, 80% bandwidth, 2 ms)","series":[{"dash":true,"name":"bytes ÷ bandwidth + overhead","style":"muted","x":[1,2,3,4,5,6,7,8,10,11,13,16,19,23,27,32,38,45,54,64,76,91,108,128,152,181,215,256,304,362,431,512,609,724,861,1024,1218,1448,1722,2048,2435,2896,3444,4096,4871,5793,6889,8192],"y":[7.6005,7.6006,7.6006,7.6007,7.6007,7.6008,7.6008,7.6009,7.601,7.601,7.6011,7.6013,7.6014,7.6016,7.6018,7.6021,7.6024,7.6027,7.6031,7.6036,7.6042,7.6049,7.6058,7.6068,7.6079,7.6093,7.611,7.613,7.6154,7.6182,7.6216,7.6255,7.6303,7.6359,7.6426,7.6506,7.6601,7.6713,7.6847,7.7007,7.7196,7.7421,7.7689,7.8008,7.8387,7.8838,7.9374,8.0011]},{"dash":true,"name":"FLOPs ÷ peak + overhead","style":"violet","x":[1,2,3,4,5,6,7,8,10,11,13,16,19,23,27,32,38,45,54,64,76,91,108,128,152,181,215,256,304,362,431,512,609,724,861,1024,1218,1448,1722,2048,2435,2896,3444,4096,4871,5793,6889,8192],"y":[2.0253,2.0488,2.0723,2.0959,2.1194,2.1429,2.1665,2.19,2.2371,2.2606,2.3077,2.3783,2.4489,2.543,2.6372,2.755,2.8963,3.0612,3.2733,3.5091,3.7921,4.1461,4.5475,5.02,5.5876,6.274,7.0798,8.0528,9.1938,10.5752,12.2225,14.1617,16.4915,19.2644,22.5831,26.5532,31.3089,36.9902,43.8194,52.031,61.9011,73.8312,88.257,105.7661,127.0669,153.0993,185.0215,224.3537]},{"name":"step time","style":"accent","x":[1,2,3,4,5,6,7,8,10,11,13,16,19,23,27,32,38,45,54,64,76,91,108,128,152,181,215,256,304,362,431,512,609,724,861,1024,1218,1448,1722,2048,2435,2896,3444,4096,4871,5793,6889,8192],"y":[7.6005,7.6006,7.6006,7.6007,7.6007,7.6008,7.6008,7.6009,7.601,7.601,7.6011,7.6013,7.6014,7.6016,7.6018,7.6021,7.6024,7.6027,7.6031,7.6036,7.6042,7.6049,7.6058,7.6068,7.6079,7.6093,7.611,8.0528,9.1938,10.5752,12.2225,14.1617,16.4915,19.2644,22.5831,26.5532,31.3089,36.9902,43.8194,52.031,61.9011,73.8312,88.257,105.7661,127.0669,153.0993,185.0215,224.3537]}],"title":"The simulated time of one step of Llama-3.1-8B on an H100 against the tokens in the step, with the memory term and the compute term of the roofline.","x":{"label":"tokens in the step","max":8192,"scale":"log","ticks":[1,4,16,64,256,1024,4096]},"y":{"label":"step time (ms)","max":300,"min":2,"scale":"log","ticks":[2,5,10,20,50,100,200]}}</desc>
+  <rect x="0" y="0" width="880" height="360" rx="8" fill="#161E1C"/>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12" fill="currentColor">
+    <g stroke="#27322E" stroke-width="1">
+      <line x1="66.0" y1="290.0" x2="858.0" y2="290.0"/>
+      <line x1="66.0" y1="241.0" x2="858.0" y2="241.0"/>
+      <line x1="66.0" y1="203.9" x2="858.0" y2="203.9"/>
+      <line x1="66.0" y1="166.8" x2="858.0" y2="166.8"/>
+      <line x1="66.0" y1="117.8" x2="858.0" y2="117.8"/>
+      <line x1="66.0" y1="80.8" x2="858.0" y2="80.8"/>
+      <line x1="66.0" y1="43.7" x2="858.0" y2="43.7"/>
+    </g>
+    <g stroke="#55635E" stroke-width="1.2">
+      <line x1="66.0" y1="290.0" x2="858.0" y2="290.0"/>
+      <line x1="66.0" y1="290.0" x2="66.0" y2="22.0"/>
+    </g>
+    <g font-size="11" fill="#97A59F">
+      <text x="58.0" y="293.5" text-anchor="end">2</text>
+      <text x="58.0" y="244.5" text-anchor="end">5</text>
+      <text x="58.0" y="207.4" text-anchor="end">10</text>
+      <text x="58.0" y="170.3" text-anchor="end">20</text>
+      <text x="58.0" y="121.3" text-anchor="end">50</text>
+      <text x="58.0" y="84.3" text-anchor="end">100</text>
+      <text x="58.0" y="47.2" text-anchor="end">200</text>
+      <text x="66.0" y="306.0" text-anchor="middle">1</text>
+      <text x="187.8" y="306.0" text-anchor="middle">4</text>
+      <text x="309.7" y="306.0" text-anchor="middle">16</text>
+      <text x="431.5" y="306.0" text-anchor="middle">64</text>
+      <text x="553.4" y="306.0" text-anchor="middle">256</text>
+      <text x="675.2" y="306.0" text-anchor="middle">1,024</text>
+      <text x="797.1" y="306.0" text-anchor="middle">4,096</text>
+    </g>
+    <text x="462.0" y="332.0" text-anchor="middle" fill="#97A59F">tokens in the step</text>
+    <text x="16" y="156.0" text-anchor="middle" fill="#97A59F" transform="rotate(-90 16 156.0)">step time (ms)</text>
+    <clipPath id="plot"><rect x="65.0" y="16.0" width="794.0" height="275.0"/></clipPath>
+    <g clip-path="url(#plot)">
+      <path d="M66.0 218.6 L126.9 218.6 L162.6 218.6 L187.8 218.6 L207.5 218.6 L223.5 218.6 L237.0 218.6 L248.8 218.6 L268.4 218.6 L276.8 218.6 L291.4 218.6 L309.7 218.6 L324.8 218.6 L341.6 218.6 L355.7 218.6 L370.6 218.6 L385.7 218.6 L400.6 218.6 L416.6 218.6 L431.5 218.6 L446.6 218.6 L462.5 218.6 L477.5 218.6 L492.5 218.5 L507.6 218.5 L522.9 218.5 L538.0 218.5 L553.4 218.5 L568.5 218.5 L583.8 218.5 L599.2 218.4 L614.3 218.4 L629.6 218.4 L644.8 218.3 L660.0 218.3 L675.2 218.2 L690.5 218.2 L705.7 218.1 L720.9 218.0 L736.2 217.9 L751.4 217.8 L766.6 217.6 L781.8 217.4 L797.1 217.2 L812.3 216.9 L827.5 216.6 L842.8 216.3 L858.0 215.8" fill="none" stroke="#97A59F" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="6 4"/>
+      <path d="M66.0 289.3 L126.9 288.7 L162.6 288.1 L187.8 287.5 L207.5 286.9 L223.5 286.3 L237.0 285.7 L248.8 285.1 L268.4 284.0 L276.8 283.4 L291.4 282.3 L309.7 280.7 L324.8 279.2 L341.6 277.2 L355.7 275.2 L370.6 272.9 L385.7 270.2 L400.6 267.2 L416.6 263.6 L431.5 259.9 L446.6 255.8 L462.5 251.0 L477.5 246.1 L492.5 240.8 L507.6 235.0 L522.9 228.9 L538.0 222.4 L553.4 215.5 L568.5 208.4 L583.8 200.9 L599.2 193.2 L614.3 185.3 L629.6 177.2 L644.8 168.8 L660.0 160.3 L675.2 151.7 L690.5 142.9 L705.7 134.0 L720.9 124.9 L736.2 115.7 L751.4 106.4 L766.6 97.0 L781.8 87.4 L797.1 77.8 L812.3 67.9 L827.5 58.0 L842.8 47.9 L858.0 37.5" fill="none" stroke="#B7A3F0" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="6 4"/>
+      <path d="M66.0 218.6 L126.9 218.6 L162.6 218.6 L187.8 218.6 L207.5 218.6 L223.5 218.6 L237.0 218.6 L248.8 218.6 L268.4 218.6 L276.8 218.6 L291.4 218.6 L309.7 218.6 L324.8 218.6 L341.6 218.6 L355.7 218.6 L370.6 218.6 L385.7 218.6 L400.6 218.6 L416.6 218.6 L431.5 218.6 L446.6 218.6 L462.5 218.6 L477.5 218.6 L492.5 218.5 L507.6 218.5 L522.9 218.5 L538.0 218.5 L553.4 215.5 L568.5 208.4 L583.8 200.9 L599.2 193.2 L614.3 185.3 L629.6 177.2 L644.8 168.8 L660.0 160.3 L675.2 151.7 L690.5 142.9 L705.7 134.0 L720.9 124.9 L736.2 115.7 L751.4 106.4 L766.6 97.0 L781.8 87.4 L797.1 77.8 L812.3 67.9 L827.5 58.0 L842.8 47.9 L858.0 37.5" fill="none" stroke="#4CC5B7" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    </g>
+    <line x1="540.6" y1="22.0" x2="540.6" y2="290.0" stroke="#E39A62" stroke-width="1.2" stroke-dasharray="4 3"/>
+    <text x="545.6" y="34.0" text-anchor="start" font-size="11" fill="#E39A62">knee: ~221 tokens</text>
+    <circle cx="66.0" cy="218.6" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="75.0" y="208.6" text-anchor="start" font-size="11" fill="#4CC5B7">1 token: 7.6 ms</text>
+    <circle cx="431.5" cy="218.6" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="431.5" y="206.6" text-anchor="middle" font-size="11" fill="#4CC5B7">64: 7.6 ms</text>
+    <circle cx="553.4" cy="215.5" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="562.4" y="235.5" text-anchor="start" font-size="11" fill="#4CC5B7">256: 8.1 ms</text>
+    <circle cx="614.3" cy="185.3" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="623.3" y="203.3" text-anchor="start" font-size="11" fill="#4CC5B7">512: 14.2 ms</text>
+    <circle cx="736.2" cy="115.7" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="745.2" y="131.7" text-anchor="start" font-size="11" fill="#4CC5B7">2,048: 52.0 ms</text>
+    <circle cx="858.0" cy="37.5" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="849.0" y="33.5" text-anchor="end" font-size="11" fill="#4CC5B7">8,192: 224 ms</text>
+    <g font-size="11.5">
+      <rect x="76.0" y="30.0" width="224.3" height="61.0" rx="5" fill="#161E1C" fill-opacity="0.9" stroke="#27322E"/>
+      <line x1="86.0" y1="43.0" x2="104.0" y2="43.0" stroke="#97A59F" stroke-width="2" stroke-dasharray="6 4"/>
+      <text x="110.0" y="47.0" fill="currentColor">bytes ÷ bandwidth + overhead</text>
+      <line x1="86.0" y1="60.0" x2="104.0" y2="60.0" stroke="#B7A3F0" stroke-width="2" stroke-dasharray="6 4"/>
+      <text x="110.0" y="64.0" fill="currentColor">FLOPs ÷ peak + overhead</text>
+      <line x1="86.0" y1="77.0" x2="104.0" y2="77.0" stroke="#4CC5B7" stroke-width="2"/>
+      <text x="110.0" y="81.0" fill="currentColor">step time</text>
+    </g>
+    <text x="10" y="353.0" font-size="10.5" fill="#97A59F" font-family="JetBrains Mono, monospace">SIMULATED: computed by minengine.perf.step_cost and knee_tokens (60% FLOPs, 80% bandwidth, 2 ms)</text>
+  </g>
+</svg>
