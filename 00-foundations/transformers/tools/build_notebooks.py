@@ -298,6 +298,10 @@ def build(solution):
     title = "# Attention practice" + (" — solutions" if solution else "")
     intro = """This notebook is a companion to `docs/transformer-primer.md` (Sections 2, 3, 8) and to `lessons/01_attention.py` and `lessons/02_block.py`.
 
+![One pre-norm block: the residual stream goes through it, attention reads from it after a Norm and adds its output back, then the MLP does the same for each position on its own.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/00-foundations/transformers/docs/figures/transformer-block-residual-stream.svg)
+
+*Figure from `docs/transformer-primer.md`, §3.4 The mental model: see the pre-norm block that exercise 6 builds, with the multi-head attention of exercise 5 in it. Each sub-layer reads the residual stream after a Norm and adds its output back, and the block has about $12d^2$ parameters.*
+
 Each exercise has a cell with `...` blanks to fill in. A check cell comes after that cell. Run the check.
 When your implementation is correct, the check prints ✅. When your implementation is not correct, the check tells you the problem.
 While blanks stay in the cell, the check stops with `NotImplementedError`.
