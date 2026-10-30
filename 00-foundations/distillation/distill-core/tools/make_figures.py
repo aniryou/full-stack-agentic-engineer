@@ -84,7 +84,7 @@ def spec_kl_against_temperature() -> dict:
             {"kind": "point", "x": 4.0, "y": _sig(s4), "label": f"T = 4: {s4:.5f}", "style": "accent", "anchor": "start", "dy": -10},
             {"kind": "point", "x": 4.0, "y": _sig(k4), "label": f"T = 4: {k4:.5f}", "style": "warm", "anchor": "start", "dy": -8},
         ],
-        "legend": "bottom-right",
+        "legend": "bottom-left",
         "note": "computed by distillcore.losses.kd and losses.logit_mse",
     }
 

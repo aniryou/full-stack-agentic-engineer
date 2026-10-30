@@ -169,7 +169,7 @@ target is ≥25 tok/s/user (TPOT ≤ 40 ms).
 
 ![Concurrent sessions on one H100 against the context length, for the 24B model in bf16 and in fp8, with the ~100 live sessions of the bank example.](figures/sessions-vs-context.svg)
 
-*The figure shows the concurrent sessions on one H100 against the context length of a session. The fp8 line is ~4× the bf16 line, and only the fp8 point is above the ~100 live sessions, which apply to the bank example only. `capacity.max_concurrent_sessions` computes the lines, and `test_figures.py` pins the chart.*
+*The figure shows the concurrent sessions on one H100 against the context length of a session. The fp8 line is ~4× the bf16 line, and only the fp8 point is above the ~100 live sessions of the bank example. `capacity.max_concurrent_sessions` computes the lines, and `test_figures.py` pins the chart.*
 
 > The two paths of the size calculation are memory (~sessions/GPU) and throughput (tok/s/GPU). Expect
 > their results to be approximately the same. Show both in a design review. If the

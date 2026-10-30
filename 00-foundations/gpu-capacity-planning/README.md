@@ -17,13 +17,15 @@ Mistral Small 3 (24B dense) and Mistral Large 3 (675B MoE).
 | `capacity.py` | Each formula as a small plain-Python function. It does not use numpy. |
 | `worked_example.py` | It runs all of the examples: Mistral Small on H100, the bank and Mistral Large 3. |
 | `test_capacity.py` | It pins the numbers that `PRIMER.md` quotes (units, the bank example, the attention term of prefill). It also does checks on the practice notebooks: the solution runs, and each check cell fails an incorrect answer. |
+| `make_figures.py` | It computes the charts of `PRIMER.md` with `capacity.py` and writes `figures/*.svg`. |
+| `test_figures.py` | It pins each chart to `capacity.py` with `svgchart.check_figure()`. |
 | `notebooks/01_capacity_practice.ipynb` | Fill-in-the-blank. Implement the 6 core functions. The checks compare them with `capacity.py` on several inputs. |
 | `solutions/01_capacity_practice.ipynb` | The worked answers. This is the same notebook with all blanks filled in. |
 
 ## Run
 ```bash
 python worked_example.py          # prints the numbers in PRIMER.md
-python -m pytest -q test_capacity.py   # checks them (needs pytest)
+python -m pytest -q test_capacity.py test_figures.py   # checks them (needs pytest)
 jupyter notebook notebooks/       # do the practice (pure stdlib, no install); answers in solutions/
 ```
 

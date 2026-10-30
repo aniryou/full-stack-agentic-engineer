@@ -636,9 +636,9 @@ The order of adoption is important. Add durability (checkpoints, idempotency) be
 
 ```mermaid
 flowchart LR
-    P["Pilot<br/>≤ 1,000"] -- "p95 in the<br/>peak hour crosses<br/>the budget:<br/>add the queue" --> V1["Production v1<br/>1,000–20,000"]
-    V1 -- "durability<br/>before admission<br/>control" --> S["Scale<br/>20,000–200,000"]
-    S -- "PT before<br/>multi-region: a<br/>residency or<br/>availability<br/>requirement" --> E["Enterprise<br/>> 200,000,<br/>multi-brand"]
+    P["Pilot<br/>≤ 1,000"] -- "p95 in the<br/>peak hour<br/>crosses the<br/>budget: add<br/>the queue" --> V1["Production v1<br/>1,000–20,000"]
+    V1 -- "durability<br/>before<br/>admission<br/>control" --> S["Scale<br/>20,000–<br/>200,000"]
+    S -- "PT before<br/>multi-region:<br/>a residency or<br/>availability<br/>requirement" --> E["Enterprise<br/>> 200,000,<br/>multi-brand"]
 ```
 
 *The growth path of §7 as the order of adoption: durability before admission control, admission control before PT, and PT before multi-region. The numbers are conversations a day. Each edge names the rule of order or the measurement that starts the next stage.*

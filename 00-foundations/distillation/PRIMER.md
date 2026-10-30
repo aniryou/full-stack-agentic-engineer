@@ -194,7 +194,7 @@ $$
 that is, the mean-squared error on centred logits (Caruana's model compression): 0.23000 for the example
 (`losses.logit_mse()`).
 
-![The soft term of the five-token example against the temperature T: the KL decreases as 1/T², and T²·KL goes to its high-T limit.](figures/kl-against-temperature.svg)
+![The soft term of the five-token example against the temperature T: the KL decreases approximately as 1/T², and T²·KL goes to its high-T limit.](figures/kl-against-temperature.svg)
 
 *The chart shows the soft term of the five-token example against the temperature $T$. The KL decreases approximately as $1/T^2$, but $T^2 \cdot \mathrm{KL}$ stays almost constant and goes to its high-T limit, 0.23000. `distillcore.losses.kd()` and `losses.logit_mse()` compute the two lines, and `tests/test_figures.py` pins the chart.*
 
@@ -710,9 +710,9 @@ Now take a real pair: Qwen3-0.6B as a draft for Qwen3-4B, with the same 151,936 
 by weight bytes, so k = 4 gives 1.45×, 1.74× and 2.11× at α = 0.6, 0.7 and 0.8. These numbers are a model, before
 per-step overheads. Measure $c$, as the serving primer says.
 
-![Speedup of a draft against its acceptance rate α at c ≈ 0.148, for k = 2, 4 and 8 drafted tokens.](figures/draft-speedup.svg)
+![Speedup of a draft against its acceptance rate α at c ≈ 0.148, for k = 4 drafted tokens.](figures/draft-speedup.svg)
 
-*The chart shows the speedup $E/(k \cdot c + 1)$ of this pair against $\alpha$, with the k = 4 values of the text as marks. At a low $\alpha$ the best depth is a small $k$, and at a high $\alpha$ it is a large $k$. `distillcore.draft.speedup()` computes the lines, and `tests/test_figures.py` pins the chart.*
+*The chart shows the speedup $E/(k \cdot c + 1)$ of this pair against $\alpha$, with the k = 4 values of the text as marks. `distillcore.draft.speedup()` computes the line, and `tests/test_figures.py` pins the chart.*
 
 **Draft-as-student designs** (verify). EAGLE trains a one-layer head that extrapolates the second-to-top-layer
 features of the target. EAGLE-3 fuses low-, mid- and high-level target features. In its training code, it makes the
@@ -860,7 +860,7 @@ a day saved), 46.1 days at 5 million, 230.6 days at 1 million.
 
 ![Cumulative cost against output tokens: the teacher line from zero, the student line from the one-off bill with a lower slope, and the crossing at 230.6 million tokens.](figures/break-even.svg)
 
-*In the §9 example, the student line starts at the one-off bill of $192.21, and the teacher line starts at zero. Each million tokens saves the difference between $0.890 and $0.056, so the lines cross at 230.6 million tokens. `distillcore.cost.serving()` and `cost.break_even()` compute the lines, and `tests/test_figures.py` pins the chart.*
+*In the §9 example, the student line starts at the one-off bill of $192.21, and the teacher line starts at zero. Each million tokens saves the difference between $0.890 and $0.056, so the lines cross at 230.6 million tokens. `distillcore.cost.serving()`, `cost.fixed_cost()` and `cost.break_even()` compute the lines, and `tests/test_figures.py` pins the chart.*
 
 With data from the teacher that you already serve, break-even is near the volume that the teacher wrote for the
 student (here 2 × 10⁸ tokens). This is true at any cost per token of the teacher. Data bought through an API instead

@@ -133,12 +133,10 @@ def spec_decode_intensity() -> dict:
     gqa_g = L3.group
     mqa_g = heads // kv.kv_heads_for("MQA", heads)
     ridge = kv.ridge(H100_TFLOPS, H100_TB_S)
-    labels = []
+    labels = []                        # g = 4 keeps one line: under it sits the axis title; its point label names it
     for g in groups:
         if g == mha_g:
             labels.append(f"{g}\nfull MHA")
-        elif g == gqa_g:
-            labels.append(f"{g}\n{L3.name}")
         elif g == mqa_g:
             labels.append(f"{g}\nMQA")
         else:

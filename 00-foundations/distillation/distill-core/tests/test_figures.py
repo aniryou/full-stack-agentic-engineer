@@ -3,11 +3,14 @@
 Each committed chart must be exactly what svgchart.render() makes of the spec stored in its <desc>, and that spec
 must hold the values the core computes today (svgchart.check_figure()). If a formula or an input changes, a test
 here fails until the chart is regenerated: ``python3 tools/make_figures.py``. The primer must embed every chart,
-and every number a mark prints must stand in the primer as printed, so that the reader finds the sentence.
+and every decimal number or price a chart prints (its title, series names and marks) must stand in the primer as
+printed, so that the reader finds the sentence.
 """
 import importlib.util
 import re
 from pathlib import Path
+
+import pytest
 
 CORE = Path(__file__).resolve().parents[1]
 _SPEC = importlib.util.spec_from_file_location("distillcore_make_figures", CORE / "tools" / "make_figures.py")
@@ -17,20 +20,9 @@ _SPEC.loader.exec_module(mf)
 PRIMER = " ".join((CORE.parent / "PRIMER.md").read_text(encoding="utf-8").split())
 
 
-def check(name: str) -> None:
+@pytest.mark.parametrize("name", sorted(mf.FIGURES))
+def test_chart_is_what_the_core_computes(name):
     mf.svgchart.check_figure(mf.FIG_DIR / name, mf.FIGURES[name])
-
-
-def test_kl_against_temperature():
-    check("kl-against-temperature.svg")
-
-
-def test_draft_speedup():
-    check("draft-speedup.svg")
-
-
-def test_break_even():
-    check("break-even.svg")
 
 
 def test_every_chart_is_embedded_in_the_primer():
@@ -38,12 +30,19 @@ def test_every_chart_is_embedded_in_the_primer():
     assert not missing, f"PRIMER.md does not embed: {missing}"
 
 
-def test_every_number_a_mark_prints_is_in_the_primer():
-    number = re.compile(r"\$?\d[\d,]*(?:\.\d+)?×?")
-    missing = []
-    for name, build in mf.FIGURES.items():
-        for mark in build().get("marks", []):
-            for num in number.findall(mark.get("label") or mark.get("text") or ""):
-                if num not in PRIMER:
-                    missing.append(f"{name}: {num}")
-    assert not missing, f"numbers on the charts that PRIMER.md does not print: {missing}"
+# A decimal number or a price: a bare integer such as "4" or "50" is somewhere in any primer, so it proves nothing.
+NUMBER = re.compile(r"\$\d[\d,]*(?:\.\d+)?×?|\d[\d,]*\.\d+×?")
+
+
+def _printed(spec: dict) -> list[str]:
+    """Every text the chart prints that can carry a number: the title, the series names, the mark labels."""
+    texts = [spec.get("title", "")]
+    texts += [s.get("name", "") for s in spec.get("series", [])]
+    texts += [m.get("label") or m.get("text") or "" for m in spec.get("marks", [])]
+    return texts
+
+
+@pytest.mark.parametrize("name", sorted(mf.FIGURES))
+def test_every_number_a_chart_prints_is_in_the_primer(name):
+    missing = [num for text in _printed(mf.FIGURES[name]()) for num in NUMBER.findall(text) if num not in PRIMER]
+    assert not missing, f"numbers on {name} that PRIMER.md does not print: {missing}"
