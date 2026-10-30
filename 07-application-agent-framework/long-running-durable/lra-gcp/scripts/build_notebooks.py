@@ -244,7 +244,7 @@ print(drain())
 assert RUNS["order-2"]["status"] == "SUCCEEDED" and CHARGES == ["charged"], "exactly one charge"
 '''
 )
-nb0.md("## Duplicate delivery\n\nCloud Tasks (and every real queue) gives at-least-once delivery. Deliver the `charge` task two times. Then look at how the guard rejects the second delivery.")
+nb0.md("## Duplicate delivery\n\nCloud Tasks (and every real queue) gives at-least-once delivery. Send the `charge` task two times. Then look at how the guard rejects the second delivery.")
 nb0.code(
     '''
 CHARGES.clear()
@@ -306,7 +306,7 @@ engine.registry.register(wf)
     attempts="3",
     effect_key='"update-ticket"',
 )
-nb1.md("## Run it one task at a time\n\n`LocalRunner.step()` delivers one task that is due, the same as one push from Cloud Tasks.")
+nb1.md("## Run it one task at a time\n\n`LocalRunner.step()` sends one task that is due, the same as one push from Cloud Tasks.")
 nb1.code(
     '''
 run = engine.start("triage", {"ticket": "I was charged twice"})
@@ -349,7 +349,7 @@ assert store.get(run.run_id).status == RunStatus.SUCCEEDED
     chaos_point='"after_commit_before_enqueue"',
     advance_s="61",
 )
-nb1.md("## Crash after the side effect, before the checkpoint\n\nThis is the crash window with the highest cost. The effect occurred, but the checkpoint did not. When the queue delivers the task again, the engine runs the step again. It finds the effect record and does not do the effect again.")
+nb1.md("## Crash after the side effect, before the checkpoint\n\nThis is the crash window with the highest cost. The effect occurred, but the checkpoint did not. When the queue sends the task again, the engine runs the step again. The engine finds the effect record and does not do the effect again.")
 nb1.code(
     '''
 TICKETS_UPDATED.clear(); crashed.clear()
@@ -372,7 +372,7 @@ assert r.status == RunStatus.SUCCEEDED and len(TICKETS_UPDATED) == {{n_effects}}
     chaos_point='"after_step_before_commit"',
     n_effects="1",
 )
-nb1.md("## Leases: a second worker\n\nTwo replicas receive the same task with 50 ms between them. The replica that loses gets `lease-held`. The HTTP layer returns `lease-held` as **503**, so Cloud Tasks retries later.")
+nb1.md("## Leases: a second worker\n\nTwo replicas get the same task with 50 ms between them. The replica that loses gets `lease-held`. The HTTP layer returns `lease-held` as **503**, so Cloud Tasks retries later.")
 nb1.code(
     '''
 engine, runner, clock, store, queue, bus = harness(routes=routes)
@@ -444,7 +444,7 @@ assert r.status == RunStatus.WAITING and r.wait.key == {{expected_key}}
 ''',
     expected_key='f"manager:{run.run_id}"',
 )
-nb2.md("## Resume — idempotent and key-scoped\n\nThe API endpoint `POST /runs/{id}/events` does this same thing. A duplicate event and an event for an incorrect gate return `None`, never an error.")
+nb2.md("## Resume — idempotent and key-scoped\n\nThe API endpoint `POST /runs/{id}/events` does this same resume. A duplicate event and an event for an incorrect gate return `None`, never an error.")
 nb2.code(
     '''
 wrong = Event(run_id=run.run_id, key="cfo:" + run.run_id, payload={"decision": "approve"})
@@ -500,7 +500,7 @@ assert store.get(run4.run_id).result == {"auto_approved": True}
 ''',
     policy='"resume"',
 )
-nb2.md("## Cancel while waiting\n\nNo task will ever run for a run that waits. Thus a cancel ends the run immediately. If a step with a compensation completed before the cancel, the cancel also compensates that step.")
+nb2.md("## Cancel while waiting\n\nNo task ever runs for a run that waits. Thus a cancel ends the run immediately. If a step with a compensation completed before the cancel, the cancel also compensates that step.")
 nb2.code(
     '''
 run5 = engine.start("expense", {"amount": 400}); runner.run_until_idle()
@@ -557,11 +557,11 @@ assert parent.status == RunStatus.WAITING and failed[0].attempt_of("research") =
 )
 nb3.md(
     "## The fan-in counter, by hand\n\n"
-    "Children finish in any order, and their completion notices have at-least-once delivery. The parent keeps a "
+    "Children finish in any order, and their completion messages have at-least-once delivery. The parent keeps a "
     "counter. The write that makes the counter reach `expected` wakes the aggregator.\n\n"
     "Write the rule that the store applies atomically (`InMemoryStateStore.record_child_result` under a lock, "
     "Firestore in a transaction). Record each child **one time**. When the counter gets to `expected`, report "
-    "*all done* for every notice, and for a late duplicate too. The wake-up of that duplicate is a named, de-duplicated "
+    "*all done* for every message, and for a late duplicate too. The wake-up of that duplicate is a named, de-duplicated "
     "task, so another try causes no harm. If the first wake-up did not arrive and the store answers *not done*, it is "
     "possible that the parent stays stuck."
 )
@@ -673,7 +673,7 @@ nb4 = NB(
     "```mermaid\nflowchart LR\n  S((START)) --> B[agree_budget<br/>RequestInput 'budget'<br/>rerun_on_resume=True]\n"
     "  B --> P[plan<br/>judgement]\n  P --> Q[queue_up<br/>side effect, runs once]\n"
     "  Q --> C[check_front<br/>RequestInput 'wake'<br/>rerun_on_resume=True]\n  C -- ready --> Y[buy<br/>idempotency key]\n"
-    "  C -- sold_out --> A[abandon]\n```\n(The cells use top-level `await`, because Jupyter already runs an event loop.)",
+    "  C -- sold_out --> A[abandon]\n```\n(Jupyter already runs an event loop, thus the cells use top-level `await`.)",
     requires=("google.adk",),
 )
 nb4.code(
@@ -722,7 +722,7 @@ print("order:", (await state())["order"])
 assert venue.calls == ["join_queue", "purchase"] and r4["interrupts"] == []
 '''
 )
-nb4.md("`queue_up` never ran again during the wake-ups. A resume continues from the node that interrupted, and ADK does not replay the nodes that already finished. `check_front` is the node that interrupted. It ran again on every wake-up because it has `rerun_on_resume=True`. With `False`, ADK marks it complete, uses the resume input (`{\"ok\": true}`) as its output and does not look at the queue. `buy` executed one time, with an idempotency key.\n\n## Staleness guard: the world changed while we waited")
+nb4.md("`queue_up` never ran again during the wake-ups. A resume continues from the node that interrupted, and ADK does not replay the nodes that already finished. `check_front` is the node that interrupted. It has `rerun_on_resume=True`, thus it ran again on every wake-up. With `False`, ADK marks it complete, uses the resume input (`{\"ok\": true}`) as its output and does not look at the queue. `buy` executed one time, with an idempotency key.\n\n## Staleness guard: the world changed while we waited")
 nb4.code(
     '''
 venue2 = Venue(); svc2 = InMemorySessionService(); runner2 = Runner(app=build_app(venue2), session_service=svc2)
@@ -822,7 +822,7 @@ nb4.md(
     "endpoint that resumes a session that *already exists*, and `main.py` adds this endpoint. The design questions for this "
     "notebook are in the drills of the topic primer (`../../PRIMER.md` §11, part D).\n\n"
     "## Takeaways\n\n* `RequestInput` is one primitive for two types of wait: a wait for a person and a wait for the world.\n"
-    "* `rerun_on_resume` decides what a resumed node does. With `True`, the node runs again and examines the world again. With `False`, the node uses the resume input as its answer. Side effects stay safe because ADK does not replay the finished nodes and the side effects have idempotency keys.\n"
+    "* `rerun_on_resume` decides what a resumed node does. With `True`, the node runs again and examines the world again. With `False`, the node uses the resume input as its answer. ADK does not replay the finished nodes and the side effects have idempotency keys, thus side effects stay safe.\n"
     "* Resume the invocation. Do not start a new one.\n* A prompt cannot wake itself. Something with a clock must call the endpoint."
 )
 
@@ -1028,7 +1028,7 @@ print("my_to_messages matches the adapter on", len(journals), "journals; ids loo
     cid='tool_call_id(intent["key"])',
     content='intent.get("result") if intent["done"] else {"pending": True}',
 )
-nb5.md("## Mistral as the engine's model\n\n`MistralLLM` implements the same `LLM` port as `GeminiLLM` and `FakeLLM`. Thus every workflow in `lra.examples` runs on it with no change. The usage becomes cost for the budget of the run (the prices in the adapter are illustrative).")
+nb5.md("## Mistral as the engine's model\n\n`MistralLLM` implements the same `LLM` port as `GeminiLLM` and `FakeLLM`. Thus every workflow in `lra.examples` runs on it with no change. The usage becomes cost for the budget of the run. The prices in the adapter are illustrative.")
 nb5.code(
     '''
 fake = FakeMistral([{"final": "billing"}])
@@ -1050,7 +1050,7 @@ nb5.md(
     "`lra/adapters/mistral/workflow.py` is this loop on Mistral Workflows, with Temporal below it. The infrastructure code "
     "goes away: there is no store, no queue, no lease and no reaper. In their place:\n\n"
     "* The **event history** of the execution is the store.\n"
-    "* The platform records every **activity** (the model call and the charge) before the activity runs. The platform retries the activity "
+    "* The model call and the charge are **activities**. The platform records every activity before the activity runs. The platform retries the activity "
     "on failure, and never runs the activity again after the activity is complete.\n"
     "* `workflow.wait_condition(...)` and a **signal** are the approval gate, with a timeout.\n"
     "* A loop bound in deterministic workflow code and `execution_timeout` are the budget.\n\n"
