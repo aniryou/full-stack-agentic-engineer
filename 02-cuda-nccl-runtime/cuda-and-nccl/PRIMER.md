@@ -240,6 +240,10 @@ Then 2 blocks fit in 100 KB: **33%**.
 The division into sub-partitions is important. At 80 registers, ⌊16,384 / 2,560⌋ = 6 warps per partition. Thus an
 SM holds 24 warps, not ⌊65,536 / 2,560⌋ = 25.
 
+![Occupancy of one L4 SM against registers per thread for blocks of 256 threads: 4 blocks and 67% at 64 registers, and 33% when each block also uses 48 KB of shared memory.](figures/occupancy-vs-registers.svg)
+
+*The chart shows the occupancy of one L4 SM against the registers per thread, for blocks of 256 threads. Each step down removes one block of 8 warps, and with 48 KB of shared memory per block, no more than 2 blocks fit. `gpusim.occupancy.occupancy()` computes the two lines, and `cuda-nccl-core/tests/test_figures.py` pins the chart.*
+
 ### 2.4 Latency hiding, Little's law and waves
 
 When a warp waits for memory, the scheduler replaces it with a ready warp. To keep a bandwidth $B$ with a latency
@@ -402,6 +406,10 @@ assumed: an eager launch costs 5 µs, launching a whole graph 10 µs
 A decode step at small batch is exactly the first case. It has hundreds of small GEMMs, norms, rotary embeddings,
 attention and sampling kernels. Many of them are a few microseconds long.
 
+![Time of 384 dependent kernels against the kernel length, with an eager launch of 5 µs per kernel or one CUDA Graph launch of 10 µs: 1,922 µs against 778 µs for 2 µs kernels, and no gain for 20 µs kernels.](figures/step-time-vs-kernel-length.svg)
+
+*The chart shows the time of 384 dependent kernels against the kernel length, on log axes. For kernels shorter than a 5 µs launch, the launches set the eager time, and for longer kernels a graph gives almost no gain. `gpusim.tiling.step_time()` computes the two lines, and `cuda-nccl-core/tests/test_figures.py` pins the chart.*
+
 ### 4.3 CUDA Graphs, and why engines capture decode
 
 A **CUDA Graph** records a sequence of kernels (and memcpys, and NCCL calls) one time. Then it replays the sequence
@@ -508,6 +516,10 @@ question for nccl-tests.
 
 Second, busbw well below the link rate inside one node usually means that NCCL does not use NVLink (§5.8).
 
+![All-reduce bandwidth against message size on 8 H100s in the alpha-beta model: the ring busbw goes up to the 450 GB/s link rate and is 447 GB/s at 1 GiB, and the NVLS busbw is 744 GB/s at 1 GiB, above the link rate.](figures/allreduce-busbw-vs-size.svg)
+
+*The chart shows the all-reduce bandwidth of 8 H100s against the message size, in the alpha-beta model. The ring busbw goes up to the link rate of 450 GB/s, and the NVLS busbw goes above it. `gpusim.collectives` computes the three lines with `model_time()`, `algbw()` and `busbw()`, and `cuda-nccl-core/tests/test_figures.py` pins the chart.*
+
 ### 5.5 Latency-bound or bandwidth-bound
 
 The latency term and the bandwidth term are equal at **$S^{\ast} = a \cdot \alpha \cdot B / c$**
@@ -526,7 +538,7 @@ nccl-tests (`sweep()`, `format_sweep()`):
 
 ![Ring all-reduce time against message size on 8 H100s in the alpha-beta model: flat near the latency term below the 7.2 MB crossover, where the 512 KiB all-reduce of decode sits, and growing with the bandwidth term above it, where the 128 MiB all-reduce of prefill sits.](figures/ring-allreduce-regimes.svg)
 
-*The figure shows the ring sweep of §5.5 on a log-log plot (`gpusim.collectives.sweep()`). Below the crossover of 7.2 MB, the latency term sets the time, which is almost constant. Above it, the bandwidth term sets the time, which grows with the message size. The 512 KiB all-reduce of decode is below the crossover, and the 128 MiB all-reduce of prefill is above it.*
+*The chart shows the time of a ring all-reduce on 8 H100s against the message size, on log axes. Below the crossover of 7.2 MB, the latency term sets the time, and above it the bandwidth term sets the time. `gpusim.collectives.model_time()` computes the three lines, and `cuda-nccl-core/tests/test_figures.py` pins the chart.*
 
 Below $S^{\ast}$, a ring all-reduce costs approximately $2(p-1) \cdot \alpha$ for any message size. Thus the
 algorithm that wins is the one with the fewest steps. At 512 KiB on 8 GPUs, the model gives these times: two-shot
