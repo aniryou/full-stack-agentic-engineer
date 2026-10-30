@@ -90,7 +90,7 @@ def spec_ttft_vs_prompt() -> dict:
         "marks": [
             {"kind": "hline", "y": 1, "label": "good chat UX: TTFT < 1 s", "style": "warm", "anchor": "start"},
             {"kind": "point", "x": 2000, "y": _r(c.ttft_s(MODEL.active_b, 2000, H100)), "label": "2K prompt: ~0.1 s",
-             "style": "accent", "anchor": "start", "dy": 16},
+             "style": "muted", "anchor": "start", "dy": 16},   # the prose's ~0.1 s is the weights-only TTFT
             {"kind": "point", "x": 32000, "y": _r(c.ttft_s(MODEL.active_b, 32000, H100, model=MODEL)),
              "label": "32K RAG prompt: ~1.9 s", "style": "accent", "anchor": "end", "dy": -9},
         ],
@@ -123,7 +123,7 @@ def spec_sessions_vs_context() -> dict:
              "anchor": "end", "dy": 18},
         ],
         "legend": "bottom-left",
-        "note": "computed by capacity.max_concurrent_sessions",
+        "note": "computed by capacity.max_concurrent_sessions; the hline by capacity.concurrency",
     }
 
 
@@ -166,7 +166,7 @@ def spec_decode_vs_batch() -> dict:
              "label": "~100 sessions in fp8: ~9,000 tok/s", "style": "accent", "anchor": "end", "dy": -9},
         ],
         "legend": "top-left",
-        "note": "computed by capacity.decode_aggregate, roofline_batch",
+        "note": "computed by capacity.decode_aggregate, roofline_batch, max_concurrent_sessions, decode_tok_s_single",
     }
 
 

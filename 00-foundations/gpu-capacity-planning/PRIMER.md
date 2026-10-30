@@ -169,7 +169,7 @@ target is ≥25 tok/s/user (TPOT ≤ 40 ms).
 
 ![Concurrent sessions on one H100 against the context length, for the 24B model in bf16 and in fp8, with the ~100 live sessions of the bank example.](figures/sessions-vs-context.svg)
 
-*The figure shows the concurrent sessions on one H100 against the context length of a session. The fp8 line is ~4× the bf16 line, and at the bank example only the fp8 line is above the ~100 live sessions. `capacity.max_concurrent_sessions` computes the lines, and `test_figures.py` pins the chart.*
+*The figure shows the concurrent sessions on one H100 against the context length of a session. The fp8 line is ~4× the bf16 line, and only the fp8 point is above the ~100 live sessions, which apply to the bank example only. `capacity.max_concurrent_sessions` computes the lines, and `test_figures.py` pins the chart.*
 
 > The two paths of the size calculation are memory (~sessions/GPU) and throughput (tok/s/GPU). Expect
 > their results to be approximately the same. Show both in a design review. If the
@@ -227,7 +227,7 @@ the bytes that a step reads. `moecore` reproduces the 17.6 ms floor of this sect
 
 ![Decode throughput on one H100 against the batch size, for the 24B model at the context of the bank example: the total and the rate per user.](figures/decode-vs-batch.svg)
 
-*The figure shows decode on one H100 at the context of the bank example: the aggregate rate increases almost in proportion to the batch. The bf16 lines stop at the memory limit, and the fp8 lines stop at the compute roofline. `capacity.decode_aggregate` computes the lines, and `test_figures.py` pins the chart.*
+*The figure shows decode on one H100 at the context of the bank example, as `capacity.decode_aggregate` computes it. The aggregate rate increases with the batch, and the rate per user decreases slowly, because each step also reads the KV of the batch. The bf16 lines stop at the memory limit, the fp8 lines stop at the compute roofline (the formulas, step 3), and `test_figures.py` pins the chart.*
 
 ## Decisions worth defending
 

@@ -68,10 +68,12 @@ def spec_kl_against_temperature() -> dict:
     k1, k4, s4 = L.kd(V, Z, 1.0, scale=False)[0], L.kd(V, Z, 4.0, scale=False)[0], L.kd(V, Z, 4.0)[0]
     return {
         "kind": "line",
-        "title": "The soft term of the five-token example against the temperature T: the KL decreases as 1/T², and "
-                 "T²·KL goes to its high-T limit.",
-        "x": {"label": "temperature T (log scale)", "scale": "log", "ticks": [1, 2, 4, 10, 100, 1000]},
-        "y": {"label": "nats", "min": 0, "max": 0.3},
+        "title": "The soft term of the five-token example against the temperature T: the KL decreases approximately "
+                 "as 1/T², and T²·KL goes to its high-T limit.",
+        "x": {"label": "temperature T (log scale)", "scale": "log", "ticks": [1, 2, 4, 10, 100, 1000],
+              "tick_labels": ["1", "2", "4", "10", "100", "1000"]},    # as the §2 table prints T
+        "y": {"label": "nats (log scale)", "scale": "log", "min": 1e-7, "max": 1, "ticks": [1e-6, 1e-4, 1e-2, 1],
+              "tick_labels": ["10⁻⁶", "10⁻⁴", "10⁻²", "1"]},
         "series": [
             {"name": "T²·KL(p_T ‖ q_T)", "x": temps, "y": t2kl, "style": "accent"},
             {"name": "KL(p_T ‖ q_T)", "x": temps, "y": kl, "style": "warm"},
@@ -92,7 +94,7 @@ def spec_kl_against_temperature() -> dict:
 def spec_draft_speedup() -> dict:
     c = Dr.draft_cost(K.SHAPES["qwen3-0.6b"].params(), K.SHAPES["qwen3-4b"].params())
     alphas = [round(0.40 + 0.01 * i, 2) for i in range(61)]
-    styles = {2: "plain", 4: "accent", 8: "violet"}
+    styles = {4: "accent"}                       # §7 gives numbers for k = 4 only
     series = [{"name": f"k = {k}", "x": alphas, "y": [_sig(Dr.speedup(a, k, c)) for a in alphas], "style": st}
               for k, st in styles.items()]
     marks = []
@@ -104,7 +106,7 @@ def spec_draft_speedup() -> dict:
                   "anchor": "start"})
     return {
         "kind": "line",
-        "title": f"Speedup of a draft against its acceptance rate α at c ≈ {c:.3f}, for k = 2, 4 and 8 drafted tokens.",
+        "title": f"Speedup of a draft against its acceptance rate α at c ≈ {c:.3f}, for k = 4 drafted tokens.",
         "x": {"label": "acceptance rate α", "min": 0.4, "max": 1.0, "ticks": [0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]},
         "y": {"label": "speedup (×)", "min": 0, "max": 4.5, "ticks": [0, 1, 2, 3, 4]},
         "series": series,
@@ -146,7 +148,7 @@ def spec_break_even() -> dict:
              "style": "muted", "anchor": "end"},
         ],
         "legend": "top-left",
-        "note": "computed by distillcore.cost.serving and cost.break_even",
+        "note": "computed by distillcore.cost.serving, cost.fixed_cost and cost.break_even",
     }
 
 

@@ -201,7 +201,7 @@ def spec_allreduce() -> dict:
 # ---------------------------------------------------------------- §7.2: Young/Daly
 
 def spec_checkpoint_waste() -> dict:
-    """wasted_fraction() against the checkpoint interval for the 16,384-GPU job of §7.1, at its Young interval."""
+    """wasted_fraction() against the checkpoint interval for the 16,384-GPU job of §7.1; marks at τ* and hourly."""
     m_gpu = reliability.component_mtbf_from_observation(419, 54 * 24, 16384)      # the Llama 3 report, §7.1
     ms = reliability.cluster_mtbf(m_gpu, 16384) * 3600
     restart = 600                                                                  # the assumed 10-minute restart
