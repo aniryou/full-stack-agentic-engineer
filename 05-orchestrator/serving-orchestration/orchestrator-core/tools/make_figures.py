@@ -15,6 +15,7 @@ from __future__ import annotations
 import importlib.util
 import pathlib
 import sys
+from decimal import ROUND_HALF_UP, Decimal
 
 LAB = pathlib.Path(__file__).resolve().parents[1]
 if str(LAB) not in sys.path:
@@ -39,6 +40,11 @@ def _r(v: float, nd: int = 4) -> float:
     return round(float(v), nd)
 
 
+def _as_table(v: float) -> str:
+    """A value as the §4.2 table prints it: notebook 03's three significant digits, then two decimals (0.995 -> 1.00)."""
+    return str(Decimal(f"{v:.3g}").quantize(Decimal("0.01"), ROUND_HALF_UP))
+
+
 # ------------------------------------------------------------------ §2.5: the locality-vs-load knob
 
 PREFIX_WEIGHTS = [0, 1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 30]      # the primer's 0, 3 and 30, and the curve between
@@ -61,9 +67,10 @@ def spec_ttft_vs_prefix_weight() -> dict:
         "kind": "line",
         "title": ("The simulated TTFT p95 of the EPP on four L4 replicas against the prefix-cache weight, "
                   "for two agent workloads."),
+        "height": 420,
         "x": {"label": "prefix-cache-scorer weight (queue and KV weights at 2)", "min": 0, "max": 30,
               "ticks": [0, 3, 5, 10, 15, 20, 25, 30]},
-        "y": {"label": "TTFT p95 (s)", "scale": "log", "min": 0.2, "max": 60,
+        "y": {"label": "TTFT p95 (s)", "scale": "log", "min": 0.15, "max": 60,
               "ticks": [0.2, 0.5, 1, 2, 5, 10, 20, 50]},
         "series": [                                                       # the table's workload last, on top
             {"name": "a hotter prefix (Zipf 2.0)", "x": PREFIX_WEIGHTS, "y": ttft[2.0], "style": "warm",
@@ -78,7 +85,7 @@ def spec_ttft_vs_prefix_weight() -> dict:
             {"kind": "point", "x": 3, "y": at[1.0][3], "label": f"weight 3: {at[1.0][3]:.2f} s", "style": "accent",
              "anchor": "start", "dy": 18},
             {"kind": "point", "x": 3, "y": at[2.0][3], "label": f"Zipf 2.0, weight 3: {at[2.0][3]:.2f} s",
-             "style": "warm", "anchor": "start", "dy": -10},
+             "style": "warm", "anchor": "start", "dy": 46},                # under the label of the table's point
             {"kind": "point", "x": 30, "y": at[1.0][30], "label": f"weight 30: {at[1.0][30]:.1f} s",
              "style": "accent", "anchor": "end", "dy": 18},
         ],
@@ -124,11 +131,11 @@ def spec_signals_vs_load() -> dict:
             {"name": "KV usage", "x": LOADS, "y": kv, "style": "accent", "markers": True},
         ],
         "marks": [
-            {"kind": "point", "x": 0.2, "y": util[0], "label": f"0.2 req/s: {util[0]:.2f}", "style": "warm",
+            {"kind": "point", "x": 0.2, "y": util[0], "label": f"0.2 req/s: {_as_table(util[0])}", "style": "warm",
              "anchor": "start", "dy": 18},
-            {"kind": "point", "x": 0.5, "y": util[1], "label": f"0.5 req/s: {util[1]:.2f}", "style": "warm",
+            {"kind": "point", "x": 0.5, "y": util[1], "label": f"0.5 req/s: {_as_table(util[1])}", "style": "warm",
              "anchor": "start", "dy": -10},
-            {"kind": "point", "x": 3.5, "y": kv[-1], "label": f"3.5 req/s: KV {kv[-1]:.2f}", "style": "accent",
+            {"kind": "point", "x": 3.5, "y": kv[-1], "label": f"3.5 req/s: KV {_as_table(kv[-1])}", "style": "accent",
              "anchor": "end", "dy": -10},
         ],
         "legend": "bottom-right",
@@ -157,6 +164,7 @@ def spec_pd_split_slo() -> dict:
         "kind": "line",
         "title": ("The simulated SLO attainment of every xPyD split of eight L4 replicas, "
                   "against aggregated serving and the analytic plan."),
+        "height": 400,
         "x": {"label": "prefill replicas of eight; the rest decode", "min": 0.6, "max": 7.4, "ticks": xs,
               "tick_labels": [f"{n}P{8 - n}D" for n in xs]},
         "y": {"label": "SLO attainment (TTFT ≤ 3 s, TPOT ≤ 80 ms)", "min": 0, "max": 1,
@@ -169,9 +177,9 @@ def spec_pd_split_slo() -> dict:
             {"kind": "point", "x": 3, "y": att[2], "label": f"3P5D: {att[2]:.2f}", "style": "accent",
              "anchor": "start", "dy": -10},
             {"kind": "point", "x": 1, "y": att[0], "label": f"1P7D: {one['ttft_p95']:.0f} s TTFT p95",
-             "style": "warm", "anchor": "start", "dy": -10},
+             "style": "warm", "anchor": "start", "dy": 3},
             {"kind": "point", "x": 7, "y": att[-1], "label": f"7P1D: {seven['tpot_p95']:.1f} s TPOT p95",
-             "style": "warm", "anchor": "end", "dy": -10},
+             "style": "warm", "anchor": "end", "dy": -24},
         ],
         "legend": "none",
         "note": "SIMULATED (seed 11): computed by fleetsim.disagg.search_pd and pd_plan, 100 Gb/s link, notebook 04",
@@ -195,7 +203,6 @@ def spec_fetch_or_recompute() -> dict:
     be_l4 = _r(breakeven_gb_s(LLAMA_8B_KV, L4_8B.compute_tok_s))
     be_h100 = _r(breakeven_gb_s(LLAMA_8B_KV, H100_8B.compute_tok_s))
     dram, gbe = ms(onload_s(TOKENS, LLAMA_8B_KV, DRAM)), ms(onload_s(TOKENS, LLAMA_8B_KV, GBE_25))
-    ends = [BANDWIDTHS[0], BANDWIDTHS[-1]]
     return {
         "kind": "line",
         "title": ("The time to get the KV of ten thousand tokens: a fetch against the tier bandwidth, "
@@ -204,19 +211,19 @@ def spec_fetch_or_recompute() -> dict:
         "y": {"label": "time for ten thousand tokens (ms)", "scale": "log", "min": 10, "max": 20000,
               "ticks": [10, 100, 1000, 10000]},
         "series": [
-            {"name": "recompute on an L4", "x": ends, "y": [l4, l4], "style": "violet", "dash": True},
-            {"name": "recompute on an H100", "x": ends, "y": [h100, h100], "style": "warm", "dash": True},
             {"name": "fetch: tokens × KV bytes/token ÷ bandwidth", "x": BANDWIDTHS, "y": fetch, "style": "accent"},
         ],
-        "marks": [
-            {"kind": "vline", "x": be_l4, "label": f"L4 break-even: {be_l4:.2f} GB/s", "style": "violet"},
-            {"kind": "vline", "x": be_h100, "label": f"H100 break-even: {be_h100:.2f} GB/s", "style": "warm"},
-            {"kind": "point", "x": be_h100, "y": h100, "label": f"recompute: {h100:.0f} ms", "style": "warm",
-             "anchor": "start", "dy": 18},
+        "marks": [                                                   # a fetch wins to the right of each crossing
+            {"kind": "hline", "y": l4, "label": "recompute on an L4", "style": "violet"},
+            {"kind": "hline", "y": h100, "label": f"recompute on an H100: {h100:.0f} ms", "style": "warm"},
+            {"kind": "point", "x": be_l4, "y": l4, "label": f"L4 break-even: {be_l4:.2f} GB/s", "style": "violet",
+             "anchor": "start", "dy": -10},
+            {"kind": "point", "x": be_h100, "y": h100, "label": f"H100 break-even: {be_h100:.2f} GB/s",
+             "style": "warm", "anchor": "end", "dy": 18},
             {"kind": "point", "x": GBE_25.read_gb_s, "y": gbe, "label": f"25 GbE: {gbe:.0f} ms", "style": "accent",
-             "anchor": "end", "dy": -10},
+             "anchor": "start", "dy": -10},
             {"kind": "point", "x": DRAM.read_gb_s, "y": dram, "label": f"host DRAM: {dram:.0f} ms",
-             "style": "accent", "anchor": "end", "dy": -10},
+             "style": "accent", "anchor": "end", "dy": 18},
         ],
         "legend": "bottom-left",
         "note": "computed by fleetsim.kvtier.onload_s, recompute_s and breakeven_gb_s (8B model, 131,072 B/token)",

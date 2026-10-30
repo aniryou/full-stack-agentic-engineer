@@ -22,7 +22,7 @@ The PagedAttention paper measured that only about 20–40% of KV cache memory in
 
 ![Contiguous reservations at the maximum length cause three kinds of waste, but with fixed-size KV blocks at any position in the pool, the waste is at most one partial block per sequence.](figures/kv-waste-contiguous-vs-paged.svg)
 
-*The top row shows three requests with contiguous reservations in illustrative proportions. Each reservation holds token state, reservation waste and internal fragmentation, and the gaps between reservations are external fragmentation. The bottom row shows the same three requests in KV blocks of one constant size, at any position in the pool. The waste is at most one partially filled block per sequence.*
+*The top row shows three requests with contiguous reservations in illustrative proportions: token state, reservation waste and internal fragmentation, with external fragmentation in the gaps. The bottom row shows the same requests in KV blocks of one constant size, at any position in the pool. Compare the warm area: with paging, it is the empty tail of at most one partially filled block per sequence.*
 
 ## The core idea: virtual memory, applied to attention
 
@@ -81,6 +81,17 @@ The engine allocates memory block by block as sequences grow. Thus the scheduler
 Paging combines with continuous (iteration-level) batching from Orca. In continuous batching, finished sequences leave the batch immediately, and sequences that wait can join at any step. Together, the two increase the effective batch size by a large factor. For example, vLLM reported 2–4× throughput over FasterTransformer and Orca at equivalent latency. The gains were larger for long sequences, large models and complex decoding.
 
 A design question of interest is this: what occurs when no free blocks stay in the pool while requests are in progress? The engine promised the blocks optimistically, so this situation can occur. vLLM preempts victim sequences with one of two mechanisms.
+
+```mermaid
+flowchart LR
+    N(["A sequence needs<br/>a new block"]) --> F{"Free blocks<br/>in the pool?"}
+    F -->|yes| A["Allocate<br/>a block"]
+    F -->|no| P["Preempt a victim<br/>sequence: all of<br/>its blocks"]
+    P -->|large blocks| SW["Swapping: copy<br/>blocks to CPU RAM<br/>and later back"]
+    P -->|small blocks| RC["Recomputation:<br/>free blocks, later<br/>a single prefill"]
+```
+
+*When the pool has no free block, follow the "no" edge: vLLM preempts a victim sequence with all of its blocks. The edge labels name the block size that favors each mechanism. Swapping moves the blocks over PCIe, and recomputation replays the sequence as one prefill.*
 
 Swapping copies the blocks of a sequence out to CPU RAM, and later back. PCIe bandwidth sets the limit on its speed. Recomputation frees the blocks. When the scheduler schedules the sequence again, the engine replays its full prompt-plus-generated-so-far as a single prefill. Recomputation often takes less time than swapping. The reason is that prefill is one large parallel pass, but swapping moves many small blocks over a slow bus.
 

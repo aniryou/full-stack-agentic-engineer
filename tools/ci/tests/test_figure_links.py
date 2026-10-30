@@ -44,6 +44,8 @@ def test_every_raw_github_figure_url_names_a_tracked_file():
             continue
         for m in RAW_RE.finditer(read(rp)):
             target = m.group(1).split("#")[0].split("?")[0]
+            if "<" in target or ">" in target:      # a template in the brief, not a link
+                continue
             if target not in files:
                 bad.append(f"{rp}: {RAW}{target}")
     assert not bad, "raw.githubusercontent.com links to files that are not in the tree:\n  " + "\n  ".join(bad)

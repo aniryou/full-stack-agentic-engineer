@@ -118,7 +118,7 @@ names the pair "Active" (hot path: higher latency, immediate) and "Background" (
 
 ```mermaid
 flowchart LR
-    IN([a candidate from<br/>extract or remember]) --> PO["WritePolicy.check()"]
+    IN([a candidate from<br/>extract or remember]) --> PO{"WritePolicy.check()"}
     PO -->|"REJECT"| REJ["not stored"]
     PO -->|"QUARANTINE"| QUA["QUARANTINE:<br/>stored, never<br/>retrieved"]
     PO -->|"continue"| M1{"a fact on file<br/>for the slot?"}
@@ -129,12 +129,12 @@ flowchart LR
 ```mermaid
 flowchart LR
     M1{"a fact on file<br/>for the slot?"} -->|"no"| ADD["ADD"]
-    M1 -->|"yes"| M2{"the same<br/>value?"}
+    M1 -->|"yes"| M2{"same<br/>value?"}
     M2 -->|"yes"| NOOP["NOOP: merge<br/>the provenance"]
     M2 -->|"no"| M3{"the new value's<br/>source and time?"}
-    M3 -->|"older, source at<br/>least as trusted"| HIS["ADD_HISTORY:<br/>stored closed"]
-    M3 -->|"newer, source at<br/>least as trusted"| UPD["UPDATE: close the<br/>old fact, keep it"]
-    M3 -->|"a weaker source"| QUA["QUARANTINE:<br/>stored, never<br/>retrieved"]
+    M3 -->|"older, source<br/>at least<br/>as trusted"| HIS["ADD_HISTORY:<br/>stored closed"]
+    M3 -->|"newer, source<br/>at least<br/>as trusted"| UPD["UPDATE: close<br/>the old fact,<br/>keep it"]
+    M3 -->|"a weaker<br/>source"| QUA["QUARANTINE:<br/>stored, never<br/>retrieved"]
 ```
 
 *Then the merge compares the candidate with the fact on file for its slot, one question at a time. An `UPDATE` closes the old fact and keeps it, and an older value becomes history. A weaker source gives `QUARANTINE`.*
@@ -319,6 +319,16 @@ different order. Its data is **CC BY-NC 4.0**, so the repository bundles none of
 A strict template reader (`memcore.harness.read_answer`) answers from what retrieval packed into the budget. It gives the newest value of
 the slot in the question, valid at the as-of date if there is one. If there is no such value, it gives "I don't know". Thus each miss is a
 miss of retrieval or of the write path. That is the correct thing for a memory benchmark to isolate.
+
+```mermaid
+flowchart LR
+    G(["generate(seed)"]) -->|"six sessions,<br/>through the<br/>write path"| ST[("MemoryStore")]
+    ST --> R["retrieve() into<br/>the budget"]
+    G -->|"13 questions"| R
+    R -->|"the packed<br/>records"| A["read_answer()"]
+```
+
+*`generate(seed)` makes the six sessions and the 13 questions from one seed. The sessions go through the write path into `MemoryStore`, and `read_answer()` sees only what `retrieve()` packed into the budget. Recall in the budget examines those packed records.*
 
 **Two artefacts of the fixture, disclosed.** Each planted statement has a **slot hint**, "(about my home city)", that no real user writes.
 On raw episodes, the hint gives the lexical embedder the words of the question. Thus the raw-episode numbers in the table that follows look
@@ -515,12 +525,12 @@ flowchart LR
         direction TB
         T1([user message]) --> T2[model]
         T2 -- "recall(query)" --> T3[(store)]
-        T3 -- "fenced records" --> T2
+        T3 -- "fenced<br/>records" --> T2
         T2 --> T4[answer]
     end
     subgraph I ["implicit"]
         direction TB
-        I1([user message]) --> I2["retrieve() on the<br/>words of the user"]
+        I1([user message]) --> I2["retrieve() on<br/>the words of<br/>the user"]
         I2 --> I3[model]
         I3 --> I4[answer]
     end
@@ -528,7 +538,7 @@ flowchart LR
         direction TB
         P1([session start]) --> P2["profile: once per<br/>session, in the<br/>stable prefix"]
         P2 --> P3[model]
-        P3 -- "recall for the rest" --> P4[(store)]
+        P3 -- "recall for<br/>the rest" --> P4[(store)]
         P4 --> P3
         P3 --> P5[answer]
     end
@@ -589,22 +599,21 @@ profile "as of session start", so that the model prefers the conversation.
 stateDiagram-v2
     state "deleted on every copy" as deleted
     state "out of the store" as gone
-    [*] --> active: ADD or UPDATE, or Consolidator.run()
-    [*] --> quarantined: QUARANTINE
-    [*] --> superseded: ADD_HISTORY, or Consolidator.run()
-    active --> deleted: forget, then propagate()
-    quarantined --> deleted: propagate()
-    quarantined --> active: a person promotes it
-    active --> superseded: a newer value<br/>in valid time
+    state "in the store" as instore {
+        [*] --> active: ADD or UPDATE, or Consolidator.run()
+        [*] --> superseded: ADD_HISTORY, or Consolidator.run()
+        [*] --> quarantined: QUARANTINE
+        quarantined --> active: a person promotes it
+        active --> superseded: a newer value in valid time
+    }
+    instore --> deleted: forget, then propagate()
     active --> gone: TTL (expire), or a cap
     superseded --> gone: TTL (expire)
-    superseded --> deleted: propagate()
-    note right of active: decay and the budget<br/>change what the model<br/>sees, not the state
     gone --> [*]
     deleted --> [*]
 ```
 
-*A newer value in valid time closes an `active` record as `superseded`, and the store keeps it. A TTL or a cap removes a record from the store, but only `propagate()` reaches every copy. Decay and the per-turn budget change what the model sees, not the state.*
+*A newer value in valid time closes an `active` record as `superseded`, and the store keeps it. A TTL or a cap removes a record from the store, but only `propagate()` reaches every copy, in each of the three states. Decay and the per-turn budget change what the model sees, not the state.*
 
 ### Consolidation
 
@@ -662,6 +671,26 @@ loop](../long-running-durable/lra-gcp/docs/primer.md#38-reflection-evaluatoropti
 The crash hook runs at the worst place: after the writes of a slot, and before its checkpoint. Thus the resumed run applies that slot again.
 The result is five facts after a crash and a resume, the same as a clean run, where random ids would leave seven. On GCP, the consolidation job is a Cloud
 Run job that Cloud Scheduler starts weekly (the lab's `deploy/gcp/` README).
+
+```mermaid
+flowchart TB
+    subgraph S1 ["once per run"]
+        direction LR
+        D{"run id:<br/>done?"} -->|"yes"| AD["already done"]
+        D -->|"no"| L["take the lease"]
+        L -->|"held by<br/>another worker"| RF["refused until it expires"]
+    end
+    subgraph S2 ["each slot, with the lease"]
+        direction LR
+        H{"heartbeat, fence:<br/>lease still ours?"} -->|"no"| LL["stop: LeaseLost"]
+        H -->|"yes"| P["plan_key(), then<br/>write the facts"]
+        P -->|"a crash here<br/>repeats the slot"| C["checkpoint<br/>the slot"]
+        C -->|"next slot"| H
+    end
+    S1 --> S2
+```
+
+*The top row runs once for each `Consolidator.run()`, and the bottom row runs once for each slot. The heartbeat renews the lease, and the fence stops a slow worker with `LeaseLost` before it writes next to its successor. A crash between the writes and the checkpoint repeats the slot, and the derived fact ids make the repeat an overwrite.*
 
 **Facts beat raw episodes at the same budget.** At 60 tokens, consolidated facts reach **90.9%** recall and raw episodes **17.6%** (the table
 in §4). Facts are short and deduplicated, and they use the words of the questions. Closed values stay out of normal queries.
@@ -734,7 +763,7 @@ the row of the identity primer's §2: "Injected content persisted in session mem
 ```mermaid
 flowchart LR
     PG["a web page"] -->|"fetch_page"| MD[the model]
-    MD -->|"remember(text),<br/>after a tool result"| TA["taint: the write<br/>gets the source tool"]
+    MD -->|"remember(text),<br/>after a<br/>tool result"| TA["taint: the write<br/>gets the trust<br/>of the tool"]
     TA --> WP{"WritePolicy.check()"}
 ```
 
@@ -742,11 +771,11 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    WP{"WritePolicy.check()"} -->|"the procedural rule"| RJ["REJECT"]
-    WP -->|"the employer fact"| QA["QUARANTINE"]
+    WP{"WritePolicy.check()"} -->|"the procedural<br/>rule"| RJ["REJECT"]
+    WP -->|"the employer<br/>fact"| QA["QUARANTINE"]
     WP -.->|"memory.write"| AU[audit log]
-    QA --> ST[("MemoryStore:<br/>one partition per<br/>(tenant, user)")]
-    ST -->|"recall, in a<br/>later session"| FN["fence(): recalled<br/>memory as data"]
+    QA --> ST[("MemoryStore:<br/>one partition<br/>per (tenant, user)")]
+    ST -->|"recall, in<br/>a later<br/>session"| FN["fence():<br/>recalled<br/>memory as data"]
 ```
 
 *A tool never writes procedural memory, so the policy rejects the procedural rule. It quarantines the fact, and the audit log records the attempt. On the read side, the partition has the principal of the token as its key, and `fence()` shows recalled memory as data.*

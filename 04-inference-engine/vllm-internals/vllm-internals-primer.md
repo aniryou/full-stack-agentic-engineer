@@ -220,7 +220,7 @@ sequenceDiagram
     C->>A: POST /v1/chat/completions (stream=true)
     Note over A: render_chat, tokenize,<br/>EngineCoreRequest
     A->>E: ADD over ZMQ (msgpack)
-    Note right of E: Request, block hashes.<br/>Scheduler.add_request:<br/>waiting
+    Note over E: Request, hashes.<br/>add_request:<br/>waiting
     loop output_handler task, at the same time as the busy loop
         Note over A: process_outputs:<br/>detokenize, stop strings
         A-->>C: data: {json}
