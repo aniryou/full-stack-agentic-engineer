@@ -7,7 +7,7 @@
 #
 # ![Two ClusterQueues of 16 GPUs in one cohort: team B's third 8-GPU job borrows 8 of team A's idle GPUs, team A's 16-GPU job waits with reclaimWithinCohort Never, and with Any it preempts that third job and B is back at its nominal 16.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/03-kubernetes-gpu/gpu-scheduling/figures/cohort-borrow-reclaim.svg)
 #
-# *Figure from the topic primer, §6.3 Preemption: team B borrows 8 idle GPUs of team A. With `reclaimWithinCohort: Any`, team A preempts the newest job of B. Scenario s5 does the same with the teams reversed.*
+# *Figure from the topic primer, §6.3 Preemption: team B borrows 8 idle GPUs of team A. With `reclaimWithinCohort: Any`, Kueue preempts the newest job of B. Scenario s5 shows the same reclaim with the teams reversed and quotas of 8 GPUs.*
 #
 # ## The one-minute version
 # Kubernetes schedules a GPU job in **two decisions in series**:

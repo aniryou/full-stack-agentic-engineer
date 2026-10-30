@@ -6,7 +6,7 @@
 #
 # ![On one 8-GPU node with 96 cores and 768 GiB, six 1-GPU pods of 16 cores and 64 GiB use all the CPU, the seventh pod is Pending on Insufficient cpu, and 2 GPUs are stranded.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/03-kubernetes-gpu/gpu-scheduling/figures/bundle-stranding.svg)
 #
-# *Figure from the topic primer, §3.4 Fragmentation, measured: six 1-GPU pods use all 96 cores of the node. Thus the CPU request, not the GPU count, strands 2 GPUs.*
+# *Figure from the topic primer, §3.4 Fragmentation, measured: six 1-GPU pods use all 96 cores of the node, so 2 GPUs stay stranded. Exercise 1.3 finds the same 2 GPUs on a `g2-standard-48` at 16 vCPUs.*
 #
 # ## The one-minute version
 # A GPU pod is ordinary Kubernetes plus a few fields. The design depends on each of these fields:
