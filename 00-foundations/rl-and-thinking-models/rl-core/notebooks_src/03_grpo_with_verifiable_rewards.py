@@ -128,9 +128,9 @@ for ec in (0.0, 0.05):                               # the other lever: pay for 
 
 # %% [markdown]
 # The success rate goes to ~100% in not more than a few dozen steps. After that, almost every group is
-# all-correct, the advantages are zero and the policy learns nothing more. Also, the policy has concentrated on a few of the 14
-# correct strings. RL sharpens: pass@1 goes up, and the diversity goes down. An entropy bonus buys the diversity
-# back at a small cost in accuracy.
+# all-correct, the advantages are zero and the policy learns nothing more. Also, the policy has concentrated on
+# a few of the 14 correct strings. RL sharpens: pass@1 goes up, and the diversity goes down. An entropy bonus buys
+# the diversity back at a small cost in accuracy.
 #
 # Here, the bonus is a sequence-level $-c \log \pi(y)$ that the code adds to the reward. Thus the baseline also
 # applies to the bonus, as to the reward. TRL's `entropy_coef` adds the mean per-token entropy to the loss

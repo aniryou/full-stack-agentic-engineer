@@ -150,8 +150,10 @@ for method in ("verifier", "vote"):
 # %% [markdown]
 # With a verifier, the small model wins at equal compute. Its many low-cost samples cover the dead ends. With only
 # a vote, the large model wins. Its single samples are correct sufficiently often, but the samples of the small model
-# are not. The result for "a smaller model with more samples" is a property of the task *and* of the presence of
-# a checker. Measure it on your own evals, with the intervals that such comparisons need (the 07.2 evals notebook).
+# are not.
+#
+# The result for "a smaller model with more samples" is a property of the task *and* of the presence of a checker.
+# Measure it on your own evals. The 07.2 evals notebook has the intervals that such comparisons need.
 #
 # ## Exercise 4.1 — the unbiased pass@k
 # Write $1 - \binom{n-c}{k}/\binom{n}{k}$ in the stable product form

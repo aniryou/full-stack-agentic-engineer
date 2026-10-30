@@ -131,9 +131,9 @@ for lam in (0.0, 0.5, 1.0):
     print(f"λ = {lam}: advantages {pref.gae(r_tok, v_tok, gamma=1.0, lam=lam).round(3).tolist()}")
 
 # %% [markdown]
-# $\lambda$ = 0 trusts the value model. With this value, the advantage is the one-step TD error: low variance,
-# biased if $V$ is incorrect. $\lambda$ = 1 trusts the sampled return. With this value, the advantage is Monte Carlo
-# minus $V$: unbiased, noisy. PPO then uses the same clipped ratio that GRPO uses (notebook 03).
+# $\lambda$ = 0 trusts the value model. With $\lambda$ = 0, the advantage is the one-step TD error: low variance,
+# biased if $V$ is incorrect. $\lambda$ = 1 trusts the sampled return. With $\lambda$ = 1, the advantage is Monte
+# Carlo minus $V$: unbiased, noisy. PPO then uses the same clipped ratio that GRPO uses (notebook 03).
 #
 # ## Worked example 5 — an annotator who likes long answers
 # There are 40 answers to one prompt. Each answer has five versions, padded with 0–800 filler tokens. Filler
