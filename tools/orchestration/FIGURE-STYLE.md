@@ -13,8 +13,9 @@ one, the house style, and the checks. It was written for the 2026-10-10 pass tha
 - Not a figure: a list of items (a table does that), a single formula, a product list, a decoration, a restatement
   of a table in boxes.
 - Density: a primer of about 10k words carries roughly 4 to 8 figures; a short primer 2 to 4; the mental-model
-  section ("The one-minute version", "the core idea") almost always one. At most one figure per section, except
-  that section.
+  section ("The one-minute version", "the core idea") almost always one. At most one figure per section (a
+  subsection with its own heading counts as a section), except that section; a chart computed by the core (§7) may
+  join a diagram in the same section when the two show different things (the mechanism, and how a quantity moves).
 - An **ASCII sketch in a code fence stays verbatim** (tests pin some of them; STE treats fences as code). Add a
   figure near it only when the figure shows what the sketch cannot (more parts, time, real structure). Never draw
   the same thing twice.
@@ -30,7 +31,12 @@ one, the house style, and the checks. It was written for the 2026-10-10 pass tha
    embeds it (create the folder); kebab-case, named for what it shows (`decode-step-timeline.svg`). The site
    generator copies every image a layer document references (`tools/site/build_site_content.py`, `collect_images`).
 
-Pick Mermaid unless the figure needs positions, proportions or time on an axis; Mermaid cannot draw those.
+3. **A chart computed by the core** (§7): an SVG in the same house style that `tools/orchestration/svgchart.py`
+   renders from values the topic's core computes, with a test that pins it. For a relationship between two
+   quantities (a cost against a batch size, a time against a width, a break-even), never drawn by hand.
+
+Pick Mermaid unless the figure needs positions, proportions or time on an axis; Mermaid cannot draw those. Pick a
+computed chart for anything with a numeric axis that the core can compute.
 
 ## 3. Mermaid rules
 
@@ -161,3 +167,64 @@ cd <the topic's core>; python3 -m pytest -q tests        # the pinned fragments 
 Look at every rendered figure: nothing overlaps, every label is inside its box, the arrows point the way the
 prose says, the figure fits one screen (the script's verdict), and it still reads at the site's column width (about
 800 px; a 900 px SVG scales down to it).
+
+For a chart (§7): `cd <core> && python3 tools/make_figures.py` regenerates it, `python3 -m pytest -q tests/test_figures.py`
+pins it, and `python3 -m pytest -q tools/ci/tests/test_figure_links.py` (from the root) checks that every figure file is
+referenced and that every absolute figure URL in a notebook (§8) names a file in the tree.
+
+## 7. Charts computed by the cores
+
+The primers state relationships between quantities, and the cores compute them: the decode step time against the
+batch size, the KV cache against the context length, the bytes a collective moves against its size, the cost of a
+student against the tokens it serves, the share of experts a batch touches. The prose gives two or three points of
+such a curve and the tests pin them; a chart shows the whole curve. A chart is never drawn by hand: a hand-drawn
+curve is a claim nobody checks.
+
+- **Where it lives.** `<core>/tools/make_figures.py` builds a spec per chart (a plain dict: the axes, the series, the
+  marks, a note), computes every value with the core's own functions (the inputs are the ones the primer names: a
+  datasheet constant, a price, a model preset), renders it with `tools/orchestration/svgchart.py` and writes
+  `<topic>/figures/<name>.svg` beside the primer. `<core>/tests/test_figures.py` calls `svgchart.check_figure()` with
+  the same spec builders, so the committed file fails the test when the core computes other values or when the file
+  is not what the renderer makes of the spec stored in its `<desc>`. Both find the repository root by walking up to
+  `tools/orchestration/svgchart.py` (the same way `tests/test_notebook_tooling.py` finds the injector). A topic without
+  a core (the capacity-planning primer's `capacity.py`, the FlashAttention deep dive's `fa_calculators.py`, the scaling
+  lab's `scalelab`) keeps the two files beside its module.
+- **What it shows.** One relationship per chart, two to four series at most, the axes labelled with the unit the
+  prose uses (`step time (ms)`, `GB`, `FLOP/byte`), a log axis where the prose reasons in decades. The marks are the
+  primer's pinned points, labelled with the number exactly as the primer prints it (`8 sequences: 2.4 ms`), so the
+  reader finds the sentence. A `vline` or `hline` names a limit the prose names (a roofline, a break-even, a budget).
+  The note names the function that computed the values (`computed by roofline.llm.decode_step_ms`).
+- **What it never shows.** A quantity whose value depends on a trained model (distill-core's students and drafts move
+  with the CPU, see the 2026-09-27 entry of CLAUDE.md); a number the prose does not reason about; a third axis; a
+  fitted curve through measured points (the labs measure, the cores compute).
+- **The spec** is documented in the helper's docstring: `kind` (`line` or `bar`), `title` (one sentence: the alt text
+  and `<title>`), `x` and `y` (label, `linear` or `log`, optional ticks and bounds), `series` (name, `x`, `y`, a style
+  from the house palette: `accent` for the subject, `warm` for a cost or a limit, `plain`, `violet`, `yellow`, `muted`;
+  `dash`, `markers`, `step`, `fill`), `marks` (`vline`, `hline`, `point`, `band`, `text`), `legend`, `note`. The default
+  card is 880 × 360, within the one-screen rule; the height may grow to 560.
+- **In the document** a chart is a figure like any other (§5): `![alt](figures/name.svg)`, an italic caption in STE
+  that says what to see, names the quantity and the function, and says that the core computes it and the test pins it
+  ("`distillcore.cost.break_even` computes the two lines; `tests/test_figures.py` pins the chart.").
+
+## 8. Figures in notebooks
+
+Colab renders neither a Mermaid block nor a relative image, so a notebook embeds an SVG figure by its absolute URL on
+the main branch, which GitHub, Colab, JupyterLab and the site all load:
+
+```markdown
+![alt text](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/<repo path>/figures/<name>.svg)
+
+*Figure from the topic primer, §3: what to see.*
+```
+
+- One figure per notebook at most, in its introduction (the first Markdown cell, after its first paragraph), and only
+  a figure a primer already carries (a chart or an SVG; a Mermaid block cannot be embedded). A notebook never gets a
+  figure drawn for it alone, and never a figure for a mechanism the notebook does not work through.
+- The caption names the document the figure comes from and its section, in the style of that document (STE in the
+  layers).
+- The blank notebook and its solution twin carry the same cell. In a percent-source lab the edit goes into
+  `notebooks_src/<name>.py` and the lab is rebuilt (`python3 tools/build_notebooks.py`); in a hand-written lab the two
+  JSON files are edited (`tools/orchestration/nb_md.py` dumps and applies the Markdown cells of a pair).
+- `tools/ci/tests/test_figure_links.py` checks that every such URL names a file in the tree; a figure that lands in the
+  same pull request as the notebook renders once the pull request merges.
+
