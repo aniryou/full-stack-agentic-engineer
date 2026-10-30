@@ -158,7 +158,7 @@ Hours are estimates, as above.
 flowchart LR
   subgraph R1["Round 1 · steps 1 to 5"]
     direction TB
-    S1["00.1 to 00.3<br/>foundations"] --> S3["04.0<br/>kernel topics"] --> S4["04.1 to 04.6<br/>serving-engine"] --> S5["04.1<br/>vllm-serving-lab"]
+    S1["00.1 to 00.3<br/>foundations"] --> S3["04.0<br/>kernel topics"] --> S4["04.1 to 04.6<br/>serving-engine<br/>§1–8"] --> S5["04.1<br/>vllm-serving-lab<br/>01–02"]
   end
   subgraph R2["Round 2 · steps 6 to 11"]
     direction TB
@@ -166,7 +166,7 @@ flowchart LR
   end
   subgraph R3["Round 3 · steps 12 to 17"]
     direction TB
-    S12["04.2 to 04.7<br/>serving-engine"] --> S13["04.9 · quantization"] --> S14["04.8 · deep dives"] --> S15["00.5 · RL, thinking"] --> S16["00.6 · distillation"] --> S17["04.7 · Cloud Run"]
+    S12["04.2 to 04.7 §9–12<br/>serving lab 03–05"] --> S13["04.9 · quantization"] --> S14["04.8 · deep dives"] --> S15["00.5 · RL and<br/>thinking models"] --> S16["00.6 · distillation"] --> S17["04.7 · Cloud Run"]
   end
   subgraph R4["Round 4 · steps 18 to 23"]
     direction TB
@@ -175,12 +175,13 @@ flowchart LR
   R1 --> R2 --> R3 --> R4
 ```
 
-*The path at a glance, rounds 1 to 4 (steps 1 to 23). First the model and the engine at T0, then the hardware.
-Then the engine again with a GPU, post-training, and the fleet. Each box names the modules and their topic. The
-table below gives the material, the hours and the tiers.*
+*Rounds 1 to 4: the model and the engine at T0, the hardware, the engine with a GPU, post-training, and the
+fleet. Step 17 (04.7) is the Cloud Run GPU step, best at T3. Each box names the modules and
+their topic, and the table below gives the material, the hours and the tiers.*
 
 ```mermaid
 flowchart TB
+  R4P(["after round 4"]) --> R5
   subgraph R5["Round 5 · steps 24 to 26"]
     direction LR
     S24["06.1 to 06.5<br/>scaling, admission<br/>and cost"] --> S25["06.6<br/>identity and<br/>security"] --> S26["06.7<br/>llm-gateway"]
