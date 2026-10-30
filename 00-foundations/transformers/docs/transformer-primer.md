@@ -200,7 +200,7 @@ Take a long sequence of tokens. At each position $t$, the model outputs a distri
 
 The causal mask makes this efficient. Position $t$ sees only positions $\le t$. Thus, one forward pass over a sequence of length $n$ makes $n$ next-token predictions, each conditioned on exactly the correct prefix. You get $n$ training examples for the price of one pass, and the model calculates them in parallel. During training, the model always sees the true prefix and never its own predictions. This is "teacher forcing."
 
-![Next-token training: one forward pass over the true text gives a prediction at every position, each compared with the token that actually came next, so one pass yields n training examples.](figures/next-token-training.svg)
+![Next-token training: one forward pass over the true text gives a prediction at every position, each compared with the token that actually came next, so one pass gives n training examples.](figures/next-token-training.svg)
 
 *Next-token training on six tokens of the sentence of §2.1 (§6.1). One forward pass with the causal mask gives a prediction at every position. The loss compares each prediction with the token that actually came next. Thus one pass gives $n$ training examples, and the model sees the true prefix at each position.*
 

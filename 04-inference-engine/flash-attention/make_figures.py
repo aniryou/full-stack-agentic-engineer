@@ -19,7 +19,8 @@ when a file is not what svgchart.render() makes of the spec stored in it.
   deep-dive-clocks-per-score.svg   §4.3: clocks per score per SM on each unit, A100, H100, B200
                                    (fa_calculators.clocks_per_score)
   deep-dive-decode-kv-share.svg    §6.5: the share of a decode step's bytes that the KV read takes, against the
-                                   cached tokens in the batch (fa_calculators.decode_attention_bytes)
+                                   cached tokens in the batch (fa_calculators.decode_kv_share,
+                                   decode_kv_crossover_tokens)
 
 Standard library + numpy (through fa_calculators). The renderer is tools/orchestration/svgchart.py, found by walking
 up from this file to the repository root.
@@ -87,13 +88,12 @@ def spec_naive_roofline() -> dict:
     i_naive, i_fused = naive["intensity"], fused_flops / fused_bytes
     lo, hi = 10.0, 10_000.0
     series, marks = [], []
-    for key, name, style in (("H100", "H100 SXM", "plain"), ("L4", "L4", "violet")):
+    for key, name, style in (("H100", "H100 SXM roof", "plain"), ("L4", "L4 roof", "violet")):
         dev = fc.DEVICES[key]
         xs = [lo, dev.ridge, hi]
         # the roof at intensity I: roofline() of I FLOPs per byte, on one byte
         ys = [fc.roofline(x, 1.0, key)["attainable_tflops"] for x in xs]
-        series.append({"name": f"{name}: {dev.bf16_tflops:g} TFLOP/s, {dev.hbm_tbs:.2f} TB/s",
-                       "x": [_r(x) for x in xs], "y": [_r(y) for y in ys], "style": style})
+        series.append({"name": name, "x": [_r(x) for x in xs], "y": [_r(y) for y in ys], "style": style})
         at_naive = fc.roofline(naive["flops"], naive["bytes"], key)
         at_fused = fc.roofline(fused_flops, fused_bytes, key)
         marks += [
@@ -133,12 +133,13 @@ def spec_hbm_bytes_vs_n() -> dict:
     fa2 = [fc.flash_traffic(n, D, BLOCK_M, BLOCK_N, schedule="fa2")["bytes"] for n in ns]
     comp = [fc.compulsory_bytes(n, D) for n in ns]
     marks = []
-    for n, anchor in ((N_4K, "end"), (N_32K, "start")):
-        dy = -9 if anchor == "end" else 14
-        for fn, style in ((lambda m: fc.naive_traffic(m, D)["bytes"], "warm"),
-                          (lambda m: fc.flash_traffic(m, D, BLOCK_M, BLOCK_N, schedule="fa2")["bytes"], "plain"),
-                          (lambda m: fc.compulsory_bytes(m, D), "accent")):
-            b = fn(n)
+    above_left, below_right = ("end", -9), ("start", 16)
+    for n in (N_4K, N_32K):
+        # each label on the side of its point away from the next line, as the §3.4 table prints the bytes
+        for b, style, (anchor, dy) in (
+                (fc.naive_traffic(n, D)["bytes"], "warm", above_left),
+                (fc.flash_traffic(n, D, BLOCK_M, BLOCK_N, schedule="fa2")["bytes"], "plain", below_right),
+                (fc.compulsory_bytes(n, D), "accent", above_left if n == N_4K else below_right)):
             marks.append({"kind": "point", "x": n, "y": _r(b / 1e6), "label": _mb(b), "style": style,
                           "anchor": anchor, "dy": dy})
     return {
@@ -172,13 +173,14 @@ def spec_clocks_per_score() -> dict:
         "title": ("Clocks per score per SM when each unit runs alone, d = 128: the tensor-core bar halves from A100 to "
                   "H100 to B200 while the EX2 bar stays at 0.0625."),
         "categories": list(GPUS),
-        "x": {"label": "per score at d = 128: 512 MMA FLOPs, one EX2, about 5 FP32 instructions",
-              "tick_labels": [f"{g}\nEX2 = {per[g]['ex2_vs_mma']:.0%} of MMA time" for g in GPUS]},
-        "y": {"label": "SM clocks per score", "min": 0, "max": 0.3, "ticks": [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3]},
+        "x": {"tick_labels": [f"{g}\nEX2 = {per[g]['ex2_vs_mma']:.0%} of MMA time" for g in GPUS]},
+        "y": {"label": "SM clocks per score, d = 128", "min": 0, "max": 0.3,
+              "ticks": [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3]},
         "series": [
             {"name": "tensor cores", "y": [per[g]["mma"] for g in GPUS], "style": "accent"},
             {"name": "EX2 on MUFU", "y": [per[g]["ex2"] for g in GPUS], "style": "warm"},
-            {"name": "about 5 FP32 instructions", "y": [_r(per[g]["fp32"]) for g in GPUS], "style": "plain"},
+            # rounded to the three decimals the §4.3 table prints (0.078, 0.039), so the bar labels match it
+            {"name": "about 5 FP32 instructions", "y": [round(per[g]["fp32"], 3) for g in GPUS], "style": "plain"},
         ],
         "legend": "top-right",
         "note": "computed by fa_calculators.clocks_per_score; the B200 row is an estimate (verify)",
@@ -186,12 +188,12 @@ def spec_clocks_per_score() -> dict:
 
 
 # --- 4. §6.5: the share of a decode step's bytes that the KV read takes ------------------------------------------
-ROWS = ((1, 2048), (1, 32768), (32, 2048), (1, 131072), (8, 32768))       # the §6.5 table (32 x 8k = 8 x 32k)
+ROWS = ((1, 2048), (1, 32768), (32, 2048), (1, 131072), (8, 32768))       # the §6.5 table (8 x 32k = 32 x 8k)
 
 
 def _share(tokens: int) -> float:
-    kv = fc.decode_attention_bytes(tokens, N_LAYERS, N_KV_HEADS, D, BF16)
-    return 100.0 * kv / (kv + PARAMS * BF16)
+    """The KV read as a percentage of the step's bytes (fa_calculators.decode_kv_share)."""
+    return 100.0 * fc.decode_kv_share(tokens, N_LAYERS, N_KV_HEADS, D, PARAMS * BF16, BF16)
 
 
 def _pct(v: float) -> str:
@@ -204,15 +206,13 @@ def _ctx(tokens: int) -> str:
 
 
 def spec_decode_kv_share() -> dict:
-    xs = [round(1024 * 2 ** (k / 4)) for k in range(4 * 10 + 1)]          # 1k .. 1M, four points per doubling
-    cross = PARAMS * BF16 / fc.kv_bytes_per_token(N_LAYERS, N_KV_HEADS, D, BF16)
+    xs = [round(1024 * 2 ** (k / 4)) for k in range(4 * 9 + 1)]           # 1k .. 512k, four points per doubling
+    cross = fc.decode_kv_crossover_tokens(N_LAYERS, N_KV_HEADS, D, PARAMS * BF16, BF16)
     marks = [{"kind": "vline", "x": _r(cross), "label": f"KV bytes = weight bytes: ≈ {round(cross, -2):,.0f} tokens",
               "style": "warm", "anchor": "end", "label_pos": "top"}]
     for (batch, ctx), anchor, dy in zip(ROWS, ("start", "end", "end", "start", "end"), (-9, -9, -9, 16, -9)):
         tokens = batch * ctx
         label = f"{batch} × {_ctx(ctx)}: {_pct(_share(tokens))}"
-        if (batch, ctx) == (8, 32768):
-            label = f"32 × 8k, {label}"
         marks.append({"kind": "point", "x": tokens, "y": _r(_share(tokens)), "label": label, "style": "accent",
                       "anchor": anchor, "dy": dy})
     return {
@@ -220,15 +220,15 @@ def spec_decode_kv_share() -> dict:
         "title": ("The share of the bytes of one decode step that the KV read takes, against the cached tokens in "
                   "the batch, for the 8B-shaped model of section 6.5 in bf16."),
         "x": {"label": "cached tokens in the batch (batch × context)", "scale": "log",
-              "ticks": [1024 * 4 ** k for k in range(6)], "tick_labels": [_ctx(1024 * 4 ** k) for k in range(6)],
-              "min": 1024, "max": 1024 * 4 ** 5},
-        "y": {"label": "KV share of the step's bytes (%)", "min": 0, "max": 100,
+              "ticks": [1024 * 2 ** k for k in range(10)], "tick_labels": [_ctx(1024 * 2 ** k) for k in range(10)],
+              "min": 1024, "max": 1024 * 2 ** 9},
+        "y": {"label": "attention share of the step's bytes (%)", "min": 0, "max": 100,
               "ticks": [0, 20, 40, 60, 80, 100]},
         "series": [{"name": "KV read / (KV read + weights read)", "x": xs, "y": [_r(_share(x)) for x in xs],
                     "style": "accent"}],
         "marks": marks,
         "legend": "none",
-        "note": "computed by fa_calculators.decode_attention_bytes; weights: 8.03 B parameters in bf16",
+        "note": "computed by fa_calculators.decode_kv_share, decode_kv_crossover_tokens; weights: 8.03 B parameters in bf16",
     }
 
 

@@ -7,18 +7,18 @@
   <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
     <rect x="24" y="66" width="150" height="48" rx="24" fill="none" stroke="currentColor" stroke-width="1.2"/>
     <text x="99" y="95" text-anchor="middle" font-weight="600">Job, JobSet, LWS</text>
-    <rect x="256" y="28" width="484" height="112" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4" rx="8"/>
-    <text x="498" y="46" fill="#97A59F" text-anchor="middle">Kueue: if and when a job starts</text>
-    <rect x="270" y="58" width="104" height="64" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    <text x="322" y="94" text-anchor="middle" font-weight="600">LocalQueue</text>
-    <rect x="392" y="58" width="138" height="64" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    <text x="461" y="78" text-anchor="middle" font-weight="600">ClusterQueue</text>
-    <text x="461" y="96" font-size="11" fill="#97A59F" text-anchor="middle">quota per flavor</text>
-    <text x="461" y="112" font-size="11" fill="#97A59F" text-anchor="middle">cohort: lend, reclaim</text>
-    <rect x="548" y="58" width="176" height="64" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    <text x="636" y="78" text-anchor="middle" font-weight="600">admits the whole gang</text>
-    <text x="636" y="96" font-size="11" fill="#97A59F" text-anchor="middle">TAS or a</text>
-    <text x="636" y="112" font-size="11" fill="#97A59F" text-anchor="middle">ProvisioningRequest</text>
+    <rect x="256" y="28" width="502" height="112" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4" rx="8"/>
+    <text x="507" y="46" fill="#97A59F" text-anchor="middle">Kueue: if and when a job starts</text>
+    <rect x="268" y="58" width="110" height="64" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="323" y="94" text-anchor="middle" font-weight="600">LocalQueue</text>
+    <rect x="394" y="58" width="144" height="64" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="466" y="78" text-anchor="middle" font-weight="600">ClusterQueue</text>
+    <text x="466" y="96" font-size="11" fill="#97A59F" text-anchor="middle">quota per flavor</text>
+    <text x="466" y="112" font-size="11" fill="#97A59F" text-anchor="middle">cohort: lend, reclaim</text>
+    <rect x="554" y="58" width="190" height="64" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="649" y="78" text-anchor="middle" font-weight="600">admits the whole gang</text>
+    <text x="649" y="96" font-size="11" fill="#97A59F" text-anchor="middle">TAS or a</text>
+    <text x="649" y="112" font-size="11" fill="#97A59F" text-anchor="middle">ProvisioningRequest</text>
     <rect x="516" y="192" width="240" height="56" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
     <text x="636" y="214" text-anchor="middle" font-weight="600">kube-scheduler</text>
     <text x="636" y="232" font-size="11.5" fill="#7ADACF" text-anchor="middle">one pod at a time: filter, score, bind</text>
@@ -35,15 +35,15 @@
     <text x="636" y="332" text-anchor="middle" font-weight="600">kubelet</text>
     <text x="636" y="350" font-size="11" fill="#97A59F" text-anchor="middle">Node status:</text>
     <text x="636" y="366" font-size="11" fill="#97A59F" text-anchor="middle">capacity, allocatable</text>
-    <path d="M174 90 L268 90" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <path d="M174 90 L266 90" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
     <text x="221" y="80" font-size="11" fill="#97A59F" text-anchor="middle">created</text>
     <text x="221" y="106" font-size="11" fill="#97A59F" text-anchor="middle">suspended</text>
     <text x="221" y="120" font-size="11" fill="#97A59F" text-anchor="middle">or gated</text>
-    <path d="M374 90 L390 90" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
-    <path d="M530 90 L546 90" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
-    <path d="M636 122 L636 190" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
-    <text x="624" y="158" font-size="11" fill="#97A59F" text-anchor="end">Job unsuspended,</text>
-    <text x="624" y="172" font-size="11" fill="#97A59F" text-anchor="end">pods get the flavor nodeSelector</text>
+    <path d="M378 90 L392 90" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <path d="M538 90 L552 90" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <path d="M649 122 L649 190" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <text x="637" y="158" font-size="11" fill="#97A59F" text-anchor="end">Job unsuspended,</text>
+    <text x="637" y="172" font-size="11" fill="#97A59F" text-anchor="end">pods get the flavor nodeSelector</text>
     <path d="M516 220 L266 220" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
     <text x="391" y="212" font-size="11" fill="#97A59F" text-anchor="middle">Pending pod</text>
     <path d="M155 248 L155 336 L254 336" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)" stroke-dasharray="4 3"/>

@@ -261,7 +261,7 @@ A worked example uses three memories. The memories are A (last used 1 h ago, imp
 
 ![The normalised recency term of A, B and C against the hours from the last access, in the paper form and the code form.](figures/recency-two-forms.svg)
 
-*After min-max normalisation, the paper form gives the largest recency term to the most recent memory, A. The code form uses only the rank of each memory, so the oldest memory, C, gets the largest term. `memcore.retrieve.recency` and `memcore.retrieve.minmax` compute the values, and `tests/test_figures.py` pins the chart.*
+*After min-max normalisation, the paper form gives the largest recency term to the most recent memory, A. The paper curve shows the term of a memory of each age beside A and C. The code form uses only the rank, so it has a value only at the three points. There, the oldest memory, C, gets the largest term. `memcore.retrieve.recency` and `memcore.retrieve.minmax` compute the values, and `tests/test_figures.py` pins the chart.*
 
 Both forms rank B, A, C here, but for different reasons. The inversion in the code shows on knowledge updates. Take raw episodes at a
 60-token budget over the 30 users of the harness. There, the code form answers **70.0%** of knowledge-update questions with the superseded
@@ -488,7 +488,7 @@ smaller one, because the provider caches the larger one. This is a threshold, no
 
 ![Dollars per 8-turn session on a hosted API against the size of the system prompt, for the four layouts, with a 4,096-token caching minimum.](figures/session-cost-vs-system-prompt.svg)
 
-*Each step down is one more turn whose prompt clears the 4,096-token minimum, so a larger system prompt can cost less. With a small system prompt, the three memory layouts cost the same, and with a large one memory before the history costs the most. `memcore.budget.hits_per_turn` and `memcore.budget.turn_cost` compute the values, and `tests/test_figures.py` pins the chart.*
+*Each step down is one more turn whose prompt clears the 4,096-token minimum, so a larger system prompt can cost less. With a small system prompt, the three memory layouts cost the same. With a large one, memory before the history costs the most. `memcore.budget.hits_per_turn` and `memcore.budget.turn_cost` compute the values, and `tests/test_figures.py` pins the chart.*
 
 **Extraction has a price too.** An extraction call after every turn (600 tokens in, 60 out) costs
 **$0.00144** — 72% of a cached turn-8 answer ($0.00199, pinned, 4,000-token system prompt). It is also 22% of one billed at full price

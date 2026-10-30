@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="880" height="360" viewBox="0 0 880 360" role="img" aria-label="Clocks per score per SM when each unit runs alone, d = 128: the tensor-core bar halves from A100 to H100 to B200 while the EX2 bar stays at 0.0625." style="color: #E4EAE7">
   <title>Clocks per score per SM when each unit runs alone, d = 128: the tensor-core bar halves from A100 to H100 to B200 while the EX2 bar stays at 0.0625.</title>
-  <desc>{"categories":["A100","H100","B200"],"kind":"bar","legend":"top-right","note":"computed by fa_calculators.clocks_per_score; the B200 row is an estimate (verify)","series":[{"name":"tensor cores","style":"accent","y":[0.25,0.125,0.0625]},{"name":"EX2 on MUFU","style":"warm","y":[0.0625,0.0625,0.0625]},{"name":"about 5 FP32 instructions","style":"plain","y":[0.078125,0.0390625,0.0390625]}],"title":"Clocks per score per SM when each unit runs alone, d = 128: the tensor-core bar halves from A100 to H100 to B200 while the EX2 bar stays at 0.0625.","x":{"label":"per score at d = 128: 512 MMA FLOPs, one EX2, about 5 FP32 instructions","tick_labels":["A100\nEX2 = 25% of MMA time","H100\nEX2 = 50% of MMA time","B200\nEX2 = 100% of MMA time"]},"y":{"label":"SM clocks per score","max":0.3,"min":0,"ticks":[0,0.05,0.1,0.15,0.2,0.25,0.3]}}</desc>
+  <desc>{"categories":["A100","H100","B200"],"kind":"bar","legend":"top-right","note":"computed by fa_calculators.clocks_per_score; the B200 row is an estimate (verify)","series":[{"name":"tensor cores","style":"accent","y":[0.25,0.125,0.0625]},{"name":"EX2 on MUFU","style":"warm","y":[0.0625,0.0625,0.0625]},{"name":"about 5 FP32 instructions","style":"plain","y":[0.078,0.039,0.039]}],"title":"Clocks per score per SM when each unit runs alone, d = 128: the tensor-core bar halves from A100 to H100 to B200 while the EX2 bar stays at 0.0625.","x":{"tick_labels":["A100\nEX2 = 25% of MMA time","H100\nEX2 = 50% of MMA time","B200\nEX2 = 100% of MMA time"]},"y":{"label":"SM clocks per score, d = 128","max":0.3,"min":0,"ticks":[0,0.05,0.1,0.15,0.2,0.25,0.3]}}</desc>
   <rect x="0" y="0" width="880" height="360" rx="8" fill="#161E1C"/>
   <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12" fill="currentColor">
     <g stroke="#27322E" stroke-width="1">
@@ -28,8 +28,7 @@
       <text x="462.0" y="306.0" text-anchor="middle"><tspan x="462.0" dy="0">H100</tspan><tspan x="462.0" dy="12">EX2 = 50% of MMA time</tspan></text>
       <text x="726.0" y="306.0" text-anchor="middle"><tspan x="726.0" dy="0">B200</tspan><tspan x="726.0" dy="12">EX2 = 100% of MMA time</tspan></text>
     </g>
-    <text x="462.0" y="332.0" text-anchor="middle" fill="#97A59F">per score at d = 128: 512 MMA FLOPs, one EX2, about 5 FP32 instructions</text>
-    <text x="16" y="156.0" text-anchor="middle" fill="#97A59F" transform="rotate(-90 16 156.0)">SM clocks per score</text>
+    <text x="16" y="156.0" text-anchor="middle" fill="#97A59F" transform="rotate(-90 16 156.0)">SM clocks per score, d = 128</text>
     <clipPath id="plot"><rect x="65.0" y="16.0" width="794.0" height="275.0"/></clipPath>
     <g clip-path="url(#plot)">
       <rect x="104.0" y="66.7" width="61.4" height="223.3" rx="2" fill="#4CC5B7" fill-opacity="0.85"/>
@@ -44,12 +43,12 @@
       <text x="462.0" y="229.2" text-anchor="middle" font-size="10.5" fill="#E39A62">0.0625</text>
       <rect x="695.3" y="234.2" width="61.4" height="55.8" rx="2" fill="#E39A62" fill-opacity="0.85"/>
       <text x="726.0" y="229.2" text-anchor="middle" font-size="10.5" fill="#E39A62">0.0625</text>
-      <rect x="230.7" y="220.2" width="61.4" height="69.8" rx="2" fill="#E4EAE7" fill-opacity="0.85"/>
-      <text x="261.4" y="215.2" text-anchor="middle" font-size="10.5" fill="#E4EAE7">0.0781</text>
-      <rect x="494.7" y="255.1" width="61.4" height="34.9" rx="2" fill="#E4EAE7" fill-opacity="0.85"/>
-      <text x="525.4" y="250.1" text-anchor="middle" font-size="10.5" fill="#E4EAE7">0.0391</text>
-      <rect x="758.7" y="255.1" width="61.4" height="34.9" rx="2" fill="#E4EAE7" fill-opacity="0.85"/>
-      <text x="789.4" y="250.1" text-anchor="middle" font-size="10.5" fill="#E4EAE7">0.0391</text>
+      <rect x="230.7" y="220.3" width="61.4" height="69.7" rx="2" fill="#E4EAE7" fill-opacity="0.85"/>
+      <text x="261.4" y="215.3" text-anchor="middle" font-size="10.5" fill="#E4EAE7">0.078</text>
+      <rect x="494.7" y="255.2" width="61.4" height="34.8" rx="2" fill="#E4EAE7" fill-opacity="0.85"/>
+      <text x="525.4" y="250.2" text-anchor="middle" font-size="10.5" fill="#E4EAE7">0.039</text>
+      <rect x="758.7" y="255.2" width="61.4" height="34.8" rx="2" fill="#E4EAE7" fill-opacity="0.85"/>
+      <text x="789.4" y="250.2" text-anchor="middle" font-size="10.5" fill="#E4EAE7">0.039</text>
     </g>
     <g font-size="11.5">
       <rect x="645.0" y="30.0" width="205.0" height="61.0" rx="5" fill="#161E1C" fill-opacity="0.9" stroke="#27322E"/>

@@ -74,6 +74,7 @@ def spec_majority_vote_vs_n() -> dict:
     narrow = rows[1][1]
     # §6: "the vote drops below one sample's accuracy only past about 130": the first odd n below p
     cross = next(n for n in range(1, 400, 2) if ttc.majority_accuracy(P_VOTE, narrow, n) < P_VOTE)
+    assert 120 <= cross <= 140, f"the narrow vote now drops below p at n = {cross}, not about 130"
     single = ttc.majority_accuracy(P_VOTE, narrow, 1)
     marks = [
         {"kind": "hline", "y": _sig(single), "style": "muted"},

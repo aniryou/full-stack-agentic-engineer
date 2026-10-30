@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="310" viewBox="0 0 880 310" role="img" aria-label="For a priority-1000 serving pod, node a loses its newer priority-0 batch pod, node b loses its priority-500 pod, and the scheduler selects node a." style="color: #E4EAE7">
+  <title>For a priority-1000 serving pod, node a loses its newer priority-0 batch pod, node b loses its priority-500 pod, and the scheduler selects node a.</title>
+  <rect x="0" y="0" width="880" height="310" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="94" y="42" font-size="11" fill="#97A59F" text-anchor="middle">no node passes</text>
+    <text x="94" y="56" font-size="11" fill="#97A59F" text-anchor="middle">the filters</text>
+    <rect x="24" y="68" width="140" height="72" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="94" y="92" text-anchor="middle" font-weight="600">serving pod</text>
+    <text x="94" y="110" font-size="11.5" fill="#97A59F" text-anchor="middle">priority 1000</text>
+    <text x="94" y="126" font-size="11.5" fill="#97A59F" text-anchor="middle">needs 4 GPUs</text>
+
+    <rect x="232" y="24" width="308" height="198" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="386" y="46" fill="#97A59F" text-anchor="middle">node a</text>
+    <rect x="246" y="68" width="136" height="72" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="314" y="92" text-anchor="middle" font-weight="600">batch pod</text>
+    <text x="314" y="110" font-size="11.5" fill="#97A59F" text-anchor="middle">priority 0</text>
+    <text x="314" y="126" font-size="11.5" fill="#97A59F" text-anchor="middle">4 GPUs · older</text>
+    <rect x="390" y="68" width="136" height="72" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="458" y="92" text-anchor="middle" font-weight="600">batch pod</text>
+    <text x="458" y="110" font-size="11.5" text-anchor="middle">priority 0</text>
+    <text x="458" y="126" font-size="11.5" text-anchor="middle">4 GPUs · newer</text>
+    <text x="314" y="160" font-size="11" fill="#97A59F" text-anchor="middle">added back first:</text>
+    <text x="314" y="174" font-size="11" fill="#97A59F" text-anchor="middle">it fits</text>
+    <text x="458" y="160" font-size="11" fill="#97A59F" text-anchor="middle">does not fit back:</text>
+    <text x="458" y="174" font-size="11" fill="#E39A62" text-anchor="middle">the victim</text>
+    <text x="386" y="206" text-anchor="middle">one priority-0 victim</text>
+
+    <rect x="556" y="24" width="300" height="198" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="706" y="46" fill="#97A59F" text-anchor="middle">node b</text>
+    <rect x="570" y="68" width="272" height="72" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="706" y="92" text-anchor="middle" font-weight="600">evaluation pod</text>
+    <text x="706" y="110" font-size="11.5" fill="#97A59F" text-anchor="middle">priority 500</text>
+    <text x="706" y="126" font-size="11.5" fill="#97A59F" text-anchor="middle">8 GPUs</text>
+    <text x="706" y="160" font-size="11" fill="#97A59F" text-anchor="middle">does not fit back</text>
+    <text x="706" y="206" text-anchor="middle">one priority-500 victim</text>
+
+    <rect x="232" y="238" width="624" height="48" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="544" y="258" text-anchor="middle" font-weight="600">the scheduler selects node a</text>
+    <text x="544" y="275" font-size="11.5" fill="#7ADACF" text-anchor="middle">the lowest priority of the highest-priority victim</text>
+    <path d="M230 262 L94 262 L94 142" fill="none" stroke="#4CC5B7" stroke-width="1.2" marker-end="url(#arrA)"/>
+    <text x="162" y="254" font-family="JetBrains Mono, monospace" font-size="11" fill="#7ADACF" text-anchor="middle">nominatedNodeName</text>
+  </g>
+</svg>

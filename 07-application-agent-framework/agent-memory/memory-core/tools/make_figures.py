@@ -89,30 +89,29 @@ def spec_recency_two_forms() -> dict:
     # only for the three memories of the example.
     grid = list(range(min(ages), max(ages) + 1))
     paper_curve = minmax(recency([NOW - h * HOUR for h in grid], NOW, "paper"))
-    # A label sits above its point, except where a line leaves the point upward to the right: there it goes below
-    # (the code form's B, and A at 0, whose label goes under the axis between the ticks).
+    # So the paper form is a line and the code form is three points with no line between them: a line through
+    # A, B and C would claim a value at an age where the code form has none (a fourth memory changes every rank).
+    # A label sits above its point, except the code form's B, whose label goes below, clear of the paper curve.
     marks = []
     for form, values, style in (("paper", paper3, "accent"), ("code", code3, "warm")):
         for n, h, v in zip(names, ages, values):
-            below = form == "code" and n != "C"
+            below = form == "code" and n == "B"
             marks.append({"kind": "point", "x": h, "y": _sig(v), "label": _norm_label(n, v), "style": style,
-                          "anchor": "start", "dy": (18 if v == 0 else 16) if below else -9})
+                          "anchor": "start", "dy": 16 if below else -9})
     marks += [
         {"kind": "text", "x": 36, "y": 0.1, "text": "paper form: 0.995^hours", "style": "accent", "anchor": "start"},
-        {"kind": "text", "x": 40, "y": 0.93, "text": "code form: 0.99^rank, oldest first", "style": "warm",
+        {"kind": "text", "x": 69, "y": 0.985, "text": "code form: 0.99^rank, oldest first", "style": "warm",
          "anchor": "end"},
     ]
     return {
         "kind": "line",
         "title": "The normalised recency term of A, B and C against the hours from the last access, in the paper "
                  "form and the code form.",
-        "x": {"label": "hours from the last access (h)", "min": 0, "max": 80, "ticks": [0, 12, 24, 36, 48, 60, 72]},
+        "x": {"label": "hours since last access (h)", "min": 0, "max": 80, "ticks": [0, 12, 24, 36, 48, 60, 72]},
         "y": {"label": "recency term, normalised", "min": 0, "max": 1.12, "ticks": [0, 0.25, 0.5, 0.75, 1.0],
               "tick_labels": ["0", "0.25", "0.5", "0.75", "1.0"]},
         "series": [
             {"name": "paper form: 0.995^hours", "x": grid, "y": [_sig(v) for v in paper_curve], "style": "accent"},
-            {"name": "code form: 0.99^rank, oldest first", "x": ages, "y": [_sig(v) for v in code3],
-             "style": "warm", "markers": True},
         ],
         "marks": marks,
         "legend": "none",
@@ -132,7 +131,7 @@ def spec_recall_vs_budget() -> dict:
     return {
         "kind": "line",
         "title": "Recall for consolidated facts and raw episodes, and the accuracy of raw episodes, against the "
-                 "per-turn token budget over the 30 users of the harness.",
+                 f"per-turn token budget over the {len(USERS)} users of the harness.",
         "x": {"label": "memory budget per turn (tokens)", "min": 10, "max": 124, "ticks": xs},
         "y": {"label": "share of questions (%)", "min": 0, "max": 108, "ticks": [0, 20, 40, 60, 80, 100]},
         "series": [
@@ -179,7 +178,7 @@ def spec_uncached_per_turn() -> dict:
         "title": "The tokens that the engine prefills again at each turn from turn 2 to turn 20, for the four "
                  "layouts of memory in the prompt.",
         "x": {"label": "turn of the session", "min": 2, "max": TURNS, "ticks": [2, 4, 6, 8, 10, 12, 14, 16, 18, 20]},
-        "y": {"label": "uncached tokens per turn", "min": 0, "max": 3800, "ticks": [0, 1000, 2000, 3000]},
+        "y": {"label": "uncached tokens per turn", "min": -150, "max": 3800, "ticks": [0, 1000, 2000, 3000]},
         "series": series,
         "marks": [
             {"kind": "point", "x": 8, "y": at8["before_history"], "label": f"turn 8: {at8['before_history']:,}",
@@ -201,10 +200,15 @@ def _session_cost(layout: str, system_tokens: int) -> float:
     return sum(budget.turn_cost(t.prompt, t.cached, OUTPUT)["total"] for t in turns)
 
 
+def _cache_minimum() -> int:
+    """The caching minimum of the price row that ``budget.turn_cost`` uses by default."""
+    return budget.CACHE_MIN_TOKENS[inspect.signature(budget.turn_cost).parameters["model"].default]
+
+
 def _crossings(layout: str) -> list[int]:
     """The system-prompt sizes at which one more turn of the session clears the provider's caching minimum: the
     prompt of turn t is the system prompt plus a fixed part, so turn t clears the minimum from one size on."""
-    minimum = budget.CACHE_MIN_TOKENS[inspect.signature(budget.turn_cost).parameters["model"].default]
+    minimum = _cache_minimum()
     ref = SESSION["system_tokens"]
     turns = budget.hits_per_turn(layout, turns=SESSION_TURNS, **SESSION)
     return sorted({minimum - (t.prompt - ref) for t in turns})
@@ -227,10 +231,10 @@ def spec_session_cost_vs_system_prompt() -> dict:
                                         "anchor": anchor, "dy": dy}
     return {
         "kind": "line",
-        "title": "Dollars per 8-turn session on a hosted API against the size of the system prompt, for the four "
-                 "layouts, with a 4,096-token caching minimum.",
+        "title": f"Dollars per {SESSION_TURNS}-turn session on a hosted API against the size of the system prompt, "
+                 f"for the four layouts, with a {_cache_minimum():,}-token caching minimum.",
         "x": {"label": "system prompt (tokens)", "min": lo, "max": hi, "ticks": list(range(lo, hi + 1, 1000))},
-        "y": {"label": "$ per 8-turn session", "min": 0, "max": 0.06, "ticks": [0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06],
+        "y": {"label": f"$ per {SESSION_TURNS}-turn session", "min": 0, "max": 0.06, "ticks": [0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06],
               "tick_labels": ["0", "0.01", "0.02", "0.03", "0.04", "0.05", "0.06"]},
         "series": series,
         "marks": [
@@ -239,6 +243,8 @@ def spec_session_cost_vs_system_prompt() -> dict:
             {"kind": "vline", "x": 4000, "label": "4,000-token system prompt", "style": "muted", "anchor": "start",
              "label_pos": "bottom"},
             {**pt("pinned", 2000, "end", -9), "style": "plain"},     # the three memory layouts share this point
+            # and this line up to the first crossing: name them above the point's label, which the test pins
+            {"kind": "text", "x": 1943, "y": 0.0495, "text": "three memory layouts", "style": "plain", "anchor": "end"},
             pt("none", 2000, "start", 16),
             pt("before_history", 4000, "start", -9),
             pt("pinned", 4000, "start", 26),                        # under the line of "none"

@@ -37,13 +37,13 @@
     <!-- lane B: a Job deadline of 5 s -->
     <text x="24" y="164" font-weight="600">Job deadline: 5 s</text>
     <text x="24" y="180" font-size="11" fill="#97A59F">from the Job start</text>
-    <rect x="220" y="154" width="50" height="26" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <rect x="220" y="154" width="50" height="26" rx="6" fill="#161E1C" stroke="currentColor" stroke-width="1.2"/>
     <text x="282" y="171" font-size="11.5" fill="#97A59F">ends <tspan font-family="JetBrains Mono, monospace" font-size="11" fill="currentColor">DeadlineExceeded</tspan></text>
 
     <!-- lane C: a Pod deadline of 5 s -->
     <text x="24" y="208" font-weight="600">Pod deadline: 5 s</text>
     <text x="24" y="224" font-size="11" fill="#97A59F">from the kubelet admission</text>
-    <rect x="450" y="198" width="50" height="26" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <rect x="450" y="198" width="50" height="26" rx="6" fill="#161E1C" stroke="currentColor" stroke-width="1.2"/>
     <text x="512" y="215" font-size="11.5" fill="#97A59F">ends <tspan font-family="JetBrains Mono, monospace" font-size="11" fill="currentColor">DeadlineExceeded</tspan></text>
 
     <!-- lane D: the deadline that SandboxPolicy.job() renders (the subject) -->

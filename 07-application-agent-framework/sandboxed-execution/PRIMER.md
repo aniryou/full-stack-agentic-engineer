@@ -235,7 +235,7 @@ flowchart LR
   D -->|yes| R["new secrets<br/>in each clone"]
 ```
 
-*Read from the left: one snapshot gives many clones, and each clone starts with the same RNG state, identifiers and tokens. The restore stays insecure unless the guest re-seeds (VMGenID) and makes new secrets after the restore. Never restore one snapshot into two tenants (§2, Firecracker `docs/snapshotting/snapshot-support.md`).*
+*Read from the left: one snapshot gives many clones, and each clone starts with the same RNG state, identifiers and tokens. The restore stays insecure unless the guest re-seeds (VMGenID) and makes new secrets after the restore.*
 
 **Rung 5: a full VM or a separate machine.** This rung is the strongest and the slowest. A boot takes seconds, and you must manage a whole OS. It is for the highest-risk or noisiest workloads, or for a place where a compliance boundary makes it necessary.
 
@@ -281,13 +281,13 @@ sequenceDiagram
         P-->>A: DENY + reasons
     else allow
         A->>P: clamp(req)
-        A->>S: run(req) under<br/>ResultStore.run_once
+        A->>S: run(req)
         S-->>A: ExecutionResult
     end
     A->>A: as_tool_result()
 ```
 
-*This figure shows the policy decision. If the policy permits the request, `ResultStore.run_once` claims the idempotency key before the run. Each path ends in `as_tool_result()`, which gives the model a result that it can act on.*
+*This figure shows the policy decision. If the policy permits the request, `SandboxAgent` calls `run(req)` on the sandbox. Each path ends in `as_tool_result()`, which gives the model a result that it can act on.*
 
 ```mermaid
 sequenceDiagram
@@ -444,11 +444,11 @@ The rendered Job also sets `automountServiceAccountToken: false`, so no cloud cr
 
 **Deadlines count the cold start.** The `activeDeadlineSeconds` of the Job runs from the start of the Job, and this time includes scheduling, node scale-up and the image pull. The `activeDeadlineSeconds` of a Pod itself runs from the time when the kubelet admits it, before the pull. Suppose that you set either one to the 5-second wall budget of the code. Then each cold execution on a busy cluster (§6: ~42–50 s p50) ends `DeadlineExceeded` before its code starts.
 
+Thus the deadline of the rendered Job is a **startup allowance plus the wall budget** (120 + 5 s by default, `SandboxPolicy.startup_allowance_s`). The enforcement of the wall budget itself is **inside** the pod: the command runs under `timeout -s KILL <wall_s>`. The pods of the lab run the wrapper of the lab, which enforces each budget in the same way.
+
 ![On a time axis, a 5 s deadline ends before the code of a cold Job starts, but the rendered deadline of 120 + 5 s does not.](figures/job-deadline-timeline.svg)
 
-*Look first at where each deadline starts: the Job deadline counts from the Job start, and the Pod deadline counts from the kubelet admission. A deadline of 5 s ends `DeadlineExceeded` in the warm bars, before the code starts. The rendered Job (`SandboxPolicy.job()`) has a deadline of 120 + 5 s, and `timeout -s KILL` enforces the wall budget inside the pod.*
-
-Thus the deadline of the rendered Job is a **startup allowance plus the wall budget** (120 + 5 s by default, `SandboxPolicy.startup_allowance_s`). The enforcement of the wall budget itself is **inside** the pod: the command runs under `timeout -s KILL <wall_s>`. The pods of the lab run the wrapper of the lab, which enforces each budget in the same way.
+*Look first at where each deadline starts: the Job deadline counts from the Job start, and the Pod deadline counts from the kubelet admission. In the two 5 s lanes, the deadline ends `DeadlineExceeded` before the code starts. The rendered Job (`SandboxPolicy.job()`) has a deadline of 120 + 5 s, and `timeout -s KILL` enforces the wall budget inside the pod.*
 
 ### The pod: security context and runtime
 

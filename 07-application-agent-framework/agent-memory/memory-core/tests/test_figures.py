@@ -4,7 +4,7 @@ Each committed chart must be exactly what svgchart.render() makes of the spec st
 must hold the values the core computes today (svgchart.check_figure()). If a formula, an input or the harness
 changes, a test here fails until the chart is regenerated: ``python3 tools/make_figures.py``. The primer must embed
 every chart, and every decimal number or percentage a chart prints (its title, series names, marks and texts) must
-stand in the primer as printed, so that the reader finds the sentence.
+stand in the primer's prose as printed (not only in an alt text or a caption), so that the reader finds the sentence.
 """
 import importlib.util
 import re
@@ -18,6 +18,27 @@ mf = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(mf)
 
 PRIMER = " ".join((CORE.parent / "PRIMER.md").read_text(encoding="utf-8").split())
+
+
+def _body(text: str) -> str:
+    """The primer without its figures: each image line (the alt text is the chart's title) and the italic caption
+    paragraph after it, so that a number a chart prints must stand in the prose and not only beside the chart."""
+    out, lines, i = [], text.splitlines(), 0
+    while i < len(lines):
+        if lines[i].lstrip().startswith("!["):
+            i += 1
+            while i < len(lines) and not lines[i].strip():
+                i += 1
+            line = lines[i].strip() if i < len(lines) else ""
+            if line.startswith("*") and not line.startswith(("**", "* ")) and line.endswith("*"):
+                i += 1
+            continue
+        out.append(lines[i])
+        i += 1
+    return " ".join(" ".join(out).split())
+
+
+BODY = _body((CORE.parent / "PRIMER.md").read_text(encoding="utf-8"))
 _SPECS: dict = {}
 
 
@@ -79,8 +100,8 @@ def _printed(chart: dict) -> list[str]:
 
 @pytest.mark.parametrize("name", sorted(mf.FIGURES))
 def test_every_number_a_chart_prints_is_in_the_primer(name):
-    missing = [num for text in _printed(spec(name)) for num in NUMBER.findall(text) if num not in PRIMER]
-    assert not missing, f"numbers on {name} that PRIMER.md does not print: {missing}"
+    missing = [num for text in _printed(spec(name)) for num in NUMBER.findall(text) if num not in BODY]
+    assert not missing, f"numbers on {name} that the prose of PRIMER.md does not print: {missing}"
 
 
 def test_the_charts_mark_the_primer_points():

@@ -89,7 +89,8 @@ def spec_stranded_arrivals() -> dict:
         "y": {"label": "stranded GPUs for an 8-GPU pod", "min": -5, "max": 32,
               "ticks": [0, 4, 8, 12, 16, 20, 24, 28, 32]},
         "series": [
-            {"name": "default (LeastAllocated, cpu+memory)", "x": xs, "y": spread, "style": "warm", "markers": True},
+            {"name": "default (LeastAllocated, cpu+memory)", "x": xs, "y": spread, "style": "warm", "markers": True,
+             "dash": True},
             {"name": "MostAllocated, GPU weight 5", "x": xs, "y": packed, "style": "accent", "markers": True},
         ],
         "marks": [

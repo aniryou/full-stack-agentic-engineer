@@ -17,7 +17,7 @@
     <rect x="242" y="84" width="120" height="28" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="3 3"/>
     <text x="302" y="102" font-size="11.5" fill="#97A59F" text-anchor="middle">idle</text>
     <rect x="362" y="84" width="120" height="28" rx="6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 3"/>
-    <text x="422" y="102" font-size="11.5" text-anchor="middle">job 3 · borrows 8</text>
+    <text x="422" y="102" font-size="11.5" text-anchor="middle">job 3 borrows 8</text>
     <rect x="482" y="84" width="120" height="28" rx="6" fill="#97A59F" fill-opacity="0.22" stroke="#97A59F" stroke-width="1.2"/>
     <text x="542" y="102" font-size="11.5" text-anchor="middle">job 1 · 8</text>
     <rect x="602" y="84" width="120" height="28" rx="6" fill="#97A59F" fill-opacity="0.22" stroke="#97A59F" stroke-width="1.2"/>
@@ -28,13 +28,13 @@
     <rect x="242" y="156" width="120" height="28" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="3 3"/>
     <text x="302" y="174" font-size="11.5" fill="#97A59F" text-anchor="middle">idle</text>
     <rect x="362" y="156" width="120" height="28" rx="6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 3"/>
-    <text x="422" y="174" font-size="11.5" text-anchor="middle">job 3 · borrows 8</text>
+    <text x="422" y="174" font-size="11.5" text-anchor="middle">job 3 borrows 8</text>
     <rect x="482" y="156" width="120" height="28" rx="6" fill="#97A59F" fill-opacity="0.22" stroke="#97A59F" stroke-width="1.2"/>
     <text x="542" y="174" font-size="11.5" text-anchor="middle">job 1 · 8</text>
     <rect x="602" y="156" width="120" height="28" rx="6" fill="#97A59F" fill-opacity="0.22" stroke="#97A59F" stroke-width="1.2"/>
     <text x="662" y="174" font-size="11.5" text-anchor="middle">job 2 · 8</text>
-    <rect x="242" y="194" width="240" height="28" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
-    <text x="362" y="212" text-anchor="middle" font-weight="600">16-GPU job of A: waits</text>
+    <rect x="242" y="194" width="240" height="28" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="362" y="212" fill="#E39A62" text-anchor="middle" font-weight="600">16-GPU job of A: waits</text>
     <text x="482" y="240" font-family="JetBrains Mono, monospace" font-size="11" fill="#97A59F" text-anchor="middle">insufficient unused quota for nvidia.com/gpu</text>
     <text x="482" y="254" font-family="JetBrains Mono, monospace" font-size="11" fill="#97A59F" text-anchor="middle">in flavor h100, 8 more needed</text>
     <text x="746" y="174" font-size="11.5">nothing occurs until</text>

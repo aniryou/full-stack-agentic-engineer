@@ -205,6 +205,14 @@ def test_decode_bytes_and_intensity():
     assert fc.mla_decode_intensity(b=1) == pytest.approx(483.56, abs=0.01)
 
 
+def test_decode_kv_share_is_the_section_6_5_share_column():
+    w = 8.03e9 * 2                                                        # 8.03 B parameters in bf16
+    shares = [fc.decode_kv_share(t, 32, 8, 128, w) for t in (2048, 32768, 65536, 131072, 262144)]
+    assert [round(100 * s, 1) for s in shares] == [1.6, 21.1, 34.8, 51.7, 68.1]      # 1.6%, 21%, 35%, 52%, 68%
+    assert fc.decode_kv_crossover_tokens(32, 8, 128, w) == pytest.approx(122_528, abs=1)
+    assert fc.decode_kv_share(122_528, 32, 8, 128, w) == pytest.approx(0.5, abs=1e-5)
+
+
 def test_mla_decode_sits_near_the_ridge_and_head_sharding_divides_it():
     ridge = fc.DEVICES["H100"].ridge
     # bf16 latent: below the bf16 ridge (82% of it), not above it

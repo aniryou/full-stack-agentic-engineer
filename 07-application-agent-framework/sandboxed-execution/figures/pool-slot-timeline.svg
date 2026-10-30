@@ -40,8 +40,8 @@
     <text x="730" y="187" text-anchor="middle" font-weight="600">run</text>
     <path d="M230 210 L230 216 L430 216 L430 210" fill="none" stroke="#97A59F" stroke-width="1"/>
     <text x="330" y="232" text-anchor="middle" font-size="11" fill="#97A59F">the slot is held t_exec = 2 s per execution</text>
-    <rect x="480" y="212" width="350" height="26" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
-    <text x="655" y="229" text-anchor="middle" font-size="11">state carries between executions (§3)</text>
+    <rect x="480" y="212" width="350" height="26" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="655" y="229" text-anchor="middle" font-size="11" fill="#97A59F">state carries between executions (§3)</text>
 
     <!-- lane 3: cold-on-demand -->
     <text x="24" y="280" font-weight="600">cold-on-demand</text>

@@ -705,6 +705,10 @@ limit can be slow. Against a narrow misconception, the vote still helps at 15 vo
 accuracy only past about 130. A dominant misconception makes every extra vote cost accuracy. The GSM8K
 self-consistency task of lm-eval reports maj@64 from 64 samples at temperature 0.2 (verify).
 
+![The accuracy of a majority vote against the number of samples, for one question where a sample is correct with p = 0.4, for four ways to spread the incorrect 60%.](figures/majority-vote-vs-n.svg)
+
+*Each line is one row of the table: the incorrect 60% of one question with p = 0.4, spread in four ways. The vote on the narrow misconception helps at 15 votes, but it drops below one sample past about 130. The core computes each point exactly with `ttc.majority_accuracy()`, and `tests/test_figures.py` pins the chart.*
+
 **pass@k vs pass^k, and the unbiased estimator.** pass@k is the probability that at least one of $k$ samples is
 correct. You must estimate it from $n \ge k$ samples with $c$ correct (Chen et al. 2021, `ttc.pass_at_k()`):
 
@@ -777,7 +781,7 @@ tokens: 2.5×). The large increase is in the time for which the request holds th
 
 ![The KV a request holds at each decode step, drawn against time: a 300-token output on a 1,500-token prompt is a thin sliver, a 3,000-token output an area 18.2 times larger.](figures/kv-token-steps.svg)
 
-*The KV that one request holds at each decode step, drawn against time, with the prompt P = 1,500 in both cases (`workload.kv_token_steps()`). The longer output holds its KV for 3,000 steps instead of 300, and its peak is only 2.5 times higher. Thus its area, memory × time, is 18.2 times larger.*
+*For the prompt P = 1,500, the core computes the KV that one request holds at each decode step with `workload.kv_token_steps()`. The longer output holds its KV for 3,000 steps instead of 300, at a peak only 2.5 times higher. Thus its area, memory × time, is 18.2 times larger, and `tests/test_figures.py` pins the chart.*
 
 ### Sizing a fleet: Little's law, HBM and the ITL SLO
 
@@ -825,6 +829,10 @@ With either method, ten times the output needs eighteen times the GPUs for memor
 the SLO's TPOT, 2.75 vs 0.15 at the step the fleet runs at. Concurrency grows with the output, and each live session
 holds 1.8× the KV. This combined growth is the 18.2× of KV-token-steps from earlier in this section. Little's
 law makes the 18.2× visible in the GPU count.
+
+![GPUs for memory against the output tokens per request in the capacity primer's example (8.33 requests/s, 1,500 tokens in, FP8 on H100s), at the SLO's TPOT and at the step the fleet runs at.](figures/memory-gpus-vs-output.svg)
+
+*The chart shows the GPUs that memory needs under the two methods of the table, from a 300-token answer to 6,000 output tokens. Both lines rise 18 times from 300 to 3,000 tokens, but the prefill need stays at 0.61 GPUs. The core computes the lines with `workload.plan()` and `workload.plan_steady()`, and `tests/test_figures.py` pins the chart.*
 
 If you use only the primer's `decode_aggregate`, it puts all 1,000 live requests of the convention in one batch. That batch needs 246 GB of KV on
 an 80 GB card. Decode *throughput* is not the binding constraint.
@@ -896,6 +904,10 @@ The tokens are the same, but the outcome is different. At 4K, one request in six
 Set `max_model_len` for the tail: prompt + p99 thinking + answer. With 1,500-token prompts, 17,408 (a multiple of
 1,024) keeps truncation at or below 1% (notebook 05, exercise 5.3). Keep `max_tokens` at `max_model_len` minus the
 prompt (15,908 here), because it counts output only. Enforce cost with a budget.
+
+![Accuracy against the output limit when max_tokens truncates and when a thinking budget forces the answer, for lognormal thinking lengths with median 1,500 and a 300-token answer.](figures/max-tokens-vs-budget.svg)
+
+*The thinking budget answers the requests that `max_tokens` truncates, and 30% of these forced answers are correct. At the vertical line, `max_tokens` = 15,908, truncation is at or below 1%. The core computes the curves with `workload.budget_outcome()`, and `tests/test_figures.py` pins the chart.*
 
 **Cost per *correct* answer, and routing by effort.** You also pay for incorrect answers: cost per correct = cost per
 request / accuracy (`workload.cost_per_correct()`). Use the §5 prices ($0.007005 per call without thinking,

@@ -413,6 +413,20 @@ def decode_attention_bytes(tokens_in_batch: int, n_layers: int, n_kv_heads: int,
     return tokens_in_batch * kv_bytes_per_token(n_layers, n_kv_heads, head_dim, b)
 
 
+def decode_kv_share(tokens_in_batch: int, n_layers: int, n_kv_heads: int, head_dim: int,
+                    weight_bytes: float, b: int = 2) -> float:
+    """Fraction of one decode step's HBM bytes that the KV read takes: KV / (KV + weights).
+    The step reads the weights once for any batch, so the share is the same on every GPU."""
+    kv = decode_attention_bytes(tokens_in_batch, n_layers, n_kv_heads, head_dim, b)
+    return kv / (kv + weight_bytes)
+
+
+def decode_kv_crossover_tokens(n_layers: int, n_kv_heads: int, head_dim: int,
+                               weight_bytes: float, b: int = 2) -> float:
+    """Cached tokens in the batch at which the KV read equals the weights read (share = 0.5)."""
+    return weight_bytes / kv_bytes_per_token(n_layers, n_kv_heads, head_dim, b)
+
+
 def decode_intensity(group: int, b: int = 2) -> float:
     """FLOP/byte of decode attention: 4*L*d*g FLOPs over 2*L*d*b bytes = 2g/b."""
     return 2.0 * group / b
