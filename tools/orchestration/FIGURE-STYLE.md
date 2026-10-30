@@ -41,9 +41,19 @@ Pick Mermaid unless the figure needs positions, proportions or time on an axis; 
   for a store, `{diamond}` for a decision, `([pill])` for an entry point, `[[subroutine]]` for a kernel or a job.
 - Quote a label that contains parentheses, commas, colons, pipes, braces, quotes or `#`:
   `A["allocate_slots(req, n)"]`. Line breaks inside a label are `<br/>`. Keep edge labels to a few words.
-- Size: at most about 14 nodes and 3 subgraphs; a sequence diagram at most 5 participants and about 12 messages.
-  The site's column is about 700 px wide: use `LR` for up to five stages in a row, `TB` beyond that. Split a
-  bigger idea into two figures.
+- **One screen.** A reader must see the whole figure without a scroll, with the labels readable. The rule, as
+  `render_figures.js` and `tools/ci/tests/test_figures_fit.py` measure it: shown in a content column of 800 px
+  (a wider figure is scaled down to it), the figure is at most 600 px tall and scaled down by no more than 0.7
+  (so a 16 px label stays about 11 px). A figure that fails is reshaped, not accepted.
+- Size, so that a figure fits: at most about 10 nodes and 3 subgraphs; a label of at most three short lines
+  (about 20 characters each: the name of the part, not its description, which the prose and the caption give);
+  `flowchart LR` for up to five stages in a row and at most three rows of nodes, `flowchart TB` for at most four
+  levels; a sequence diagram at most 4 participants and about 8 messages, with short notes; a state diagram at
+  most 6 states. A decision tree is wide, not tall: `LR` with the questions as diamonds in one row. Split a
+  bigger mechanism into two figures, each with its own caption, or draw it as an SVG (§4) when the layout needs
+  columns.
+- Label text is plain: no bold, no backticks, no unit explanations; a number in a label appears verbatim in the
+  prose.
 - Names in a label are the names the prose uses (the class, the function, the component), plain text (no
   backticks in Mermaid labels).
 
@@ -54,7 +64,8 @@ looks the same in every theme, thin outlined boxes, one teal accent for the subj
 
 - **Card:** `<svg xmlns="http://www.w3.org/2000/svg" width="W" height="H" viewBox="0 0 W H" role="img"
   aria-label="…" style="color: #E4EAE7">`, a `<title>` equal to the aria-label, then
-  `<rect x="0" y="0" width="W" height="H" rx="8" fill="#161E1C"/>`. Width 720 to 1000, height as needed.
+  `<rect x="0" y="0" width="W" height="H" rx="8" fill="#161E1C"/>`. Width 720 to 1000; height at most 560 (one
+  screen, §3: at 1000 wide the figure is shown at 0.8, so up to 700 is possible, but keep to 560 at 800 wide).
 - **Text:** `font-family="Bricolage Grotesque, system-ui, sans-serif"`, 12.5 px body, 11 to 11.5 px secondary,
   `font-weight="600"` for a box title; code in `font-family="JetBrains Mono, monospace"` 11 px. Primary text is
   `currentColor` (#E4EAE7); secondary text and edge labels `#97A59F`.
@@ -135,14 +146,18 @@ labelled return path):
 ## 6. Checks before a commit
 
 ```bash
-# every Mermaid block parses, and a PNG per block to look at (prerequisites in the script's header)
+# every Mermaid block parses and fits one screen (§3), and a PNG per block to look at (prerequisites in the header)
 node tools/orchestration/render_figures.js md <doc.md> <outdir>
-# each SVG, to look at
+# each SVG, to look at, with the same verdict
 node tools/orchestration/render_figures.js svg <doc-dir>/figures/<name>.svg <out.png>
+# before the commit: every figure of the repository, measured into tools/orchestration/figures-manifest.tsv,
+# which CI reads (tools/ci/tests/test_figures_fit.py); commit the manifest with the document
+node tools/orchestration/render_figures.js check
 python3 tools/orchestration/ste_lint.py <doc.md>        # no new errors (compare with `git stash` or HEAD)
 python3 tools/orchestration/mdlinks.py <doc.md>          # the image links resolve
 cd <the topic's core>; python3 -m pytest -q tests        # the pinned fragments are still there
 ```
 
 Look at every rendered figure: nothing overlaps, every label is inside its box, the arrows point the way the
-prose says, and the figure still reads at the site's column width (about 700 px; a 900 px SVG scales down to it).
+prose says, the figure fits one screen (the script's verdict), and it still reads at the site's column width (about
+800 px; a 900 px SVG scales down to it).

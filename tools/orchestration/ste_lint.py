@@ -20,10 +20,17 @@ The rules are the ones in tools/orchestration/STE100-STYLE.md that a program can
   WARN   semicolon         a semicolon chain (L2)
   WARN   abbreviation      etc., e.g., i.e., vs., & (W6)
   WARN   word              a word the standard replaces, with the replacement (W7, STE100-STYLE.md 3.1)
+  WARN   paren-clause      a clause with a verb inside parentheses, in the middle of a sentence (L1)
 
 Skipped: fenced code, inline code (counted as one word), headings, link targets, images, HTML tags, mathematics
 (counted as one word), table separator rows, ALL-CAPS tokens (statuses), the `(verify)` tag. Table cells and list
 items are checked as paragraphs of their own (a cell is not held to the six-sentence rule).
+
+The word list has two parts: the usual replacements (the first rewrite, 2026-10-03), and the dictionary-level
+words of the second pass (2026-10-30, STE100-STYLE.md 3.1, the second table): words the standard does not approve
+and that have a plain replacement. A technical name that happens to share the spelling (a product's "display", the
+"state" of a machine, a "major" version) is kept; the finding says what the standard would use. The JSON summary
+also reports `long_words`, the share of words of three or more syllables, as a plain-language measure.
 
 Standard library only. The output is `path:line: LEVEL rule: detail | sentence`. Exit code 1 when any file has an
 error, unless --no-fail.
@@ -105,7 +112,102 @@ WORDS = {
     "basically": "(remove)", "simply": "(remove)", "whether": "if", "whilst": "while", "wrong": "incorrect",
     "a lot of": "many / much", "lots of": "many / much", "as well as": "and", "plenty": "sufficient",
 }
-WORDS_RE = re.compile(r"\b(" + "|".join(sorted((re.escape(w) for w in WORDS), key=len, reverse=True)) + r")\b", re.I)
+WORDS_PASS2 = {
+    # verbs
+    "activate": "start / operate", "activates": "starts / operates", "activated": "started",
+    "arise": "occur", "arises": "occurs", "arose": "occurred",
+    "assist": "help", "assists": "helps", "assistance": "help",
+    "attain": "get", "attains": "gets",
+    "bring about": "cause", "brings about": "causes",
+    "cease": "stop", "ceases": "stops",
+    "conduct": "do", "conducts": "does", "conducted": "did",
+    "consider": "think about / look at", "considers": "thinks about", "considered": "thought about / examined",
+    "construct": "make", "constructs": "makes", "constructed": "made",
+    "deliver": "give / send / supply", "delivers": "gives / sends", "delivered": "given / sent",
+    "depict": "show", "depicts": "shows", "depicted": "shown",
+    "detect": "find", "detects": "finds", "detected": "found",
+    "differ": "be different", "differs": "is different",
+    "discover": "find", "discovers": "finds", "discovered": "found",
+    "displays": "shows (a display, the noun, is a technical name)", "displayed": "shown",
+    "eliminate": "remove", "eliminates": "removes", "eliminated": "removed",
+    "emit": "send / write", "emits": "sends / writes", "emitted": "sent / wrote",
+    "encounter": "find / meet", "encounters": "finds", "encountered": "found",
+    "evaluate": "examine / test / calculate", "evaluates": "examines / tests", "evaluated": "examined / tested",
+    "exceed": "be more than / go above", "exceeds": "is more than", "exceeded": "was more than",
+    "exhibit": "show", "exhibits": "shows", "exhibited": "showed",
+    "expand": "increase / extend", "expands": "increases / extends", "expanded": "increased / extended",
+    "facilitate": "help / make easier", "facilitates": "helps / makes easier",
+    "give rise to": "cause", "gives rise to": "causes",
+    "halt": "stop", "halts": "stops", "halted": "stopped",
+    "illustrate": "show", "illustrates": "shows", "illustrated": "shown",
+    "imply": "mean / show", "implies": "means / shows", "implied": "meant",
+    "inspect": "examine", "inspects": "examines", "inspected": "examined",
+    "invoke": "call", "invokes": "calls", "invoked": "called",
+    "lack": "not have", "lacks": "does not have", "lacked": "did not have",
+    "maintain": "keep / hold", "maintains": "keeps / holds", "maintained": "kept / held",
+    "maximize": "make as large as possible", "maximise": "make as large as possible",
+    "minimize": "make as small as possible / keep to a minimum", "minimise": "make as small as possible",
+    "necessitate": "make necessary", "necessitates": "makes necessary",
+    "notice": "see / find", "notices": "sees / finds", "noticed": "saw / found",
+    "observe": "see / measure", "observes": "sees / measures", "observed": "seen / measured",
+    "populate": "fill", "populates": "fills", "populated": "filled",
+    "possess": "have", "possesses": "has",
+    "preserve": "keep", "preserves": "keeps", "preserved": "kept",
+    "receive": "get", "receives": "gets", "received": "got",
+    "reduce": "decrease", "reduces": "decreases", "reduced": "decreased",
+    "represents": "is / shows / stands for",
+    "take place": "occur", "takes place": "occurs", "took place": "occurred",
+    "transmit": "send", "transmits": "sends", "transmitted": "sent",
+    "understand": "know", "understands": "knows", "understood": "knew",
+    "wish": "want", "wishes": "wants", "wished": "wanted",
+    "accommodate": "hold / take", "accommodates": "holds / takes",
+    # nouns, adjectives and adverbs
+    "adequate": "sufficient", "adequately": "sufficiently",
+    "although": "but", "though": "but",
+    "as a result": "thus", "accordingly": "thus", "thereby": "thus", "whereby": "by which",
+    "a number of": "some / many", "a variety of": "different / many", "the majority of": "most",
+    "a handful of": "a few", "a couple of": "two / a few", "multiple": "many / more than one",
+    "numerous": "many", "various": "different / many", "sole": "only", "solely": "only", "merely": "only",
+    "beneath": "below", "upon": "on / when", "via": "through / by", "within": "in", "whereas": "but",
+    "nevertheless": "but", "nonetheless": "but", "despite": "but", "in spite of": "but", "unlike": "different from",
+    "in case of": "if", "in the event of": "if", "in the event that": "if", "as long as": "if / while",
+    "with regard to": "about", "with respect to": "about", "concerning": "about", "in terms of": "(rewrite: as / for)",
+    "currently": "now", "at present": "now", "previously": "before", "subsequent": "next / later",
+    "typically": "usually", "commonly": "usually", "nearly": "almost", "roughly": "approximately",
+    "simultaneous": "at the same time", "simultaneously": "at the same time", "sequentially": "in sequence",
+    "meanwhile": "during this time", "otherwise": "if not", "respectively": "(say each pair)",
+    "certain": "some / specified (make certain: make sure)", "desired": "necessary / specified / that you want",
+    "essential": "necessary", "crucial": "important", "vital": "important / necessary",
+    "significant": "large / important", "significantly": "much", "negligible": "very small",
+    "entire": "all / full / complete", "entirely": "fully / completely", "overall": "total / in total",
+    "manner": "way", "optimal": "best / the most satisfactory", "optimum": "best",
+    "similar": "almost the same / like", "similarly": "in the same way", "suitable": "correct / applicable",
+    "straightforward": "simple / easy", "lengthy": "long", "obvious": "clear", "obviously": "clearly",
+    "apparent": "clear", "unable": "cannot / not able", "capable of": "can",
+    "indeed": "(remove)", "notably": "(remove)", "fairly": "(remove)", "somewhat": "(remove / a little)",
+    "relatively": "(remove / compared with)", "extremely": "(remove) / much", "note that": "(remove; say the fact)",
+    "since": "because (a cause) / from, after (a time)",
+}
+WORDS.update(WORDS_PASS2)
+WORDS_RE = re.compile(r"(?<![\w-])(" + "|".join(sorted((re.escape(w) for w in WORDS), key=len, reverse=True)) + r")(?![\w'-])", re.I)   # not inside "all-reduce" or "Little's"
+# A clause with a verb inside parentheses, in the middle of a sentence (not a cross-reference, not a sentence of
+# its own in parentheses): the standard puts a comment in its own sentence.
+PAREN = re.compile(r"\(([^()]{20,})\)")
+PAREN_VERB = re.compile(
+    r"\b(is|are|was|were|has|have|had|does|do|did|can|cannot|must|will|makes?|gives?|runs?|uses?|needs?|keeps?|sets?|"
+    r"gets?|takes?|see|say|says|holds?|stays?|goes|comes?|occurs?|means?|calls?|returns?|reads?|writes?|sends?|"
+    r"starts?|stops?|counts?|shows?|puts?|lets?|permits?|fails?|passes?|adds?|removes?|changes?)\b")
+PAREN_XREF = re.compile(r"^\s*(§|see\b|figure|fig\.|facts|notebook|step|line|lines|verify|verifytag|checked|read\b|"
+                        r"also\b|about\b|for example|e\.g|i\.e|code\b|math\b|\d|the figure|the table|table)", re.I)
+VOWELS = re.compile(r"[aeiouy]+")
+
+
+def syllables(word: str) -> int:
+    w = word.lower()
+    n = len(VOWELS.findall(w))
+    if w.endswith("e") and not w.endswith(("le", "ee", "ye")) and n > 1:
+        n -= 1
+    return max(1, n)
 ALLCAPS = re.compile(r"^[A-Z0-9_./-]+$")
 HEADING = re.compile(r"^\s{0,3}#{1,6}\s")
 FENCE = re.compile(r"^\s*(```|~~~)")
@@ -134,6 +236,7 @@ def clean_inline(text: str) -> str:
     text = HTML_TAG.sub(" ", text)
     text = text.replace("(verify)", "(VERIFYTAG)")
     text = re.sub(r",\s*verify\)", ", VERIFYTAG)", text)   # "(checked 2026-09-26, verify)"
+    text = re.sub(r"\(([^()]*?)\bverify\b", lambda m: "(" + m.group(1) + "VERIFYTAG", text)   # "(all verify)", "(2026-09-27, verify; ...)"
     text = re.sub(r"\*\*|__", "", text)
     text = re.sub(r"(?<![\w*])\*(?=\S)|(?<=\S)\*(?![\w*])", "", text)
     text = text.replace("\\$", "$")
@@ -198,8 +301,15 @@ def check_block(kind: str, line: int, text: str, findings: list[Finding], stats:
         for m in PASSIVE.finditer(s):
             findings.append(Finding(line, "WARN", "passive", m.group(0), excerpt))
             stats["passive"] += 1
+        for m in PAREN.finditer(s):
+            inner = m.group(1).strip()
+            if len(inner.split()) >= 6 and PAREN_VERB.search(inner) and not PAREN_XREF.match(inner) \
+                    and not (inner[:1].isupper() and inner.rstrip()[-1:] in ".!?") and s.strip() != m.group(0).strip():
+                findings.append(Finding(line, "WARN", "paren-clause", f"({inner[:60]}{'...' if len(inner) > 60 else ''})", excerpt))
         for w in ws:
             lw = w.lower()
+            if w not in ("CODE", "MATH") and lw.isalpha() and not ALLCAPS.match(w) and syllables(lw) >= 3:
+                stats["long_words"] += 1
             if lw.endswith("ing") and len(lw) >= 5 and lw not in ING_ALLOW and not ALLCAPS.match(w) \
                     and w not in ("CODE", "MATH") and not lw.startswith("code"):
                 findings.append(Finding(line, "WARN", "ing", w, excerpt))
@@ -208,7 +318,7 @@ def check_block(kind: str, line: int, text: str, findings: list[Finding], stats:
 
 def lint_markdown(text: str, line_offset: int = 0) -> tuple[list[Finding], dict]:
     findings: list[Finding] = []
-    stats = {"sentences": 0, "words": 0, "max_words": 0, "passive": 0, "ing": 0}
+    stats = {"sentences": 0, "words": 0, "max_words": 0, "passive": 0, "ing": 0, "long_words": 0}
     text = re.sub(r"<!-- colab-links:start -->.*?<!-- colab-links:end -->",
                   lambda m: "\n" * m.group(0).count("\n"), text, flags=re.S)   # generated by tools/gen_colab_index.py
     text = HTML_COMMENT.sub(lambda m: "\n" * m.group(0).count("\n"), text)
@@ -283,7 +393,7 @@ def lint_markdown(text: str, line_offset: int = 0) -> tuple[list[Finding], dict]
 def lint_notebook(path: pathlib.Path) -> tuple[list[Finding], dict]:
     d = json.loads(path.read_text(encoding="utf-8"))
     findings: list[Finding] = []
-    stats = {"sentences": 0, "words": 0, "max_words": 0, "passive": 0, "ing": 0}
+    stats = {"sentences": 0, "words": 0, "max_words": 0, "passive": 0, "ing": 0, "long_words": 0}
     for idx, cell in enumerate(d["cells"]):
         if cell["cell_type"] != "markdown":
             continue
@@ -298,7 +408,7 @@ def lint_notebook(path: pathlib.Path) -> tuple[list[Finding], dict]:
 def lint_percent_source(path: pathlib.Path) -> tuple[list[Finding], dict]:
     """A percent-format notebook source: the ``# %% [markdown]`` cells, with the leading ``# `` stripped."""
     findings: list[Finding] = []
-    stats = {"sentences": 0, "words": 0, "max_words": 0, "passive": 0, "ing": 0}
+    stats = {"sentences": 0, "words": 0, "max_words": 0, "passive": 0, "ing": 0, "long_words": 0}
     lines = path.read_text(encoding="utf-8").split("\n")
     in_md, start, buf = False, 0, []
 
@@ -370,13 +480,15 @@ def _main(argv: list[str]) -> int:
         report[str(path)] = {"errors": len(errs), "warnings": len(warns), "by_rule": by_rule,
                              "sentences": stats["sentences"], "words": stats["words"],
                              "mean_words": round(stats["words"] / stats["sentences"], 1) if stats["sentences"] else 0,
-                             "max_words": stats["max_words"], "passive": stats["passive"], "ing": stats["ing"]}
+                             "max_words": stats["max_words"], "passive": stats["passive"], "ing": stats["ing"],
+                             "long_words": round(stats["long_words"] / stats["words"], 3) if stats["words"] else 0}
         total_err += len(errs)
         if not a.summary and not a.json:
             for f in sorted(findings, key=lambda f: (f.line, f.level, f.rule)):
                 print(f"{path}:{label(f.line)}: {f.level} {f.rule}: {f.detail} | {f.sentence}")
     if a.json:
         totals = {k: sum(r[k] for r in report.values()) for k in ("errors", "warnings", "sentences", "words", "passive", "ing")}
+        totals["long_words"] = round(sum(r["long_words"] * r["words"] for r in report.values()) / totals["words"], 3) if totals["words"] else 0
         print(json.dumps({"files": report, "totals": totals}, indent=1))
     else:
         print()

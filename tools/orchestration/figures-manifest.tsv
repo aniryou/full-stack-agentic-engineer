@@ -1,0 +1,176 @@
+# Every figure, measured by `node tools/orchestration/render_figures.js check` (FIGURE-STYLE.md §3): kind, document, block, line, sha1 of the Mermaid source, width, height, height when shown in a 800 px column, scale, verdict.
+kind	doc	block	line	sha1	w	h	shown_h	scale	verdict
+svg	00-foundations/distillation/figures/break-even.svg	-	0	-	880	360	327	0.91	fits
+svg	00-foundations/distillation/figures/exposure-bias.svg	-	0	-	880	330	300	0.91	fits
+svg	00-foundations/distillation/figures/forward-reverse-kl.svg	-	0	-	880	364	331	0.91	fits
+svg	00-foundations/distillation/figures/four-recipes.svg	-	0	-	880	540	491	0.91	fits
+svg	00-foundations/distillation/figures/speculative-decoding-pass.svg	-	0	-	880	350	318	0.91	fits
+mermaid	00-foundations/distillation/PRIMER.md	1	361	6cb9f6ac67339d661fc6f9fc9835eae574e68b97	855	1031	965	0.94	too tall: 965 px when shown, the limit is 600
+mermaid	00-foundations/distillation/PRIMER.md	2	501	e9295b16992f07e63f9184568b0b7e18dc1899da	586	1001	1001	1.00	too tall: 1001 px when shown, the limit is 600
+svg	00-foundations/gpu-capacity-planning/figures/bank-example-hbm.svg	-	0	-	880	300	273	0.91	fits
+mermaid	00-foundations/gpu-capacity-planning/PRIMER.md	1	112	664e57be24c7c852500453460163346abfaa0cd0	980	1177	961	0.82	too tall: 961 px when shown, the limit is 600
+svg	00-foundations/mixture-of-experts/figures/collapse-loop-and-balance.svg	-	0	-	920	316	275	0.87	fits
+svg	00-foundations/mixture-of-experts/figures/decode-step-bytes-vs-batch.svg	-	0	-	880	400	364	0.91	fits
+svg	00-foundations/mixture-of-experts/figures/expert-layouts-on-gpus.svg	-	0	-	1000	404	323	0.80	fits
+svg	00-foundations/mixture-of-experts/figures/experts-touched-vs-batch.svg	-	0	-	880	400	364	0.91	fits
+svg	00-foundations/mixture-of-experts/figures/memory-on-one-l4.svg	-	0	-	880	392	356	0.91	fits
+svg	00-foundations/mixture-of-experts/figures/sort-by-expert-grouped-gemm.svg	-	0	-	980	356	291	0.82	fits
+mermaid	00-foundations/model-landscape/open-weight-llms-primer.md	1	434	41a7de8949dfe0740ca2a8f78a2336d0c7a5ad6e	757	729	729	1.00	too tall: 729 px when shown, the limit is 600
+svg	00-foundations/rl-and-thinking-models/figures/grpo-group-update.svg	-	0	-	880	420	382	0.91	fits
+svg	00-foundations/rl-and-thinking-models/figures/kv-token-steps.svg	-	0	-	880	360	327	0.91	fits
+svg	00-foundations/rl-and-thinking-models/figures/policy-gradient-trajectory.svg	-	0	-	880	350	318	0.91	fits
+svg	00-foundations/rl-and-thinking-models/figures/rl-step-timeline.svg	-	0	-	880	452	411	0.91	fits
+svg	00-foundations/rl-and-thinking-models/figures/thinking-budget-cuts.svg	-	0	-	880	330	300	0.91	fits
+mermaid	00-foundations/rl-and-thinking-models/PRIMER.md	1	59	1412ff6b5faaffeadb972cc0e3c23923a075ad7e	790	700	700	1.00	too tall: 700 px when shown, the limit is 600
+mermaid	00-foundations/rl-and-thinking-models/PRIMER.md	2	285	ef04f698d6a6d1d4cd3578b87047f2cb4b108e16	884	960	869	0.90	too tall: 869 px when shown, the limit is 600
+mermaid	00-foundations/rl-and-thinking-models/PRIMER.md	3	663	6b76ec36a1b20078fc8b61c2766d971087282782	817	845	827	0.98	too tall: 827 px when shown, the limit is 600
+svg	00-foundations/transformers/docs/figures/attention-soft-lookup.svg	-	0	-	900	330	293	0.89	fits
+svg	00-foundations/transformers/docs/figures/next-token-training.svg	-	0	-	880	314	285	0.91	fits
+svg	00-foundations/transformers/docs/figures/prefill-decode-kv-cache.svg	-	0	-	900	410	364	0.89	fits
+svg	00-foundations/transformers/docs/figures/three-flavors.svg	-	0	-	900	386	343	0.89	fits
+svg	00-foundations/transformers/docs/figures/tokens-in-and-out.svg	-	0	-	940	310	264	0.85	fits
+svg	00-foundations/transformers/docs/figures/transformer-block-residual-stream.svg	-	0	-	900	336	299	0.89	fits
+svg	01-hardware-gpu-fabric/gpu-deployment/figures/interconnect-cliff.svg	-	0	-	880	308	280	0.91	fits
+svg	01-hardware-gpu-fabric/gpu-deployment/figures/memory-budget-80gb.svg	-	0	-	880	324	295	0.91	fits
+svg	01-hardware-gpu-fabric/gpu-deployment/figures/parallelism-menu.svg	-	0	-	900	350	311	0.89	fits
+svg	01-hardware-gpu-fabric/gpu-deployment/figures/prefill-vs-decode.svg	-	0	-	880	340	309	0.91	fits
+mermaid	01-hardware-gpu-fabric/gpu-deployment/gpu-deployment-primer.md	1	273	b9b8554f7634320f9c8fa824277996c0b26ecd3f	681	604	604	1.00	too tall: 604 px when shown, the limit is 600
+svg	01-hardware-gpu-fabric/gpu-primer/figures/coalesced-access.svg	-	0	-	880	330	300	0.91	fits
+svg	01-hardware-gpu-fabric/gpu-primer/figures/gpu-shape.svg	-	0	-	900	488	434	0.89	fits
+svg	01-hardware-gpu-fabric/gpu-primer/figures/latency-hiding-oversubscription.svg	-	0	-	880	360	327	0.91	fits
+svg	01-hardware-gpu-fabric/gpu-primer/figures/pipelined-kernel.svg	-	0	-	880	350	318	0.91	fits
+svg	01-hardware-gpu-fabric/gpu-primer/figures/scale-up-scale-out.svg	-	0	-	880	428	389	0.91	fits
+svg	01-hardware-gpu-fabric/roofline-and-fabric/figures/checkpoint-interval-timeline.svg	-	0	-	900	350	311	0.89	fits
+svg	01-hardware-gpu-fabric/roofline-and-fabric/figures/cold-start-timeline.svg	-	0	-	960	330	275	0.83	fits
+svg	01-hardware-gpu-fabric/roofline-and-fabric/figures/decode-step-weights-vs-kv.svg	-	0	-	900	340	302	0.89	fits
+svg	01-hardware-gpu-fabric/roofline-and-fabric/figures/gpu-memory-system.svg	-	0	-	880	330	300	0.91	fits
+svg	01-hardware-gpu-fabric/roofline-and-fabric/figures/memory-hierarchy-gemm-tile.svg	-	0	-	900	440	391	0.89	fits
+svg	01-hardware-gpu-fabric/roofline-and-fabric/figures/node-nvlink-nics-rails.svg	-	0	-	960	476	397	0.83	fits
+svg	01-hardware-gpu-fabric/roofline-and-fabric/figures/roofline-h100-bf16.svg	-	0	-	900	480	427	0.89	fits
+mermaid	01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md	1	789	e9edb474859ce775d3c434fe340b730620043a36	815	831	816	0.98	too tall: 816 px when shown, the limit is 600
+svg	02-cuda-nccl-runtime/cuda-and-nccl/figures/coalescing-sectors.svg	-	0	-	900	420	373	0.89	fits
+svg	02-cuda-nccl-runtime/cuda-and-nccl/figures/eager-vs-graph-timeline.svg	-	0	-	900	432	384	0.89	fits
+svg	02-cuda-nccl-runtime/cuda-and-nccl/figures/gpu-util-vs-sm-active.svg	-	0	-	900	330	293	0.89	fits
+svg	02-cuda-nccl-runtime/cuda-and-nccl/figures/launch-hierarchy-occupancy.svg	-	0	-	900	526	468	0.89	fits
+svg	02-cuda-nccl-runtime/cuda-and-nccl/figures/ring-allreduce-regimes.svg	-	0	-	900	440	391	0.89	fits
+svg	02-cuda-nccl-runtime/cuda-and-nccl/figures/sharing-mig-mps-timeslicing.svg	-	0	-	900	376	334	0.89	fits
+svg	02-cuda-nccl-runtime/cuda-and-nccl/figures/two-gates-compatibility.svg	-	0	-	900	512	455	0.89	fits
+svg	03-kubernetes-gpu/gpu-scheduling/figures/bundle-stranding.svg	-	0	-	900	304	270	0.89	fits
+svg	03-kubernetes-gpu/gpu-scheduling/figures/cohort-borrow-reclaim.svg	-	0	-	880	352	320	0.91	fits
+svg	03-kubernetes-gpu/gpu-scheduling/figures/control-loop.svg	-	0	-	880	408	371	0.91	fits
+svg	03-kubernetes-gpu/gpu-scheduling/figures/startup-latency-timeline.svg	-	0	-	880	272	247	0.91	fits
+svg	03-kubernetes-gpu/gpu-scheduling/figures/tas-placement.svg	-	0	-	940	300	255	0.85	fits
+mermaid	03-kubernetes-gpu/gpu-scheduling/PRIMER.md	1	200	6c49274f81d49a2848a0ea4f6b54c5af102cd453	822	622	605	0.97	too tall: 605 px when shown, the limit is 600
+mermaid	03-kubernetes-gpu/gpu-scheduling/PRIMER.md	2	469	eaf4f77840916d830106baa13517eadfcb1b6e2d	573	790	790	1.00	too tall: 790 px when shown, the limit is 600
+mermaid	03-kubernetes-gpu/gpu-scheduling/PRIMER.md	3	813	57277952fb476723fcc2ababd65775076fc18f4e	947	532	449	0.84	fits
+svg	04-inference-engine/flash-attention/figures/deep-dive-clocks-per-score.svg	-	0	-	880	370	336	0.91	fits
+svg	04-inference-engine/flash-attention/figures/deep-dive-fa1-memory-traffic.svg	-	0	-	880	422	384	0.91	fits
+svg	04-inference-engine/flash-attention/figures/deep-dive-fa3-warp-specialization.svg	-	0	-	900	432	384	0.89	fits
+svg	04-inference-engine/flash-attention/figures/deep-dive-mla-absorbed-decode.svg	-	0	-	900	436	388	0.89	fits
+svg	04-inference-engine/flash-attention/figures/deep-dive-naive-roofline.svg	-	0	-	880	420	382	0.91	fits
+svg	04-inference-engine/flash-attention/figures/deep-dive-online-softmax-blocks.svg	-	0	-	900	436	388	0.89	fits
+svg	04-inference-engine/flash-attention/figures/deep-dive-paged-kv-gather.svg	-	0	-	880	470	427	0.91	fits
+svg	04-inference-engine/flash-attention/figures/deep-dive-split-kv-decode.svg	-	0	-	880	372	338	0.91	fits
+svg	04-inference-engine/flash-attention/figures/deep-dive-triton-program-grid.svg	-	0	-	900	416	370	0.89	fits
+svg	04-inference-engine/flash-attention/figures/primer-naive-vs-tiled.svg	-	0	-	880	544	495	0.91	fits
+svg	04-inference-engine/flash-attention/figures/primer-online-softmax.svg	-	0	-	880	344	313	0.91	fits
+mermaid	04-inference-engine/flash-attention/flash-attention-deep-dive.md	1	46	03224c23064af97e33e9952ca6b265841c8de65b	882	1014	920	0.91	too tall: 920 px when shown, the limit is 600
+mermaid	04-inference-engine/flash-attention/flash-attention-primer.md	1	168	7f590ac95ae62ec5d93955b5a5bba77fa45db432	595	678	678	1.00	too tall: 678 px when shown, the limit is 600
+svg	04-inference-engine/kv-cache/figures/cache-shrink-map.svg	-	0	-	880	430	391	0.91	fits
+svg	04-inference-engine/kv-cache/figures/kv-cache-size.svg	-	0	-	880	430	391	0.91	fits
+svg	04-inference-engine/kv-cache/figures/prefill-decode-phases.svg	-	0	-	880	434	395	0.91	fits
+svg	04-inference-engine/paged-attention/figures/copy-on-write-fork.svg	-	0	-	880	404	367	0.91	fits
+svg	04-inference-engine/paged-attention/figures/kv-waste-contiguous-vs-paged.svg	-	0	-	880	404	367	0.91	fits
+svg	04-inference-engine/paged-attention/figures/paged-kernel-blockwise.svg	-	0	-	880	340	309	0.91	fits
+svg	04-inference-engine/quantization/figures/gptq-column-loop.svg	-	0	-	900	372	331	0.89	fits
+svg	04-inference-engine/quantization/figures/kv-cache-bytes-and-sessions.svg	-	0	-	900	300	267	0.89	fits
+svg	04-inference-engine/quantization/figures/number-formats-bits.svg	-	0	-	900	500	444	0.89	fits
+svg	04-inference-engine/quantization/figures/scale-granularity.svg	-	0	-	900	340	302	0.89	fits
+svg	04-inference-engine/quantization/figures/smoothquant-migration.svg	-	0	-	900	410	364	0.89	fits
+svg	04-inference-engine/quantization/figures/three-levers.svg	-	0	-	900	400	356	0.89	fits
+mermaid	04-inference-engine/quantization/PRIMER.md	1	779	b4d90eb099b2f7435a276485ca485dea5fd3b483	932	1363	1170	0.86	too tall: 1170 px when shown, the limit is 600
+mermaid	04-inference-engine/quantization/PRIMER.md	2	868	5133413bfcfd09e4b46e8a51b27ac994876c934e	565	1092	1092	1.00	too tall: 1092 px when shown, the limit is 600
+svg	04-inference-engine/serving-engine/figures/chunked-prefill-interference.svg	-	0	-	880	296	269	0.91	fits
+svg	04-inference-engine/serving-engine/figures/continuous-batching-steps.svg	-	0	-	768	240	240	1.00	fits
+svg	04-inference-engine/serving-engine/figures/kv-pool-sizing.svg	-	0	-	880	320	291	0.91	fits
+svg	04-inference-engine/serving-engine/figures/prefix-cache-hash-chain.svg	-	0	-	880	356	324	0.91	fits
+svg	04-inference-engine/serving-engine/figures/speculative-decoding-round.svg	-	0	-	900	350	311	0.89	fits
+svg	04-inference-engine/serving-engine/figures/tensor-parallel-layer.svg	-	0	-	1000	312	250	0.80	fits
+mermaid	04-inference-engine/serving-engine/PRIMER.md	1	36	f5c590b97c56fbdb1bcde71e41d2465124ce03c3	372	976	976	1.00	too tall: 976 px when shown, the limit is 600
+svg	04-inference-engine/vllm-internals/figures/block-pool-free-queue.svg	-	0	-	900	450	400	0.89	fits
+svg	04-inference-engine/vllm-internals/figures/grammar-bitmask-step.svg	-	0	-	880	464	422	0.91	fits
+svg	04-inference-engine/vllm-internals/figures/mrv2-batch-from-slots.svg	-	0	-	880	380	345	0.91	fits
+svg	04-inference-engine/vllm-internals/figures/paged-kv-write-and-read.svg	-	0	-	880	400	364	0.91	fits
+svg	04-inference-engine/vllm-internals/figures/quant-kernel-paths.svg	-	0	-	880	372	338	0.91	fits
+svg	04-inference-engine/vllm-internals/figures/scheduler-six-steps.svg	-	0	-	880	420	382	0.91	fits
+mermaid	04-inference-engine/vllm-internals/vllm-internals-primer.md	1	56	6403cf679afd918fcef7f58d8ad584296fb0caa0	628	1048	1048	1.00	too tall: 1048 px when shown, the limit is 600
+mermaid	04-inference-engine/vllm-internals/vllm-internals-primer.md	2	214	45eecf4cb8b38bd79c07ec9accc6ad45a3a9a73f	1001	1239	990	0.80	too tall: 990 px when shown, the limit is 600
+mermaid	04-inference-engine/vllm-internals/vllm-internals-primer.md	3	1586	46b96891ba742f32278d9e6ac0c5a868de85f740	998	963	772	0.80	too tall: 772 px when shown, the limit is 600
+svg	05-orchestrator/serving-orchestration/figures/flow-control-router-queue.svg	-	0	-	930	410	353	0.86	fits
+svg	05-orchestrator/serving-orchestration/figures/kv-tiers-fetch-or-recompute.svg	-	0	-	900	398	354	0.89	fits
+svg	05-orchestrator/serving-orchestration/figures/pd-disaggregation-kv-transfer.svg	-	0	-	960	410	342	0.83	fits
+svg	05-orchestrator/serving-orchestration/figures/replica-prefix-cache-hit-miss.svg	-	0	-	880	330	300	0.91	fits
+mermaid	05-orchestrator/serving-orchestration/PRIMER.md	1	270	c63190d26debc86716511be4d670a2bc5bd9dae6	726	812	812	1.00	too tall: 812 px when shown, the limit is 600
+mermaid	05-orchestrator/serving-orchestration/PRIMER.md	2	460	9390bc0978e2b257e4a281a8279181c2c11bab66	454	1022	1022	1.00	too tall: 1022 px when shown, the limit is 600
+mermaid	05-orchestrator/serving-orchestration/PRIMER.md	3	916	44a10d1bedbb12a8b2ea1edca6f70315d18da43c	888	654	589	0.90	fits
+svg	06-gateway/identity-security/agentic-identity-gcp-lab/docs/agent-three-parties.svg	-	0	-	940	300	255	0.85	fits
+svg	06-gateway/identity-security/agentic-identity-gcp-lab/docs/delegation-token-exchange.svg	-	0	-	1030	250	194	0.78	fits
+mermaid	06-gateway/identity-security/agentic-identity-gcp-lab/docs/primer.md	1	92	2b4dd31b1864938c6017f88c8b65d38b75968ffb	876	886	809	0.91	too tall: 809 px when shown, the limit is 600
+mermaid	06-gateway/identity-security/agentic-identity-gcp-lab/docs/primer.md	2	200	60fafdd0d6c0bbc82c00b05d23835bd97033d55f	859	1543	1437	0.93	too tall: 1437 px when shown, the limit is 600
+mermaid	06-gateway/identity-security/agentic-identity-gcp-lab/docs/primer.md	3	286	8c6c13a0833c47504a167ba46b393d7969258c71	651	1359	1359	1.00	too tall: 1359 px when shown, the limit is 600
+svg	06-gateway/identity-security/agentic-identity-gcp-lab/docs/reference-architecture.svg	-	0	-	1100	680	495	0.73	fits
+svg	06-gateway/llm-gateway/figures/guardrail-placement-timeline.svg	-	0	-	900	452	402	0.89	fits
+mermaid	06-gateway/llm-gateway/PRIMER.md	1	49	229209e309d849103b36b5c0e1516f7a566c027c	903	1154	1022	0.89	too tall: 1022 px when shown, the limit is 600
+mermaid	06-gateway/llm-gateway/PRIMER.md	2	175	d638d69f8d21aae7f759a3a9c482ebc8ce1bf351	945	855	724	0.85	too tall: 724 px when shown, the limit is 600
+mermaid	06-gateway/llm-gateway/PRIMER.md	3	273	d94ab80871423d2cc0c17552ff283ec1e41beb9f	703	1355	1355	1.00	too tall: 1355 px when shown, the limit is 600
+mermaid	06-gateway/llm-gateway/PRIMER.md	4	484	d82886651f4be9e3da2204856391f96886d8e36b	783	1409	1409	1.00	too tall: 1409 px when shown, the limit is 600
+mermaid	06-gateway/llm-gateway/PRIMER.md	5	587	4b695afb700b574b692c66b7c71f895fdebdcccc	1001	908	726	0.80	too tall: 726 px when shown, the limit is 600
+mermaid	06-gateway/llm-gateway/PRIMER.md	6	706	48abda4a071e4b0cee81fecdbf3a28e0c5346992	874	854	782	0.92	too tall: 782 px when shown, the limit is 600
+mermaid	06-gateway/llm-gateway/PRIMER.md	7	1074	40b910f7469c984546addaf624fe05c518eb3bec	940	916	780	0.85	too tall: 780 px when shown, the limit is 600
+mermaid	06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md	1	213	8adbcd052699e36bee7efeb29a7620acc2d82e3e	665	1103	1103	1.00	too tall: 1103 px when shown, the limit is 600
+mermaid	06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md	2	308	32708640dc48a104fbdd5d1bf4fcaba5fe84188e	1368	382	223	0.58	too wide: shown at 0.58 of its size, the limit is 0.7
+mermaid	06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md	3	421	ce16ee556860a403f7525c7268cf42e61558ebfc	852	1381	1297	0.94	too tall: 1297 px when shown, the limit is 600
+mermaid	06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md	4	641	e0468657c1c2a1ce3b55f3b79d6ec7396c8fc14f	276	1270	1270	1.00	too tall: 1270 px when shown, the limit is 600
+mermaid	06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/02-reference-architecture.md	1	41	a524b9df33df9a09c86d7efb6eb9e2f6a5062c89	0	0	0	0	parse error: page.evaluate: Error: Parse error on line 9:
+mermaid	06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/02-reference-architecture.md	2	131	4b39fe3be4b729e9f9389f5b6921c18c1eeea239	527	556	556	1.00	fits
+mermaid	06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/02-reference-architecture.md	3	242	36bff354d6a17d872bb90eeaee2d97c737254483	1368	839	491	0.58	too wide: shown at 0.58 of its size, the limit is 0.7
+svg	06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/figures/turn-critical-path.svg	-	0	-	900	270	240	0.89	fits
+mermaid	06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/mistral/01-scaling-primer.md	1	358	65a3106ebe640de78a998f7aab9ceb57fe000cf1	1368	453	265	0.58	too wide: shown at 0.58 of its size, the limit is 0.7
+mermaid	06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/scaling-agentic-solutions-on-google-cloud.md	1	305	5d371582524bb6dd011c093f9fd26c268d6c4d3f	1368	380	222	0.58	too wide: shown at 0.58 of its size, the limit is 0.7
+svg	07-application-agent-framework/agent-memory/figures/memory-lifetimes.svg	-	0	-	880	364	331	0.91	fits
+svg	07-application-agent-framework/agent-memory/figures/memory-mechanism.svg	-	0	-	900	464	412	0.89	fits
+svg	07-application-agent-framework/agent-memory/figures/prompt-layouts-turn-8.svg	-	0	-	900	320	284	0.89	fits
+svg	07-application-agent-framework/agent-memory/figures/retrieval-score-and-pack.svg	-	0	-	900	356	316	0.89	fits
+mermaid	07-application-agent-framework/agent-memory/PRIMER.md	1	119	187ae0d1d64d550cf2ec2726503510e0d6992ff2	882	1261	1144	0.91	too tall: 1144 px when shown, the limit is 600
+mermaid	07-application-agent-framework/agent-memory/PRIMER.md	2	490	307a5a0cba33246995c467b7596797d78adf2de5	973	755	621	0.82	too tall: 621 px when shown, the limit is 600
+mermaid	07-application-agent-framework/agent-memory/PRIMER.md	3	566	323da92ce3ce4ef28ec75d089b4512fc1ab119e7	884	718	650	0.90	too tall: 650 px when shown, the limit is 600
+mermaid	07-application-agent-framework/agent-memory/PRIMER.md	4	712	0e51b8fea7bd8e6ee54554f65520a9658c338445	741	1270	1270	1.00	too tall: 1270 px when shown, the limit is 600
+svg	07-application-agent-framework/long-running-durable/figures/one-step-five-invariants.svg	-	0	-	980	612	500	0.82	fits
+svg	07-application-agent-framework/long-running-durable/figures/three-reference-architectures.svg	-	0	-	1000	512	410	0.80	fits
+mermaid	07-application-agent-framework/long-running-durable/lra-core/PRIMER.md	1	17	3bc3d5e578eb6fd87cee0aeec6496239ff0fac24	945	1421	1203	0.85	too tall: 1203 px when shown, the limit is 600
+mermaid	07-application-agent-framework/long-running-durable/lra-gcp/docs/primer.md	1	419	8064a60d25dae471d07ac371c66ef868749bba30	920	919	799	0.87	too tall: 799 px when shown, the limit is 600
+mermaid	07-application-agent-framework/long-running-durable/PRIMER.md	1	50	c3fbb05705a59f3b49c5ec639f6629807fb2fe98	1182	494	334	0.68	too wide: shown at 0.68 of its size, the limit is 0.7
+mermaid	07-application-agent-framework/long-running-durable/PRIMER.md	2	143	cd196f4c7353c166feeed272b04f0b14698b3348	1368	168	98	0.58	too wide: shown at 0.58 of its size, the limit is 0.7
+mermaid	07-application-agent-framework/long-running-durable/PRIMER.md	3	175	7c8e7dba992041a37dd58ce2eff3be9f6d0610ac	815	907	890	0.98	too tall: 890 px when shown, the limit is 600
+mermaid	07-application-agent-framework/long-running-durable/PRIMER.md	4	264	cb84106c3bede86eaeb96c7796fc9a2803820fdb	841	988	940	0.95	too tall: 940 px when shown, the limit is 600
+svg	07-application-agent-framework/retrieval-rag/embeddings-lab/docs/figures/dense-sparse-multivector.svg	-	0	-	960	474	395	0.83	fits
+svg	07-application-agent-framework/retrieval-rag/embeddings-lab/docs/figures/embedding-map.svg	-	0	-	900	370	329	0.89	fits
+svg	07-application-agent-framework/retrieval-rag/embeddings-lab/docs/figures/in-batch-negatives.svg	-	0	-	900	424	377	0.89	fits
+svg	07-application-agent-framework/retrieval-rag/embeddings-lab/docs/figures/residual-stream-pooling.svg	-	0	-	964	452	375	0.83	fits
+mermaid	07-application-agent-framework/retrieval-rag/embeddings-lab/docs/primer.md	1	468	7d88f1e4db8df7f3f8befc6ff59ca26f1c0c62dd	728	1048	1048	1.00	too tall: 1048 px when shown, the limit is 600
+svg	07-application-agent-framework/retrieval-rag/figures/hnsw-layers-search.svg	-	0	-	960	572	477	0.83	fits
+svg	07-application-agent-framework/retrieval-rag/figures/ivf-pq-index.svg	-	0	-	960	482	402	0.83	fits
+mermaid	07-application-agent-framework/retrieval-rag/vector-databases-primer.md	1	194	9af08003dd8e8777a59c1d3df5a2db12c3548407	743	1499	1499	1.00	too tall: 1499 px when shown, the limit is 600
+mermaid	07-application-agent-framework/retrieval-rag/vector-databases-primer.md	2	288	9f13a044e2508c94a759b74cb858a386da85582d	672	1288	1288	1.00	too tall: 1288 px when shown, the limit is 600
+svg	07-application-agent-framework/sandboxed-execution/figures/isolation-ladder.svg	-	0	-	992	460	371	0.81	fits
+svg	07-application-agent-framework/sandboxed-execution/figures/pool-slot-timeline.svg	-	0	-	900	430	382	0.89	fits
+mermaid	07-application-agent-framework/sandboxed-execution/PRIMER.md	1	24	75d1a435a94006946a8c8712ef57d5c78e3eb090	718	765	765	1.00	too tall: 765 px when shown, the limit is 600
+mermaid	07-application-agent-framework/sandboxed-execution/PRIMER.md	2	59	b3ce42fb4214f58d441a0dac6b68032e2752c8b6	993	1012	815	0.81	too tall: 815 px when shown, the limit is 600
+mermaid	07-application-agent-framework/sandboxed-execution/PRIMER.md	3	261	3b8bdd01feac05d3690baedc5896205008cebfd0	950	1164	980	0.84	too tall: 980 px when shown, the limit is 600
+mermaid	07-application-agent-framework/sandboxed-execution/PRIMER.md	4	357	794099809b8161ebdffe1508fe66b921b82c53af	755	1245	1245	1.00	too tall: 1245 px when shown, the limit is 600
+mermaid	07-application-agent-framework/sandboxed-execution/PRIMER.md	5	414	f2abec10bfa9d9856dbf1372b2b2e759e61243d5	787	1391	1391	1.00	too tall: 1391 px when shown, the limit is 600
+mermaid	07-application-agent-framework/sandboxed-execution/PRIMER.md	6	587	c5ceb2e909cdbd6f6fea2f4e6f4da012653e1901	595	1223	1223	1.00	too tall: 1223 px when shown, the limit is 600
+mermaid	CURRICULUM.md	1	157	014ac91c7fd28236d41c2d00b982db6d6d298e1b	1368	1016	594	0.58	too wide: shown at 0.58 of its size, the limit is 0.7
+svg	site/assets/favicon.svg	-	0	-	32	32	32	1.00	fits
+svg	site/assets/logo.svg	-	0	-	32	32	32	1.00	fits
+svg	site/assets/repo-map.svg	-	0	-	960	582	485	0.83	fits
