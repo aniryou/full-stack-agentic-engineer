@@ -26,7 +26,7 @@ The spec::
          "dash": false, "markers": false, "step": false, "fill": false, "labels": false}
       ],
       "marks": [                                          # optional annotations, in data coordinates
-        {"kind": "vline", "x": 230.6, "label": "break-even", "style": "warm"},
+        {"kind": "vline", "x": 230.6, "label": "break-even", "style": "warm", "label_pos": "top" | "bottom"},   # a label under the legend moves to the other end by itself
         {"kind": "hline", "y": 3.35, "label": "HBM roofline"},
         {"kind": "point", "x": 8, "y": 2.1, "label": "8 sequences: 2.1 ms", "style": "accent", "anchor": "start"},
         {"kind": "band", "x0": 0, "x1": 100, "label": "memory-bound", "style": "muted"},
@@ -229,7 +229,7 @@ def render(spec: dict) -> str:
     marks = spec.get("marks") or []
     note = spec.get("note")
     legend_pos = spec.get("legend", "top-right" if len(series) > 1 else "none")
-    L, R, T, B = MARGIN["left"], MARGIN["right"], MARGIN["top"], MARGIN["bottom"]
+    L, R, T, B = MARGIN["left"], MARGIN["right"], MARGIN["top"], MARGIN["bottom"] + (16 if note else 0)
     px0, px1 = L, W - R
     py0, py1 = H - B, T         # y grows downward: py0 is the axis line
 
@@ -304,13 +304,29 @@ def render(spec: dict) -> str:
 
     # --- axis titles
     if xa.get("label"):
-        out.append(f'    <text x="{_f((px0 + px1) / 2)}" y="{_f(H - 12)}" text-anchor="middle" fill="{MUTED}">{escape(xa["label"])}</text>')
+        out.append(f'    <text x="{_f((px0 + px1) / 2)}" y="{_f(H - 12 - (16 if note else 0))}" text-anchor="middle" fill="{MUTED}">{escape(xa["label"])}</text>')
     if ya.get("label"):
         cy = (py0 + py1) / 2
         out.append(f'    <text x="16" y="{_f(cy)}" text-anchor="middle" fill="{MUTED}" transform="rotate(-90 16 {_f(cy)})">{escape(ya["label"])}</text>')
 
     # --- clip for the plot area
     out.append(f'    <clipPath id="plot"><rect x="{_f(px0 - 1)}" y="{_f(py1 - 6)}" width="{_f(px1 - px0 + 2)}" height="{_f(py0 - py1 + 7)}"/></clipPath>')
+
+    # --- the legend's box, computed first: a mark label that would sit under it moves to the other end
+    legend_box = None
+    if legend_pos != "none" and series:
+        _rows = [(s.get("name") or f"series {i + 1}") for i, s in enumerate(series)]
+        _bw = max(_text_w(r, 11.5) for r in _rows) + 40
+        _bh = 10 + 17 * len(_rows)
+        _bx = px1 - _bw - 8 if "right" in legend_pos else px0 + 10
+        _by = py1 + 8 if "top" in legend_pos else py0 - _bh - 8
+        legend_box = (_bx, _by, _bw, _bh)
+
+    def _hits_legend(x, y, w, h):
+        if legend_box is None:
+            return False
+        lx, ly, lw, lh = legend_box
+        return x < lx + lw and x + w > lx and y < ly + lh and y + h > ly
 
     # --- bands first (under the data)
     for m in marks:
@@ -320,7 +336,11 @@ def render(spec: dict) -> str:
         x0, x1 = X.px(float(m["x0"])), X.px(float(m["x1"]))
         out.append(f'    <rect x="{_f(min(x0, x1))}" y="{_f(py1)}" width="{_f(abs(x1 - x0))}" height="{_f(py0 - py1)}" fill="{col}" fill-opacity="0.12"/>')
         if m.get("label"):
-            out.append(f'    <text x="{_f((x0 + x1) / 2)}" y="{_f(py1 + 14)}" text-anchor="middle" font-size="11" fill="{col}">{escape(m["label"])}</text>')
+            lw = _text_w(m["label"], 11)
+            ly = py1 + 14
+            if _hits_legend((x0 + x1) / 2 - lw / 2, ly - 11, lw, 14):
+                ly = py0 - 8
+            out.append(f'    <text x="{_f((x0 + x1) / 2)}" y="{_f(ly)}" text-anchor="middle" font-size="11" fill="{col}">{escape(m["label"])}</text>')
 
     # --- the data
     out.append('    <g clip-path="url(#plot)">')
@@ -373,13 +393,23 @@ def render(spec: dict) -> str:
             if m.get("label"):
                 anchor = m.get("anchor", "start")
                 dx = 5 if anchor == "start" else -5
-                out.append(f'    <text x="{_f(x + dx)}" y="{_f(py1 + 12)}" text-anchor="{anchor}" font-size="11" fill="{col}">{escape(m["label"])}</text>')
+                lw = _text_w(m["label"], 11)
+                ly = py1 + 12 if m.get("label_pos", "top") == "top" else py0 - 8
+                bx = x + dx if anchor == "start" else x + dx - lw
+                if _hits_legend(bx, ly - 11, lw, 14):
+                    ly = py0 - 8 if ly == py1 + 12 else py1 + 12
+                out.append(f'    <text x="{_f(x + dx)}" y="{_f(ly)}" text-anchor="{anchor}" font-size="11" fill="{col}">{escape(m["label"])}</text>')
         elif k == "hline":
             y = Y.px(float(m["y"]))
             out.append(f'    <line x1="{_f(px0)}" y1="{_f(y)}" x2="{_f(px1)}" y2="{_f(y)}" stroke="{col}" stroke-width="1.2" stroke-dasharray="4 3"/>')
             if m.get("label"):
                 anchor = m.get("anchor", "end")
+                lw = _text_w(m["label"], 11)
                 x = px1 - 4 if anchor == "end" else px0 + 6
+                bx = x - lw if anchor == "end" else x
+                if _hits_legend(bx, y - 16, lw, 14):
+                    anchor = "start" if anchor == "end" else "end"
+                    x = px1 - 4 if anchor == "end" else px0 + 6
                 out.append(f'    <text x="{_f(x)}" y="{_f(y - 5)}" text-anchor="{anchor}" font-size="11" fill="{col}">{escape(m["label"])}</text>')
         elif k == "point" and kind == "line":
             x, y = X.px(float(m["x"])), Y.px(float(m["y"]))
@@ -399,18 +429,9 @@ def render(spec: dict) -> str:
             out.append(f'    <text x="{_f(x)}" y="{_f(y)}" text-anchor="{anchor}" font-size="11" fill="{col}">{escape(m["text"])}</text>')
 
     # --- legend
-    if legend_pos != "none" and series:
+    if legend_box is not None:
         rows = [(s.get("name") or f"series {i + 1}", STYLES[s.get("style", "accent")], bool(s.get("dash"))) for i, s in enumerate(series)]
-        box_w = max(_text_w(r[0], 11.5) for r in rows) + 40
-        box_h = 10 + 17 * len(rows)
-        if "right" in legend_pos:
-            bx = px1 - box_w - 8
-        else:
-            bx = px0 + 10
-        if "top" in legend_pos:
-            by = py1 + 8
-        else:
-            by = py0 - box_h - 8
+        bx, by, box_w, box_h = legend_box
         out.append(f'    <g font-size="11.5">')
         out.append(f'      <rect x="{_f(bx)}" y="{_f(by)}" width="{_f(box_w)}" height="{_f(box_h)}" rx="5" fill="{CARD}" fill-opacity="0.9" stroke="{GRID}"/>')
         for i, (name, col, dash) in enumerate(rows):

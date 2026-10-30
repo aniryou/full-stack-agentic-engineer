@@ -194,6 +194,10 @@ $$
 that is, the mean-squared error on centred logits (Caruana's model compression): 0.23000 for the example
 (`losses.logit_mse()`).
 
+![The soft term of the five-token example against the temperature T: the KL fades as 1/T², and T²·KL stays almost constant and goes to the logit-matching limit.](figures/kl-against-temperature.svg)
+
+*The chart shows the soft term of the five-token example against the temperature $T$. The KL decreases approximately as $1/T^2$, but $T^2 \cdot \mathrm{KL}$ stays almost constant and goes to the logit-matching limit, 0.23000. `distillcore.losses.kd()` and `losses.logit_mse()` compute the two lines, and `tests/test_figures.py` pins the chart.*
+
 TRL applies no $T^2$ (verify). `GKDTrainer` calculates its divergence at T = 1, and its `temperature` sets only the
 sampling. `DistillationTrainer` divides both logits by its `temperature` (default 1.0) in the loss. The
 `LogitsDistillationLoss` of NVIDIA ModelOpt multiplies by $T^2$ (verify). Treat $T$ and $\alpha$ as settings to sweep.
@@ -706,6 +710,10 @@ Now take a real pair: Qwen3-0.6B as a draft for Qwen3-4B, with the same 151,936 
 by weight bytes, so k = 4 gives 1.45×, 1.74× and 2.11× at α = 0.6, 0.7 and 0.8. These numbers are a model, before
 per-step overheads. Measure $c$, as the serving primer says.
 
+![Speedup of a draft against its acceptance rate α, at c ≈ 0.148 (a 0.6B draft for a 4B target), for k = 2, 4 and 8 drafted tokens per target pass.](figures/draft-speedup.svg)
+
+*The chart shows the speedup $E/(k \cdot c + 1)$ of this pair against $\alpha$, with the k = 4 values of the text as marks. At a low $\alpha$ the best depth is a small $k$, and at a high $\alpha$ it is a large $k$. `distillcore.draft.speedup()` computes the lines, and `tests/test_figures.py` pins the chart.*
+
 **Draft-as-student designs** (verify). EAGLE trains a one-layer head that extrapolates the second-to-top-layer
 features of the target. EAGLE-3 fuses low-, mid- and high-level target features. In its training code, it makes the
 cross-entropy against the softmax of the target as small as possible, over 7 unrolled steps. This is soft-target distillation from the
@@ -852,7 +860,7 @@ a day saved), 46.1 days at 5 million, 230.6 days at 1 million.
 
 ![Cumulative cost against output tokens: the teacher line from zero, the student line from the one-off bill with a lower slope, and the crossing at 230.6 million tokens.](figures/break-even.svg)
 
-*Break-even in the §9 example (`cost.break_even()`). The student starts with the one-off bill, and the teacher's tokens are 93% of that bill. Each million tokens then saves the difference between $0.890 and $0.056, so the lines cross at 230.6 million tokens. That is 4.6 days at 50 million output tokens a day, and 46.1 days at 5 million.*
+*In the §9 example, the student line starts at the one-off bill of $192.21, and the teacher line starts at zero. Each million tokens saves the difference between $0.890 and $0.056, so the lines cross at 230.6 million tokens. `distillcore.cost.serving()` and `cost.break_even()` compute the lines, and `tests/test_figures.py` pins the chart.*
 
 With data from the teacher that you already serve, break-even is near the volume that the teacher wrote for the
 student (here 2 × 10⁸ tokens). This is true at any cost per token of the teacher. Data bought through an API instead

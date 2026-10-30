@@ -119,6 +119,13 @@ SPEC below is [`tools/orchestration/SPEC.md`](tools/orchestration/SPEC.md), the 
   (its header names the prerequisites), and `... check` measures every figure of the repository into
   `tools/orchestration/figures-manifest.tsv`, which `tools/ci/tests/test_figures_fit.py` reads in CI together with
   the SVG sizes: after a change to a Mermaid block, run the check and commit the manifest with the document.
+  A relationship between two quantities that a core computes (a step time against a batch size, a break-even) is a
+  **chart the core draws**, never a hand-drawn curve: `<core>/tools/make_figures.py` computes the series with the core
+  and renders them with `tools/orchestration/svgchart.py` into `figures/`, and `<core>/tests/test_figures.py` pins the
+  file to what the core computes now (FIGURE-STYLE.md §7). A notebook embeds a primer's SVG figure by its absolute URL
+  on `main` (Colab renders neither Mermaid nor a relative image; FIGURE-STYLE.md §8), one per notebook at most, and
+  `tools/ci/tests/test_figure_links.py` checks that every such URL names a file in the tree and that no figure file is
+  left unreferenced.
 
 ### Run tiers
 
