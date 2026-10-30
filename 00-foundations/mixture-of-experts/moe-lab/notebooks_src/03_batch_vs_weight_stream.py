@@ -5,6 +5,11 @@
 # the decode step time at each batch. T0: the same curves from the roofline with stated efficiencies
 # (**simulated**). Every formula has a check against the numbers of layer 01.
 #
+# ![Bytes one decode step reads against the batch for Mixtral-8x7B and for a dense model of its active size, on an H200 at 1K context.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/00-foundations/mixture-of-experts/figures/decode-step-bytes-vs-batch.svg)
+#
+# *Figure from the topic primer, "The one-minute version": at batch 1, Mixtral-8x7B reads almost the same bytes as
+# a dense model of its active size. By batch 16, it reads almost all of its weights.*
+#
 # ## The one-minute version
 #
 # * A decode step streams the weights one time for the whole batch. A dense model streams all of them at any

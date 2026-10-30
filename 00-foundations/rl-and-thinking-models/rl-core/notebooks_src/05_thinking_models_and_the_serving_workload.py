@@ -5,6 +5,10 @@
 # minute. Every latency and GPU count is a **model**, not a measurement. The model is the capacity primer's
 # formulas plus a roofline step.
 #
+# ![The KV a request holds at each decode step, drawn against time: a 300-token output on a 1,500-token prompt is a thin sliver, a 3,000-token output an area 18.2 times larger.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/00-foundations/rl-and-thinking-models/figures/kv-token-steps.svg)
+#
+# *Figure from the primer, §7 What thinking does to serving: the KV of one request grows at each decode step. For a 1,500-token prompt, the peak of a 3,000-token output is only 2.5 times higher, but its area is 18.2 times larger. Worked example 4 and exercise 5.1 compute this area.*
+#
 # Two `thinking-lab` notebooks ask the same questions against a server:
 # `02_a_thinking_model_on_one_gpu` and `04_serving_thinking_models`. The server is a T0 fake server that sends
 # `reasoning` deltas, or real vLLM with Qwen3 and `--reasoning-parser` on a T4.

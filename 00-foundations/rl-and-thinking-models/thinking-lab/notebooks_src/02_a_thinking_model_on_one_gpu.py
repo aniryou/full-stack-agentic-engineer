@@ -7,6 +7,10 @@
 # T0 (the default) uses bundled responses in the documented format of vLLM (illustrative). It also uses
 # an in-process fake server, and the model and the response times of that server are **simulated**.
 #
+# ![Where three controls cut the output of a thinking model: max_tokens cuts inside the think block and leaves no answer, a thinking budget forces the end of the think block and then the model answers, and the two-call recipe continues in a second request.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/00-foundations/rl-and-thinking-models/figures/thinking-budget-cuts.svg)
+#
+# *Figure from the topic primer, §5 Thinking models: where three controls cut the output. `max_tokens` cuts inside the think block and leaves no answer. A thinking budget and the two-call recipe end the think block, and then the model answers.*
+#
 # ## The one-minute version
 #
 # * A "thinking model" is ordinary weights plus four conventions. The **chat template** opens a

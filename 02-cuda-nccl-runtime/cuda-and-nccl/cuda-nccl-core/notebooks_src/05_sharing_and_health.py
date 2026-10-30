@@ -5,6 +5,10 @@
 # (T3) configures MIG and time-sharing node pools and reads DCGM metrics. Offline, it parses
 # sample exporter output.
 #
+# ![A kernel of 8 blocks runs all the time on a 132-SM H100: GPU util reads 100% because a kernel ran at every instant, while SM active reads 6% because only 8 SMs had a warp resident.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/02-cuda-nccl-runtime/cuda-and-nccl/figures/gpu-util-vs-sm-active.svg)
+#
+# *Figure from the primer, §8.2 "DCGM, and why 'GPU util' misleads": one kernel of 8 blocks runs all the time on 132 SMs. GPU util reads 100%, but SM active reads 6%. The first case of Exercise 5.4 is this kernel.*
+#
 # ## The one-minute version
 # * There are three ways to share one GPU. **MIG** partitions the GPU into up to 7 isolated
 #   instances, each with one of the shapes that the GPU permits. **MPS** runs the kernels of

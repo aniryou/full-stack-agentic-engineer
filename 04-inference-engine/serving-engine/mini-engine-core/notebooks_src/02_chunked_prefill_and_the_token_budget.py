@@ -5,9 +5,9 @@
 # notebook is a **SIMULATED** value: a roofline model (`minengine.perf`) gives the time of each step of the real scheduler.
 # Measure the real curve with vLLM in `vllm-serving-lab` (notebook `03_knobs_and_tradeoffs`, T1).
 #
-# ![The simulated worst step of 64 decodes and one prefill chunk on an H100 against the token budget, with the 25 ms ITL target.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/04-inference-engine/serving-engine/figures/token-budget-worst-step.svg)
+# ![The simulated step time on an H100 against the tokens in the step, with the two roofline terms.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/04-inference-engine/serving-engine/figures/step-time-vs-tokens.svg)
 #
-# *Figure from the serving-engine primer, §3 Chunked prefill and prefill/decode interference: each point is a candidate budget of exercise 2.4. The worst step at 512 stays below the 25 ms line, and the worst step at 1,024 goes above it.*
+# *Figure from the serving-engine primer, §3 Chunked prefill and prefill/decode interference: below the knee, the weight read and the overhead set the step time. Above the knee, each token adds FLOPs. Worked example 2 prints these step times.*
 #
 # ## The one-minute version
 # The cost of a step depends on the number of tokens in it. Up to a **knee** of a few hundred tokens, a step is

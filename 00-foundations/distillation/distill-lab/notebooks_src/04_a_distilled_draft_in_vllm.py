@@ -10,6 +10,10 @@
 # notebook uses the recorded run. A bundled pair of `/metrics` scrapes, **synthetic** at $\alpha = 0.7$, teaches vLLM's
 # counters.
 #
+# ![One round of speculative decoding: k draft steps propose k tokens, one target pass accepts or rejects them, and the round yields the accepted tokens plus one.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/00-foundations/distillation/figures/speculative-decoding-pass.svg)
+#
+# *Figure from the PRIMER, §7 "A distilled draft for speculative decoding": the draft proposes $k$ tokens. One target pass stops at the first rejected token. The round gives the accepted tokens plus one, and their mean over many rounds is $E$.*
+#
 # ## The one-minute version
 #
 # * **A draft model is a student graded on one number:** how often the target accepts what the draft proposes. At each

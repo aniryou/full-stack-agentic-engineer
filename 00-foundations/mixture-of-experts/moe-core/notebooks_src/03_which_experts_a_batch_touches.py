@@ -6,6 +6,10 @@
 # `../moe-lab/notebooks/03_batch_vs_weight_stream.ipynb` (T1). When that notebook finds no GPU, it prints the
 # predictions of this notebook.
 #
+# ![Bytes one decode step reads against the batch for Mixtral-8x7B and for a dense model of its active size, on an H200 at 1K context.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/00-foundations/mixture-of-experts/figures/decode-step-bytes-vs-batch.svg)
+#
+# *Figure from the primer, The one-minute version: see the bytes that one decode step reads against the batch. Worked example 2 calculates them for Mixtral (simulated). At batch 1, Mixtral reads almost the bytes of a dense model of its active size. From batch 16, it reads almost all of its weights.*
+#
 # ## The one-minute version
 # One token reads $k$ of $E$ experts per layer. A decode step reads the **union** of the choices of its tokens. With
 # uniform routing, a layer touches $E(1 - (1 - k/E)^T)$ different experts for $T$ tokens. This is the closed form that

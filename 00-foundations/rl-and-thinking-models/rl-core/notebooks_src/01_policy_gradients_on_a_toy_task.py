@@ -5,6 +5,10 @@
 # Thus you can also calculate each expectation *exactly*: enumerate all 256 possible outputs. The same loop on a
 # real (small) transformer is the `thinking-lab` notebook `01_grpo_on_a_tiny_transformer`.
 #
+# ![A completion as a trajectory of tokens that the policy samples one at a time, with the reward at the end and one gradient step that pushes every token by the same advantage.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/00-foundations/rl-and-thinking-models/figures/policy-gradient-trajectory.svg)
+#
+# *Figure from the primer, §2 Policy gradients over token sequences: the policy samples each token, and the verifier scores the whole string at the end. The advantage $R - b$ then gives every token of the completion the same weight. Worked example 4 measures the baseline, and exercise 1.2 writes the REINFORCE estimator.*
+#
 # ## The one-minute version
 # A language model is a **policy**. At each position, it selects a token from $\pi(a \mid s)$. A completion is a
 # trajectory. Its log-probability is the sum of the log-probabilities of its tokens.

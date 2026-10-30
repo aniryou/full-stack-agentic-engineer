@@ -7,6 +7,10 @@
 # the bundled table of the **simulated** model of the lab, on the same problems, with illustrative
 # outcomes that `python -m thinklab.thinking.recorded` generates again.
 #
+# ![The accuracy of a majority vote against the number of samples, for one question where a sample is correct with p = 0.4, for four ways to spread the incorrect 60%.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/00-foundations/rl-and-thinking-models/figures/majority-vote-vs-n.svg)
+#
+# *Figure from the topic primer, §6 Test-time compute: the accuracy of a majority vote against the number of samples, for one question with p = 0.4. When one incorrect answer is more common than the correct answer, each extra vote lowers the accuracy.*
+#
 # ## The one-minute version
 #
 # * At inference time, there are two ways to use more compute on a question. One way is to think

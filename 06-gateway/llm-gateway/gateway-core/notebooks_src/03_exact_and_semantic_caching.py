@@ -6,6 +6,10 @@
 # cache next to the prefix cache of vLLM, over HTTP, is `gateway-lab` notebook `03_semantic_cache_vs_the_prefix_cache`
 # (T0 emulated, T1 with `cached_tokens` measured).
 #
+# ![Hits and false hits of the semantic cache against the threshold, without and with the entity guard, on the bundled sample.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/06-gateway/llm-gateway/figures/semantic-cache-threshold-sweep.svg)
+#
+# *Figure from the LLM gateway primer, §3.3 Semantic caching, measured: see the hits and false hits that `cache.sweep_thresholds` gives. No threshold gives many hits without false hits, and the entity guard decreases the false hits at the lower thresholds.*
+#
 # ## The one-minute version
 # Four caches sit on the path of an LLM request, and only two of them can be *incorrect*. The prompt cache of the
 # provider and the prefix cache of the engine reuse computation. They save money or prefill time, and they never change

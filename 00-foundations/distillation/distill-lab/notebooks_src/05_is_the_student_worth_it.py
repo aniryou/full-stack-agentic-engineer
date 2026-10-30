@@ -9,6 +9,10 @@
 # `/metrics`. The lm-eval tool gives real accuracies. The section "Worked example: measured
 # throughput at T1" has the commands.
 #
+# ![Cumulative cost against output tokens: the teacher line from zero, the student line from the one-off bill with a lower slope, and the crossing at 230.6 million tokens.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/00-foundations/distillation/figures/break-even.svg)
+#
+# *Figure from the PRIMER, §9 "The economics of a student": the student line starts at the one-off bill. It rises more slowly than the teacher line. Exercise 5.3 calculates where the two lines cross.*
+#
 # ## The one-minute version
 #
 # * **Two kinds of number, two questions** (PRIMER §8 "Measuring a student"). *Agreement* (KL, top-1 agreement)

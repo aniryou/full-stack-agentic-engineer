@@ -272,7 +272,11 @@ nb1 = NB(
     "01 · Durable execution with the `lra` engine",
     "This notebook has the same invariants and a real engine: leases, optimistic concurrency, explicit retries and a reaper. "
     "Everything runs on in-memory adapters that copy the semantics of Firestore and Cloud Tasks. Everything also runs with "
-    "a clock that you control and with chaos hooks.",
+    "a clock that you control and with chaos hooks.\n\n"
+    "![One step of a run as eight stages, from wake-up to enqueue next, each beside the invariant that protects it and its mechanism in code.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/07-application-agent-framework/long-running-durable/figures/one-step-five-invariants.svg)\n\n"
+    "*Figure from the topic primer, §3 The five invariants: the left column shows the stages of one step of a run. "
+    "In this notebook, a second worker gets `lease-held` at the lease stage. "
+    "The chaos hooks stop the step after the act and after the checkpoint.*",
 )
 nb1.code(SETUP)
 nb1.md("## A three-step workflow\n\nSteps return `Next`, `Done`, `Wait` or `FanOut`. A step changes `ctx.state`. It calls the model through `ctx.llm`. Each call through `ctx.llm` counts against the budget. The step does side effects through `ctx.effect`, and each side effect through `ctx.effect` is idempotent.")
@@ -515,7 +519,11 @@ nb2.md("## The same gate in Cloud Workflows and ADK\n\n* **Cloud Workflows**: ca
 nb3 = NB(
     "03 · Fan-out/fan-in, saga compensation, bounded reflection, budgets",
     "The research pipeline in `lra.examples` uses all of the patterns together. In this notebook, we run the pipeline, break it "
-    "and look at how it recovers.",
+    "and look at how it recovers.\n\n"
+    "![A planner LLM makes N subtasks, idempotent workers do them, and the write that reaches N on the run document enqueues the named aggregate task.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/07-application-agent-framework/long-running-durable/figures/fan-out-fan-in.svg)\n\n"
+    "*Figure from the topic primer, §4 P2 Orchestrator / workers, fan-out–fan-in: in this notebook, the child runs are the workers. "
+    "The write that makes the counter of the parent reach N wakes the aggregator. "
+    "A late duplicate enqueues the same named task again, and the queue rejects it.*",
 )
 nb3.code(SETUP)
 nb3.md("## Orchestrator–worker: a plan becomes child runs")
@@ -833,6 +841,10 @@ nb5 = NB(
     "selects the *next action*: a tool call or a final answer. Thus the model call becomes a non-deterministic side effect "
     "(primer §1.3). If you ask again after a crash, it is possible that the model selects a different call. The solution is to "
     "**write the decision to the journal before you act on it**. Then act at most one time, under a stable idempotency key.\n\n"
+    "![One step of a run as eight stages, from wake-up to enqueue next, each beside the invariant that protects it and its mechanism in code.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/07-application-agent-framework/long-running-durable/figures/one-step-five-invariants.svg)\n\n"
+    "*Figure from the topic primer, §3 The five invariants: look at the stages decide, intent and act in the left column. "
+    "This notebook records the decision of the model before the act. "
+    "A retry then executes the same call with the same key and never asks the model again.*\n\n"
     "In the second half of the notebook, Mistral becomes the model provider (offline, with a fake client). The second half also shows the "
     "same loop on Mistral Workflows. There, the platform gives the journal, the retries and the wait.",
 )

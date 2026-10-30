@@ -7,6 +7,10 @@
 # A platform engineer actually puts these two systems into production: a tool-calling agent loop and a retrieval
 # pipeline. Then the notebook gives you drills on six patterns that reviewers use again and again.
 #
+# ![The retrieval pipeline of §12: the ingest path parses, chunks, embeds and upserts the source content into the vector database, and the query path embeds the query, retrieves candidates from the database, fuses the lists, reranks the candidates and logs the outcomes.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/07-application-agent-framework/retrieval-rag/figures/retrieval-pipeline.svg)
+#
+# *Figure from the vector databases primer, §12 The retrieval pipeline end to end: Exercise B reviews the query path in the bottom row. The code under review embeds the question, searches the index, reranks the candidates and builds the prompt.*
+#
 # **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md). For more depth in this repo, see the [vector databases primer](../../../retrieval-rag/vector-databases-primer.md) §12 (the retrieval pipeline from end
 # to end). This notebook puts together Notebooks 01, 04, 10 and 11 in the form that a code review uses: the code of another person.
 #

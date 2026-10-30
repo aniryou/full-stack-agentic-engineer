@@ -6,6 +6,10 @@
 # defences that do not depend on the judgement of the model: provenance-labelled data, screening, per-agent
 # allowlists, identity scopes and confirmation.
 #
+# ![The user's prompt and each tool result go through a check before the model reads them, and the answer goes through screen_response().](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/06-gateway/identity-security/agentic-identity-gcp-lab/docs/figures/untrusted-content-checks.svg)
+#
+# *Figure from the identity primer, §6.1 The untrusted-content boundary: look at the path of a tool result. It goes through a check and a provenance tag before the model reads it. This notebook builds the same two steps with `screen()` and `DataBlock`.*
+#
 # **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md). For more depth in this repo, see the [identity primer](../../../../06-gateway/identity-security/agentic-identity-gcp-lab/docs/primer.md) §6 (tool-call safety and prompt injection) and the [sandbox primer](../../../sandboxed-execution/PRIMER.md) §1 (the threat model).
 #
 # In this notebook, you do these steps:

@@ -5,6 +5,10 @@
 # `03_collectives_with_torch_distributed` (gloo on CPU at T0, NCCL at T1/T2) and
 # `04_busbw_and_the_alpha_beta_fit` (fits $\alpha$ and $\beta$ to nccl-tests output).
 #
+# ![Ring all-reduce time against message size on 8 H100s in the alpha-beta model: flat near the latency term below the 7.2 MB crossover, where the 512 KiB all-reduce of decode sits, and growing with the bandwidth term above it, where the 128 MiB all-reduce of prefill sits.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/02-cuda-nccl-runtime/cuda-and-nccl/figures/ring-allreduce-regimes.svg)
+#
+# *Figure from the primer, §5.5 "Latency-bound or bandwidth-bound": below the 7.2 MB crossover, the latency term sets the time of the ring all-reduce. Exercise 3.3 calculates this crossover. The 512 KiB message of decode is below it, and the 128 MiB message of prefill is above it.*
+#
 # ## The one-minute version
 # * What each rank holds before and after defines a **collective**. Inference uses these collectives:
 #   broadcast, all-reduce, reduce-scatter, all-gather, all-to-all and send/recv.

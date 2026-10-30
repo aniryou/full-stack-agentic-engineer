@@ -5,6 +5,10 @@
 # experts on a GPU, continue with `../moe-lab/notebooks/02_watch_the_router.ipynb` (T1, with a fallback to bundled
 # traces).
 #
+# ![The sparse forward of an MoE layer sorts the T × k assignments by expert, runs one GEMM per expert over its slice, and adds the weighted rows back to each token.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/00-foundations/mixture-of-experts/figures/sort-by-expert-grouped-gemm.svg)
+#
+# *Figure from the primer, §2.5 How the layer runs: see panels 2 to 4, the three steps of `forward()` in worked example 1. It sorts the $T \times k$ rows by expert, runs one GEMM per expert, and adds the weighted rows back to each token.*
+#
 # ## The one-minute version
 # A mixture-of-experts layer replaces the one MLP of the transformer block with **$E$ expert MLPs** and a **router**.
 # The router is a linear map from the hidden state of the token to $E$ scores. Each token keeps its **top-k** experts.

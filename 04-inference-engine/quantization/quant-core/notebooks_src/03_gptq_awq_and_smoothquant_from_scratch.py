@@ -5,6 +5,10 @@
 # residual MLP stack. Its RMSNorm gains make four activation channels 25–40× larger than the rest (like the
 # "massive activations" of real LLMs). Its weights come from training in closed form on a synthetic 16-class task.
 #
+# ![One GPTQ step: the loop rounds column j, and the error goes to the columns not yet rounded, in proportion to row j of U.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/04-inference-engine/quantization/figures/gptq-column-loop.svg)
+#
+# *Figure from the topic primer, §4 Weight-only post-training quantization: one GPTQ step rounds column $j$. The error of that column goes to the later columns, in proportion to row $j$ of $U$, the upper Cholesky factor of $H^{-1}$. In exercise 3.1, you write this loop.*
+#
 # There is no download. The lab's notebook 01 (T1) runs the same algorithms on a real 0.5B checkpoint with
 # llm-compressor.
 #

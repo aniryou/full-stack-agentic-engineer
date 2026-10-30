@@ -6,6 +6,10 @@
 # * can put an order of magnitude on it in a minute,
 # * know which levers move it.
 #
+# ![One turn with two tool calls on a time axis: the plan call, the two tool calls in parallel, the answer call and the streaming of the answer are four sequential segments on the critical path, and the user sees the first token only after the plan call, the tools and the time-to-first-token of the answer call.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/figures/turn-critical-path.svg)
+#
+# *Figure from `06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md`, §1.3 Latency is a sum of sequential tails: one turn as four sequential segments. The two tools run in parallel, thus they add only the time of the longer tool. Exercise 5.1 adds the segments in the same way: a parallel group adds only its longest member.*
+#
 # Each number in this notebook is arithmetic that you can do again by hand in a design review. The library
 # only gives names to the arithmetic.
 #

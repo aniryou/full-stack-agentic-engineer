@@ -13,6 +13,10 @@
 # - `429` with `Retry-After`.
 # - `X-Agent-Version`, because the behaviour is part of the contract.
 #
+# ![The gateway side of one turn, from the POST of the message to the relay of the stream events.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/figures/turn-admit-relay.svg)
+#
+# *Figure from `06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/02-reference-architecture.md`, §4 A turn, end to end: read the Client and gateway columns. When the tenant bucket is empty, the gateway sends 429 with `Retry-After`. If not, the gateway opens an SSE stream and relays the events of the turn. This notebook runs the turn in the same process, with no queue between the API and the agent.*
+#
 # **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md). For more depth in this repo, see the [scaling primer](../../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §5.3 (admission control) and §5.7 (streaming and connections).
 #
 # In this notebook, you will:

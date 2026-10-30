@@ -7,6 +7,10 @@
 # case, the training cells show a recorded run, labelled illustrative, and the torch checks tell you
 # that the notebook skipped them.
 #
+# ![One GRPO update: a group of G completions from one prompt, a verifier score per completion, group-normalised advantages that every token of a completion shares, and the clipped surrogate with the k3 KL term.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/00-foundations/rl-and-thinking-models/figures/grpo-group-update.svg)
+#
+# *Figure from the topic primer, §4 RL with verifiable rewards and GRPO: one GRPO update on one prompt. The group statistics turn the verifier scores into advantages, and every token of a completion carries the advantage of that completion.*
+#
 # ## The one-minute version
 #
 # * **RL for a language model is "sample, score, reweight".** Sample completions from the model, and

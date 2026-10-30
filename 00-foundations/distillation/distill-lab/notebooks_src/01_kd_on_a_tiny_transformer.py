@@ -7,6 +7,10 @@
 # Without torch, the notebook still runs: the training cells show a recorded run, labelled illustrative, and every
 # exercise is numpy.
 #
+# ![Four panels show what each recipe of the core takes from the teacher: hard labels, logit KD, SeqKD and on-policy GKD.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/00-foundations/distillation/figures/four-recipes.svg)
+#
+# *Figure from the PRIMER, "The one-minute version": each panel shows what one recipe takes from the teacher. This notebook trains a student with each of the four recipes on the same task.*
+#
 # ## The one-minute version
 #
 # * **Distillation trains a small model (the student) to match what a large one (the teacher) does**, not only
