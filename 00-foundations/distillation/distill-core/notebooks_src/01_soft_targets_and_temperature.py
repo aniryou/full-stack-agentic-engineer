@@ -54,7 +54,7 @@ print(f"KL(p ‖ q) at T = 1: {L.kl(L.softmax(Z), L.softmax(V))[0]:.5f} nats")
 # When $T$ increases, $\mathrm{KL}(p_T \,\|\, q_T)$ decreases approximately as $1/T^2$. Its gradient $(q_T - p_T)/T$
 # also decreases approximately as $1/T^2$. Thus, without a correction, the hard-label term is much larger than a soft
 # term at $T$ = 4, and the soft term has almost no effect. A multiplication by $T^2$ puts the scale back. The limit is
-# logit matching,
+# a match of the centred logits,
 #
 # $$
 # \frac{1}{2N}\,\lVert (v - \bar{v}) - (z - \bar{z}) \rVert^2.
@@ -114,7 +114,7 @@ for N in (242, 605):
 # With two examples per context, soft targets give 87.6% rule accuracy against 67.8%. With five, they give 99.2%
 # against 91.7%. The hard-label student also has a bad calibration. It never saw most neighbours, so it gives them
 # almost no probability, and its KL to the truth is large. A soft target tells it about all eleven tokens at the same
-# time. This is the full case for distillation, instead of a small model that trains from scratch on the same data.
+# time. This result is the full case for distillation, instead of a small model that trains from scratch on the same data.
 #
 # ## Worked example 5 — three routes to a small model
 # Compare three routes to a small model:
@@ -149,16 +149,16 @@ for steps in (0, 20, 100):
           f"fresh {fr.mean():.3f} ({fr.min():.3f}–{fr.max():.3f})")
 
 # %% [markdown]
-# Pruning alone damages the model (0.317 on average), but the pruned model is better than nothing: a new student
+# If you only prune, you damage the model (0.317 on average), but the pruned model is better than nothing: a new student
 # scores 0.097. KD from the parent repairs the pruned model fast. After 20 steps, the worst pruned student (0.612) is
-# better than the best new student (0.331). At 100 steps, the difference between the two is within seed noise, and one
+# better than the best new student (0.331). At 100 steps, the difference between the two is not larger than the seed noise, and one
 # draw can show either one ahead.
 #
 # The numbers here come from one CPU. The matrix kernel of numpy changes with the microarchitecture. A few hundred
-# Adam steps change last-bit differences into a slightly different model. Thus your run can differ in the last digits.
+# Adam steps change last-bit differences into a slightly different model. Thus your run can be different in the last digits.
 # The core's tests hold each number to the spread that we measured across kernels, `tests/test_primer_numbers.py`.
 #
-# Pruning gives a head start in training steps, not a better student. This is Minitron's argument at a small scale:
+# If you prune first, you get a head start in training steps, not a better student. This is Minitron's argument at a small scale:
 # prune by importance, then distil from the parent, with many fewer training tokens per model.
 #
 # ## Exercise 1.1 — temperature
@@ -183,7 +183,7 @@ print("✅ p_T = softmax(z/T): T > 1 flattens, T < 1 sharpens, and a large logit
 
 # %% [markdown]
 # ## Exercise 1.2 — the gradient Hinton's loss hands the student
-# Return the gradient of $T^2\,\mathrm{KL}(p_T \,\|\, q_T)$ with respect to the student's logits `v` (one row). Here
+# Return the gradient of $T^2\,\mathrm{KL}(p_T \,\|\, q_T)$ on the student's logits `v` (one row). Here
 # $p_T = \operatorname{softmax}(z/T)$ and $q_T = \operatorname{softmax}(v/T)$. Derive the gradient. Do not use finite
 # differences.
 
@@ -251,7 +251,7 @@ print("✅ α mixes the teacher's soft targets with the hard labels; α = 0 is p
 # ## Exercise 1.5 — Minitron's importance score
 # Width pruning keeps the hidden units that are important on calibration data. Return the indices of the `keep` hidden
 # units with the largest mean $\lvert \text{activation} \rvert$ over the contexts `ctx`. Sort the indices from the smallest to the largest. Use
-# `model.forward(ctx)`. Its cache is `(contexts, x, h)`.
+# `model.forward(ctx)`. The cache of `model.forward` is `(contexts, x, h)`.
 
 # %% exercise
 def keep_units(model, ctx, keep):
@@ -276,12 +276,12 @@ print("✅ keep the most active units, slice W1, b1 and W2 — a narrower model 
 # "The loss is
 # $\alpha\,T^2\,\mathrm{KL}(p_T \,\|\, q_T) + (1 - \alpha)\,\mathrm{CE}$. The gradient of the soft term on the student's
 # logits is $T\,(q_T - p_T)$. The $T^2$ keeps the scale of the gradient as $T$ increases. At the limit of high $T$,
-# the soft term is logit matching.
+# the soft term is a match of the centred logits.
 #
 # "$T$ and $\alpha$ are settings to sweep, not constants. TRL applies no $T^2$ (its GKD trainer calculates the
 # divergence at $T$ = 1). Width is capacity. If the student is smaller than the size that can hold what the teacher
 # does, no loss closes the gap. If we have the teacher's weights, we prune the teacher to the student's shape by
-# activation importance, and we distil into that model. It gets there in fewer steps than a new network, not further."
+# activation importance, and we distil into that model. The pruned model gets there in fewer steps than a new network, not further."
 #
 # **Drill questions**
 # 1. *Why multiply the soft term by $T^2$?* Its gradient is $(q_T - p_T)/T$, and the difference itself decreases as

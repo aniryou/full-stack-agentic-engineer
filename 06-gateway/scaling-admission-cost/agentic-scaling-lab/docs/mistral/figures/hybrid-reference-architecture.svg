@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="552" viewBox="0 0 1000 552" role="img" aria-label="The reference architecture of Part 4: the gateway, RabbitMQ, the orchestrator, the vLLM fleet with the Mistral API as spill-over, the tools and the stores." style="color: #E4EAE7">
+  <title>The reference architecture of Part 4: the gateway, RabbitMQ, the orchestrator, the vLLM fleet with the Mistral API as spill-over, the tools and the stores.</title>
+  <rect x="0" y="0" width="1000" height="552" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <!-- client and edge -->
+    <rect x="16" y="24" width="150" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="91" y="50" text-anchor="middle" font-weight="600">App / web chat</text>
+    <rect x="16" y="92" width="150" height="74" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="91" y="115" text-anchor="middle" font-weight="600">Ingress</text>
+    <text x="91" y="134" text-anchor="middle" font-size="11.5" fill="#97A59F">TLS · WAF</text>
+    <text x="91" y="151" text-anchor="middle" font-size="11.5" fill="#97A59F">per-caller limits</text>
+    <!-- gateway -->
+    <rect x="16" y="190" width="150" height="120" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="91" y="214" text-anchor="middle" font-weight="600">gateway</text>
+    <text x="91" y="232" text-anchor="middle" font-size="11.5" fill="#7ADACF">Deployment</text>
+    <text x="91" y="256" text-anchor="middle" font-size="11.5">auth · admission</text>
+    <text x="91" y="273" text-anchor="middle" font-size="11.5">enqueue</text>
+    <text x="91" y="290" text-anchor="middle" font-size="11.5">SSE relay</text>
+    <!-- RabbitMQ -->
+    <ellipse cx="316" cy="198" rx="70" ry="8" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <path d="M246 198 L246 302 A70 8 0 0 0 386 302 L386 198" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="316" y="228" text-anchor="middle" font-weight="600">RabbitMQ</text>
+    <text x="316" y="246" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">agent-turns</text>
+    <text x="316" y="266" text-anchor="middle" font-size="11.5" fill="#97A59F">quorum queue</text>
+    <text x="316" y="282" text-anchor="middle" font-size="11.5" fill="#97A59F">manual ack</text>
+    <text x="316" y="298" text-anchor="middle" font-size="11.5" fill="#97A59F">delivery limit 5</text>
+    <!-- orchestrator -->
+    <rect x="466" y="190" width="160" height="120" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="546" y="214" text-anchor="middle" font-weight="600">orchestrator</text>
+    <text x="546" y="232" text-anchor="middle" font-size="11.5" fill="#7ADACF">Deployment</text>
+    <text x="546" y="256" text-anchor="middle" font-size="11.5">durable loop</text>
+    <text x="546" y="273" text-anchor="middle" font-size="11.5">budgets · checkpoints</text>
+    <text x="546" y="294" text-anchor="middle" font-size="11.5" fill="#97A59F">KEDA on queue depth</text>
+    <!-- tools -->
+    <rect x="660" y="24" width="140" height="88" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="730" y="47" text-anchor="middle" font-weight="600">tool executor</text>
+    <text x="730" y="67" text-anchor="middle" font-size="11.5" fill="#97A59F">bulkhead · breaker</text>
+    <text x="730" y="84" text-anchor="middle" font-size="11.5" fill="#97A59F">cache</text>
+    <text x="730" y="101" text-anchor="middle" font-size="11.5" fill="#97A59F">idempotency</text>
+    <rect x="834" y="24" width="150" height="88" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="909" y="47" text-anchor="middle" font-weight="600">tool services</text>
+    <text x="909" y="65" text-anchor="middle" font-size="11.5" fill="#97A59F">MCP servers</text>
+    <text x="909" y="86" text-anchor="middle" font-size="11.5">CRM · billing</text>
+    <text x="909" y="102" text-anchor="middle" font-size="11.5">network · KB</text>
+    <!-- model gateway -->
+    <rect x="660" y="190" width="140" height="120" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="730" y="214" text-anchor="middle" font-weight="600">model gateway</text>
+    <text x="730" y="232" text-anchor="middle" font-size="11.5" fill="#97A59F">library</text>
+    <text x="730" y="256" text-anchor="middle" font-size="11.5">routing · buckets</text>
+    <text x="730" y="273" text-anchor="middle" font-size="11.5">retry · breaker</text>
+    <text x="730" y="290" text-anchor="middle" font-size="11.5">fallback</text>
+    <!-- vLLM fleet -->
+    <rect x="834" y="190" width="150" height="120" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="909" y="214" text-anchor="middle" font-weight="600">vLLM</text>
+    <text x="909" y="232" text-anchor="middle" font-size="11.5">GPU node pool</text>
+    <text x="909" y="248" text-anchor="middle" font-size="11.5">in Singapore</text>
+    <text x="909" y="272" text-anchor="middle" font-size="11.5" fill="#97A59F">Ministral 3 14B</text>
+    <text x="909" y="289" text-anchor="middle" font-size="11.5" fill="#97A59F">11 H100s at peak</text>
+    <!-- Mistral API -->
+    <rect x="660" y="360" width="220" height="80" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="770" y="383" text-anchor="middle" font-weight="600">Mistral API · EU-hosted</text>
+    <text x="770" y="402" text-anchor="middle" font-size="11.5">Small 4 · Medium 3.5</text>
+    <text x="770" y="420" text-anchor="middle" font-size="11.5" fill="#97A59F">or an APAC marketplace</text>
+    <!-- OpenTelemetry -->
+    <rect x="834" y="456" width="150" height="80" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="909" y="479" text-anchor="middle" font-weight="600">OpenTelemetry</text>
+    <text x="909" y="498" text-anchor="middle" font-size="11.5" fill="#97A59F">Prometheus</text>
+    <text x="909" y="515" text-anchor="middle" font-size="11.5" fill="#97A59F">Grafana · Tempo</text>
+    <!-- Postgres -->
+    <ellipse cx="316" cy="350" rx="70" ry="8" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <path d="M246 350 L246 418 A70 8 0 0 0 386 418 L386 350" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="316" y="378" text-anchor="middle" font-weight="600">Postgres</text>
+    <text x="316" y="396" text-anchor="middle" font-size="11.5" fill="#97A59F">sessions · turns</text>
+    <text x="316" y="412" text-anchor="middle" font-size="11.5" fill="#97A59F">steps · transcripts</text>
+    <!-- Redis -->
+    <ellipse cx="316" cy="446" rx="70" ry="8" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <path d="M246 446 L246 526 A70 8 0 0 0 386 526 L386 446" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="316" y="474" text-anchor="middle" font-weight="600">Redis</text>
+    <text x="316" y="492" text-anchor="middle" font-size="11.5" fill="#97A59F">streams · locks</text>
+    <text x="316" y="508" text-anchor="middle" font-size="11.5" fill="#97A59F">buckets · level</text>
+    <text x="316" y="524" text-anchor="middle" font-size="11.5" fill="#97A59F">idempotency</text>
+    <!-- data edges -->
+    <g stroke="#97A59F" stroke-width="1.2" fill="none">
+      <path d="M91 68 L91 90" marker-end="url(#arr)"/>
+      <path d="M91 166 L91 188" marker-end="url(#arr)"/>
+      <path d="M166 250 L244 250" marker-end="url(#arr)"/>
+      <path d="M386 250 L464 250" marker-end="url(#arr)"/>
+      <path d="M626 250 L658 250" marker-end="url(#arr)"/>
+      <path d="M800 250 L832 250" marker-end="url(#arr)"/>
+      <path d="M600 190 L600 68 L658 68" marker-end="url(#arr)"/>
+      <path d="M800 68 L832 68" marker-end="url(#arr)"/>
+      <path d="M120 310 L120 386 L244 386" marker-end="url(#arr)"/>
+      <path d="M56 310 L56 488 L244 488" marker-start="url(#arr)" marker-end="url(#arr)"/>
+      <path d="M500 312 L500 386 L388 386" marker-start="url(#arr)" marker-end="url(#arr)"/>
+      <path d="M540 310 L540 488 L388 488" marker-end="url(#arr)"/>
+    </g>
+    <!-- spill-over and telemetry -->
+    <g stroke="#97A59F" stroke-width="1.2" fill="none" stroke-dasharray="4 3">
+      <path d="M730 310 L730 358" marker-end="url(#arr)"/>
+      <path d="M626 296 L643 296 L643 476 L832 476" marker-end="url(#arr)"/>
+      <path d="M950 310 L950 454" marker-end="url(#arr)"/>
+    </g>
+    <g font-size="11" fill="#97A59F" text-anchor="middle">
+      <text x="206" y="214">publish,</text>
+      <text x="206" y="228">routing key</text>
+      <text x="206" y="242">= session</text>
+      <text x="426" y="228">consume,</text>
+      <text x="426" y="242">prefetch 80</text>
+    </g>
+    <g font-size="11" fill="#97A59F">
+      <text x="740" y="332">spill-over,</text>
+      <text x="740" y="346">policy-gated</text>
+    </g>
+  </g>
+</svg>

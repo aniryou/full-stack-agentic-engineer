@@ -20,7 +20,7 @@
 #
 # For **MCP**, the gateway is the OAuth client. It does these things:
 #
-# - It discovers the authorization server from a 401.
+# - It finds the authorization server from a 401.
 # - It registers with a Client ID Metadata Document.
 # - It authorizes with PKCE and `resource`.
 # - It rotates refresh tokens (a reused token revokes the grant).
@@ -36,7 +36,7 @@
 # - set a false-positive budget,
 # - make the discovery URLs,
 # - calculate PKCE by hand,
-# - detect refresh-token reuse.
+# - find refresh-token reuse.
 #
 # Primer: §6 *Keys, tenants and isolation*, §7 *Guardrails and what they cost*, §8 *The gateway as an MCP client*
 # (`../PRIMER.md`). See also the identity primer §3.3–3.5, §5, §6.1, §7.1. §9, where to run it and what to adopt, is
@@ -161,7 +161,7 @@ print(f"✅ W = {W_max} tokens adds {held_back_ttft_added(W_max, 0.02, 0.15):.2f
 
 # %% [markdown]
 # ## Exercise 5.3 — a false-positive budget
-# A conversation makes 26 checks (the input and the output of 13 model calls). Product says that at most **5 %** of
+# A conversation makes 26 checks: the input and the output of 13 model calls. Product says that at most **5 %** of
 # conversations can see a false block. Set `max_fpr`: the largest per-check false-positive rate that meets that limit.
 # Assume that the checks are independent.
 
@@ -302,7 +302,7 @@ print("✅ rotation works, a replayed token revokes alice's whole grant (current
 # agent."
 #
 # **Drill questions**
-# 1. *Why must the gateway derive `cache_salt` rather than accept it from the app?* If the caller selects the salt, a
+# 1. *Why must the gateway derive `cache_salt` and not accept it from the app?* If the caller selects the salt, a
 #    tenant can send the salt of another tenant. Then the first tenant can join the prefix-cache entries of that other
 #    tenant (and probe them with time measurements). A salt that the gateway derives from the verified tenant with a secret is
 #    unguessable, and nobody can borrow it.

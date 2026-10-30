@@ -2,7 +2,7 @@
 
 This lab is a hands-on companion to the embeddings primer (`docs/primer.md`). It implements each core idea by hand
 in plain NumPy, with no torch and no sklearn. Each implementation is small, so you can read it in one session. But
-it is also sufficiently real that the effects actually occur.
+each implementation is also sufficiently real that the effects actually occur.
 
 **Time and tier:** ~8 h (rough). The lab is part of module 07.4, together with the other retrieval labs and primers (~28 h in all), in [`CURRICULUM.md`](../../../CURRICULUM.md). T0 is a laptop or a Colab CPU, at no cost. It needs numpy and matplotlib, and no torch, no GPU and no key.
 

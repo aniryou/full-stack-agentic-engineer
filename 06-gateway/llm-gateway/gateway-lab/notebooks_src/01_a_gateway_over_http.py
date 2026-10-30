@@ -74,8 +74,8 @@ print("secret stored anywhere?", any(key_a in json.dumps(r) for r in rows),
 #
 # The client gives an **alias** (`chat`), not a model. The gateway resolves the alias to a chain (`acme/fast`, then
 # `bolt/haiku`). It calls the first target with the provider key of *that* target. It answers with headers that tell
-# which target served the request. The `model` in the body is the upstream model that answered the request (OpenAI does
-# the same for an alias).
+# which target served the request. The `model` in the body is the upstream model that answered the request. OpenAI does
+# the same for an alias.
 
 # %%
 r = stack.chat(key_a, "What does a gateway own?")
@@ -427,7 +427,7 @@ stack.stop()
 #
 # **Two minutes:** "Every model call goes through one gateway. Callers hold virtual keys. The gateway keeps only a
 # hash of each key, and each key has a scope of aliases and a budget. One call revokes a key. The tenant comes from the
-# verified key, never from a header. The provider keys are only in the gateway.
+# authenticated key, never from a header. The provider keys are only in the gateway.
 #
 # "A request gives an alias. The gateway decides if the request runs (budget, limits) and which provider, model, region
 # or pool serves it. In a self-hosted pool, the endpoint picker selects the replica. Everything uses chat completions
@@ -447,7 +447,7 @@ stack.stop()
 # it on the upstream request anyway, and it removes the usage chunk from the response. If the stream stops before that
 # chunk, the gateway bills the row from the chunks that it relayed and marks the row as an estimate. The row is never 0.
 #
-# **Drill 3.** *Anthropic reports 2,300 input tokens and 2,700 cache reads; what goes in `prompt_tokens`?* The answer
+# **Drill 3.** *If Anthropic reports 2,300 input tokens and 2,700 cache reads, what goes in `prompt_tokens`?* The answer
 # is 5,000. Anthropic's `input_tokens` excludes the cache. Thus the canonical prompt count (and OTel's
 # `gen_ai.usage.input_tokens`) is the sum. If you bill 2,300 as input and then give a discount for the cache again, you
 # charge less than the correct price.

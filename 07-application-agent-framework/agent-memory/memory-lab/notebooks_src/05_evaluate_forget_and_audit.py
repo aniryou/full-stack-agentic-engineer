@@ -32,7 +32,7 @@
 #   tenant, you rotate the cache salt of that tenant.
 # * the eval set
 #
-# Then search the files to prove the deletion. The audit log holds only hashes. Thus it is not one more copy.
+# Then search the files to prove the deletion. The audit log holds only hashes. Thus the log is not one more copy.
 # Backups expire on their own schedule.
 #
 # **Audit** every read, write and forget with both identities (PRIMER §8, identity primer §9). The primer is
@@ -85,13 +85,13 @@ print(results["implicit"].table())
 # with no request. Its cost is its tokens and a second model call.
 #
 # Abstention and the adversarial questions are correct in all modes, because the scripted answerer never
-# invents an answer. A real model can invent an answer. That is why these questions are in the benchmark.
+# invents an answer. A real model can invent an answer. Thus these questions are in the benchmark.
 #
 # This harness is not the harness of memory-core (PRIMER §4, §6). This harness has other users, 84 questions, a
-# 128-token budget, an answerer that understands paraphrases, and a scripted model that recalls on first-person
+# 128-token budget, an answerer that knows paraphrases, and a scripted model that recalls on first-person
 # questions. Thus its ranking of the modes is different from the table in PRIMER §6. Neither ranking is
 # evidence about a real model, because in both harnesses a script makes the choices of the model. The method
-# is what transfers: the same questions, graded the same way, for every design that you consider.
+# is what transfers: the same questions, graded the same way, for every design that you examine.
 #
 # ## Exercise 5.1 — grade an answer
 #
@@ -151,7 +151,7 @@ for p in curve:
 # you pay for every token on every turn, and the tokens can cost prefix-cache hits (notebook 03).
 #
 # The knee of this lab is *relative*: 95% of the best. The `knee(tol=0.02)` of memory-core is *absolute*:
-# within 2 points of the best. The two knees select the same budget when recall saturates near 100%. They can
+# at most 2 points below the best. The two knees select the same budget when recall saturates near 100%. They can
 # be different on a flat curve. The Glossary of the PRIMER names both. Say which knee you used.
 
 # %% exercise
@@ -179,7 +179,7 @@ print(f"✅ knee at {k['budget']} tokens: recall {k['recall']:.1%} of a best {ma
 # 1. into an **episode**, through the memory service. The episode has the deletion key `acme/u1/address`.
 #    The write sends an Idempotency-Key, and the key is a row in the **idempotency** table of the service.
 # 2. into a **fact** that consolidation derived from the episode, and into a weekly **summary** whose
-#    provenance cites the episode. The summary has a different deletion key. Thus only provenance links it.
+#    provenance cites the episode. The summary has a different deletion key. Thus only provenance links it to the episode.
 # 3. into a prompt that an inference engine served. The **prefix cache** of the engine holds those blocks.
 # 4. into the **eval set**, as a golden case built from a transcript (07.2 notebook 08 §9).
 # 5. into the **audit log**, as hashes. This is by design.
@@ -335,7 +335,7 @@ print(harness_markdown({"implicit (hashing)": base}, "computed: scripted model, 
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes.** "We evaluate memory with a planted-facts harness that uses a seed. It uses the question
+# **Two minutes.** "We test memory with a planted-facts harness that uses a seed. It uses the question
 # shapes of LongMemEval and LoCoMo. It has 84 questions across seven categories. We grade each answer correct,
 # stale, abstained or hallucinated. We report Wilson intervals and the tokens and model calls per answer.
 #

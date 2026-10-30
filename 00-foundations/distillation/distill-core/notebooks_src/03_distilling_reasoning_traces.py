@@ -49,7 +49,7 @@ print("teacher's length distribution, L = 12..27:", " ".join(f"{x:.2f}" for x in
 
 # %% [markdown]
 # ## Worked example 2 — distil it: SFT on its traces
-# Sample 1,000 traces (a length, and if the answer was correct). Then fit the student by maximum likelihood. For a
+# Sample 1,000 traces. Each trace gives a length, and it tells if the answer was correct. Then fit the student by maximum likelihood. For a
 # stopping-rule table, the maximum-likelihood fit has a closed form. It is the fraction of the traces that stopped at
 # each length, among the traces that got to that length.
 
@@ -86,7 +86,7 @@ for name, keep, ml in (("all traces (plain SeqKD)", "all", None), ("correct only
     row(f"{name} ({kept.sum()} kept)", R.distil(L, ok, keep=keep, max_len=ml).expected(task))
 
 # %% [markdown]
-# Correct traces are longer on average (it helps to think). Thus, with rejection sampling, the student thinks slightly
+# Correct traces are longer on average, because it helps to think. Thus, with rejection sampling, the student thinks slightly
 # longer. A length cap at $L \le 16$ decreases the tokens per correct answer from 22.3 to 16.6. It also decreases the
 # accuracy from 0.892 to 0.769. The budget is a product decision, and the traces that you keep make that decision for
 # you. The cap also discards 91% of the traces that you paid the teacher to write.
@@ -104,11 +104,11 @@ print(f"distilled from 1,000 traces:        accuracy {student.expected(task)['ac
 # %% [markdown]
 # A trace shows the student *how long* to think. The reward of a rollout says only correct or incorrect. RL on the
 # student needs the teacher's own budget to get to where the traces put the student at once. R1's comparison had the
-# same shape at scale (the distilled 32B was better than RL on the 32B base, primer §5). R1's comparison also had a
+# same shape at scale: the distilled 32B was better than RL on the 32B base (primer §5). R1's comparison also had a
 # capability ceiling that the toy does not have.
 #
 # ## Worked example 6 — what does not transfer
-# The answer is knowledge. Give the student a smaller $q$ (it solves the problem half as often per thinking token). It
+# The answer is knowledge. Give the student a smaller $q$. The student solves the problem half as often per thinking token. It
 # copies the teacher's length exactly, and that length is incorrect for it.
 
 # %%
@@ -250,7 +250,7 @@ print(f"✅ L* = {L_star:.1f} tokens for the weaker student against the {student
 
 # %% [markdown]
 # ## In a design review
-# **The two-minute version.** "We distil reasoning by SFT on the traces of a thinking teacher. That copies the
+# **The two-minute version.** "We distil reasoning by SFT on the traces of a thinking teacher. This SFT copies the
 # procedure: the format, the steps and how long to think. Thus the student arrives with the teacher's thinking-length
 # distribution. We calculate the serving capacity of the student for that tail, not for the tail of a chat model.
 #
@@ -260,16 +260,16 @@ print(f"✅ L* = {L_star:.1f} tokens for the weaker student against the {student
 #
 # "At equal samples, distillation is better than RL on a small model. The reason is that a trace carries the full
 # behaviour, and a reward carries one bit. But distillation cannot transfer knowledge that the student does not have. A
-# weaker student copies a length that is incorrect for it. Thus we evaluate at the student's own best budget, and we
+# weaker student copies a length that is incorrect for it. Thus we measure the student at its own best budget, and we
 # think about a short RL stage after distillation."
 #
 # **Drill questions**
-# 1. *Our distilled 1.5B thinks as long as the 32B teacher, and the GPU bill doubled. Why?* SFT on traces copies the
+# 1. *Our distilled 1.5B thinks for the same length as the 32B teacher, and the GPU bill doubled. Why?* SFT on traces copies the
 #    length distribution of the teacher. Put a cap on the trace length in the data. Or add a budget and a length
 #    penalty in a short RL stage.
 # 2. *Keep only correct traces: is there a side effect?* When it helps to think, correct traces are longer. Thus the
 #    student thinks longer. Also, the data loses the hard problems that have no correct trace (a coverage bias).
 # 3. *When is RL on the student better than distillation?* When no stronger teacher exists for the task. Or after the
 #    student has the teacher's behaviour and needs its own behaviour. RL on the student fits its own $q$ (here $L^*$ =
-#    27.5, not the copied 19.9). R1's authors note that it is possible for an RL stage after distillation to add much
+#    27.5, not the copied 19.9). R1's authors say that it is possible for an RL stage after distillation to add much
 #    more.

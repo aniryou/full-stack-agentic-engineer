@@ -38,7 +38,7 @@ To read the router from inside the cluster, run `kubectl -n moe-lab port-forward
 Then run notebook 02 with `MOELAB_URL=http://127.0.0.1:8000`. The notebook finds the 60 experts, top-4,
 of Qwen1.5-MoE-A2.7B in `moelab.configs` by the served model id.
 
-**What to look for.** `./run.sh logs` shows the memory that each GPU loaded and the KV cache that it
+**What to look for.** `./run.sh logs` shows the memory that each GPU loaded and the KV cache that each GPU
 got. It also shows the warning *"Using default MoE config. Performance might be sub-optimal!"* This message tells
 you that vLLM has no tuned fused-MoE config for the L4 (notebook 05).
 
@@ -65,6 +65,6 @@ experiments costs a few dollars. The benchmark Job uses the system pool.
 terraform -chdir=../../../../../02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab/deploy/gcp/terraform destroy
 ```
 
-Sometimes Spot capacity is not available. Google Cloud can also reclaim it with ~30 s notice. If Google Cloud reclaims the node, the pod
+Sometimes Spot capacity is not available. Google Cloud can also reclaim a Spot node with a ~30 s warning. If Google Cloud reclaims the node, the pod
 restarts and downloads the weights again (the cache is node-local). For a more stable demo, create the
 pool without Spot (`gpu_spot = false` in the tfvars of layer 02).

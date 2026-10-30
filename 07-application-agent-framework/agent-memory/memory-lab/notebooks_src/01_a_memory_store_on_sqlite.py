@@ -69,8 +69,8 @@ print(store.stats())
 # %% [markdown]
 # ## Worked example: three rankings for one question
 #
-# The vector leg is a dot product over the unit vectors of the partition (the hashing embedder is lexical:
-# only shared words count). The full-text leg is the `bm25()` of FTS5 over the words of the question, minus
+# The vector leg is a dot product over the unit vectors of the partition. The hashing embedder is lexical:
+# only shared words count. The full-text leg is the `bm25()` of FTS5 over the words of the question, minus
 # the stopwords. The value of `bm25()` is **negative, and lower is better**. Hybrid fuses the two *rankings* by RRF, thus
 # their different scales never meet.
 
@@ -223,8 +223,8 @@ print("search after the forget:", [h.record.text for h in naive.search("acme", "
 # Write `purge_steps(fts_secure_delete, wal)`. It returns, in order, the SQL to run **after** the DELETE, so
 # that no copy stays. Without FTS5 `secure-delete`, merge the index
 # (`INSERT INTO memories_fts(memories_fts) VALUES('optimize')`). In WAL mode, do a checkpoint and truncate
-# the log (`PRAGMA wal_checkpoint(TRUNCATE)`). Do this before *and* after `VACUUM` writes the file again. (In
-# WAL mode, a VACUUM also writes through the log.)
+# the log (`PRAGMA wal_checkpoint(TRUNCATE)`). Do this before *and* after `VACUUM` writes the file again. In
+# WAL mode, a VACUUM also writes through the log.
 
 # %% exercise
 def purge_steps(fts_secure_delete, wal):
@@ -246,17 +246,17 @@ print("   the store's own forget(mode='purge') runs the same steps:", naive.forg
 
 # %% [markdown]
 # When this SQLite has FTS5 `secure-delete` (3.42 or newer, verify), `SQLiteMemoryStore` turns it on at
-# creation. It is possible that the SQLite of Colab is older. The store detects the feature on a
+# creation. It is possible that the SQLite of Colab is older. The store finds the feature on a
 # temporary table, never from the version string. With `secure-delete`, a DELETE also removes the terms of
 # the deleted row from the index. `PRAGMA secure_delete=ON` writes zeros over the content of freed pages.
-# Neither reaches a copy of the file that another person took: backups are the last line of PRIMER §7.
+# Neither setting reaches a copy of the file that another person took: backups are the last line of PRIMER §7.
 #
 # ## T0 + Docker: the same store on Postgres + pgvector
 #
 # `memlab.store.pgvector` has the same schema and the same three queries in SQL. The SQL writes RRF with
 # $k = 60$ as two ranked CTEs. The module also has the lease and checkpoint tables of the consolidation job.
 # If `MEMLAB_PG_DSN` has a value and psycopg is available, this cell runs the queries. If not, the cell prints how
-# to start Postgres. It also examines every statement offline with the parser of Postgres itself (`pglast`).
+# to start Postgres. The cell also examines every statement offline with the parser of Postgres itself (`pglast`).
 
 # %%
 from memlab.store import pgvector as pgv
@@ -305,7 +305,7 @@ print("removed", WORK)
 #
 # **Drill 1.** *Why not HNSW for memory?* The partition of a user holds hundreds to thousands of records. An
 # exact scan takes milliseconds and never misses a record. HNSW is worth its cost at tenant scale. Also,
-# pgvector filters *after* the index scan (ef_search 40 gives about 4 rows at 10% selectivity), thus filtered
+# pgvector filters *after* the index scan (about 4 rows with ef_search 40 at 10% selectivity), thus filtered
 # ANN needs partitions or `hnsw.iterative_scan`.
 #
 # **Drill 2.** *A test shows that search no longer returns the deleted memory. Are we compliant?* No,

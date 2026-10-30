@@ -76,7 +76,7 @@ print("what the model reads:", good.to_content())
 # %% [markdown]
 # ### Side-effect classes
 #
-# Every tool declares its effect on the world. The three classes are `READ`, `REVERSIBLE` (you can undo it, or it is idempotent by key)
+# Every tool declares its effect on the world. The three classes are `READ`, `REVERSIBLE` (with an undo, or idempotent by key)
 # and `IRREVERSIBLE` (money moved, email sent). By default, an irreversible tool **must get a confirmation**. The loop pauses for a person
 # (Notebook 03 shows the machinery for the pause and the resume). `required_scope` connects a tool to the identity of the caller.
 # Thus, whatever text the model writes, it cannot get an action that the user has no permission to do.
@@ -176,7 +176,7 @@ for e in events:
 
 # %% [markdown]
 # The second model call must contain the tool result. If not, the model answers without the tool result.
-# `FakeLLM.calls` records every request that it received. Thus you can prove that the result went back:
+# `FakeLLM.calls` records every request that it got. Thus you can prove that the result went back:
 
 # %%
 for m in llm.calls[1]["messages"]:
@@ -188,7 +188,7 @@ for m in llm.calls[1]["messages"]:
 #
 # When the model asks for several tools in one turn, the loop runs them at the same time.
 # It uses a semaphore, and each tool has its own timeout. Three 50 ms tools cost about 50 ms, not 150.
-# This is why it is worth the effort to prompt the model to batch independent calls.
+# This parallel run is why it is worth the effort to prompt the model to batch independent calls.
 
 # %%
 @tool
@@ -211,7 +211,7 @@ assert elapsed < 0.15, "tool calls ran sequentially?"
 #
 # When the model calls a tool that does not exist, the result is `unknown_tool`, with the real names in the hint.
 # If the model repeats the same call more than `max_repeated_calls` times, the result is `duplicate_call`.
-# This is the lowest-cost possible brake on a "call, ignore the result, call again" spiral.
+# The `duplicate_call` result is the lowest-cost possible brake on a "call, ignore the result, call again" spiral.
 
 # %%
 dup_llm = scripted(call("track_parcel", id="ORD-1"),            # no such tool

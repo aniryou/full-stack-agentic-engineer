@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="530" viewBox="0 0 1000 530" role="img" aria-label="The system overview: the client reaches the gateway through the load balancer, the gateway publishes turns to Pub/Sub, Pub/Sub pushes them to the orchestrator, and the orchestrator calls Gemini and the tool services and uses Firestore and Redis." style="color: #E4EAE7">
-  <title>The system overview: the client reaches the gateway through the load balancer, the gateway publishes turns to Pub/Sub, Pub/Sub pushes them to the orchestrator, and the orchestrator calls Gemini and the tool services and uses Firestore and Redis.</title>
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="530" viewBox="0 0 1000 530" role="img" aria-label="The system overview: the edge, the three Cloud Run services, Pub/Sub, the two stores and the Gemini endpoint." style="color: #E4EAE7">
+  <title>The system overview: the edge, the three Cloud Run services, Pub/Sub, the two stores and the Gemini endpoint.</title>
   <rect x="0" y="0" width="1000" height="530" rx="8" fill="#161E1C"/>
   <defs>
     <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
@@ -11,8 +11,8 @@
     <text x="525" y="42" text-anchor="middle" font-size="11.5" fill="#97A59F">Async</text>
     <rect x="760" y="24" width="220" height="116" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
     <text x="870" y="42" text-anchor="middle" font-size="11" fill="#97A59F">Gemini Enterprise Agent Platform</text>
-    <rect x="96" y="180" width="190" height="120" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
-    <text x="191" y="198" text-anchor="middle" font-size="11.5" fill="#97A59F">Edge</text>
+    <rect x="96" y="168" width="190" height="136" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="191" y="186" text-anchor="middle" font-size="11.5" fill="#97A59F">Edge</text>
     <rect x="310" y="170" width="670" height="152" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
     <text x="966" y="188" text-anchor="end" font-size="11.5" fill="#97A59F">Cloud Run (region)</text>
     <rect x="370" y="360" width="380" height="110" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
@@ -23,9 +23,10 @@
     <text x="49" y="248" text-anchor="middle" font-size="11">App / web</text>
 
     <!-- edge -->
-    <rect x="110" y="214" width="162" height="60" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    <text x="191" y="239" text-anchor="middle" font-weight="600">Global external ALB</text>
-    <text x="191" y="259" text-anchor="middle" font-size="11.5" fill="#97A59F">Cloud Armor · IAP</text>
+    <rect x="110" y="200" width="162" height="76" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="191" y="224" text-anchor="middle" font-weight="600">Global external ALB</text>
+    <text x="191" y="243" text-anchor="middle" font-size="11.5" fill="#97A59F">managed cert</text>
+    <text x="191" y="261" text-anchor="middle" font-size="11.5" fill="#97A59F">Cloud Armor · IAP</text>
 
     <!-- async -->
     <rect x="330" y="58" width="130" height="60" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>

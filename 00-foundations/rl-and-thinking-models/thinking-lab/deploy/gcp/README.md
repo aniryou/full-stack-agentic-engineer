@@ -51,7 +51,7 @@ has no reasoning-specific metric. The per-request reasoning counts are in the
 Cloud Run bills per second while an instance exists. With `min_instances = 0`, an idle service costs nothing. But
 the next request then has a cold start (the image pull plus 8 GB of weights).
 `terraform destroy -var-file=thinking.tfvars` removes the deployment. On GKE, a Spot `g2-standard-8` (one L4) costs a fraction of the
-on-demand price (Spot is 60-91% off, verify in [`COMPUTE.md`](../../../../../COMPUTE.md)). You also pay for the
+on-demand price: 60-91% less (verify in [`COMPUTE.md`](../../../../../COMPUTE.md)). You also pay for the
 cluster:
 
 ```bash

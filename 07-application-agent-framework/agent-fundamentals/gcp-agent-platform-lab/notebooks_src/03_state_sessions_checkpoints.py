@@ -187,7 +187,7 @@ print("model's reply:", declined.text, "| refunds executed in total:", len(refun
 #
 # A multi-step job that talks to external systems must survive when its worker stops at any line.
 # The pattern is a `TaskRecord` in a `TaskStore`. The record has `completed_steps` (the steps already applied)
-# and a `checkpoint` (the data that the next step needs). The worker saves the record **after every step**.
+# and a `checkpoint`. The `checkpoint` holds the data that the next step needs. The worker saves the record **after every step**.
 #
 # On resume, the worker skips the completed steps. The next cell has a four-step claims workflow.
 # The worker crashes immediately after step 2, and a new worker takes the record.
@@ -659,4 +659,4 @@ print("✅ questions:", *qs, sep="\n   ")
 # because one day the worker will stop between the payment call and the checkpoint. A saga of compensations covers the steps that
 # nobody can undo."*
 #
-# Then ask the important question: *what happens if the worker dies right here?* Then point at the line.
+# Then ask the important question: *what occurs if the worker stops right here?* Then point at the line.

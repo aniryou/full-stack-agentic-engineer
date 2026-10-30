@@ -27,7 +27,7 @@ print("not found  :", get_order.run({"order_id": "ORD-9"}))
 print("bad args   :", get_order.run({}))                      # missing required argument
 
 # %% [markdown]
-# Look at the three result shapes that the model can receive:
+# Look at the three result shapes that the model can get:
 # `{"ok": True, "data": ...}`, a **structured error** with a `hint`, and an
 # `invalid_arguments` error. None of them is a crash. Because of this, the model can
 # recover. It can ask for the id that it does not have, or it can apologise for the

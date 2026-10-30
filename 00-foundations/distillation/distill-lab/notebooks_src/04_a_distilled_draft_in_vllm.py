@@ -21,7 +21,7 @@
 #   of the same family trained it on other data. That mismatch of distributions lowers $\alpha$. For a draft, do *not*
 #   filter by a verifier. The reason is that the goal is to match the target, also where the target makes mistakes.
 # * **Read vLLM's numbers carefully.** By default, vLLM 0.30.0 makes *greedy* drafts. Thus the acceptance is
-#   $p(\operatorname{argmax} q)$, not $\sum \min(p, q)$. Its "acceptance rate" is
+#   $p(\operatorname{argmax} q)$, not $\sum \min(p, q)$. vLLM's "acceptance rate" is
 #   $\text{accepted} / \text{drafted} = (E - 1)/k$, not $\alpha$. $\alpha$ is the per-position rate at position 0. The
 #   mean acceptance length $1 + \text{accepted}/\text{drafts}$ is $E$.
 # * **Same vocabulary or nothing:** vLLM's `draft_model` method compares `vocab_size`. A Qwen3-0.6B draft for Qwen3-4B
@@ -45,8 +45,8 @@ print(table([{"k": k, **{f"E at alpha {al}": round(DR.expected_tokens(al, k), 3)
 # %% [markdown]
 # ## Worked example: vLLM's spec-decode counters
 #
-# vLLM exports four counters: drafts (the verify steps that had drafts), draft tokens, accepted tokens, and
-# accepted tokens per position (label `position` = $0 \ldots k - 1$). A position $i$ counts only when the target
+# vLLM exports four counters: drafts, draft tokens, accepted tokens, and
+# accepted tokens per position (label `position` = $0 \ldots k - 1$). The drafts counter counts the verification steps that had drafts. A position $i$ counts only when the target
 # accepted all of the positions $0 \ldots i$. The bundled scrapes are **synthetic**. `DR.simulate_counters` made 20,000
 # drafts of $k$ = 4 at $\alpha = 0.7$. The scrapes show how to read the counters, not what any draft gets.
 
@@ -60,8 +60,8 @@ print(text("spec_decode_metrics_after.txt"))
 # ## Exercise 4.1 — from counters to α
 #
 # Write `read_counters(before, after)`. It returns `(alpha, mean_length, rate)`. `alpha` is the per-position rate at
-# position 0 (the accepted tokens at position 0 divided by the drafts). `mean_length` is
-# $1 + \text{accepted} / \text{drafts}$ (vLLM counts the target's bonus token). `rate` is the accepted tokens divided by
+# position 0 (the accepted tokens at position 0 divided by the drafts). Because vLLM counts the target's bonus token, `mean_length` is
+# $1 + \text{accepted} / \text{drafts}$. `rate` is the accepted tokens divided by
 # the draft tokens. vLLM logs this number as "Avg Draft acceptance rate".
 #
 # Use `after.value(name)` and `before.value(name)` with the names in `distillab.metrics`. Use `after.by_label(M.SPEC_ACCEPTED_PER_POS, "position")`
@@ -216,7 +216,7 @@ print("✅ Qwen2.5-0.5B cannot draft for Qwen2.5-7B (vocab_size 151,936 vs 152,0
 
 # %% [markdown]
 # The speedups are an upper bound for batch 1. The formula assumes a memory-bound target step. The verification of
-# $k$ + 1 tokens costs approximately the same as one token only while this is true. Larger batches make the target
+# $k$ + 1 tokens costs approximately the same as one token only while the target step is memory-bound. Larger batches make the target
 # compute-bound, and the gain decreases. Notebook 05 of the 04 serving lab measures where this occurs.
 #
 # ## On a real GPU (T1)
@@ -272,7 +272,7 @@ if env.server_url():
 #
 # **Drill 3.** *The distilled draft doubled $\alpha$ at batch 1, but throughput at batch 64 decreased. Why?* At batch
 # 64, the target step is compute-bound. The verification of $k$ + 1 tokens per sequence costs up to $k$ + 1 times as
-# much, and the extra tokens do not pay for it.
+# much. The extra tokens do not pay for that cost.
 #
 # Speculation is a latency tool. Thus, make it depend on the load, as `num_speculative_tokens_per_batch_size` permits
 # in vLLM (verify).

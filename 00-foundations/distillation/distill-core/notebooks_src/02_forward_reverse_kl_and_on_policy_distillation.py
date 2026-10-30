@@ -9,16 +9,16 @@
 # ## The one-minute version
 # When the student cannot copy the teacher, the divergence decides which errors the student makes.
 #
-# - **Forward KL** $\mathrm{KL}(p \,\|\, q)$ is what SFT and classic KD minimise. It makes a student that is too small
+# - **Forward KL** $\mathrm{KL}(p \,\|\, q)$ is what SFT and classic KD make as small as possible. It makes a student that is too small
 #   cover each mode and put mass *between* the modes.
 # - **Reverse KL** $\mathrm{KL}(q \,\|\, p)$ makes the student commit to the modes that it can fit.
 # - The generalised **JSD($\beta$)** interpolates between the two (TRL: $\beta = 0$ forward, $\beta = 1$ reverse).
 # - **Sequence-level distillation** is SFT on text that the teacher wrote. It is the recipe behind the R1 distills.
 #   Sequence-level distillation pays for tokens that the verifier discards.
-# - Its problem is **exposure bias**. The student learns on the teacher's prefixes and decodes on its own prefixes.
+# - The problem of sequence-level distillation is **exposure bias**. The student learns on the teacher's prefixes and decodes on its own prefixes.
 #   Thus one error puts the student where no training example was.
 # - **On-policy distillation** (GKD) samples from the student and asks the teacher about each token that the student
-#   made. Thus it trains exactly where you will use it. As RL, it is REINFORCE with a dense reward
+#   made. Thus the student trains exactly where you will use it. As RL, it is REINFORCE with a dense reward
 #   $r_t = \log \pi_T - \log \pi_S$ per token. This is `rlcore.pg.reinforce_grad` with the teacher as the reference.
 #
 # Primer: `../../PRIMER.md` §2–§4.
@@ -39,8 +39,8 @@ def bar(p, width=30):
 
 # %% [markdown]
 # ## Worked example 1 — a bimodal teacher, a one-bump student
-# The teacher has two good continuations (tokens 2 and 8, for example two ways to write an answer). The student family
-# can make only one bump. Fit the student in three ways.
+# The teacher has two good continuations, tokens 2 and 8. For example, the two tokens are two ways to write an answer.
+# The student family can make only one bump. Fit the student in three ways.
 
 # %%
 p = D.bimodal()
@@ -53,7 +53,7 @@ for name, div, beta in (("forward KL(p‖q)", "forward", 0.5), ("JSD β = 0.5", 
 # %% [markdown]
 # Forward KL has a cost wherever the teacher has mass and the student has none. Thus the best one-bump student is
 # almost flat ($s$ = 8.6). It puts 45.4% of its mass on tokens to which the teacher gives less than 1%. In generation,
-# this is text that the teacher never writes.
+# that mass is text that the teacher never writes.
 #
 # Reverse KL has a cost wherever the *student* has mass and the teacher has none. Thus the student commits to one mode
 # ($\mathrm{KL} = \ln 2$: it drops half of the teacher's mass). It almost never makes a token that the teacher rejects.
@@ -136,12 +136,12 @@ print("  KD     ", " ".join(f"{x:.2f}" for x in eb_kd["sampled_on_rule"]))
 # far decreases to 0.650 by position 4 and to 0.190 by position 12. But the teacher's chance stays at 1.000. That is exposure
 # bias.
 #
-# Your numbers can differ in the last digits. A seeded run is the run of one CPU. The on-policy rows of the next example
+# Your numbers can be different in the last digits. A seeded run is the run of one CPU. The on-policy rows of the next example
 # move by up to ±0.05 across CPU kernels. The first note of the primer and `tests/test_primer_numbers.py` say how much.
 #
 # ## Worked example 4 — on-policy distillation removes it
 # Continue from the KD student with GKD at $\lambda = 1$. The student samples its own continuations. The teacher scores
-# each position. Minimise $\mathrm{JSD}(\beta)$ at those positions.
+# each position. Make $\mathrm{JSD}(\beta)$ as small as possible at those positions.
 
 # %%
 runs = {}
@@ -230,7 +230,7 @@ for label, kw in (("on-policy distillation, 32B teacher", {}), ("GRPO", dict(tea
 # %% [markdown]
 # ## Exercise 2.1 — the reverse-KL fit
 # Write `reverse_kl(q, p)` $= \sum q \log(q/p)$ over the entries with $q$ > 0. Then return the $(\mu, s)$ of the
-# one-bump student (`D.bump(mu, s, 11)`) that minimises it over the grids `mus` and `ss`. If there is a tie, select the
+# one-bump student (`D.bump(mu, s, 11)`) that makes it as small as possible over the grids `mus` and `ss`. If there is a tie, select the
 # smaller $\mu$.
 
 # %% exercise
@@ -380,10 +380,10 @@ print(f"✅ predicted {yield_12:.3f}, measured {measured:.3f} over 4,000 samples
 #
 # "The weak point of sequence-level distillation is exposure bias. The student trains on the teacher's prefixes, but
 # it decodes on its own prefixes. On-policy distillation repairs that. The student samples, the teacher scores each
-# token, and we minimise a divergence there.
+# token, and we make a divergence as small as possible there.
 #
 # "As RL, on-policy distillation is REINFORCE with a dense per-token reward, $\log \pi_T - \log \pi_S$. It costs one
-# teacher forward pass per student token. With a large teacher, this makes each step more costly than a GRPO step.
+# teacher forward pass per student token. With a large teacher, this cost makes each step more costly than a GRPO step.
 # But on-policy distillation wins on the number of steps.
 #
 # "We select the divergence and we know what it does. Forward KL makes a small student cover everything, the gaps
@@ -396,7 +396,7 @@ print(f"✅ predicted {yield_12:.3f}, measured {measured:.3f} over 4,000 samples
 # **Drill questions**
 # 1. *Why can you not do on-policy distillation through a text-only API?* It needs the teacher's log-probability of
 #    each token that the *student* generated (a forward pass over given text). SeqKD needs only samples. vLLM's
-#    `prompt_logprobs` gives it for a served teacher (verify the limits).
+#    `prompt_logprobs` gives that log-probability for a served teacher (verify the limits).
 # 2. *Our distilled model makes strange mixtures of two valid answers. Which loss did we use?* Forward KL (SFT/KD). A
 #    student that cannot hold both modes spreads mass between them. Try reverse KL or a JSD with $\beta$ near 1.
 # 3. *Offline KD had a low teacher-forced loss, but the generations become worse after a few sentences. Why?*

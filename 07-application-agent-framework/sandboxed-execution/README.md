@@ -63,7 +63,7 @@ print(sb.isolation_report()["network_blocked"])   # False — a process sandbox 
 ## How it fits
 
 First, read the [agent-core loop and tool contract](../agent-fundamentals/agent-core/) (07.1). This topic makes
-its `run_code` tool safe. The topic uses two neighbour topics directly:
+the `run_code` tool of agent-core safe. The topic uses two neighbour topics directly:
 
 - The [identity and security primer](../../06-gateway/identity-security/agentic-identity-gcp-lab/docs/primer.md):
   §2 threat model, §4.2 tool tiers, §5 secrets, §6.2 code execution, §9 audit. This topic cites these sections
@@ -86,7 +86,7 @@ gives the learning path.
   removes ambient authority. But it does not stop kernel exploits or the network. Real isolation is a container,
   then gVisor (`runsc`), then a microVM (Firecracker/Kata). The lab shows these rungs.
 - **Root changes the story, both ways.** Three controls need the sandbox to run each execution as its own UID,
-  and that needs root:
+  and a UID switch needs root:
   - `RLIMIT_NPROC` limits the number of processes. It has no effect for uid 0. When the sandbox is not root, your own
     processes share the limit.
   - The sandbox keeps your files unreadable. `HOME` redirection is not a boundary.

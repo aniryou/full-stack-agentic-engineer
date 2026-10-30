@@ -12,7 +12,7 @@ engine stays the subject.
 The same kind of cluster is also available as **Terraform**. It is a zonal GKE Standard cluster with
 managed Prometheus. Its L4 Spot pool scales from zero and has a GKE-installed driver. Layer 03's
 lab has Terraform for this kind of cluster in
-[`k8s-gpu-lab/deploy/gcp/terraform/`](../../../../../../03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab/deploy/gcp/terraform/) (plus DWS flex-start and GCS FUSE).
+[`k8s-gpu-lab/deploy/gcp/terraform/`](../../../../../../03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab/deploy/gcp/terraform/). That Terraform also adds DWS flex-start and GCS FUSE.
 Layer 05's lab also has Terraform for it in [`inference-gateway-lab/deploy/gcp/terraform/`](../../../../../../05-orchestrator/serving-orchestration/inference-gateway-lab/deploy/gcp/terraform/) (plus
 the Gateway API and a proxy-only subnet).
 
@@ -21,7 +21,7 @@ The Terraform of this lab is the Cloud Run service in
 
 | File | What it is |
 |---|---|
-| `cluster.sh` | A zonal GKE Standard cluster and an L4 **Spot** pool that autoscales **0..2** (GKE installs the driver). Then the script applies the manifests. `DRY_RUN=1` prints the commands. |
+| `cluster.sh` | A zonal GKE Standard cluster and an L4 **Spot** pool that autoscales **0..2**. GKE installs the driver. Then the script applies the manifests. `DRY_RUN=1` prints the commands. |
 | `vllm.yaml` | A `Deployment` (1 GPU, probes on `/health`, `/dev/shm`, HF cache) and a `Service` on port 8000. |
 | `podmonitoring.yaml` | A `monitoring.googleapis.com/v1` `PodMonitoring`. It scrapes `/metrics` every 15 s. |
 
@@ -68,5 +68,5 @@ kubectl delete -f vllm.yaml -f podmonitoring.yaml
 PROJECT_ID=my-project ./cluster.sh delete
 ```
 
-Spot capacity can be unavailable. GCP can also take it back with ~30 s notice. For a steady demo,
+Spot capacity can be unavailable. GCP can also take it back with a ~30 s warning. For a steady demo,
 remove the `cloud.google.com/gke-spot` selector. Then create the pool without `--spot`.

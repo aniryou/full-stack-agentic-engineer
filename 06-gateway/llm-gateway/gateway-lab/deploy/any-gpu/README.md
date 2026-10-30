@@ -18,7 +18,7 @@ breaker.
 | File | What it does |
 |---|---|
 | `serve.sh` | `vllm serve` from pip on :8000, a fake fallback on :8101, the gateway on :8080. With `DRY_RUN=1`, it only prints. |
-| `docker-compose.yaml` | the same with Docker. vLLM is bound to loopback, so callers reach it only through the gateway. |
+| `docker-compose.yaml` | the same with Docker. The compose file binds vLLM to loopback. Thus, callers reach vLLM only through the gateway. |
 | `down.sh` | stops what either of them started |
 
 ## The flags, and why the lab needs them
@@ -28,7 +28,7 @@ breaker.
 | `--served-model-name lab/llm` | The upstream model name in `configs/vllm.yaml`. Clients never see it. They ask for the alias `chat`. |
 | `--enable-prompt-tokens-details` | Without it, the `usage` of vLLM has no `prompt_tokens_details.cached_tokens`. Then notebook 03 cannot measure prefix-cache hits per request. Prefix caching itself is on by default. |
 | `--max-model-len 4096` | The prompts of the lab are short. The flag keeps the KV cache of a 0.5B model small on a T4. |
-| `--dtype half` on a T4 | Turing has no bfloat16. `serve.sh` detects this. In compose, add the flag yourself. |
+| `--dtype half` on a T4 | Turing has no bfloat16. `serve.sh` finds the T4 and sets the flag. In compose, add the flag yourself. |
 | `--api-key` (optional) | Set `VLLM_API_KEY`. The gateway holds it, and callers never do. The check of vLLM covers only `/v1`, `/v2`, `/inference` and `/cohere`. `/health`, `/metrics` and the rest stay open. Thus, keep the port private all the same. |
 
 The gateway asks vLLM for `stream_options.include_usage` on every streamed request. It strips the usage chunk from

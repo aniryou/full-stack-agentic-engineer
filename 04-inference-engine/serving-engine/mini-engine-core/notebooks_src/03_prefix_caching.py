@@ -8,7 +8,7 @@
 # ## The one-minute version
 # Two requests whose prompts start with the same tokens compute the same K/V for that prefix. Thus the engine
 # computes that K/V one time. The engine gives each **full** KV block a name: `hash(parent block's name, the block's tokens, extra keys)`.
-# The parent is part of the name. Thus a name identifies the *entire* prefix, not only the 16 tokens inside the
+# The parent is part of the name. Thus a name identifies the *whole* prefix, not only the 16 tokens inside the
 # block.
 #
 # A new request goes along the chain of names of its prompt. It adopts each block that is already in the cache
@@ -17,7 +17,7 @@
 # engine actually needs the memory.
 #
 # Agents have long stable system prompts, tool schemas and append-only histories. For agents, prefix caching often
-# gives the single largest gain in the engine. The prompt layout decides if you get it.
+# gives the single largest gain in the engine. The prompt layout decides if you get that gain.
 #
 # Primer: §5 *Prefix caching*, §4 *KV cache management revisited* (`../../PRIMER.md`). Background:
 # `04-inference-engine/paged-attention/` (block tables, copy-on-write).
@@ -42,7 +42,7 @@ for name, toks in [("a", a), ("b", b), ("c", c)]:
     print(name, [h.hex()[:6] for h in block_hashes(toks, 4)])
 
 # %% [markdown]
-# `a` and `b` share their first four names (the first 16 tokens are identical). They become different at the block
+# `a` and `b` share their first four names, because their first 16 tokens are identical. They become different at the block
 # that holds `Q1` / `Q2`. `c` has the same tokens as `b` in blocks 2 and 3 (`" be "`, `"brie"`), but it has
 # **different names**. Its first block is different, and the name of each later block depends on it. The K/V of a
 # block depend on each token before it (attention), so the name must depend on those tokens too. The partial last
@@ -84,7 +84,7 @@ print("from cache:", [eng.requests[r].num_cached_tokens for r in ["r0", "r1", "r
       eng.kv.num_blocks - eng.kv.num_free_blocks)
 
 # %% [markdown]
-# In one step, `r0` prefills its whole prompt, and `r1` and `r2` prefill only the tokens after token 176. That is
+# In one step, `r0` prefills its whole prompt, and `r1` and `r2` prefill only the tokens after token 176. This reuse is
 # safe, because the forward pass writes the K/V of each layer for the *whole* step before any request attends at that
 # layer. The model code does `cache.write(...)` for all tokens, then the per-request attention.
 #
@@ -114,7 +114,7 @@ print(f"   {o.num_cached_tokens} tokens from cache now")
 # takes them from the front of the queue and **evicts** the name. Prefix caching costs no memory. It uses only
 # memory that no other request needs yet.
 #
-# Note *which* 32 tokens stayed in the cache after the large request: the **head** of the system prompt. Requests
+# Look at *which* 32 tokens stayed in the cache after the large request: the **head** of the system prompt. Requests
 # free their blocks tail first, so the most widely shared blocks are the last to go.
 #
 # ## Worked example 5 — why the parent must be in the name
@@ -146,7 +146,7 @@ for label, fn in [("chained   ", hash_block), ("parentless", parentless)]:
 # %% [markdown]
 # The chained cache uses again only the block whose whole prefix is the same. Its result agrees with the reference
 # to rounding error. The parentless cache uses more blocks from the cache, and it computes different probabilities.
-# There is no error and no crash, only outputs that are subtly incorrect (with a real model, text that is clearly incorrect).
+# There is no error and no crash, only outputs that are subtly incorrect. With a real model, the output is text that is clearly incorrect.
 #
 # Silent errors of this kind are the reason that engines use a chained, collision-resistant hash (vLLM defaults to
 # SHA-256 as of Sep 2026, verify). They are also the reason that tenant isolation adds a salt to the root of the
@@ -343,5 +343,5 @@ print(f"✅ the radix tree reuses {extra} extra tokens per pair: always less tha
 #    after different prefixes collide. Then the engine serves incorrect K/V and gives no warning.
 # 2. *Two identical 20-token prompts, block size 4: how many tokens hit?* 16. The engine recomputes the last block,
 #    because it needs the logits of the last token.
-# 3. *Does prefix caching reduce the memory available to other requests?* No. Cached blocks with no users are free
+# 3. *Does prefix caching decrease the memory available to other requests?* No. Cached blocks with no users are free
 #    (evictable). The engine uses them again only when nobody needs the memory.

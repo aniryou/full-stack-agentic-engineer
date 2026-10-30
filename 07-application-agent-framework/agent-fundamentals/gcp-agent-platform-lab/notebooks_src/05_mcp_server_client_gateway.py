@@ -164,7 +164,7 @@ print("after the round trip:", final["structuredContent"])
 # Thus the server answers `tools/call` immediately with a **task handle**, and it does the work in the background.
 # The client polls `tasks/get` at the interval that the server suggests.
 # The client uses `tasks/update` to answer the questions that come while the work runs.
-# This is the answer at the protocol level to approvals, and to backends that already think in job ids.
+# The Tasks extension is the answer at the protocol level to approvals, and to backends that already think in job ids.
 
 # %%
 raw = await client.request("tools/call", {"name": "reconcile_batch", "arguments": {"batch_id": "B-77"}})
@@ -183,7 +183,7 @@ while (snapshot := await client.get_task(task_id))["status"] == "working":
 print("final:", snapshot["status"], snapshot["result"]["structuredContent"])
 
 # %% [markdown]
-# A client that did **not** declare the extension must never receive a task.
+# A client that did **not** declare the extension must never get a task.
 # The server runs the same tool inline and answers when the tool completes.
 # The same tool has two wire shapes for two clients:
 
@@ -198,7 +198,7 @@ print("resultType:", inline["resultType"], "| result:", inline["structuredConten
 #
 # `LocalHttpServer` binds 127.0.0.1 on a random port from daemon threads, so the kernel continues to respond.
 # It does a check of the `Origin` header when a browser sends one.
-# This is the DNS-rebinding defence that the spec makes necessary for local servers.
+# This check is the DNS-rebinding defence that the spec makes necessary for local servers.
 # The client is the same, byte for byte. Only the transport changes.
 
 # %%
@@ -266,11 +266,11 @@ print("ops cancel        →", (await ops.call_tool("cancel_order", {"order_id":
 
 # %% [markdown]
 # **The gateway screens a poisoned result.** Order `ORD-1003` has an injection in a free-text field.
-# This is the classic indirect prompt injection (Notebook 11).
+# This injection is the classic indirect prompt injection (Notebook 11).
 # Without the gateway, the text goes into the model's context as a tool result.
 # With the gateway, the gateway blocks the call, and the audit says why.
 #
-# Note that the screen of a *result* cannot undo a side effect. It keeps the poison out of the next model call.
+# The screen of a *result* cannot undo a side effect. It keeps the poison out of the next model call.
 
 # %%
 print("what the server would have returned:", ORDERS["ORD-1003"]["memo"])
@@ -389,14 +389,14 @@ print("✅ condition enforced deny-by-default:", [a.decision for a in refunds_ga
 # ### Exercise 6.3 — implement the task polling loop yourself
 #
 # `McpClient.call_tool` hides the loop. Write the loop again against the raw JSON-RPC methods (`client.request`).
-# `poll_task(client, task, answer)` receives the `task` object from a `tools/call` response. It must do these steps:
+# `poll_task(client, task, answer)` gets the `task` object from a `tools/call` response. It must do these steps:
 #
 # 1. When `status == "completed"`, return `task["result"]`.
 # 2. When the status is `failed` or `cancelled`, raise `RuntimeError`.
 # 3. On `input_required`, make `inputResponses`. For every entry of `task["inputRequests"]`, await
 #    `answer(key, request["params"])`. Send the responses with `tasks/update`.
 #    Then continue with the task object that `tasks/update` returns.
-# 4. Otherwise, sleep for `task["pollIntervalMs"] / 1000` seconds. Then get the task again with `tasks/get`.
+# 4. In all other cases, sleep for `task["pollIntervalMs"] / 1000` seconds. Then get the task again with `tasks/get`.
 
 # %% exercise
 async def poll_task(client: McpClient, task: dict, answer) -> dict:
@@ -469,8 +469,8 @@ print("✅ screening extended:", gateway.audit[-2].decision, "→", blocked_mess
 #
 # In one or two sentences (`why_strip`), explain why the gateway removed the `Authorization` header.
 # The audience of the token was the ledger server.
-# The gateway removed the header although the agent had permission to call the orders server.
-# Include the audience in your answer. Also say what can otherwise occur to the token.
+# The gateway removed the header, but the agent had permission to call the orders server.
+# Include the audience in your answer. Also say what can occur to the token if the gateway forwards it.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -501,7 +501,7 @@ print("✅", why_strip)
 #
 # Many servers still speak a 2025 revision. Thus, say which revision the design assumes.
 # The file [docs/MCP_REVISIONS.md](../docs/MCP_REVISIONS.md) tells you what is different.
-# It also tells you where the subset of this lab is different from the spec (the check was on 2026-09-26, verify).
+# It also tells you where the subset of this lab is different from the spec. The check was on 2026-09-26 (verify).
 #
 # Then draw the gateway:
 #

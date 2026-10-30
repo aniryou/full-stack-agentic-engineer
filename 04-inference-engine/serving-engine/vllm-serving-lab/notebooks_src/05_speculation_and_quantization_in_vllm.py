@@ -8,11 +8,11 @@
 #
 # ## The one-minute version
 #
-# The two techniques attack the same fact: **decode is bound by memory bandwidth**. Each step reads all the
+# The two techniques attack the same fact: **memory bandwidth limits decode**. Each step reads all the
 # weights to make one token per sequence.
 #
 # * **Speculative decoding** proposes $k$ tokens at a low cost: an n-gram lookup in the prompt, a small draft
-#   model, or EAGLE/MTP heads. Then it verifies all of them in *one* forward pass of the target. With a
+#   model, or EAGLE/MTP heads. Then it examines all of them in *one* forward pass of the target. With a
 #   per-token acceptance $\alpha$, a step gives $(1 - \alpha^{k+1})/(1 - \alpha)$ tokens on average. The
 #   rule of rejection sampling keeps the output distribution *exactly* the distribution of the target model.
 #   Speculation pays while the step is memory-bound (small batches). The gain decreases when larger batches
@@ -40,7 +40,7 @@ for a in (0.5, 0.7, 0.9):
 
 # %% [markdown]
 # Each increase in $k$ gives less than the increase before it. At $\alpha = 0.7$, the 5th to 8th draft
-# tokens add only 0.4 tokens per step, but the verifier must process all of them. The method names are as
+# tokens add only 0.4 tokens per step, but the verify step must process all of them. The method names are as
 # in the `SpeculativeConfig` of vLLM v0.30.0, and they change between releases. These are the vLLM flags
 # for the three families:
 
@@ -53,7 +53,7 @@ for spec in ({"method": "ngram", "num_speculative_tokens": 4, "prompt_lookup_max
 # %% [markdown]
 # ## Exercise 5.1 — expected tokens per verification step
 #
-# Write `expected_tokens(alpha, k)`. It returns the mean number of tokens that one verify step emits. The
+# Write `expected_tokens(alpha, k)`. It returns the mean number of tokens that one verify step gives. The
 # assumption: the verify step accepts each draft token independently with the probability `alpha`, and the first
 # rejection stops the run. Add the one token that the target always gives. Make sure that the function
 # also handles `alpha = 1`.
@@ -82,7 +82,7 @@ print(f"✅ formula {expected_tokens(0.7, 4):.3f} vs simulated {observed:.3f} to
 # `FakeBackend` changes the `speculative_config` of vLLM into the settings of the emulator. The acceptance
 # rate is an assumption that you give to the backend, `FakeBackend(spec_acceptance=0.7)`. It never goes
 # into the config. Thus the config stays one that `vllm serve --speculative-config` accepts. On a real
-# engine, the acceptance is a property of your traffic and of the draft method. This is why you read it
+# engine, the acceptance is a property of your traffic and of the draft method. Thus you read the acceptance
 # from `/metrics` and do not assume it.
 #
 # To do a load test of a real engine at a *selected* acceptance, vLLM v0.30.0 has a synthetic mode:
@@ -214,7 +214,7 @@ print("✅ speculation is a latency tool while decode is memory-bound; once the 
 #
 # The check builds the three cases from `sizing.weight_bytes` and the L4 datasheet (50% of peak FLOP/s,
 # 80% of bandwidth). AWQ computes in 16-bit, thus it gets the bf16 FLOP/s. The dequantization of the
-# weights adds a cost on top, and this cost depends on the kernel. Marlin-style kernels hide most of it at a
+# weights adds a cost on top, and this cost depends on the kernel. Marlin-style kernels hide most of this cost at a
 # large batch. The check leaves this cost out, as an assumption to examine on your GPU (verify), not as a
 # result.
 
@@ -262,8 +262,8 @@ print(f"   AWQ decode is {res['bf16'][0] / res['awq (W4A16)'][0]:.1f}x faster, n
 # - Expect that FP8 options are not available there, or that they are weight-only (verify for your vLLM
 #   version).
 #
-# Attention on a T4 runs on the Triton backend of vLLM. v0.30.0 selects this backend automatically (its
-# FlashAttention backend must have sm_80+). No flag is necessary.
+# Attention on a T4 runs on the Triton backend of vLLM. v0.30.0 selects this backend automatically. The
+# FlashAttention backend of vLLM must have sm_80+. No flag is necessary.
 #
 # The quantized sizes in this notebook keep the embeddings and `lm_head` in 16-bit. Real checkpoints do
 # the same (5.73 GB for AWQ Llama-3.1-8B, 9.08 GB for FP8). Thus AWQ decode is ~2.8x faster than bf16. It is not
@@ -306,7 +306,7 @@ else:
 #
 # **Drill 2.** *Does speculative decoding change outputs?* Not with exact rejection sampling. Accept with
 # the probability $\min(1, p/q)$. On a rejection, sample again from the normalized residual
-# $\max(0, p - q)$. Then the emitted tokens have the target distribution.
+# $\max(0, p - q)$. Then the output tokens have the target distribution.
 #
 # **Drill 3.** *AWQ did nothing for our long-prompt TTFT (on one GPU it even got worse). Why?* Prefill is
 # compute-bound, and W4A16 still multiplies in 16-bit. Thus there is no decrease in FLOPs.

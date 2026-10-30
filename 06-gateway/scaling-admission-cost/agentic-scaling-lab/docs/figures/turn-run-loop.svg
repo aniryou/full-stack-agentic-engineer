@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="524" viewBox="0 0 1000 524" role="img" aria-label="A sequence diagram of the orchestrator side of one turn: Pub/Sub pushes the turn, the orchestrator takes the session lock, loads the checkpoints, runs the model and tool steps in a loop with a checkpoint for each step, saves the turn, acknowledges the message and summarises the history." style="color: #E4EAE7">
-  <title>A sequence diagram of the orchestrator side of one turn: Pub/Sub pushes the turn, the orchestrator takes the session lock, loads the checkpoints, runs the model and tool steps in a loop with a checkpoint for each step, saves the turn, acknowledges the message and summarises the history.</title>
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="524" viewBox="0 0 1000 524" role="img" aria-label="The orchestrator side of one turn, from the push by Pub/Sub to the ack and the compaction." style="color: #E4EAE7">
+  <title>The orchestrator side of one turn, from the push by Pub/Sub to the ack and the compaction.</title>
   <rect x="0" y="0" width="1000" height="524" rx="8" fill="#161E1C"/>
   <defs>
     <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
@@ -58,16 +58,16 @@
     <rect x="258" y="347" width="107" height="16" fill="#161E1C"/>
     <text x="262" y="360" font-size="11.5">ArrayUnion(step)</text>
     <path d="M255 410 L679 410" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
-    <rect x="258" y="391" width="287" height="16" fill="#161E1C"/>
+    <rect x="258" y="391" width="270" height="16" fill="#161E1C"/>
     <text x="262" y="404" font-size="11.5">save session (optimistic version) · save turn</text>
     <path d="M255 438 L529 438" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
-    <rect x="258" y="419" width="275" height="16" fill="#161E1C"/>
+    <rect x="258" y="419" width="270" height="16" fill="#161E1C"/>
     <text x="262" y="432" font-size="11.5">XADD turn.completed · inflight-1 · DEL lock</text>
     <path d="M249 466 L65 466" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)" stroke-dasharray="4 3"/>
     <rect x="182" y="447" width="64" height="16" fill="#161E1C"/>
     <text x="242" y="460" text-anchor="end" font-size="11.5">200 (ack)</text>
     <path d="M255 494 L827 494" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
-    <rect x="258" y="475" width="287" height="16" fill="#161E1C"/>
+    <rect x="258" y="475" width="270" height="16" fill="#161E1C"/>
     <text x="262" y="488" font-size="11.5">summarise (compaction, off the critical path)</text>
   </g>
 </svg>

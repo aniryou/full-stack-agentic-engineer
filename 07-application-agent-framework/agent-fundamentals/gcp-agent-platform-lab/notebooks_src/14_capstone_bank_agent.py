@@ -8,8 +8,8 @@
 # Evaluation, observability and governance are the bands that cut across every layer. Each section is one thing that you draw
 # in the review. Each section uses the library, so that you can do a check of every claim in the review.
 #
-# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md). Every row of it meets here. Notebooks 01–12 teach each mechanism. This notebook integrates
-# them.
+# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md). Every row of the map meets here. Notebooks 01–12 teach each mechanism. This notebook puts the mechanisms
+# together.
 #
 # In this notebook you will:
 # 1. Build the systems of record and the tool contracts over them. Then build an MCP façade behind a gateway, and delegated identity from end to end.
@@ -53,7 +53,7 @@ from agentlab.security import STANDING_INSTRUCTION, ActionPolicy, guard_all, scr
 #
 # | question | default |
 # |---|---|
-# | Which channel first? | The authenticated app chat (identity comes from the app's login). Voice and IVR come later. |
+# | Which channel first? | The authenticated app chat. The identity comes from the app's login. Voice and IVR come later. |
 # | Which intents in v1? | balance, transactions, policy Q&A, card block, escalation to a person |
 # | Any writes? | One: block a card. It is irreversible, the customer confirms it, and a scope must permit it. No payments, limits or product changes. |
 # | Volume and peak? | 50k conversations/day, 3× peak, about 8 model calls per conversation |
@@ -270,7 +270,7 @@ print("clock:", iso(CLOCK()), "| acc-1 read model as of:", iso(CORE.accounts["ac
 # signed-in customer by default. The subject comes from the verified identity in `ToolContext`. Thus it is not necessary for the
 # model to guess an account id, and the model cannot select the account of another person.
 #
-# `block_card` is irreversible (the loop will pause for confirmation). It needs the `cards:write` scope, and it is idempotent by
+# `block_card` is irreversible. Thus the loop will pause for confirmation. It needs the `cards:write` scope, and it is idempotent by
 # key. `create_case` builds its payload from the session log through `escalation_summary` (Exercise 5.2). Thus code assembles
 # the hand-off, and the model never dictates it.
 
@@ -468,7 +468,7 @@ for agent in ("accounts", "cards"):
 # %% [markdown]
 # ## 4. Identity: the customer, end to end
 #
-# The channel authenticates the customer (SSO in the app). It gets a token whose **audience is the accounts server**. The scopes
+# The channel authenticates the customer (SSO in the app). The channel gets a token whose **audience is the accounts server**. The scopes
 # of the token are what this session can do. The runtime changes the verified claims into an agentlab `Identity` that travels
 # with every call:
 #
@@ -510,7 +510,7 @@ print("\nbob, cards agent, block_card →", (await remote_tool("block_card", "ca
 # **Token exchange, in one sentence.** In production, the MCP server never reads the core with alice's MCP token. It exchanges
 # the token (RFC 8693) for a core-banking credential with the same `sub` and `act = accounts-mcp`. The core enforces ownership
 # on *that* credential. In the next cell, the read-model stub of §2 stands in
-# for the core and receives the verified subject.
+# for the core and gets the verified subject.
 
 # %%
 for who, account in ((alice, "acc-1"), (alice, "acc-2"), (bob, "acc-2")):
@@ -644,7 +644,7 @@ print("   fresh:", render_balance(fresh))
 # The renderers in the next cell are the "voice" of the specialists. The rules are how the specialists plan, and the rules are
 # simple on purpose. The router's own planner offers the specialists as tools, with the same schema that a router that delegates
 # sees. But the router uses the choice only to **hand the session over**. The planner matches the intents about cards first.
-# When a turn has more than one intent, the intent that is important for safety wins (multi-intent turns are not in v1).
+# When a turn has more than one intent (not in v1), the intent that is important for safety wins.
 
 # %%
 def render_transactions(page: dict) -> str:
@@ -877,11 +877,11 @@ print("✅ hand-off:", json.dumps({k: summary[k] for k in ("intent", "tried", "r
 # %% [markdown]
 # ### Three conversations through the runner
 #
-# There is one `Runner` for each signed-in customer (its tools carry her token), one session store and one tracer. Each
+# There is one `Runner` for each signed-in customer, one session store and one tracer. The tools of a `Runner` carry the token of its customer. Each
 # conversation is one trace, and approvals occur inside it. Look at three things in each conversation:
 #
 # * the **final text**,
-# * the **event kinds** (the log is the source of truth),
+# * the **event kinds**, because the log is the source of truth,
 # * for the card block: the pause is a state transition that the customer's approval completes, and the block **executed exactly once**.
 
 # %%
@@ -928,7 +928,7 @@ assert handoff_case["tried"] == ["list_transactions"] and handoff_case["recommen
 
 # %% [markdown]
 # The next cell sends the same request from **bob's** session. The loop pauses, bob approves, and the server still refuses,
-# because the token has no `cards:write`. The answer explains this from the structured error. The order of these steps is a
+# because the token has no `cards:write`. The answer explains the refusal from the structured error. The order of these steps is a
 # known defect, and §8 lists it. The correct order is to examine the scope *before* the system asks the customer to confirm.
 
 # %%
@@ -942,7 +942,7 @@ assert "cards:write" in conv_bob.text and CARDS.cards["card-7"]["status"] == "ac
 # ### When the read model is down
 #
 # The intermittent dependency in this design is the mainframe path. `GracefulTool` retries the transient failure, and the breaker
-# opens after two failures. The model then receives a structured `unavailable` with a hint, not a stack trace or a hang. After
+# opens after two failures. The model then gets a structured `unavailable` with a hint, not a stack trace or a hang. After
 # the cooling period, one probe closes the circuit again. Look at what the customer hears in each case.
 
 # %%
@@ -970,8 +970,8 @@ tracer.print_tree(trace_b.trace_id)
 # %% [markdown]
 # ## 6. The evaluation gate
 #
-# A **stratified golden set** answers the release question. It runs through the same runtime (Notebook 08 teaches the
-# statistics). The cases pin these items:
+# A **stratified golden set** answers the release question. It runs through the same runtime. Notebook 08 teaches the
+# statistics. The cases pin these items:
 #
 # * the trajectory,
 # * the arguments that are important,
@@ -1046,7 +1046,7 @@ print("✅ cards stratum:", cards_only_run.render().splitlines()[1].strip())
 # %% [markdown]
 # Run the whole set two times. Then apply the gate to it, with three conditions:
 #
-# * **absolute** on the cards stratum (one miss in any run fails the release),
+# * **absolute** on the cards stratum, thus one miss in any run fails the release,
 # * aggregate pass rate ≥ 0.9,
 # * no forbidden tool, ever.
 #
@@ -1140,7 +1140,7 @@ assert any(n["tool"] == "list_transactions" and "injection:tool_call_instruction
 # %% [markdown]
 # ## 7. Observability and cost
 #
-# Every conversation in §5 left a trace. `TraceSummary` reduces each trace to the numbers that an operator monitors: steps, tool
+# Every conversation in §5 left a trace. `TraceSummary` changes each trace into the numbers that an operator monitors: steps, tool
 # calls, tokens (with the cached share), dollars, wall time. The price table is illustrative. Make sure that it is correct before
 # you quote it.
 
@@ -1232,7 +1232,7 @@ print(f"\nlab conversations averaged {metrics['tokens_per_task']:,.0f} tokens; t
 # sample of production answers against the §5 policy.
 #
 # Card blocks join the canary only after the cards stratum stays perfect for two weeks in shadow. *GA* comes per intent, with a
-# **kill switch per intent** (the router's rule table is configuration). A global kill switch turns the front door back into
+# **kill switch per intent**. The router's rule table is configuration. A global kill switch turns the front door back into
 # the old FAQ.
 #
 # **What breaks first, and what this notebook built against it.**
@@ -1256,7 +1256,7 @@ print(f"\nlab conversations averaged {metrics['tokens_per_task']:,.0f} tokens; t
 # **Not in v1** (unchanged from §1): payments and transfers, limit changes, products and sales, dispute resolution,
 # unauthenticated channels, other languages, cross-session memory, proactive outreach.
 #
-# **The L7 layer** is what makes this more than one bot. The next three agents (collections, onboarding, the branch assistant)
+# **The L7 layer** is what makes this design more than one bot. The next three agents (collections, onboarding, the branch assistant)
 # and non-agent apps can also use the accounts MCP façade. Every `create_case` is product feedback. It is a labelled example
 # of a task that v1 was not able to do. The cases have a rank by volume, and they supply the input for the next intent.
 #

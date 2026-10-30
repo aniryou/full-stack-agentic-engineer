@@ -61,7 +61,7 @@ print("chain for alias chat:", stack.cfg.aliases["chat"].targets, "| bolt is slo
 # different question: *what do I get back?* The check switches on each fault below at `acme` (the first target of
 # `chat`) for one streamed request. Write `client_sees(fault)`. Return `(status, served_by, error_in_stream)`:
 #
-# - the HTTP status that the client receives,
+# - the HTTP status that the client gets,
 # - the `x-gwlab-target` that served the request (`None` if no target did),
 # - a flag that shows if the stream has an `error` event.
 #
@@ -301,7 +301,7 @@ stack.stop()
 # targets give 99.99 %. A common-mode failure puts a limit on that. Thus the fallback is in another region or provider,
 # and we plan its capacity and price before the day that we need it."
 #
-# **Drill 1.** *A provider outage lasted five minutes; our incident lasted forty and the bill doubled. Why?* Retries
+# **Drill 1.** *A provider outage lasted five minutes, but our incident lasted forty and the bill doubled. Why?* Retries
 # without a budget continued after the outage ended. Streams that failed in the middle ran again from the start and
 # paid two times. The chain fell through to a model with a higher price at full traffic, until that model reached the
 # end of its quota.

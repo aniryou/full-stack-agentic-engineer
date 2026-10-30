@@ -7,7 +7,7 @@
 # `distill-lab` notebook `04_a_distilled_draft_in_vllm` (T1).
 #
 # ## The one-minute version
-# Speculative decoding (serving-engine primer §7) accepts a drafted token with probability $\min(1, p/q)$. This makes the
+# Speculative decoding (serving-engine primer §7) accepts a drafted token with probability $\min(1, p/q)$. This rule makes the
 # per-token acceptance $\alpha = \sum_v \min(p(v), q(v)) = 1 - \mathrm{TV}(p, q)$. One target pass gives
 # $(1 - \alpha^{k+1}) / (1 - \alpha)$ tokens. Thus a draft model is a **student whose only metric is acceptance**. You
 # measure the acceptance where it is important: on the target's own text.
@@ -17,7 +17,7 @@
 # changed the target. Larger drafts have a higher acceptance and cost more per step. The speedup $E / (k\,c + 1)$
 # selects the size.
 #
-# Also, by default vLLM makes greedy drafts. When the target samples, this puts a cap on the acceptance at the target's
+# Also, by default vLLM makes greedy drafts. When the target samples, this default puts a cap on the acceptance at the target's
 # top-token probability. Primer: `../../PRIMER.md` §7.
 
 # %%
@@ -86,9 +86,9 @@ for name, d in drafts.items():
 # distributions gets to 0.988. The draft from samples alone gets to 0.933. Samples give an estimate of the target's
 # distribution. Soft targets give the distribution itself. At $k$ = 4, that is 1.86× against 2.26×.
 #
-# These numbers are the run of one CPU. With the matrix kernel of another machine, the numbers are within a few
-# hundredths of these values. For the 4- and 8-unit drafts of the next example, the $\alpha$ of another machine is
-# within ±0.14 of the $\alpha$ of this run.
+# These numbers are the run of one CPU. With the matrix kernel of another machine, the numbers are at most a few
+# hundredths from these values. For the 4- and 8-unit drafts of the next example, another machine's $\alpha$ is
+# in the range ±0.14 around this run's $\alpha$.
 #
 # Look at the greedy column. When the target samples at $T$ = 1, the target accepts a greedy draft with probability
 # $p(\operatorname{argmax} q) \le \max p = 0.8$. It does not matter how good the draft is.
@@ -109,7 +109,7 @@ for H in (4, 8, 16, 32):
 
 # %% [markdown]
 # Acceptance increases with size, and it saturates when the draft can hold the target (16 units here). The cost
-# continues to increase. Thus the speedup gets to a maximum and then decreases (the best $k$ has a cap of 16 here).
+# continues to increase. Thus the speedup gets to a maximum and then decreases. Here, the best $k$ has a cap of 16.
 #
 # Below that size, the capacity gap sets $\alpha$, not the training data. At 8 units, the off-the-shelf draft even scores
 # slightly higher than the distilled draft. The errors that a draft makes when it is too small depend on its training
@@ -118,7 +118,7 @@ for H in (4, 8, 16, 32):
 #
 # ## Worked example 4 — the same arithmetic for a real pair
 # Qwen3-0.6B makes the drafts for Qwen3-4B (the same vocabulary, 151,936). vLLM's `draft_model` needs equal vocabulary
-# sizes. At batch 1, decode streams the weights. Thus $c \approx$ the ratio of weight bytes. This is a model, not a
+# sizes. At batch 1, decode reads all the weights. Thus $c \approx$ the ratio of weight bytes. This is a model, not a
 # measurement.
 
 # %%
@@ -149,7 +149,7 @@ print("✅ α is measured on the target's own text, position by position — not
 # %% [markdown]
 # ## Exercise 4.2 — tokens per pass and the best depth
 # Write `tokens_per_pass(alpha, k)` $= 1 + \alpha + \dots + \alpha^k$. Also write `best_depth(alpha, c, k_max=16)`: the
-# $k$ that maximises `tokens_per_pass` / $(k\,c + 1)$. If there is a tie, select the smallest $k$.
+# $k$ that makes `tokens_per_pass` / $(k\,c + 1)$ as large as possible. If there is a tie, select the smallest $k$.
 
 # %% exercise
 def tokens_per_pass(alpha, k):
@@ -198,7 +198,7 @@ print(f"✅ a perfect draft: {perfect['greedy']:.3f} greedy, {perfect['alpha']:.
 # - `alpha` (the position-0 rate),
 # - `draft_rate` (accepted ÷ drafted).
 #
-# Then set `iid` (True/False) to show if the per-position rates agree with one $\alpha$ (within 0.01 of
+# Then set `iid` (True/False) to show if the per-position rates agree with one $\alpha$ (at most 0.01 from
 # $\alpha^{i+1}$).
 
 # %% exercise
@@ -246,7 +246,7 @@ print("✅ 16 units: the smallest draft that holds the target — more acceptanc
 # rate' is $\left(E - 1\right)/k$."
 #
 # **Drill questions**
-# 1. *Our draft's acceptance is 0.55 on chat traffic, although it matched the target on benchmarks. Why?* $\alpha$ is a
+# 1. *Our draft's acceptance is 0.55 on chat traffic, but it matched the target on benchmarks. Why?* $\alpha$ is a
 #    property of the pair *on this traffic*. If the target is a fine-tune, train the draft again on the target's own
 #    outputs for this traffic. The data-regeneration step of SpecForge does exactly this.
 # 2. *vLLM reports a 'draft acceptance rate' of 0.33 at $k$ = 4. Is that $\alpha$?* No, it is $\left(E - 1\right)/k$.

@@ -111,8 +111,8 @@ two rules are sufficient to build a real graph on clean text.
 **`# LLM:`** the extraction and the description-merge are model calls.
 
 ### 3. The graph (`graph.py`)
-The nodes are entities. The edges are undirected, weighted relationships (the weight is the tie strength, summed
-across mentions). The graph is an adjacency dict written by hand, thus no graph dependency hides the mechanism.
+The nodes are entities. The edges are undirected, weighted relationships. The weight of an edge is the tie strength,
+summed across mentions. The graph is an adjacency dict written by hand, thus no graph dependency hides the mechanism.
 **`# PERF:`** a system at real scale uses networkx/igraph.
 
 ### 4. Communities (`community.py`)
@@ -156,8 +156,8 @@ Global search has three steps:
 
 ## Where the LLM lives
 
-The purpose of the `# LLM:` marks is to show *exactly* where intelligence enters a pipeline that is otherwise
-mechanical. There are **six** different calls. All of them go through `LanguageModel.complete()`. This is the one
+The purpose of the `# LLM:` marks is to show *exactly* where intelligence enters the pipeline. All the other
+parts of the pipeline are mechanical. There are **six** different calls. All of them go through `LanguageModel.complete()`. This is the one
 method that a real backend implements (see `AnthropicLLM`).
 
 | GraphRAG LLM call            | minigraphrag location                    | `MockLLM` stand-in |

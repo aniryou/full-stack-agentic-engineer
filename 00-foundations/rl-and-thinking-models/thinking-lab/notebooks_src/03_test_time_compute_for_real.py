@@ -160,7 +160,7 @@ for mode in ("off", "on"):
 # Read across a row. pass@k increases fastest, because it assumes that you can recognise the correct
 # answer. maj@k increases more slowly. It stops at the share of problems where the correct answer is
 # the *most common* one. On problems where an incorrect answer is the most common one, more votes
-# make it *more* certain.
+# make it *more* probable that the incorrect answer wins.
 #
 # Best-of-k with the noisy reward model increases at first, and then it can *decrease*. With more
 # samples, an incorrect sample has more chances to get the top score. That is reward

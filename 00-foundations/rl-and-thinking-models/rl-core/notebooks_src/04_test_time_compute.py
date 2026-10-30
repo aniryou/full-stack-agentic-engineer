@@ -36,7 +36,7 @@ print(f"questions: mean chance an attempt is on a workable approach {qs['a'].mea
 
 # %% [markdown]
 # ## Worked example 1 — estimating pass@k without fooling yourself
-# Draw $n$ = 10 samples per question. Count the $c$ correct samples. The obvious estimate of pass@5 is
+# Draw $n$ = 10 samples per question. Count the $c$ correct samples. The simple estimate of pass@5 is
 # $1 - (1 - c/n)^5$. Its expectation over the binomial draw is *below* the truth. The expectation of the unbiased
 # estimator *is* the truth.
 
@@ -151,7 +151,7 @@ for method in ("verifier", "vote"):
 # With a verifier, the small model wins at equal compute. Its many low-cost samples cover the dead ends. With only
 # a vote, the large model wins. Its single samples are correct sufficiently often, but the samples of the small model
 # are not. The result for "a smaller model with more samples" is a property of the task *and* of the presence of
-# a checker. Measure it on your own evals (the 07.2 evals notebook has the intervals that such comparisons need).
+# a checker. Measure it on your own evals, with the intervals that such comparisons need (the 07.2 evals notebook).
 #
 # ## Exercise 4.1 — the unbiased pass@k
 # Write $1 - \binom{n-c}{k}/\binom{n}{k}$ in the stable product form
@@ -195,7 +195,7 @@ print(f"✅ 75% per try: pass@5 = {any_success:.0%} but pass^5 = {reliability:.1
 
 # %% [markdown]
 # ## Exercise 4.3 — majority of n between two answers
-# A sample is correct with $p$. Otherwise, it gives the *same* incorrect answer. For odd $n$,
+# A sample is correct with $p$. If not, it gives the *same* incorrect answer. For odd $n$,
 # $P(\text{majority right})$ is the binomial tail ${P(X > n/2)}$. Write it. Compare it with the exact
 # multi-answer function.
 
@@ -259,7 +259,7 @@ print(f"✅ with a verifier: {best[0]} samples of {best[1]} tokens ({best[2]:.3f
 # spends $\mathbb{E}[\min(L_{\text{crack}}, L)] = (1 - (1 - q)^L)/q$ (and the full $L$ when it never cracks it).
 # For the questions in `qs`, calculate `waste`. This is the fraction of an $L$ = 4,000 thinking budget that the
 # model spends *after* it already cracked the question. Calculate it as an average over the
-# questions, weighted by $a$ (the chance that the attempt was on a workable approach).
+# questions, weighted by $a$, the chance that the attempt was on a workable approach.
 
 # %% exercise
 L_fixed = 4000
@@ -284,7 +284,7 @@ print(f"✅ {waste:.0%} of a fixed 4K-token think happens after the answer is fo
 # majority vote works when mistakes are scattered. It makes the result worse when there is a common
 # misconception.
 #
-# "Returns decrease each time the budget doubles. A fixed budget wastes tokens on questions that
+# "Returns decrease each time the budget doubles. A constant budget wastes tokens on questions that
 # the model solves early. Thus we set effort per request class, not globally. We report pass@1 and, for agent
 # flows, pass^k. pass^k is reliability across repeated requests, which more samples do not improve. We estimate
 # pass@k with the unbiased estimator from $n \ge k$ samples, with confidence intervals."

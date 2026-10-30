@@ -10,8 +10,8 @@
 #
 # - **Bradley–Terry** reads that statement as a noisy comparison of rewards,
 #   $P(A \succ B) = \sigma(r(A) - r(B))$. Thus a **reward model** is logistic regression on pairs.
-# - **RLHF** then maximises $\mathbb{E}[r] - \beta\,\mathrm{KL}(\pi \,\|\, \pi_{\text{ref}})$ with PPO. PPO is a
-#   clipped policy-gradient step, plus a **value model** for the baseline (GAE).
+# - **RLHF** then uses PPO to make $\mathbb{E}[r] - \beta\,\mathrm{KL}(\pi \,\|\, \pi_{\text{ref}})$ as large as
+#   possible. PPO is a clipped policy-gradient step, plus a **value model** for the baseline (GAE).
 # - **DPO** uses the fact that the KL-regularised optimum has a closed form,
 #   $\pi^* \propto \pi_{\text{ref}} \exp(r/\beta)$. DPO inverts it,
 #   $r = \beta \log(\pi^*/\pi_{\text{ref}}) + \text{const}$, and substitutes $r$ into Bradley–Terry. The constant
@@ -107,7 +107,7 @@ print(f"implicit reward β·log(π/π_ref): balanced minus unbalanced = {ir[ok >
 # Read off three things:
 #
 # - DPO gets to the same policy as RM + RL. It *is* the same objective, solved in closed form.
-# - The implicit reward recovers the true reward gap (up to the constant that Bradley–Terry cannot see).
+# - The implicit reward recovers the true reward gap, up to a constant. Bradley–Terry cannot see this constant.
 # - `rewards/chosen` is **negative**: the log-ratios of the chosen strings decreased.
 #
 # DPO pushes the *margin*. When the two answers of a pair share most of their tokens (here: the same states), DPO
@@ -122,7 +122,7 @@ print(f"implicit reward β·log(π/π_ref): balanced minus unbalanced = {ir[ok >
 # $$
 #
 # In RLHF, the reward-model score is on the last token, and $-\beta \log(\pi/\pi_{\text{ref}})$ is on every
-# token. The value model is typically as large as the policy. GRPO saves the memory of this value model
+# token. The value model is usually as large as the policy. GRPO saves the memory of this value model
 # (notebook 03).
 
 # %%
@@ -131,9 +131,9 @@ for lam in (0.0, 0.5, 1.0):
     print(f"λ = {lam}: advantages {pref.gae(r_tok, v_tok, gamma=1.0, lam=lam).round(3).tolist()}")
 
 # %% [markdown]
-# $\lambda$ = 0 trusts the value model (one-step TD error: low variance, biased if $V$ is incorrect). $\lambda$ = 1
-# trusts the sampled return (Monte Carlo minus $V$: unbiased, noisy). PPO then uses the same clipped ratio that
-# GRPO uses (notebook 03).
+# $\lambda$ = 0 trusts the value model. Then the advantage is the one-step TD error: low variance, biased if $V$ is
+# incorrect. $\lambda$ = 1 trusts the sampled return. Then the advantage is Monte Carlo minus $V$: unbiased, noisy. PPO
+# then uses the same clipped ratio that GRPO uses (notebook 03).
 #
 # ## Worked example 5 — an annotator who likes long answers
 # There are 40 answers to one prompt. Each answer has five versions, padded with 0–800 filler tokens. Filler
@@ -162,7 +162,7 @@ print(f"optimising true quality instead (β = 0.1): quality {pig @ cat['quality'
 # %% [markdown]
 # The reward-model score increases monotonically. The true quality increases, gets to a peak around a KL of
 # 0.4–1.7 nats, and then decreases below the reference. At the same time, the answers become four times longer.
-# That shape (the proxy goes up, the gold goes up and then down) is reward-model **over-optimisation**. Length is
+# The proxy goes up, and the gold goes up and then down. That shape is reward-model **over-optimisation**. Length is
 # its most common form in practice.
 #
 # The defences:
@@ -170,7 +170,7 @@ print(f"optimising true quality instead (β = 0.1): quality {pig @ cat['quality'
 # - Cap the KL budget (stop early).
 # - Control for length when you collect or fit preferences.
 # - Prefer verifiable rewards where they exist (notebook 03).
-# - Evaluate on the true objective.
+# - Measure the true objective.
 #
 # ## Exercise 2.1 — the Bradley–Terry gradient
 # For weights `w` and feature differences `d = x_chosen − x_rejected` (one row per pair), return the gradient of
@@ -260,8 +260,8 @@ print("✅ GAE: λ interpolates between the value model's one-step view and the 
 
 # %% [markdown]
 # ## Exercise 2.5 — choose the KL budget
-# From the length-biased experiment, select the `best_beta` in `betas` that maximises **true** quality. Report
-# the KL that it spends (`kl_budget`). This is the early-stopping point that a gold eval can give you.
+# From the length-biased experiment, select the `best_beta` in `betas` that gives the largest **true** quality.
+# Report the KL that it spends (`kl_budget`). This is the point for an early stop that a gold eval can give you.
 
 # %% exercise
 betas = [10, 5, 3, 2, 1.5, 1, 0.7, 0.5, 0.3, 0.1]
@@ -309,13 +309,13 @@ print("✅ IPO stops at a margin of 1/(2β) = 5; DPO's loss keeps (slowly) payin
 #
 # "The main risk on each path is the preference data itself. The biases of the annotators become the reward,
 # length above all. Harder optimisation turns them into the behaviour. Thus we control for length, cap the KL
-# budget, and evaluate on held-out human or verifiable judgements. Where a program can do a check of the answers,
+# budget, and measure with held-out human or verifiable judgements. Where a program can do a check of the answers,
 # we use verifiable rewards instead."
 #
 # **Drill questions**
 # 1. *Why does DPO need no reward model?* Answer: the optimum of the KL-regularised objective gives
 #    $r = \beta \log(\pi^*/\pi_{\text{ref}}) + \beta \log Z(x)$. In the Bradley–Terry difference $r(y^+) - r(y^-)$,
-#    the $Z$ term cancels. Thus you can write the likelihood in terms of the policy alone.
+#    the $Z$ term cancels. Thus you can write the likelihood as a function of the policy alone.
 # 2. *rewards/chosen decreases during DPO. Is it a bug?* Answer: not necessarily. DPO optimises the margin. A
 #    decrease of both log-ratios (the rejected one faster) wins it. A collapse of the chosen
 #    log-probability or a degradation of the generations is a cause for concern. If that occurs, decrease the

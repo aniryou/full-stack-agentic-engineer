@@ -212,10 +212,10 @@ The token budget also puts a cap on concurrency. 10 M TPM ÷ 60 ≈ 167 k tokens
 
 ```mermaid
 flowchart LR
-    C(["≈ 1.16 conversations<br/>a second"]) --> T["× 6 turns<br/>≈ 7 turns<br/>a second"]
+    C(["100,000 a day ÷ 86,400<br/>≈ 1.16 conversations<br/>a second"]) --> T["× 6 turns<br/>≈ 7 turns<br/>a second"]
     T --> M["× 2.2 calls<br/>≈ 15 calls<br/>a second"]
-    M --> TPM["× 5,000 tokens × 60<br/>≈ 4.6 M input tokens<br/>a minute"]
-    TPM --> CMP["against the baseline:<br/>1.38× at peak,<br/>4.58× in an incident"]
+    M --> TPM["× 5,000 tokens × 60<br/>≈ 4.6 M input tokens<br/>a minute (13.75 M<br/>at peak, 45.8 M in<br/>an incident)"]
+    TPM --> CMP["against the baseline:<br/>0.46× at average,<br/>1.38× at peak,<br/>4.58× in an incident"]
     BASE["the org tier:<br/>10 M TPM baseline"] --> CMP
 ```
 
@@ -224,10 +224,10 @@ flowchart LR
 ```mermaid
 flowchart LR
     C(["≈ 1.16 conversations<br/>a second"]) --> T["≈ 7 turns a second"]
-    T -- "× 6 s" --> IF["in-flight turns:<br/>42 at average,<br/>125 at peak"]
-    C -- "× 400 s" --> S["concurrent sessions:<br/>460 at average"]
+    T -- "Little's law:<br/>× 6 s" --> IF["in-flight turns:<br/>42 at average,<br/>125 at peak,<br/>417 in an incident"]
+    C -- "× 400 s" --> S["concurrent sessions:<br/>460 at average,<br/>4,600 in an incident"]
     BASE["the org tier:<br/>10 M TPM baseline"] -- "÷ 60" --> B["the budget:<br/>≈ 167 k tokens/s"]
-    B -- "÷ 2 k tokens/s<br/>a turn" --> CAP["about 85 turns<br/>in flight: the<br/>in-flight cap"]
+    B -- "÷ 2 k tokens/s<br/>a turn" --> CAP["about 85 turns<br/>in flight: the<br/>in-flight cap,<br/>below peak demand"]
 ```
 
 *The concurrency of §3.3, from Little's law. The turn duration gives the turns in flight, and the length of a conversation gives the concurrent sessions. The same baseline gives the initial in-flight cap (`scalelab.capacity`).*
@@ -312,9 +312,9 @@ The Cloud Run fleet for all of this system is a few dozen vCPUs. That is approxi
 
 ## 4. The reference architecture
 
-![The reference architecture of Part 4: the client, the load balancer, the gateway, Pub/Sub, the orchestrator with the model gateway and the tool executor, and the two stores.](figures/reference-architecture.svg)
+![The reference architecture of Part 4: the client, the load balancer, the two services, Pub/Sub, the model gateway, the tool executor and the two stores.](figures/reference-architecture.svg)
 
-*The reference architecture of Part 4. The gateway and the orchestrator are two Cloud Run services with a Pub/Sub queue between them. Both use Firestore for the durable state and Redis for the hot state.*
+*The reference architecture of Part 4. The gateway and the orchestrator are two Cloud Run services with a Pub/Sub queue between them. Both use Firestore for the durable state and Memorystore Valkey (Redis) for the hot state.*
 
 A turn, from end to end: the client posts a message. The gateway authenticates the request. It examines the bucket of the tenant and the global in-flight cap, and it decides a degrade level. It writes the turn to Firestore. It publishes to Pub/Sub with the session id as ordering key. Then it starts to relay the event stream of the turn to the client over SSE.
 
@@ -413,7 +413,7 @@ Admission control is the circuit breaker on the feedback loop of 1.6. It sits at
 
 The cap starts at the token-budget number from 3.3. You adjust it from load tests. Priority classes (an agent-assist console, a VIP tier) bypass it.
 
-![The admission loop of §5.3: the three questions of the gateway, the admit and shed outcomes, and the signals that set the degrade level in Redis.](figures/admission-loop.svg)
+![The admission loop of §5.3: three questions, the admit and shed outcomes, and the signals that set the degrade level.](figures/admission-loop.svg)
 
 *The admission loop of §5.3. The gateway asks its three questions before a turn costs anything, and it sheds at level 3 with a 503 and a `Retry-After`. The admitted turns produce the signals, `AdmissionController.compute_level()` turns them into the level, and Redis shares the level with every instance.*
 
@@ -626,7 +626,7 @@ The order of adoption is important. Add durability (checkpoints, idempotency) be
 flowchart LR
     P["Pilot<br/>≤ 1,000"] -- "p95 in the<br/>peak hour crosses<br/>the budget:<br/>add the queue" --> V1["Production v1<br/>1,000–20,000"]
     V1 -- "durability<br/>before admission<br/>control" --> S["Scale<br/>20,000–200,000"]
-    S -- "PT before<br/>multi-region" --> E["Enterprise<br/>> 200,000,<br/>multi-brand"]
+    S -- "PT before<br/>multi-region: a<br/>residency or<br/>availability<br/>requirement" --> E["Enterprise<br/>> 200,000,<br/>multi-brand"]
 ```
 
 *The growth path of §7 as the order of adoption: durability before admission control, admission control before PT, and PT before multi-region. The numbers are conversations a day. Each edge names the rule of order or the measurement that starts the next stage.*

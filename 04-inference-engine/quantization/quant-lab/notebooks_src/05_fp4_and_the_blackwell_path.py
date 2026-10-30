@@ -7,8 +7,8 @@
 # from datasheets, verify). It also shows the accuracy of FP4 weights and activations on the bundled
 # tiny model.
 #
-# **Tier T1:** This tier needs one Blackwell GPU with CUDA 12.8+. Rent the GPU. Do not use a small one
-# (for example, use a B200 or an RTX PRO 6000). Cloud Run offers the RTX PRO 6000 (verify). Everything
+# **Tier T1:** This tier needs one Blackwell GPU with CUDA 12.8+. Rent the GPU. Do not use a small one.
+# For example, use a B200 or an RTX PRO 6000. Cloud Run offers the RTX PRO 6000 (verify). Everything
 # product-specific here is `(verify)`.
 #
 # ## The one-minute version
@@ -51,7 +51,7 @@ for fmt in ("bf16", "fp8", "int4-g128", "mxfp4", "nvfp4"):
 #
 # The interval between E2M1 grid values is 0.5 below 2, 1 between 2 and 4, and 2 between 4 and 6.
 # Values above 6 saturate. Write `e2m1(x)`. The function rounds to the nearest grid value, with **ties
-# to the even mantissa**, and keeps the sign. The vLLM function `cast_to_fp4` uses the same rule. It
+# to the even mantissa**, and keeps the sign. The vLLM function `cast_to_fp4` uses the same rule. The rule
 # rounds 0.25 to 0, 0.75 to 1, 1.25 to 1, 1.75 to 2, 2.5 to 2, 3.5 to 4 and 5 to 4.
 
 # %% exercise
@@ -105,7 +105,7 @@ print(f"✅ codes {mx_code(blocks).tolist()}; block max / scale lands in [3.5, 7
 # ## Exercise 5.3 — NVFP4's two-level scale
 #
 # compressed-tensors (and the reference code of vLLM) quantize a tensor `w` with
-# $\mathrm{global} = 448 \times 6/\mathrm{amax}(w)$. This value is a multiplier. Then, for each block of 16,
+# $\mathrm{global} = 448 \times 6/\mathrm{amax}(w)$. This global value is a multiplier. Then, for each block of 16,
 # they calculate $\mathrm{local} = \operatorname{E4M3}(\mathrm{global} \times \mathrm{block\_amax}/6)$ and
 # $\mathrm{value} = \operatorname{E2M1}(w/(\mathrm{local}/\mathrm{global}))$. To dequantize, they calculate
 # $\mathrm{value} \times \mathrm{local}/\mathrm{global}$.
@@ -261,7 +261,7 @@ print("NVFP4 KV cache (--kv-cache-dtype nvfp4):", {g: kv.attention_backend(g, "n
 #
 # "On our H100s and L4s, the same checkpoint runs weight-only through Marlin. The weight-only path gives
 # a memory win only. Also, a kernel that dequantizes can run below the efficiency of the BF16 GEMM.
-# In that case, the kernel is slower than BF16 from a couple of hundred tokens per step. Every prefill
+# In that case, the kernel is slower than BF16 from approximately two hundred tokens per step. Every prefill
 # is in that range of step sizes.
 #
 # "The accuracy risk is the activations. In the lab's model, FP4 activations decrease task accuracy
@@ -275,7 +275,7 @@ print("NVFP4 KV cache (--kv-cache-dtype nvfp4):", {g: kv.attention_backend(g, "n
 # scale.
 #
 # **Drill 2.** *We serve an NVFP4 checkpoint on H100s and prefill got slower than BF16. Bug?* No. Below
-# sm_100, vLLM runs it weight-only (Marlin), with BF16 math plus dequantization. Because prefill is
+# sm_100, vLLM runs the checkpoint weight-only (Marlin), with BF16 math plus dequantization. Because prefill is
 # compute-bound, the dequantization is only overhead. Use FP8 on Hopper.
 #
 # **Drill 3.** *Does NVFP4's global scale divide or multiply?* In compressed-tensors, it is a

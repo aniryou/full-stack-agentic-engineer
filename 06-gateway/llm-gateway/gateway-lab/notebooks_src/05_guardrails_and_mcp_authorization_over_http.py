@@ -9,9 +9,9 @@
 # ## The one-minute version
 #
 # **Guardrails** (PRIMER §7). The position of a check decides its cost and what it can stop. An input check adds
-# latency before the first token (inline). Or it adds latency only when it is slower than the TTFT of the model
-# (parallel, with the first byte held until the check passes). An output check on a stream trades latency against
-# leakage. It has four placements:
+# latency before the first token (inline), or only when it is slower than the TTFT of the model (parallel). In the
+# parallel placement, the gateway holds the first byte until the check passes. An output check on a stream trades
+# latency against leakage. It has four placements:
 #
 # - Hold the whole answer (`full`).
 # - Hold windows of $W$ tokens (`window`: adds about $(W - 1) \times \text{ITL} + \text{check}$ to TTFT).
@@ -19,20 +19,20 @@
 #   tokens leak before the cut).
 # - Only log (`shadow`).
 #
-# Guardrails decrease risk. Authorization puts a limit on it (identity primer §0, §4.1, §6).
+# Guardrails decrease risk. Authorization puts a limit on the risk (identity primer §0, §4.1, §6).
 #
 # **Keys** (PRIMER §6). Provider keys live only in the gateway, and they rotate with an overlap. One call revokes a
 # virtual key.
 #
 # PRIMER §6.5 and the identity primer §3.3–3.5 cover the workload identity of the gateway itself. This identity is
-# a SPIFFE SVID from the Workload API. The SVID rotates at half its lifetime, ±10 % of the half-life. That is 27–33
-# minutes left on a 1-hour SVID, and about 32 in practice, because each check draws the jitter again. The fake
+# a SPIFFE SVID from the Workload API. The SVID rotates at half its lifetime, ±10 % of the half-life. This rule
+# gives 27–33 minutes left on a 1-hour SVID, and about 32 in practice, because each check draws the jitter again. The fake
 # Workload API for this identity lives in the core.
 #
 # **MCP** (PRIMER §8). When agents reach MCP servers through the gateway, the gateway is the OAuth client. The
 # gateway does these things:
 #
-# - It discovers the authorization server from the 401 of the MCP server.
+# - It finds the authorization server from the 401 of the MCP server.
 # - It registers with a Client ID Metadata Document.
 # - It runs PKCE S256 with `resource` in both requests.
 # - It keeps a token per (principal, resource, scopes).
@@ -96,10 +96,10 @@ for (inp, out), r in results.items():
 # `check_s`. The gateway releases the window when its check ends.
 #
 # Write `window_release(ttft, itl, n, window, check_s)`. It returns the list of release times. The TTFT of the
-# client is the first time, and its E2E is the last time. The check compares your list with
+# client is the first time, and its E2E is the last time. The check cell compares your list with
 # `gwlab.gateway.guardrails` on a grid. The grid includes checks that are slower than the generation of tokens, and
-# these checks wait in a queue. Then the check compares your list with the measured `window` and `full` rows of the
-# worked example.
+# these checks wait in a queue. Then the check cell compares your list with the measured `window` and `full` rows
+# of the worked example.
 
 # %% exercise
 def window_release(ttft: float, itl: float, n: int, window: int, check_s: float) -> list:
@@ -130,7 +130,7 @@ print("✅ a held-back window costs about (W − 1)·ITL + one check before the 
 #
 # ## Worked example: revoke a virtual key
 #
-# A leaked virtual key is the budget of one tenant until you revoke it. The revocation is one admin call, and it
+# A leaked virtual key is the budget of one tenant until you revoke it. The revocation is one admin call. It
 # applies from the next request.
 
 # %%
@@ -400,7 +400,7 @@ mcp.stop()
 #
 # **Two minutes:** "Guardrails sit at four hooks: input, tool call, tool result and output. Their placement is a
 # latency-versus-leakage decision that we make for each policy. An inline input screen costs its check time before
-# the first token. For secrets in the output, we hold back windows. We find their size from our TTFT
+# the first token. For secrets in the output, we hold back windows. We find the window size from our TTFT
 # budget, $(W - 1) \times \text{ITL} + \text{check}$.
 #
 # "For lower-stakes categories, we send the stream and cut it in parallel, and we accept a window of leakage. New

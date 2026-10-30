@@ -28,7 +28,7 @@ The notebooks also run when you do not install the package. A bootstrap cell put
 Open `notebooks/NN_*.ipynb` in sequence. Each notebook is a short course on one topic. It starts with
 worked examples that you run and read. Then come **Exercise** cells with `# YOUR CODE HERE`, which you
 fill in. A **Check** cell comes after each Exercise cell. The Check cell fails loudly until your solution
-is correct. Then it prints ✅.
+is correct, and it prints ✅ when your solution is correct.
 
 The fully solved version of every notebook is in `solutions/`. Try the exercise first, then compare. Each
 notebook ends with *The one-minute version*: how to explain that topic in a design review.

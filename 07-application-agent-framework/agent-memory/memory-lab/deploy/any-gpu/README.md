@@ -45,7 +45,7 @@ for a Sentence-Transformers checkpoint. `bge-small-en-v1.5` is a 384-dimension B
 parameters with 512 positions (verify its licence on the model card). Thus the command sets `MAX_MODEL_LEN=512`.
 
 The vectors of `bge-small-en-v1.5` have 384 dimensions, not the 1,024 of the hashing embedder. Thus, start a
-**fresh** store for it (the T1 cell of notebook 05 does this). Never mix dimensions in one table.
+**fresh** store for this embedder. The T1 cell of notebook 05 starts this store. Never mix dimensions in one table.
 
 ## 3. Run the notebooks against them
 

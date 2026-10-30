@@ -51,13 +51,13 @@ flowchart TB
     APPS(["apps, agents and tenants"]) -- "an alias, over one API" --> GW
     subgraph GW["the gateway"]
         direction LR
-        IF["if the request runs"] --> WHICH["which target serves it"]
+        IF["if the request runs:<br/>key, budget, token<br/>limits, guardrail"] --> WHICH["which target serves it:<br/>an alias resolves to<br/>a fallback chain"]
     end
-    GW -- "provider keys,<br/>injected" --> HOSTED["hosted providers:<br/>OpenAI, Anthropic,<br/>Gemini"]
+    GW -- "provider keys,<br/>injected on the way out" --> HOSTED["hosted providers:<br/>OpenAI, Anthropic,<br/>Gemini"]
     GW -- "one target,<br/>one breaker" --> POOL
     subgraph POOL["a self-hosted pool"]
         direction TB
-        RTR["the 05 router<br/>selects the replica"] --> ENG["the 04 engine<br/>batches requests"]
+        RTR["the 05 router<br/>selects the replica"] --> ENG["the 04 engine<br/>batches the requests"]
     end
     GW -. "reads and writes" .-> STATE
     subgraph STATE["state outside the process"]
@@ -283,10 +283,10 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    NEXT{"a target<br/>left?"} -- "none" --> NONE["every target<br/>failed: 503"]
+    NEXT{"an ordered target<br/>left?"} -- "none" --> NONE["every target<br/>failed: 503"]
     NEXT -- "the next one" --> B{"its breaker<br/>open?"}
     B -- "yes: skip it" --> NEXT
-    B -- "no, or<br/>one probe" --> CALL["call the<br/>provider"]
+    B -- "no, or one probe<br/>after the cooldown" --> CALL["call the<br/>provider"]
     CALL -- "200, first byte" --> OK["relay the<br/>stream"]
     CALL -- "a failure that<br/>falls through" --> NEXT
     CALL -- "a failure that must<br/>not fall through" --> STOP["an error to<br/>the client"]
@@ -487,7 +487,7 @@ entities must match (`cache.entities()`). The [embeddings primer
 §17](../../07-application-agent-framework/retrieval-rag/vector-databases-primer.md) warn about exactly these false
 positives.
 
-![The class gate sends a request to no cache, the exact cache or the semantic cache, and a miss calls the model.](figures/response-cache-lookup.svg)
+![The class of the route sends a request to no cache, the exact cache or the semantic cache, and a miss calls the model.](figures/response-cache-lookup.svg)
 
 *The route declares the class, and the key or the namespace holds the tenant. A semantic hit must also pass the
 entity guard before the gateway serves it. The gateway stores only complete answers, with a TTL (§3.2, §3.4).*
@@ -602,6 +602,7 @@ sequenceDiagram
     participant G as gateway
     participant L as ReserveLimiter
     participant P as provider
+    Note over C,P: only an admitted request
     loop each chunk
         P-->>G: chunk
         G->>L: debit(): reserved to used
@@ -708,12 +709,12 @@ has the TTFT, the duration and the trace id.
 
 ```mermaid
 flowchart LR
-    U["the provider's<br/>usage"] --> PR["metering.<br/>price_call()"]
+    U["the provider's<br/>usage"] --> PR["metering.price_call()"]
     EST["a cut stream:<br/>an estimate"] --> PR
     PR --> ROW["one LedgerRow<br/>per request"]
     ROW --> LED[("Ledger:<br/>billing-grade")]
     LED --> CB["chargeback<br/>per tenant"]
-    LED --> REC["Ledger.<br/>reconcile()"]
+    LED --> REC["Ledger.reconcile()"]
     ROW -. "the same<br/>trace id" .-> TR["otel.Tracer"]
     TR --> SP[("OTLP/JSON<br/>spans")]
 ```
@@ -1095,6 +1096,7 @@ sequenceDiagram
     participant G as gateway (MCPClient)
     participant S as MCP server
     participant AS as authorization server
+    Note over G,S: after the 403 insufficient_scope
     G->>AS: authorize again: PKCE S256, resource,<br/>scope = the held scopes plus the demanded one
     AS-->>G: code and iss
     G->>AS: token: code, verifier, resource, DPoP proof

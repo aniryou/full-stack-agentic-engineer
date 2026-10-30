@@ -16,20 +16,20 @@ up", not as the final truth. Examine the current docs before you rely on them.
 | Custom control flow | subclass `agents.BaseAgent`, implement `run(ctx) -> events` | subclass `BaseAgent`, implement `_run_async_impl`, which yields events | |
 | Deterministic workflows | `SequentialAgent`, `ParallelAgent`, `LoopAgent(max_iterations, until)` | `SequentialAgent`, `ParallelAgent`, `LoopAgent(max_iterations)`. The loop exits on an escalation or on a condition. 2.x has a native DAG `Workflow` (verify). | ADK's loop exits when a sub-agent escalates. Here, `until(session)` is code. |
 | Function tools | `@tool` / `FunctionTool(fn, side_effect=..., required_scope=...)`. The schema comes from the signature, through pydantic. | `FunctionTool(func)`. The schema comes from the signature and the docstring. | Side-effect classes and scopes are lab additions. ADK has tool confirmation for HITL. |
-| Delegation | `AgentTool(agent)`, with a child session and a shared budget | `AgentTool(agent)`, and the LLM-driven `transfer_to_agent` for a hand-off | The distinction between a hand-off (same session) and a delegation (child session) is the same in both. |
+| Delegation | `AgentTool(agent)`, with a child session and a shared budget | `AgentTool(agent)`, and the LLM-driven `transfer_to_agent` for a hand-off | The difference between a hand-off (same session) and a delegation (child session) is the same in both. |
 | MCP tools | `mcp.McpToolset(client)` gives remote tools | `MCPToolset(connection_params=...)` | ADK uses the current MCP revision through the official SDK. |
 | OpenAPI tools | — | `OpenAPIToolset(spec)` | The lab's façade servers do the same job. |
 | Session and events | `agents.Session` (event log + `state`), `InMemorySessionStore`, `JsonFileSessionStore` | `Session` with `events` and `state`. The session services are `InMemorySessionService`, `DatabaseSessionService` and `VertexAiSessionService` (Agent Runtime). | The state key prefixes `app:` `user:` `temp:` match the scopes of ADK. |
 | Long-term memory | `ContextBuilder.memory_provider` | `MemoryService` (in-memory, Agent Runtime Memory Bank) | |
 | Runner | `agents.Runner(agent, store, tracer).run / stream / approve` | `Runner(agent, app_name, session_service).run_async(...)` yields events | Here, approve and resume simulate ADK's tool confirmation and its pause and resume. |
-| Guardrail hooks | `security.GuardedTool`, `reliability.GracefulTool`, `ContextBuilder` | callbacks, for example `before_model_callback` and `after_tool_callback` | ADK attaches cross-cutting logic as callbacks on the agent. The lab wraps the tools. |
+| Guardrail hooks | `security.GuardedTool`, `reliability.GracefulTool`, `ContextBuilder` | callbacks, for example `before_model_callback` and `after_tool_callback` | ADK attaches the logic that many calls share as callbacks on the agent. The lab wraps the tools. |
 | Budgets | `agents.Budget(max_steps, max_tokens, max_seconds, max_depth)` shared through `InvocationContext` | `RunConfig` limits (for example, the maximum number of LLM calls), and `RetryConfig` in 2.x (verify) | |
 | Evaluation | `evals.run_eval`, `Gate`, trajectory metrics, judges | `adk eval` with eval sets (tool trajectory and response criteria), and user and environment simulation | The metrics have the same shape: a trajectory match and a rubric score for the response. |
 | Tracing | `observability.Tracer` with `gen_ai.*` attributes | OpenTelemetry integration, and Agent Observability / Cloud Trace on the platform | |
 | Model | `llm.FakeLLM` / `llm.GeminiLLM` | A model string (`gemini-3-flash`, September 2026, verify) or a `Gemini(...)` model object. LiteLLM for other models. | |
 | Dev loop | `make lab`, `tools/run_notebooks.py` | `adk web`, `adk run`, `adk api_server`, `adk eval`, `adk deploy` | |
 | Deployment | The lab has no deployment. Notebook 07 gives a sketch of the API. | Agent Runtime (old name: Agent Engine, verify), Cloud Run, GKE | |
-| Governance | `mcp.Gateway` with `Policy` rules, `X-Agent-Identity` | Agent Registry + Agent Gateway + Agent Identity (SPIFFE, mTLS/DPoP), Model Armor | The lab's gateway is a substitute for the platform's egress governance. |
+| Governance | `mcp.Gateway` with `Policy` rules, `X-Agent-Identity` | Agent Registry + Agent Gateway + Agent Identity (SPIFFE, mTLS/DPoP), Model Armor | The lab's gateway takes the place of the platform's egress governance. |
 
 ## Porting a notebook to ADK in an evening
 

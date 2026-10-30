@@ -35,9 +35,9 @@ simulations run 50× faster than real time.* The times are approximate. The lab 
 | [`docs/02-reference-architecture.md`](docs/02-reference-architecture.md) | This is the Cloud Run + Gemini reference architecture. Its §11 is the self-hosted model layer on Kubernetes. | 45 min | — |
 | [`docs/03-capacity-plan.md`](docs/03-capacity-plan.md) | These are the numbers for both providers. The code generates them. | 10 min | — |
 | [`docs/04-gcp-mapping.md`](docs/04-gcp-mapping.md) | This document connects each concept to its Google Cloud service, and each service to the setting that matters. Then it gives the vLLM and Kubernetes settings for a fleet, and notes for each cloud. | 20 min | — |
-| [`docs/scaling-agentic-solutions-on-google-cloud.md`](docs/scaling-agentic-solutions-on-google-cloud.md) | This is the long-form companion, worked on a fictional insurer. Its Part 3 is `scalelab.capacity`, and a test pins it. | 2 h | — |
+| [`docs/scaling-agentic-solutions-on-google-cloud.md`](docs/scaling-agentic-solutions-on-google-cloud.md) | This is the long-form companion, worked on a fictional insurer. Its Part 3 is `scalelab.capacity`. A test pins Part 3. | 2 h | — |
 
-**The provider path.** Everything runs on the Google Cloud anchor (a hosted Gemini pool) if you do not switch it. The
+**The provider path.** If you do not switch the backend, everything runs on the Google Cloud anchor (a hosted Gemini pool). The
 Mistral provider and the self-hosted backends are `scalelab/mistral.py`, `scalelab/serving.py` and the `ServerPool` /
 `HybridBackend` backends. To select them, use `make_setup(mode, provider=...)`. You can also use the environment
 variables `SCALELAB_BACKEND` (`hosted` | `local` | `hybrid`) and `SCALELAB_PROVIDER` (`gemini` | `mistral`).
@@ -111,5 +111,5 @@ permission to do. This lab says how much it has permission to run. After this la
 - Every latency and throughput number comes from a simulation (the load tests) or from a first-principles estimate
   (a replica). Before anyone buys GPUs, replace these numbers with a load test against staging and with
   `vllm bench serve` on the target GPUs.
-- The prices, limits and model ids are dated (5 and 19 September 2026). The docs mark them `(verify)`.
+- The prices, limits and model ids are from 5 and 19 September 2026. The docs mark them `(verify)`.
 - Licence: MIT.

@@ -81,8 +81,8 @@ from typing import Any
 # * `FakeRequests.get` **blocks the thread** for 0.2 s, exactly like `requests`. `FakeAsyncHTTP.get` awaits instead.
 # * `FakeDB.execute` records every query. It refuses a `WHERE` predicate that the code made with string interpolation.
 # * `FakePayments.refund` applies the refund and *then* times out on the first call for an order. This is the shape
-#   of the failure in production, and with simple retries it causes a double charge. With an idempotency key, it replays the stored outcome.
-# * `FakeModel` is a scripted function-calling model. `script[i]` is its reply when $i$ tool results have arrived since
+#   of the failure in production, and with simple retries this failure causes a double charge. With an idempotency key, the fake replays the stored outcome.
+# * `FakeModel` is a scripted function-calling model. `script[i]` is its reply when $i$ tool results have arrived after
 #   the last user message. Thus its behaviour is deterministic for each way that the runtime drives it. `fail_on_calls` injects 503s.
 # * `Heartbeat` ticks every 10 ms on the event loop and records the longest gap. A blocked loop shows as a stall.
 
@@ -301,7 +301,7 @@ print("fakes ready")
 #
 # * `http` replaces `requests`.
 # * `payments` replaces the payments client.
-# * The code receives the model as an argument and does not read it from a global. Thus a demo can inject it.
+# * The code gets the model as an argument and does not read it from a global. Thus a demo can inject the model.
 #
 # **This version keeps every bug of the original.** Read it with the six
 # passes before you run the next cell.
@@ -818,7 +818,7 @@ print("✅ Exercise A: every bug the tests encode is fixed")
 #    conversation of user A. The list also grows with no limit. Solution: the default `history=None`, and
 #    `list(history or [])` in the body.
 # 3. **Security: SQL injection.** `search_orders(where)` (l. 16–17) runs a predicate that the model writes. The model
-#    is an untrusted author (prompt injection gets to it through tool results and documents). Solution: a narrow, typed
+#    is an untrusted author. Prompt injection gets to the model through tool results and documents. Solution: a narrow, typed
 #    tool (`customer_id`, `status`) and parameterised queries.
 # 4. **Security: PII in logs.** `log.info("turn complete: %s", self.history)` (l. 44) writes messages and CRM records
 #    to the log sink that you have, whatever it is. Solution: log the metadata (steps, tool names, latency, token
@@ -844,7 +844,7 @@ print("✅ Exercise A: every bug the tests encode is fixed")
 #     and the function returns nothing. It also retries permanent errors, and it uses no jitter. Solution: classify the errors, retry
 #     only transient failures, and return a structured failure or raise an exception.
 # 12. **Maintainability: malformed transcript and hidden state.** The code never appends the tool-call turn of the
-#     assistant, and the tool messages have no `tool_call_id`. A real function-calling API rejects that. The globals
+#     assistant, and the tool messages have no `tool_call_id`. A real function-calling API rejects that transcript. The globals
 #     `TOOLS` and `model` make it impossible to test the class in isolation.
 #
 # **The optimal solution, in three parts.** *Current cost:* a turn with three lookups blocks the process for 600 ms, and a
@@ -1383,7 +1383,7 @@ print("✅ Exercise B: retrieval is entitlement-aware, batched, bounded and rank
 # 8. **Cost: one reranker call per document.** `rerank(query, d.text)` in a loop (l. 24–25) is $k$ model calls for
 #    each query. Solution: `score_batch` (one call), or bounded concurrency if the API has no batch endpoint.
 # 9. **Correctness: dedupe by equality.** `if d not in docs` (l. 21) compares new row objects. Thus two chunks of one
-#    document both stay in the list (and the operation is O(n²)). Solution: remove the duplicate ids before the fetch.
+#    document both stay in the list. The operation is also O(n²). Solution: remove the duplicate ids before the fetch.
 # 10. **Availability: cache without TTL or bound.** `CACHE` (l. 1) grows forever. It never removes a stale answer
 #     after a document changes. Solution: a TTL from an injected clock, an LRU bound, and a version in the key.
 # 11. **Quality: no token budget, no citations.** `"\n".join(d.text ...)` (l. 33) ignores the context window. Also,
@@ -1827,7 +1827,7 @@ print("✅ drill 6")
 #
 # 1. *Intent (30 s).* Say what the code is for and who calls it. For example: "an async support agent; the handler retries whole
 #    turns; tools are plain functions in a global registry." If you read the intent incorrectly, everything after it
-#    is of no use. Thus ask a question to make sure of it: "Am I right that `handle` is per request?"
+#    is of no use. Thus ask a question to make sure of the intent: "Am I right that `handle` is per request?"
 # 2. *Findings, worst first (90 s).* Say the ranking rule (**money, data leakage, availability, then the rest**),
 #    and go through the findings in that order. Give one sentence for each finding: *where*, *what breaks*, *how you
 #    can prove it*. "Line 22: refunds
@@ -1836,7 +1836,7 @@ print("✅ drill 6")
 # 3. *The optimal solution (60 s).* Give the current cost, then the lower bound, then the change that reaches it. "Three sequential 200 ms
 #    lookups cost 600 ms; the floor is 200 ms; `gather` under a semaphore with a per-call `wait_for` gets there.
 #    The retry belongs around the model call, with `await asyncio.sleep`, not around the turn."
-# 4. *What to add before you ship (30 s).* Name the tests that encode each bug (you just wrote them). Also
+# 4. *What to add before you ship (30 s).* Name the tests that encode each bug. You just wrote these tests. Also
 #    name structured tool errors, redacted logs with metadata for steps, tools and latency, and a step budget. For
 #    irreversible tools, also name a confirmation gate (Notebook 01).
 #

@@ -118,6 +118,10 @@ The feedback loop has these steps:
 
 Without a circuit breaker on that loop, an agent system under overload does not fail fast. It slows down for everyone until the turn deadlines expire and the users go away. By then, the users used the tokens all the same. This is the failure mode with the highest cost of all, because you pay for all of it and you satisfy nobody.
 
+![The feedback loop of 1.6: more load causes more 429s, then retries and longer model calls, longer turns, more turns in flight, and more memory, queued model calls and retries, which cause more 429s again.](figures/overload-feedback-loop.svg)
+
+*This is the feedback loop of 1.6. Each step causes the next step, and the last step causes more `429`s again. Little's law connects the longer turns to more turns in flight.*
+
 A simulated load test shows this failure in seconds (`scalelab.sim`, the lab's notebook 04, simulated numbers). The test puts 120 virtual users against a simulated 3 M TPM pool:
 
 - With retries only, the p95 turn latency goes from 5.8 s to approximately 40 s. There are hundreds of rate-limited calls and a few dozen hard failures.
@@ -220,6 +224,18 @@ The two numbers set the size of different things. In-flight turns set the size o
 
 The token budget also puts a cap on concurrency, and this is the most important number. The budget is 10 M TPM ÷ 60 ≈ 167,000 tokens per second. A turn uses 2.2 × 5,350 ≈ 11,800 tokens over six seconds, or about 2,000 tokens per second. Thus the baseline is sufficient for approximately **85 turns in flight, or 14 turns per second**. This is the start value for the in-flight cap of the admission controller, and it is *below* peak demand. That gap is the whole story of this example.
 
+```mermaid
+flowchart LR
+  T(["turns a second"]) -- "× 6 s" --> IF["in-flight turns<br/>42 at average<br/>125 at peak"]
+  IF -- "set the size of" --> IFS["orchestrator memory<br/>session locks<br/>model concurrency"]
+  C(["conversations<br/>a second"]) -- "× 400 s" --> S["concurrent sessions<br/>460 at average"]
+  S -- "set the size of" --> SS["gateway streams<br/>Redis session state"]
+  B(["10 M TPM ÷ 60"]) --> BT["≈ 167,000 tokens<br/>per second"]
+  BT -- "÷ 2,000 tokens<br/>per second a turn" --> CAP["≈ 85 turns in flight:<br/>the in-flight cap,<br/>below peak demand"]
+```
+
+*Little's law gives the two numbers of §3.3, and each number sets the size of different parts. The token budget gives the in-flight cap of about 85, which is below the 125 turns in flight at peak.*
+
 ### 3.4 Cost per conversation
 
 | Configuration | Per model call | Per conversation | Per month |
@@ -302,21 +318,9 @@ The whole Cloud Run fleet for this system is a few dozen vCPUs. That is approxim
 
 ## 4. The reference architecture
 
-```mermaid
-flowchart LR
-  U[App / web portal] --> LB[Global external ALB<br/>Cloud Armor rate limits + WAF<br/>IAP]
-  LB --> GW[gateway · Cloud Run<br/>auth · admission · enqueue · SSE relay<br/>request-based, concurrency 250, min 2]
-  GW -- publish, ordering key = session --> PS[(Pub/Sub agent-turns<br/>ack 600 s · retry 10–600 s · DLQ after 5)]
-  PS -- push + OIDC --> OR[orchestrator · Cloud Run<br/>durable loop · budgets · checkpoints<br/>instance-based, concurrency 80, min 2]
-  OR --> MG[model gateway<br/>routing · buckets · retry · breaker · fallback]
-  MG --> G[Gemini · global endpoint<br/>PT + spill-over]
-  OR --> TE[tool executor<br/>bulkhead · breaker · cache · idempotency]
-  TE --> TS[tool services · Cloud Run<br/>profile · policy admin · claims · documents · MCP]
-  OR <--> FS[(Firestore<br/>sessions · turns · steps · TTL)]
-  OR --> RS[(Memorystore Valkey<br/>streams · locks · buckets · idempotency · level)]
-  GW <--> RS
-  GW --> FS
-```
+![The reference architecture of Part 4: the client, the load balancer, the gateway, Pub/Sub, the orchestrator with the model gateway and the tool executor, Gemini, the tool services and the two stores.](figures/google-cloud-reference-architecture.svg)
+
+*In the reference architecture, the gateway and the orchestrator are two Cloud Run services, with a Pub/Sub queue between them. Both services use Firestore for durable state and Redis for hot state.*
 
 This is the path of a turn from end to end. The client posts a message. The gateway authenticates the message. It examines the token bucket of the tenant and the global in-flight cap, and it decides the current degradation level. It writes the turn to Firestore and publishes to Pub/Sub, with the session id as ordering key. Then it starts to relay the event stream of the turn to the client over server-sent events.
 
@@ -404,6 +408,19 @@ Admission control is the circuit breaker on the feedback loop of 1.6. It sits at
 3. Does this turn take the system over the in-flight cap?
 
 The cap starts at the token-budget figure from 3.3. Then you adjust it from load tests. Priority classes bypass it, for example an adviser-assist console, a broker portal or a VIP segment.
+
+```mermaid
+flowchart LR
+  T(["a turn arrives<br/>at the gateway"]) --> Q1["1. tenant<br/>token bucket"]
+  Q1 --> Q2["2. degradation<br/>level"]
+  Q2 --> Q3{"3. over the<br/>in-flight cap?"}
+  Q3 -- "no, or a<br/>priority class" --> A["admit"]
+  Q3 -- "yes" --> SH["shed: 503 and<br/>Retry-After"]
+  SIG["signals from<br/>every instance"] --> L[("level<br/>in Redis")]
+  L --> Q2
+```
+
+*The gateway asks the three questions of §5.3 before a turn costs anything. A turn over the cap gets a `503` and a `Retry-After`, unless it has a priority class. The system writes the level to Redis from the signals of every instance.*
 
 The system calculates the degradation level from signals that every instance can publish:
 

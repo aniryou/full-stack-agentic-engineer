@@ -67,7 +67,7 @@ print("✅ policy drives the loop without a fixed script")
 #
 # A confused model can call the same tool with the same arguments forever, and use
 # tokens each time. Write `dedupe(tool_calls, seen)`. The argument `seen` is a set of
-# the signatures that already ran (use `tc.signature()`). Return only the calls whose
+# the signatures of the calls that already ran (use `tc.signature()`). Return only the calls whose
 # signature is **new**. Add them to `seen`.
 #
 # In a loop in production, you also give the model a "you already have this" note for
@@ -98,7 +98,7 @@ print("✅ dedupe drops repeated calls")
 # ## Exercise 3.3 — reason about the budget
 #
 # `Agent(max_steps=N)` sets the maximum number of model calls in each turn. Think about
-# a model that **never** answers (it always returns a tool call), with `max_steps=4`.
+# a model that **never** answers and always returns a tool call, with `max_steps=4`.
 # How many `assistant` messages are in the transcript? Is `result.done` True or False?
 # Set the two variables. Then the check compares them with a real run.
 

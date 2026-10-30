@@ -38,41 +38,9 @@ Run is the standard compute of Meridian. The language is Python 3.11.
 
 ## 2. System overview
 
-```mermaid
-flowchart TB
-  subgraph Edge
-    LB[Global external ALB<br/>managed cert · Cloud Armor · IAP]
-  end
-  subgraph Run["Cloud Run (region)"]
-    GW[gateway<br/>request-based · conc 250 · 2..100]
-    OR[orchestrator<br/>instance-based · conc 80 · 2..50]
-    TS[tools<br/>request-based · conc 200 · 1..20]
-    MCP[mcp (optional)<br/>streamable HTTP]
-  end
-  subgraph Async
-    PS[(Pub/Sub agent-turns<br/>push · OIDC · ordering key)]
-    DLQ[(agent-turns-dlq)]
-  end
-  subgraph State
-    FS[(Firestore<br/>sessions/{id}/turns/{id})]
-    RS[(Memorystore Valkey/Redis<br/>streams · locks · buckets · idem · level)]
-  end
-  subgraph Model["Gemini Enterprise Agent Platform"]
-    GM[Gemini 3.5 Flash / 3.5 Flash-Lite / 3.1 Pro<br/>global endpoint · PT + spill-over · caching]
-  end
-  Client((App / web)) --> LB --> GW
-  GW -->|publish| PS -->|push| OR
-  PS -.->|after 5 attempts| DLQ
-  OR --> GM
-  OR -->|ID token| TS
-  OR -.->|optional| MCP
-  GW <--> RS
-  OR <--> RS
-  GW --> FS
-  OR <--> FS
-  OT[Cloud Trace · Monitoring · Logging] -.- GW
-  OT -.- OR
-```
+![The system overview: the edge, the three Cloud Run services, Pub/Sub, the two stores and the Gemini endpoint.](figures/system-overview.svg)
+
+*The client reaches the gateway through the load balancer. The gateway publishes each turn to Pub/Sub, and Pub/Sub pushes it to the orchestrator. Dashed lines show the dead-letter path, the optional MCP server and the observability.*
 
 The system has three Cloud Run services, one queue, two stores and one model endpoint. Every arrow has authentication:
 
@@ -128,18 +96,9 @@ Responsibilities:
 
 The state machine of a turn:
 
-```mermaid
-stateDiagram-v2
-  [*] --> queued: gateway admits, publishes
-  queued --> running: push delivered, lock taken
-  running --> running: model step / tool step checkpointed
-  running --> completed: final answer
-  running --> failed: budget exceeded / provider error (graceful message)
-  running --> queued: RetryLater (overloaded, store unavailable) → redelivery
-  queued --> dead_letter: 5 delivery attempts
-  completed --> [*]
-  failed --> [*]
-```
+![The states of a turn and the transitions between them.](figures/turn-states.svg)
+
+*The states of a turn. A RetryLater outcome sends the turn back to queued, and after 5 delivery attempts the turn goes to dead_letter.*
 
 ### 3.3 Model gateway (the lab's `resilience.py`, one per model)
 
@@ -239,44 +198,13 @@ Terraform provisions the dashboard and the seven alert policies with the rest of
 
 ## 4. A turn, end to end
 
-```mermaid
-sequenceDiagram
-  participant C as Client
-  participant G as gateway
-  participant R as Redis
-  participant F as Firestore
-  participant P as Pub/Sub
-  participant O as orchestrator
-  participant M as Gemini
-  participant T as tools
-  C->>G: POST /v1/sessions/{id}/messages
-  G->>R: tenant bucket · level · inflight+1
-  alt shed
-    G-->>C: 429/503 + Retry-After
-  end
-  G->>F: create turn (queued)
-  G->>P: publish {session, turn} (ordering key = session)
-  G->>R: XADD turn.queued
-  G-->>C: SSE stream opens (relay from the turn's stream)
-  P->>O: push /pubsub/turns (OIDC)
-  O->>R: SET NX lock:session
-  O->>F: load session + turn (checkpoints)
-  loop until final answer or budget
-    O->>M: generate_content (stream)
-    M-->>O: deltas · tool calls · usage
-    O->>R: XADD step.model.delta …
-    O->>F: ArrayUnion(step)
-    O->>T: tool calls in parallel (idempotency keys)
-    T-->>O: results
-    O->>F: ArrayUnion(step)
-  end
-  O->>F: save session (optimistic version) · save turn
-  O->>R: XADD turn.completed · inflight-1 · DEL lock
-  O-->>P: 200 (ack)
-  R-->>G: stream events
-  G-->>C: SSE events … turn.completed
-  O->>M: summarise (compaction, off the critical path)
-```
+![The gateway side of one turn, from the POST of the message to the relay of the stream events.](figures/turn-admit-relay.svg)
+
+*The gateway side of one turn. The gateway admits or sheds the turn, creates it in Firestore, publishes it to Pub/Sub and opens the SSE stream. Then it relays the events of the turn from Redis to the client.*
+
+![The orchestrator side of one turn, from the push by Pub/Sub to the ack and the compaction.](figures/turn-run-loop.svg)
+
+*The orchestrator side of the same turn. The orchestrator takes the session lock and loads the checkpoints. In the loop, it adds a step record to the turn after each model call and each tool round. When the loop ends, it saves the session and the turn, sends the ack to Pub/Sub and does the compaction off the critical path.*
 
 ## 5. Capacity and scaling design
 
@@ -377,6 +305,20 @@ gateway keeps its shape: the gateway, the durable orchestrator, idempotent tools
 equivalents replace the managed services: RabbitMQ quorum queues for Pub/Sub, Postgres for Firestore, Redis for
 Memorystore and KEDA for the autoscaler of Cloud Run. The changes are in the model layer and in the numbers that
 size it.
+
+```mermaid
+flowchart LR
+  GW[gateway] --> Q[("RabbitMQ<br/>quorum queues")] --> OR["orchestrator<br/>model gateway"]
+  GW <--> RD[(Redis)]
+  OR <--> RD
+  OR <--> PG[(Postgres)]
+  OR -->|hosted| API[api.mistral.ai]
+  OR -->|self-hosted| IG["inference<br/>gateway"]
+  IG --> V["vLLM<br/>replicas"]
+  K[KEDA] -.->|scales| V
+```
+
+*Everything above the model gateway keeps its shape, and Kubernetes equivalents replace the managed services. The model gateway sends a call to the hosted API or to the inference gateway in front of the vLLM replicas. KEDA changes the replica count.*
 
 The worked case is the anchor of the Mistral provider: a Singapore telco at 100,000 conversations a day.
 

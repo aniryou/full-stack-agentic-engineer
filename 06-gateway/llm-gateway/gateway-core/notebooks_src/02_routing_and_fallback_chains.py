@@ -62,12 +62,12 @@ print("policy cheapest (800 in/500) :", show(router.candidates("chat", {"max_com
 # real cost is the GPU bill. Notebook 04 shows the chargeback of that bill.
 #
 # ## Worked example 1 — an outage, with and without a breaker
-# The primary hangs for five minutes (it gives no answer at all). The timeout of the gateway is 10 s. One request
+# The primary hangs for five minutes and gives no answer at all. The timeout of the gateway is 10 s. One request
 # arrives every 12 s for eight minutes.
 #
 # The in-process gateway handles one request at a time on the virtual clock. Thus the gap is longer than a timeout on
-# purpose: no request waits behind another. Also, the measurement of each time to first token starts at the arrival of
-# its request (the loop makes sure of this). Exercise 2.4 has requests that overlap, which is the production case.
+# purpose: no request waits behind another. Also, the loop makes sure that the measurement of each time to first token starts at the arrival of
+# its request. Exercise 2.4 has requests that overlap, which is the production case.
 
 # %%
 def outage_run(threshold, n=40, gap=12.0):
@@ -165,7 +165,7 @@ print(f"✅ {chain_avail([0.995, 0.99], 0.001):.3%}: the common-mode term, not t
 
 # %% [markdown]
 # ## Exercise 2.3 — expected latency of walking a chain
-# Each step has `p_ok`, `t_ok` (the time to first token on success) and `t_fail` (the time to detect a failure). Write
+# Each step has `p_ok`, `t_ok` (the time to first token on success) and `t_fail` (the time to find a failure). Write
 # `expected_latency(steps)`: the mean time to the first token *or* to the final failure. (Hint: every outcome after a
 # failure pays the time of that failure.)
 
@@ -277,13 +277,13 @@ print("✅ before the first byte: fall through; after it: surface the error and 
 
 # %% [markdown]
 # ## Exercise 2.6 — pick a first-byte deadline from a latency budget
-# The primary fails 5 % of requests because it hangs. The gateway stops the wait after `t_fail` seconds and falls
-# through (the steps are as in worked example 2). The budget of the route is a **mean** time to first token of 0.70 s.
+# The primary fails 5 % of requests because it hangs. On the steps of worked example 2, the gateway stops the wait after `t_fail` seconds and falls
+# through. The budget of the route is a **mean** time to first token of 0.70 s.
 # Set `deadline` to the largest `t_fail`, to 0.01 s, that meets the budget. Calculate it. Do not try values at random.
 #
 # Then show why a whole-response timeout cannot do the job. A healthy answer on this route is 350 tokens at 20 ms each,
 # after a 0.6 s first token. Thus set `full_response_s` to the shortest whole-response timeout that never stops a
-# healthy stream. Set `mean_with_it` to the mean time to first token of the route if the gateway detects failures only
+# healthy stream. Set `mean_with_it` to the mean time to first token of the route if the gateway finds failures only
 # that late.
 
 # %% exercise
@@ -331,7 +331,7 @@ print(f"✅ a {deadline:.2f} s first-byte deadline keeps the mean at {routing.ch
 # 2. *We added a third provider and availability did not move. Why?* A common-mode failure (the gateway, a region, one
 #    provider behind two aliases) already put a cap on the chain. Independent targets only decrease the part that was
 #    already small.
-# 3. *The breaker is configured, yet the first ten seconds of an outage were terrible. Why?* The requests overlap. The
+# 3. *We configured the breaker, yet the first ten seconds of an outage were terrible. Why?* The requests overlap. The
 #    breaker opens only after failures *complete*. Thus every request in flight during the first timeout pays it:
 #    about 500 at 50 requests a second (Exercise 2.4). A first-byte deadline and fast failure signals (connect errors,
 #    503s) make that window shorter.

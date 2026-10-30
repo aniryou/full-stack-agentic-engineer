@@ -93,7 +93,7 @@ Two habits make a threat model credible when you draw it on a whiteboard:
 flowchart TB
     U(["User"]) -- "ASI09" --> FE["Front-end"]
     FE -- "identity and consent" --> AG["Agent runtime<br/>ASI03, ASI10"]
-    AG --> M["Model endpoint<br/>ASI01"]
+    AG --> M["Model<br/>endpoint<br/>ASI01"]
     AG --> T["MCP servers<br/>and tools<br/>ASI02, ASI04"]
     AG --> P["Peer agents<br/>ASI07, ASI08"]
     AG --> MEM[("Memory and<br/>session store<br/>ASI06")]
@@ -127,19 +127,22 @@ Every action of the agent is under one of two authorities. Make this explicit in
 - **Own authority**: the agent uses *its* identity and *its* IAM grants. Example: the agent writes traces to Cloud Logging or reads a shared knowledge base. It can also call a 2-legged-OAuth SaaS API with credentials that the organization gave *the agent*. Audit logs show only the identity of the agent.
 - **Delegated authority (on behalf of a user)**: the agent acts with credentials that *the user consented to*, typically 3-legged OAuth. Example: the agent reads the user's calendar, creates a ticket as the user, or sends a query to BigQuery with the user's own dataset permissions. Audit logs must show **both** the agent and the user. Google's Agent Identity does exactly this when it acts through Auth Manager.
 
+You cannot use one authority in place of the other. A common design error is to give broad permissions to the agent's own identity ("it needs to read everyone's tickets"). The correct design uses delegation: the agent reads *this user's* tickets with *this user's* token. Delegation keeps the agent's own blast radius small. It also makes authorization decisions the problem of the resource, which already knows how to authorize users.
+
 ```mermaid
 flowchart LR
-    AG(["Agent"]) -- "own authority" --> OWN["its identity and<br/>its IAM grants"]
-    AG -- "on behalf of a user" --> DEL["a credential that<br/>the user consented to"]
-    OWN --> KB["a shared<br/>knowledge base"]
-    DEL --> TK["this user's tickets"]
-    KB -.-> L1[("audit log:<br/>the agent")]
-    TK -.-> L2[("audit log: the agent<br/>and the user")]
+    subgraph DEL ["delegation"]
+        direction LR
+        A2(["Agent"]) -- "this user's token" --> RS["the resource<br/>authorizes the user"]
+        RS --> T2["this user's tickets"]
+    end
+    subgraph ERR ["the design error"]
+        direction LR
+        A1(["Agent"]) -- "a broad grant to<br/>its own identity" --> T1["everyone's tickets"]
+    end
 ```
 
-*Each action of the agent is under one of two authorities. Under its own authority, the agent uses its identity and its IAM grants, and the audit log shows only the agent. On behalf of a user, the agent uses a credential that the user consented to, and the audit log shows both.*
-
-You cannot use one authority in place of the other. A common design error is to give broad permissions to the agent's own identity ("it needs to read everyone's tickets"). The correct design uses delegation: the agent reads *this user's* tickets with *this user's* token. Delegation keeps the agent's own blast radius small. It also makes authorization decisions the problem of the resource, which already knows how to authorize users.
+*The design error gives broad permissions to the agent's own identity, thus the agent can read everyone's tickets. With delegation, the agent sends this user's token. The resource authorizes the user, and the blast radius of the agent stays small.*
 
 ### 3.3 What "agent identity" should mean (and how GCP implements it)
 

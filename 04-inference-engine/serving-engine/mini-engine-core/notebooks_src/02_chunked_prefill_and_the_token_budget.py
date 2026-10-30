@@ -7,7 +7,7 @@
 #
 # ## The one-minute version
 # The cost of a step depends on the number of tokens in it. Up to a **knee** of a few hundred tokens, a step is
-# **memory-bound**. It takes as long as the weight read, so more tokens are almost free. After the knee, the step is
+# **memory-bound**. It takes the same time as the weight read, so more tokens are almost free. After the knee, the step is
 # **compute-bound**, and each token costs FLOPs. If the engine processes a long prompt in one step, that step is
 # long. Then each request that decodes in the same step sees one large gap between two tokens: prefill
 # **interferes** with decode.
@@ -88,7 +88,7 @@ for gname, mname in [("L4", "qwen2.5-1.5b"), ("H100-SXM", "llama-3.1-8b")]:
               f"{1e3 * c['t'] / n:7.3f} ms per token")
 
 # %% [markdown]
-# From 1 to 256 tokens, the step time almost does not change. This is why decode batching is nearly free. It is
+# From 1 to 256 tokens, the step time almost does not change. This flat curve is why decode batching is almost free. It is
 # also why a single decode token has a high cost per token. After the knee, the time increases linearly with the
 # tokens.
 #

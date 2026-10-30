@@ -14,11 +14,11 @@
 # against the same weights. Thus the FLOP/s set the speed of prefill.
 #
 # * **Weight-only INT4 (W4A16)** reads a quarter of the weight bytes, and it still multiplies in 16-bit. Decode
-#   is ~3x faster, and prefill is not faster (the dequantization is more work). It runs on everything from a T4
+#   is ~3x faster. Prefill is not faster, because the dequantization is more work. It runs on everything from a T4
 #   (Marlin, and Machete on Hopper).
 # * **FP8 W8A8** halves the bytes *and* doubles the tensor-core FLOP/s. But it does this only where FP8 tensor
 #   cores exist (sm_89+: L4, RTX 4090, H100, B200). On a T4 or A100, vLLM runs the same checkpoint as
-#   weight-only FP8 through Marlin. This gives a memory win and no FLOP win.
+#   weight-only FP8 through Marlin. That path gives a memory win and no FLOP win.
 # * **NVFP4 W4A4** cuts the bytes to a quarter and gives four times the FLOP/s on Blackwell (sm_100+). On other
 #   GPUs, it is weight-only.
 # * **INT8 W8A8** runs on INT8 tensor cores from Turing to Hopper. vLLM refuses it on Blackwell.
@@ -37,14 +37,14 @@ print(serve.matrix(gpus=("T4", "L4", "H100-80GB", "B200"), schemes=("bf16", "fp8
 # %% [markdown]
 # Read one row for each GPU generation. The **kernel** column shows the kernel that you expect in the startup
 # log of vLLM (`Using MarlinLinearKernel for ...`, `Selected CutlassFP8ScaledMMLinearKernel for ...`). If your
-# log shows a different kernel, the plan is incorrect for your version. Do a check of it (verify) before you
+# log shows a different kernel, the plan is incorrect for your version. Do a check of the plan (verify) before you
 # trust a benchmark.
 #
 # ## Worked example: one GEMM on the roofline
 #
 # The `down_proj` of Llama-3.1-8B is $[M, 14{,}336] \times [14{,}336, 4{,}096]$ for `M` tokens in the step. Its
 # time is $\max(2MKN/\text{peak}, (KN \cdot w + MK \cdot a + MN \cdot 2)/\text{bandwidth})$. Here `w` and `a` are
-# the weight and activation bytes (W4A16 counts its group scales and zero points: 4.16 bits).
+# the weight and activation bytes. W4A16 counts its group scales and zero points: 4.16 bits.
 
 # %%
 for M in (1, 16, 64, 256, 2048):
@@ -133,7 +133,7 @@ print(report.markdown([{k: r[k] for k in ("scheme", "ttft_ms_mean", "tpot_ms_mea
 # ## Worked example: measuring over HTTP, the way you would measure a real server
 #
 # The fake server runs the same emulator in real time behind `/v1/completions` (SSE streaming). The client
-# measures the time of each chunk. TTFT is the first chunk that carries a token, and ITL is the gaps between
+# measures the time of each chunk. TTFT is the first chunk that carries a token. ITL is the gaps between
 # chunks. The client does this exactly as it does against `vllm serve`.
 #
 # The `/version` of the server says
@@ -251,7 +251,7 @@ print("then: QUANTLAB_URL=http://127.0.0.1:8000 jupyter lab notebooks/   (or pyt
 #
 # At typical contexts, the KV cache of the 64 sequences is about half the bytes that the step reads. For
 # Llama-3.1-8B on an H100, layer 01 PRIMER §3.5 gives 3.80x at batch 1 and 1.54x at batch 64. The GEMMs are not
-# compute-bound yet (that starts at ~120 tokens per step on an L4). Past that point, the advantage of W4A16
+# compute-bound yet. On an L4, the GEMMs become compute-bound at ~120 tokens per step. Past that point, the advantage of W4A16
 # decreases, and from ~460 tokens per step it is gone.
 #
 # **Drill 3.** *Can we run INT8 W8A8 on B200s?* vLLM refuses it on compute capability >= 10.0. Use FP8 or NVFP4

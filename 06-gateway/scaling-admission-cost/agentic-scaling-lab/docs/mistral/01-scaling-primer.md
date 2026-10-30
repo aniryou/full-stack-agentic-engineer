@@ -120,6 +120,19 @@ The loop has these steps:
 
 Without a brake, the system becomes slower for all users. Then the deadlines expire, and the users leave the conversation. But the system already used the tokens. On the API, the loop shows itself as a 429 storm. On a fleet, the loop is silent: vLLM never says no, and the batch grows. The time per token grows with the batch, and nothing in the error logs changes while the p50 doubles.
 
+```mermaid
+flowchart LR
+  A([More load]) --> B[The model is slower<br/>or pushes back]
+  B --> C[Retries and<br/>longer calls]
+  C --> D[Longer turns]
+  D --> E[More turns<br/>in flight]
+  E --> B
+  B -- on the API --> F[429 storm]
+  B -- on a fleet --> G[The batch grows<br/>without errors]
+```
+
+*The feedback loop of 1.6, without a brake. Each pass puts more turns in flight, and the model becomes slower again. On the API, the loop shows itself as a 429 storm, and on a fleet, the batch grows without an error.*
+
 The load generator (`scalelab/sim.py`, notebook 05) reproduces the two forms (simulated). The simulated API pool has 3 M TPM. In it, 120 users with simple retries push the p95 turn to 39 s. The run has 394 rate-limit responses and 35 failed turns.
 
 Degrade levels alone bring the p95 to 5.5 s. To do this, they move half the turns to Ministral 3 8B when the pool goes above 80 %. Degrade levels plus an in-flight cap of 26 give 3.3 s, zero 429s, and 22 % of the attempts shed with a `Retry-After`. The cap of 26 comes from the token budget of the pool.
@@ -275,6 +288,10 @@ A vLLM replica is one copy of the weights across `tp` GPUs (`scalelab/serving.py
 
 *Memory decides concurrency*. An H100 at vLLM's default `gpu_memory_utilization` 0.92 gives 73.6 GB. After 4 GB for activations and 15.7 GB of FP8 weights, 53.9 GB of KV cache stays. That is about 329 k tokens at 160 KiB each. With the 2,700-token prefix stored once, that is about 130 calls. Thus vLLM's default `max_num_seqs` of 128 is the limit that binds.
 
+![The memory of one H100 replica: the FP8 weights, the activations and the KV cache in 73.6 GB, and the limit that binds.](figures/h100-replica-memory.svg)
+
+*The memory of one replica, to scale. With the prefix stored once, the KV cache holds about 130 calls. Thus the default `max_num_seqs` of 128 is the limit that binds.*
+
 *Bandwidth decides the time per token*, as 1.3 showed. *Prefill decides TTFT*. 2,300 new tokens at two FLOPs per active parameter is 6.2 × 10¹³ FLOP. That is about 78 ms at 40 % of the H100's FP8 peak.
 
 The batch that you run is the latency that you give *and* the fleet that you buy. Each row has the same inputs: Ministral 3 14B on one H100, a 5,200-token context and 200 output tokens. Each row also has 2.2 calls plus a second of tools per turn, and a fleet sized for the peak with 30 % headroom:
@@ -355,24 +372,9 @@ At peak, everything fits (0.76× and 0.72× on the hosted limits, 0.69× on the 
 
 ## 4. The reference architecture
 
-```mermaid
-flowchart LR
-  U[App / web chat] --> IN[Ingress / API gateway<br/>TLS · WAF · per-caller rate limits]
-  IN --> GW[gateway · Deployment<br/>auth · admission · enqueue · SSE relay<br/>2..20 pods]
-  GW -- publish, routing key = session --> MQ[(RabbitMQ quorum queue agent-turns<br/>manual ack · delivery-limit 5 · dead-letter exchange)]
-  MQ -- consume, prefetch 80 --> OR[orchestrator · Deployment<br/>durable loop · budgets · checkpoints<br/>KEDA on queue depth]
-  OR --> MG[model gateway library<br/>routing · buckets · retry · breaker · fallback · spill-over]
-  MG --> VL[vLLM · GPU node pool in Singapore<br/>Ministral 3 14B · 1 × H100 per replica · 11 at peak<br/>static for peak · KEDA on waiting / KV for headroom]
-  MG -. spill-over, policy-gated .-> API[Mistral API api.mistral.ai · EU-hosted<br/>Small 4 / Medium 3.5 · service_tier auto<br/>or a marketplace in an APAC region]
-  OR --> TE[tool executor<br/>bulkhead · breaker · cache · idempotency]
-  TE --> TS[tool services / MCP servers<br/>CRM · billing · network · KB]
-  OR <--> PG[(Postgres<br/>sessions · turns · steps · transcripts · TTL)]
-  OR --> RS[(Redis<br/>streams · locks · buckets · idem · level)]
-  GW <--> RS
-  GW --> PG
-  OR -.-> OT[OpenTelemetry → Prometheus · Grafana · Tempo<br/>gen_ai.* spans · vllm:* metrics]
-  VL -.-> OT
-```
+![The reference architecture of Part 4: the gateway, RabbitMQ, the orchestrator, the vLLM fleet with the Mistral API as spill-over, the tools and the stores.](figures/hybrid-reference-architecture.svg)
+
+*The reference architecture of Part 4. The gateway and the orchestrator are two Deployments with a RabbitMQ queue between them. The model gateway sends calls to the vLLM fleet first, and the Mistral API gets only the policy-gated spill-over.*
 
 This is a turn from end to end. The ingress applies the WAF and a per-caller limit. Then the gateway does these steps:
 
@@ -484,6 +486,17 @@ Model ids are in the configuration, never in the code. This is also how you surv
 Spill-over is the fallback that is also a capacity strategy. The model gateway (`HybridBackend`) sends a call to the API when the saturation of the fleet goes above 0.9. Saturation is the sequences that run plus the sequences that wait, against the batch at which the fleet meets its latency target. The gateway records which backend served each call. In the lab's hybrid overload run, the API served 30 % of calls.
 
 The gate is policy. A turn is eligible when its traffic carries no personal data (the incident bulletin, a generic plan question, a knowledge-base lookup on redacted text). All other traffic waits for the fleet, or the gateway sheds it. That rule lets you size a fleet for the base load in a residency-bound deployment. The operator's risk function signs the rule, so write it with them.
+
+```mermaid
+flowchart LR
+  M([Model call]) --> S{Fleet saturation<br/>above 0.9?}
+  S -- no --> F[vLLM fleet]
+  S -- yes --> E{"Eligible turn:<br/>no personal data?"}
+  E -- yes --> A[Mistral API]
+  E -- no --> W["Wait for the fleet,<br/>or shed"]
+```
+
+*The spill-over rule of `HybridBackend` in the model gateway. A call goes to the Mistral API only when the fleet saturation is above 0.9 and the turn carries no personal data.*
 
 > **Pitfall.** Do not say "We use the SDK's retries" without a deadline, or "vLLM will tell us when it's overloaded" without `--max-num-queued-reqs`. The first retries into a turn that already timed out for the user. The second waits for a signal that never comes.
 

@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="290" viewBox="0 0 900 290" role="img" aria-label="The feedback loop of 1.6: more load causes more 429s, then retries and longer model calls, longer turns, more turns in flight, and more memory, queued model calls and retries, which cause more 429s again." style="color: #E4EAE7">
+  <title>The feedback loop of 1.6: more load causes more 429s, then retries and longer model calls, longer turns, more turns in flight, and more memory, queued model calls and retries, which cause more 429s again.</title>
+  <rect x="0" y="0" width="900" height="290" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <!-- entry -->
+    <rect x="24" y="50" width="130" height="44" rx="22" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="89" y="77" text-anchor="middle" font-weight="600">more load</text>
+    <!-- top row -->
+    <rect x="210" y="40" width="180" height="64" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="300" y="66" text-anchor="middle" font-weight="600">more 429s</text>
+    <text x="300" y="86" text-anchor="middle" font-size="11.5">from the shared pool</text>
+    <rect x="450" y="40" width="180" height="64" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="540" y="66" text-anchor="middle" font-weight="600">retries</text>
+    <text x="540" y="86" text-anchor="middle" font-size="11.5" fill="#97A59F">longer model calls</text>
+    <rect x="690" y="40" width="180" height="64" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="780" y="77" text-anchor="middle" font-weight="600">longer turns</text>
+    <!-- bottom row -->
+    <rect x="690" y="194" width="180" height="64" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="780" y="231" text-anchor="middle" font-weight="600">more turns in flight</text>
+    <rect x="210" y="186" width="180" height="80" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="300" y="211" text-anchor="middle" font-weight="600">more memory</text>
+    <text x="300" y="231" text-anchor="middle" font-size="11.5" fill="#97A59F">more queued model calls</text>
+    <text x="300" y="248" text-anchor="middle" font-size="11.5" fill="#97A59F">more retries</text>
+    <!-- centre -->
+    <text x="540" y="154" text-anchor="middle" font-weight="600" fill="#97A59F">the feedback loop</text>
+    <!-- edges -->
+    <g stroke="#97A59F" stroke-width="1.2" fill="none">
+      <path d="M154 72 L208 72" marker-end="url(#arr)"/>
+      <path d="M390 72 L448 72" marker-end="url(#arr)"/>
+      <path d="M630 72 L688 72" marker-end="url(#arr)"/>
+      <path d="M780 104 L780 192" marker-end="url(#arr)"/>
+      <path d="M690 226 L392 226" marker-end="url(#arr)"/>
+      <path d="M300 186 L300 106" marker-end="url(#arr)"/>
+    </g>
+    <text x="792" y="153" font-size="11" fill="#97A59F">Little's law</text>
+  </g>
+</svg>

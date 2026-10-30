@@ -54,7 +54,7 @@ for fmt, gran, g, bits in schemes:
 
 # %% [markdown]
 # Each bit gives about 6 dB of signal-to-noise. INT4 loses ~24 dB against INT8. Groups get back a small quantity of
-# precision, at a small storage cost (a 16-bit scale per 128 weights adds 0.125 bits). On well-behaved weights, INT8 per channel
+# precision, at a small storage cost. A 16-bit scale per 128 weights adds 0.125 bits. On well-behaved weights, INT8 per channel
 # is in fact more precise than FP8 (43 against 32 dB), because FP8-E4M3 has only 3 mantissa bits.
 #
 # The strength of FP8 is *range*: a floating-point grid keeps the same relative precision from 2⁻⁶ to 448. The range
@@ -74,7 +74,7 @@ print(f"relative rounding error on N(0,1) values: median {np.median(rel):.3%}, m
 # %% [markdown]
 # The grid has eight values per power of two. Thus the relative step is 1/8, and the worst rounding error is
 # 1/16 = 6.25%, for all magnitudes. This is true until values are less than 2⁻⁶ (subnormals) or more than 448
-# (saturation). That is why FP8 comes with a per-tensor or per-channel scale. The scale maps the range of the data
+# (saturation). These limits are why FP8 comes with a per-tensor or per-channel scale. The scale maps the range of the data
 # onto the grid.
 #
 # ## Worked example 3 — one outlier channel
@@ -91,12 +91,12 @@ for gran in ["tensor", "channel"]:
 # %% [markdown]
 # The aggregate error of per-tensor INT8 looks acceptable (3%), because the outlier channel dominates the norm. But
 # the 31 ordinary channels almost disappear (their values round to a few levels). **Aggregate metrics hide
-# per-channel damage**. This is the reason that per-channel scales are the default for INT8 weights.
+# per-channel damage**. This hidden damage is the reason that per-channel scales are the default for INT8 weights.
 #
 # ## Worked example 4 — activations have outliers too: SmoothQuant for W8A8
 # W8A8 also quantizes the activations, per token, at run time. LLM activations have a few channels that are large in
 # all tokens. SmoothQuant divides those channels of $X$ by a factor $s$. It multiplies the rows of $W$ with the same
-# index by the same factor: $XW = (X/s)(sW)$. This moves the difficulty into the weights, which tolerate it.
+# index by the same factor: $XW = (X/s)(sW)$. This step moves the difficulty into the weights, which tolerate it.
 
 # %%
 X, W = rng.standard_normal((32, 64)), rng.standard_normal((64, 16)) * 0.05
@@ -128,7 +128,7 @@ for label, kw in [("int8 per-channel", dict(fmt="int8", granularity="channel")),
     print(f"{label:17} KL {c['kl']:.5f} nats  top-1 {c['top1']:.1%}  greedy text identical for {same} tokens")
 
 # %% [markdown]
-# The damage per token is small, but the greedy text diverges within a few tokens. One near-tie that flips changes
+# The damage per token is small, but the greedy text diverges after a few tokens. One near-tie that flips changes
 # everything after it. An exact match on the generated text is an unstable metric. The metrics to trust are the
 # distribution distance (KL, top-1) and **task-level evals** on your own data.
 #
@@ -228,8 +228,8 @@ print(f"✅ int4 g32 error {quant.error(w, int4_groupwise(w, 32))['rel']:.3f} < 
 # %% [markdown]
 # ## Exercise 6.3 — what the weights weigh
 # Write `weights_gb(params, bits, group_size=None, scale_bits=16, keep16_params=0)`. Include the scales in the result.
-# Keep `keep16_params` of the parameters in 16-bit (the embedding table and LM head, which quantized checkpoints do
-# not quantize). Then decide which of these cases fit on **one 80 GB GPU**, with at least 20% of it left for the KV
+# Keep `keep16_params` of the parameters in 16-bit. These parameters are the embedding table and the LM head, which
+# quantized checkpoints do not quantize. Then decide which of these cases fit on **one 80 GB GPU**, with at least 20% of it left for the KV
 # cache:
 #
 # * Llama-3.1-8B (8.03B parameters, untied 128,256 × 4,096 embedding and LM head),

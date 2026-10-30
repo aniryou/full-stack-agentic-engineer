@@ -93,7 +93,7 @@ print("keyed retry  → ledger:", payments.ledger, "| result:", result, "| appli
 # * has a cap, so nobody waits forever,
 # * has jitter, so a thousand clients do not retry in the same millisecond.
 #
-# `backoff_schedule` is a pure function. This is why you can test it and print it.
+# `backoff_schedule` is a pure function. Thus you can test it and print it.
 
 # %%
 def show_schedule(policy, rng_seed=0):
@@ -153,7 +153,7 @@ for exc in (RetryableError("503", status=503), asyncio.TimeoutError(), ToolTrans
 # ### Exercise 3.1 — implement `classify_http`
 #
 # Return `True` for the statuses that are worth a retry: **408, 429, 502, 503, 504**. Each other 4xx is the
-# fault of the caller, and it is permanent. Treat 500 as permanent too. It is usually deterministic, and a
+# fault of the caller, and it is permanent. Treat 500 as permanent too. It is usually deterministic. A
 # retry of deterministic failures at scale is how a short problem becomes an outage.
 
 # %% exercise
@@ -281,7 +281,7 @@ print(f"served {len(served)} (2 at a time + 2 queued), shed {len(shed)} immediat
 # %% [markdown]
 # ## 6. Deadlines compose into a turn budget
 #
-# A timeout is a duration. A **deadline** is a point in time. If you promised the user an answer within 8 s,
+# A timeout is a duration. A **deadline** is a point in time. If you promised the user an answer in 8 s,
 # each hop gets a *child* deadline. A child deadline can never end after the parent. Also, you keep time for
 # the answer itself. If you do not, the turn uses all its time on tools and times out silently.
 
@@ -337,7 +337,7 @@ print("degraded share so far:", f"{chain.degraded_share():.0%}", "| failures per
 # Some errors must not fall through. A smaller model cannot repair a *malformed request*. Also, a silent
 # answer to a broken request from a lower-cost model hides a bug. Implement `should_fall_through(exc)`:
 #
-# * `CircuitOpen` and `BulkheadFull`: fall through (the step is unavailable, not incorrect).
+# * `CircuitOpen` and `BulkheadFull`: fall through. The step is unavailable, not incorrect.
 # * anything for which `is_retryable` is true (transient, timeout): fall through.
 # * everything else (for example `PermanentError`, or a `ValueError` from bad input): **do not** fall through.
 
@@ -373,7 +373,7 @@ print("✅ transient and unavailable fall through; wrong requests surface")
 # ## 8. A GracefulTool inside an agent: the model is told the tool is down
 #
 # The last part puts the mechanisms of sections 1 to 7 around an agentlab tool. `GracefulTool` retries transient
-# failures and sends each attempt through a breaker. When the circuit opens, it returns a **structured**
+# failures and sends each attempt through a breaker. When the circuit opens, `GracefulTool` returns a **structured**
 # `unavailable` result. The hint in that result tells the model what to do. Thus there is no stack trace, no
 # hang, and no model that continues to call a dead tool.
 

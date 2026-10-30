@@ -13,7 +13,7 @@ the standard library + numpy, with no model and no network (~1,700 lines).
 
 ## Start here
 
-1. Read [`../PRIMER.md`](../PRIMER.md) §1–§2 (what an agent remembers, and the write path).
+1. Read [`../PRIMER.md`](../PRIMER.md) §1–§2. These sections are about what an agent remembers and the write path.
 2. Run `python3 -m pip install -e ".[dev]" && python3 -m pytest -q`. The 85 tests take approximately 20 s.
    The suite skips one test: the Colab injector check. The tests include these two:
    - "every number the primer quotes is recomputed"
@@ -69,12 +69,12 @@ Read the modules in this order. Each module starts with a docstring that gives t
 | [`memcore/records.py`](memcore/records.py) | ~100 | One typed record for episodic, semantic and procedural memory: scope, source, provenance, confidence, importance, validity, TTL, deletion key. |
 | [`memcore/store.py`](memcore/store.py) | ~135 | Scope is a partition, not a filter. The crc32 hashing embedder of ragkit, implemented again. A flat index and a full-text index that both delete. |
 | [`memcore/write.py`](memcore/write.py) | ~220 | Extraction after the turn. The write policy (kinds per source, a confidence floor, screening). ADD / UPDATE / ADD_HISTORY / NOOP, which keeps superseded facts and keeps late, older values as history. Idempotency keys that name the step, not the content. |
-| [`memcore/retrieve.py`](memcore/retrieve.py) | ~100 | The generative-agents score in the form of the paper and in the form of the code. Greedy packing into a token budget. As-of filters. Reads are writes. |
+| [`memcore/retrieve.py`](memcore/retrieve.py) | ~100 | The generative-agents score in the form of the paper and in the form of the code. Records packed greedily into a token budget. As-of filters. Reads are writes. |
 | [`memcore/budget.py`](memcore/budget.py) | ~270 | The prefix-cache rules of vLLM and a salted block-hash cache. Secret salts for each tenant, and their rotation. Three memory layouts. Prefill time on the roofline (SIMULATED). Dollars per turn at dated prices, with the caching minimum of the provider. `Budget`. |
 | [`memcore/consolidate.py`](memcore/consolidate.py) | ~195 | Episodes to facts with precedence, supersession in valid time, and flags. A run id, a lease with a heartbeat and a fence, checkpoints and a crash hook. Reflection with explicit exits. |
 | [`memcore/forget.py`](memcore/forget.py) | ~150 | Decay, TTL and caps. `propagate()` to every surface on word boundaries, with a review list for what provenance finds and content cannot find. `residue()` to prove the deletion. |
-| [`memcore/agent.py`](memcore/agent.py) | ~250 | The loop of agent-core with `remember` / `recall` / `forget`. Tools, implicit and pinned modes (the agent pins the profile again when a pinned slot changes). Taint. Fencing. Audit events with the field names of the identity lab. |
-| [`memcore/harness.py`](memcore/harness.py) | ~270 | The planted-facts generator in the task shapes of LongMemEval and LoCoMo (and its two artefacts, which you can switch on and off). Evaluation, Wilson and per-user intervals, recall against budget, the knee, the three modes compared. |
+| [`memcore/agent.py`](memcore/agent.py) | ~250 | The loop of agent-core with `remember` / `recall` / `forget`. Tools, implicit and pinned modes. When a pinned slot changes, the agent pins the profile again. Taint. A fence around memory in the prompt. Audit events with the field names of the identity lab. |
+| [`memcore/harness.py`](memcore/harness.py) | ~270 | The planted-facts generator in the task shapes of LongMemEval and LoCoMo, and its two artefacts. You can switch the artefacts on and off. Evaluation, Wilson and per-user intervals, recall against budget, the knee, the three modes compared. |
 
 ## What the tests prove
 
@@ -86,7 +86,7 @@ Read the modules in this order. Each module starts with a docstring that gives t
     C 1.3571).
   - The oldest-first recency of the code form.
   - The buckets and cosines (0.2236) of the hashing embedder.
-  - Packing.
+  - Records packed into a budget.
   - The cached tokens per turn of every layout, in closed form.
   - Retention decay (0.225).
   - The Wilson interval (45/50 gives 0.7864–0.9565).
@@ -102,15 +102,15 @@ Read the modules in this order. Each module starts with a docstring that gives t
   - An older value never supersedes a newer value. This is true in the writer, and in a consolidation run over
     windows that are out of order.
   - A consolidation job can crash after the writes of a slot and before its checkpoint. When the lease expires,
-    another worker resumes the job. The job writes each fact one time only (if the ids are random, the job writes
-    duplicates).
+    another worker resumes the job. The job writes each fact one time only. If the ids are random, the job writes
+    duplicates.
   - A slow worker that lost its lease stops before it writes.
   - A deletion matches values on word boundaries, lists paraphrases for review and rotates the cache salt of the
     tenant.
   - The policy quarantines and rejects a poisoned page. A permissive policy lets the page answer the adversarial
     question.
   - `forget` is confirm-gated.
-  - The memory budget shapes packing. Writes and model calls fail closed.
+  - The memory budget shapes what retrieval packs. Writes and model calls fail closed.
   - A write to a pinned slot pins the profile again.
 - **The limits of the fixture, pinned:**
   - The slot hints give raw episodes an advantage.
@@ -139,8 +139,8 @@ A **scripted model** takes the place of the LLM:
   `recall` only when a turn names a slot. Thus "tools miss the task" is a rule, not an observation.
 
 The **embedder is lexical** (crc32 feature hashing). Thus paraphrases miss by design. Tokens are `len(text) // 4`
-and token ids are 4-character chunks. Thus text prefixes are token prefixes (a real tokenizer can move one token at a
-boundary).
+and token ids are 4-character chunks. Thus text prefixes are token prefixes. A real tokenizer can move one token at a
+boundary.
 
 The roofline model of `minengine.perf` (datasheet GPU numbers, 0.6/0.8 efficiencies, verify) gives the prefill
 times, which are **SIMULATED**. The prices are dated list prices `(verify)`. The price calculation treats the

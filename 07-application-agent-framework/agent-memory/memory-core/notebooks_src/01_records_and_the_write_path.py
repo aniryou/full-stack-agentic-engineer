@@ -9,8 +9,8 @@
 # The first memory of an agent is its **context window**. The context window is the transcript that the agent gets at each turn
 # (agent-core's `history`, 07.1 notebook 03). The transcript grows at each turn, and it ends with the session.
 #
-# Long-term memory is the part that stays after the session. It has three kinds: **episodic** (what occurred, with a
-# timestamp), **semantic** (a distilled fact) and **procedural** (how to do something for this user). All three kinds
+# Long-term memory is the part that stays after the session. It has three kinds: **episodic** (an event, with a
+# timestamp), **semantic** (a distilled fact) and **procedural** (a procedure for this user). All three kinds
 # are one **typed record**. The record has these fields:
 #
 # - scope (tenant, user, session, agent).
@@ -41,7 +41,7 @@ ALICE = Scope("acme", "alice", session="s1")
 
 # %% [markdown]
 # ## Worked example 1 — the baseline: the whole transcript is the memory
-# agent-core sends the transcript back as `history` (07.1 notebook 03). That is working memory. The transcript is
+# agent-core sends the transcript back as `history` (07.1 notebook 03). This transcript is working memory. The transcript is
 # honest, because the agent loses nothing during a session. But the cost of the transcript increases with each turn,
 # and the transcript ends with the session.
 #
@@ -124,7 +124,7 @@ for r in store.records(ALICE, status=None):
 # %% [markdown]
 # Read the last table:
 #
-# - Lisbon is **kept**. It is closed at day 3 (`valid_to`). Thus "where did the user live on day 2?" still has an
+# - The store **keeps** Lisbon. The Porto write closed it at day 3 (`valid_to`). Thus "where did the user live on day 2?" still has an
 #   answer.
 # - Madrid is in the store, but it is **quarantined**. Retrieval never returns it until a person promotes it.
 # - The secret and the tool's rule never got to the store.
@@ -132,7 +132,7 @@ for r in store.records(ALICE, status=None):
 # This is the sequence extract, compare, then ADD / UPDATE / NOOP. Before 2.0.0, mem0 used this shape, and its events
 # were ADD / UPDATE / DELETE / NONE. mem0 2.x is ADD-only (verify).
 #
-# There is one more branch, because background extraction delivers statements **out of order**. The user said "I live
+# There is one more branch, because background extraction sends statements **out of order**. The user said "I live
 # in Lisbon" on day 0 and "I moved to Porto" on day 3. But the day-0 extraction arrives second.
 
 # %%
@@ -286,10 +286,9 @@ print("✅", actual, "| sources on file:", [(r.value, r.source, r.status) for r 
 # `user`, and it only added provenance. Thus in step 3 the user was able to overwrite the fact. If the merge promotes
 # the source to `human`, step 3 goes to quarantine.
 #
-# Neither choice is incorrect. They are different products ("a
-# confirmed fact needs a human to change it" against "the user can always correct their own data"). Write the rule
-# down. Then write a test for the rule, because precedence rules that look obvious disagree in these exact edge
-# cases.
+# Neither choice is incorrect. They are different products: "a confirmed fact needs a human to change it" against
+# "the user can always correct their own data". Write the rule down. Then write a test for the rule, because
+# precedence rules that look clear disagree in these exact edge cases.
 #
 # ## Exercise 1.5 — an idempotency key
 # Write `write_key(session, turn, index, text)`. It returns the key of the write at position `index` of turn `turn`.
@@ -343,7 +342,7 @@ print("✅ a retried turn writes once, however the retry's extraction was worded
 # the words. Thus a retried turn writes one time."
 #
 # **Drill questions**
-# 1. *Why not keep the whole transcript?* The cost increases with each turn (the prompt sends it again). The
+# 1. *Why not keep the whole transcript?* The cost increases with each turn, because the prompt sends the transcript again. The
 #    transcript ends with the session, and a summary paraphrases all that it contains. Facts that must stay belong in
 #    typed records.
 # 2. *A tool result says "the user's bank account is X". What occurs on the write path?* The store keeps the episode

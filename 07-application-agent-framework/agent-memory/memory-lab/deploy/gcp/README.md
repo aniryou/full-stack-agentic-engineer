@@ -100,9 +100,9 @@ the `oidc_token` of `google_cloud_scheduler_job.reaper` in its
 The Terraform sample of Google for scheduled jobs uses the v2 URI of the diagram at the top of this README. The
 gcloud samples of Google use the v1 form
 `https://<region>-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/<project>/jobs/<job>:run` (verify
-which form your gcloud prefers). Also verify `--task-timeout`, `--set-secrets` and `--command/--args` on
-`gcloud run jobs create`. Also verify if `roles/run.invoker` on the job is sufficient to run it (the sample of
-Google gives `roles/run.developer` on the project).
+which form your gcloud prefers). Also examine `--task-timeout`, `--set-secrets` and `--command/--args` on
+`gcloud run jobs create`. Also examine if `roles/run.invoker` on the job is sufficient to run it. The sample of
+Google gives `roles/run.developer` on the project.
 
 If the schedule starts the job two times, no damage occurs. Both executions calculate the same window (the
 previous ISO week) and the same run id for each user. One execution takes the lease. The other execution finds the
@@ -148,6 +148,6 @@ gcloud artifacts repositories delete memlab --project my-project --location us-c
 # the Cloud SQL instance and the serving lab's Cloud Run service: see their own cleanup steps
 ```
 
-When you delete the Cloud SQL instance, you delete the memories. Its automated backups obey the backup retention
-setting of the instance (verify). The backup retention is the subject of the "backups" line of the
+When you delete the Cloud SQL instance, you delete the memories. The automated backups of the instance obey its backup retention
+setting (verify). The backup retention is the subject of the "backups" line of the
 deletion checklist in notebook 05.

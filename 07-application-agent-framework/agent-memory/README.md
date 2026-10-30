@@ -69,7 +69,7 @@ print([r.value for r in retrieve(store, alice, "What is the user's home city?", 
 ## How it fits
 
 Read the [agent-core loop and tool contracts](../agent-fundamentals/agent-core/) (07.1) first. This topic replaces
-the baseline of agent-core, "memory is the transcript". This topic reuses this material, and cites it section by
+the baseline of agent-core, "memory is the transcript". This topic reuses the material in the list that follows, and cites it section by
 section:
 
 - The [agent platform lab](../agent-fundamentals/gcp-agent-platform-lab/) (07.2: sessions, context layout, evals,
@@ -106,7 +106,7 @@ path, see [`CURRICULUM.md`](../../CURRICULUM.md).
     PRIMER §4 and §6 quantify each advantage. The comparison that decides a design uses a real model (T1).
 
 - **The benchmarks are shapes, not data.** The harness copies the task types of LongMemEval and LoCoMo. It bundles
-  nothing and downloads nothing (the LoCoMo data is CC BY-NC 4.0).
+  nothing and downloads nothing. The LoCoMo data is CC BY-NC 4.0.
 
 - **Deletion on disk is the job of the lab.** The core shows every surface that a deletion must reach. The lab proves
   the deletion on a real SQLite file. On that file, FTS5 and WAL keep deleted text until you make them release it.

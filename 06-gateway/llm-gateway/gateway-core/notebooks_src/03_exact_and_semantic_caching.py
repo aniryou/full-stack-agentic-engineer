@@ -88,7 +88,7 @@ for a, b in zip(rows[False], rows[True]):
 # many hits without false ones. The entity guard halves the false hits at low thresholds, but it cannot see "Business"
 # against "Team".
 #
-# This is not an artefact that you can adjust away. A real embedder increases the paraphrase scores, but "the Team plan"
+# This result is not an artefact that you can adjust away. A real embedder increases the paraphrase scores, but "the Team plan"
 # and "the Business plan" stay near in any embedding. Thus the answer has three parts:
 #
 # - narrow cacheable classes,
@@ -148,7 +148,7 @@ print(f"✅ the guard separates {len(blocked)} of 15 near misses:", blocked)
 # %% [markdown]
 # ## Exercise 3.3 — choose a threshold under a false-hit budget
 # The budget of the route: at most **5 %** of cacheable lookups can get an incorrect answer from the cache. Examine the
-# thresholds 0.50, 0.51, …, 1.00, with and without the guard. Select the `(tau, guard)` that maximises the hit rate in
+# thresholds 0.50, 0.51, …, 1.00, with and without the guard. Select the `(tau, guard)` that gives the highest hit rate in
 # the budget. If there is a tie, prefer the higher threshold, then the guard on. Use `cache.sweep_thresholds`.
 
 # %% exercise
@@ -197,7 +197,7 @@ print(f"✅ break-even ${break_even:.5f} per wrong answer: any wrong answer that
 #
 # Write `namespace(tenant, user, cache_class)`. It returns a string. For the classes in `PER_USER`, the namespace
 # contains the tenant *and* the user. For every other class, it contains only the tenant. Tenant ids and user ids are
-# arbitrary strings (they can contain `:` or `|`). Thus two different (tenant, user) pairs must never give the same
+# arbitrary strings that can contain `:` or `|`. Thus two different (tenant, user) pairs must never give the same
 # namespace.
 
 # %%
@@ -265,7 +265,7 @@ print(f"   for a vLLM pool the engine's prefix cache is isolated per tenant with
 # verifier."
 #
 # **Drill questions**
-# 1. *The semantic cache answered one user with another user's order status. What went wrong?* A personal class was
+# 1. *The semantic cache answered one user with another user's order status. What was the cause?* A personal class was
 #    cacheable, and the namespace had no tenant or user. Also, a near miss of one digit went above the threshold. Declare the
 #    classes for each route. Make the namespace from the verified tenant. Put a guard on numbers and IDs. Measure the
 #    false hits first.

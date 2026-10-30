@@ -18,7 +18,7 @@
 #   GRPO trains no value model (PRIMER §4 "RL with verifiable rewards and GRPO").
 # * **Verifiable rewards** need no reward model: a program examines the final answer. Here the task
 #   is the last digit of a sum of six base-5 digits. A 2-layer transformer cannot add six numbers in
-#   the one token that it emits for the answer. But it can add them if it first writes the partial
+#   the one token that it writes for the answer. But it can add them if it first writes the partial
 #   sums in a `<think>` scratchpad. Each thinking token adds one more step of serial computation.
 # * **What you will watch:** a short supervised warm-up shows the model both behaviours, half the
 #   time each: it answers straight away, or it thinks first. Then GRPO, with a reward only for correct
@@ -234,7 +234,7 @@ else:
 #
 # ## Exercise 1.3 — the GRPO loss, in torch
 #
-# Write the loss that `train.py` minimises. The inputs are:
+# Write the loss that `train.py` makes as small as possible. The inputs are:
 #
 # * `(B, T)` tensors of per-token log-probabilities under three policies: the current policy
 #   (`logp`), the policy that sampled the batch (`old_logp`) and the reference (`ref_logp`).
@@ -299,7 +299,7 @@ else:
 # ## Exercise 1.4 — train with your loss, and make the clip bind
 #
 # The check cell after the exercise starts GRPO again two times from the same SFT model, for 10
-# steps each time. Both runs minimise *your* loss. The first run uses `num_iterations = 1`. The
+# steps each time. Both runs make *your* loss as small as possible. The first run uses `num_iterations = 1`. The
 # second run uses `num_iterations = 2`: it uses each rollout batch for two optimizer steps, as TRL
 # does with $\mu > 1$. Before you run the check, predict these values:
 #
@@ -384,7 +384,7 @@ print("✅ the spikes are k3's variance where π_θ << π_ref: unbiased on avera
 # The *true* KL for this choice has a bound. As $\pi_\theta$(`</think>`) $\to 0$, it goes to
 # $\log(1/0.5)$ = 0.69 nats per completion. The variance of the estimator has no bound: it grows
 # like $\pi_{\text{ref}}^2/\pi_\theta$. With `beta > 0`, the same term is in the *loss*, thus those
-# rare tokens also get large gradients. Read a logged KL as a moving mean over steps, not step by
+# rare tokens also get large gradients. Read a logged KL as a mean over a window of steps, not step by
 # step.
 #
 # ## On a real GPU (T1)
@@ -427,7 +427,7 @@ print(table([{"knob": "k / base", "try": "10 / 10", "what changes": "a harder ta
 #
 # "The logged KL to the SFT model has spikes, but they are not a sign of drift. The cause is that
 # $k_3$ is noisy where the policy no longer takes a path that the reference liked. The same
-# dynamics, at scale, are why RL-trained reasoning models produce long outputs. That is a serving
+# dynamics, at scale, are why RL-trained reasoning models produce long outputs. Long outputs are a serving
 # problem as much as a training one (notebook 04)."
 #
 # **Drill 1.** *Why does GRPO not need a critic, and what does that cost?* The group mean is the

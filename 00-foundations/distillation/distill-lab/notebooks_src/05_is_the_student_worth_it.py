@@ -6,8 +6,8 @@
 # comes from the recorded tiny run of notebook 01 (illustrative).
 #
 # T1: set `DISTILLAB_URL` to a vLLM server. Then the throughput cell measures output tokens per second from its
-# `/metrics`. The lm-eval tool gives real accuracies (the commands are in the section "Worked example: measured
-# throughput at T1").
+# `/metrics`. The lm-eval tool gives real accuracies. The section "Worked example: measured
+# throughput at T1" has the commands.
 #
 # ## The one-minute version
 #
@@ -96,7 +96,7 @@ print(f"✅ student accuracy {PAIRED['student']:.3f}, 95% interval {lo:.3f}-{hi:
 # ## Exercise 5.2 — where the gap hides
 #
 # Write `gap_by(records, key)`. It returns a dict from each value of `key` (such as `"difficulty"`) to the gap
-# $\text{teacher accuracy} - \text{student accuracy}$ on those records. Then compare the overall gap with the gap on
+# $\text{teacher accuracy} - \text{student accuracy}$ on those records. Then compare the gap over all the records with the gap on
 # the hardest slice.
 
 # %% exercise
@@ -252,7 +252,7 @@ print(f"✅ with an accuracy floor of {FLOOR}: teacher from difficulty {BEST if 
 # * the student's own confidence (`C.cascade(..., student_first=True)`)
 # * the user's tier
 #
-# With the student's confidence, the router sends the query to the teacher after the student answers. This pays for
+# With the student's confidence, the router sends the query to the teacher after the student answers. Thus the cascade pays for
 # both answers on the routed share.
 #
 # A difficulty classifier that is 90% accurate changes this table. Thus, measure the router, not the oracle.

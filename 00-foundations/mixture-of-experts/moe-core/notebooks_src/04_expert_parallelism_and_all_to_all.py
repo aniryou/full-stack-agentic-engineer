@@ -61,8 +61,9 @@ for tok in (8, 64, 4096):
         print(f"{tok:10d} {lk:>9s} | {cell(d)} | {cell(dd)} | {cell(dc)}")
 
 # %% [markdown]
-# Decode moves a small quantity of data per layer (latency-bound: $\alpha$ is the largest term). Prefill moves a large
-# quantity (bandwidth-bound). For DeepSeek at 4,096 tokens per GPU, one dispatch is 231 MiB. That dispatch takes ~0.5 ms
+# Decode moves a small quantity of data per layer, so decode is latency-bound: $\alpha$ is the largest term. Prefill
+# moves a large quantity, so prefill is bandwidth-bound. For DeepSeek at 4,096 tokens per GPU, one dispatch is
+# 231 MiB. That dispatch takes ~0.5 ms
 # on NVLink and ~4 ms over one 400 Gb/s NIC per GPU. That is why DeepEP supplies two kernel families: low-latency
 # (decode, CUDA-graph friendly) and high-throughput (prefill). The high-throughput kernels forward the data over NVLink
 # and then over RDMA.
@@ -77,7 +78,7 @@ for tok in (8, 64, 4096):
 # roofline of its own: its rows × 2 × expert params ÷ peak, against its touched experts × expert bytes ÷ bandwidth.
 # The layer waits for the slowest rank, and each all-to-all waits for the busiest port.
 #
-# A port sends and receives at the same time. The combine is the dispatch in reverse.
+# A port sends data and gets data at the same time. The combine is the dispatch in reverse.
 
 # %%
 rng = np.random.default_rng(0)
@@ -103,7 +104,7 @@ print(f"\ndecode, skewed: expert time per rank {np.round(d.rank * 1e6, 1).tolist
 # %% [markdown]
 # At decode size, each expert sees ~64 rows, far below the ridge of the H100 (~295 FLOP/B). Every rank uses ~45 µs to
 # stream the weights of its 16 experts, whatever the skew. The extra rows of the hot rank hide under that read. In
-# decode, the cost of the skew is in the exchange. The port of the hot rank receives the dispatch and sends the
+# decode, the cost of the skew is in the exchange. The port of the hot rank gets the dispatch and sends the
 # combine for ~1.5× the mean traffic. At prefill size, the GEMMs are compute-bound, and the 1.65× rows of the busiest
 # rank set the layer.
 #
@@ -319,7 +320,7 @@ print(f"✅ same roofline ({two_nodes['roofline'] * 1e3:.1f} ms), all-to-alls {o
 #
 # "Then the step waits for the busiest GPU. In prefill, this is the GPU that computes the rows of the hot experts. In
 # memory-bound decode, it is the GPU whose link carries the traffic of the hot experts. Placement moves the hot spot.
-# An EPLB-style rebalance with a few redundant experts removes most of it, for a couple of GiB per GPU.
+# An EPLB-style rebalance with a few redundant experts removes most of it, for a few GiB per GPU.
 #
 # "We use EP together with data-parallel attention (wide-EP). Each rank holds a replica of the attention weights, but
 # the KV is per rank and the experts are spread thin. Thus each GPU has space for a large batch, and every expert sees

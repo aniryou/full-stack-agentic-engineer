@@ -81,7 +81,7 @@ print("text:", repr(acc.text()), "| finish:", acc.finish_reason, "| usage:", acc
 # (anthropic-sdk-python 1.8.0 `MessageDeltaUsage`). But this is true only if the stream ends.
 #
 # If you cut the stream before `message_delta`, you hold only the usage of `message_start`. Its `output_tokens` is 1,
-# and that is not a bill. Then the normaliser emits no usage chunk at all. The gateway estimates from the deltas that it
+# and that is not a bill. Then the normaliser sends no usage chunk at all. The gateway estimates from the deltas that it
 # relayed, and it marks the value as an estimate. It never invents the count that it does not have.
 
 # %%
@@ -102,7 +102,7 @@ print("anthropic, cut before message_delta: usage", acc.usage, "| estimate from 
 # ## Worked example 3 — the whole front door
 # `Gateway.handle()` runs the path of §1.3:
 #
-# 1. authenticate a **virtual key** (the tenant comes from the key),
+# 1. authenticate a **virtual key**, the source of the tenant,
 # 2. screen,
 # 3. cache,
 # 4. reserve tokens,
@@ -111,7 +111,7 @@ print("anthropic, cut before message_delta: usage", acc.usage, "| estimate from 
 # 7. reconcile,
 # 8. record.
 #
-# The primary provider has a scripted outage. Thus the request falls through to the next target. This occurs before
+# The primary provider has a scripted outage. Thus the request falls through to the next target. The fall-through occurs before
 # the first byte, so the client never sees the outage.
 
 # %%
@@ -140,7 +140,7 @@ print("ledger row:", r.row)
 # - `prompt_tokens` (with the cached tokens and the cache-written tokens),
 # - `completion_tokens` (with the reasoning tokens),
 # - `cached_tokens`,
-# - `cache_write_tokens` (the prompt tokens that the provider writes to its cache and bills at their own price),
+# - `cache_write_tokens`, the prompt tokens that the provider writes to its cache and bills at their own price,
 # - `reasoning_tokens`,
 # - `total_tokens`.
 #
@@ -215,7 +215,7 @@ print("✅ two interleaved calls reassembled by index:", got)
 #
 # * `upstream_body(request)`: what the gateway sends upstream. This is a copy of the request, plus
 #   `stream_options = {"include_usage": True}` **only** when `stream` is true (if not, vLLM answers 400).
-# * `client_events(events, client_asked)`: the events that the client receives. These are all the events, except the
+# * `client_events(events, client_asked)`: the events that the client gets. These are all the events, except the
 #   usage chunk (`choices == []` and a `usage`) when the client did not ask for it.
 
 # %% exercise
@@ -247,7 +247,7 @@ print("✅ usage injected upstream only on streams, and stripped from clients th
 # %% [markdown]
 # ## Exercise 1.4 — bill a stream that was cut
 # The provider stops after the 7th chunk, and no usage chunk arrives. The ledger must not bill 0. Calculate
-# `cut_estimate`: the completion tokens to bill. Estimate them over all the content that the client received, with the
+# `cut_estimate`: the completion tokens to bill. Estimate them over all the content that the client got, with the
 # method of `api.estimate_tokens` (four characters a token). Use only `cut_events`.
 
 # %%
@@ -337,8 +337,8 @@ print("✅ from the file alone:", attempts, "| names pinned to", otel.PINNED)
 # 2. *A stream is cut after 200 tokens and no usage arrives. What does the ledger say?* The ledger has an estimated row,
 #    with status `cut`, for the tokens that the gateway counted from the relayed deltas. Later, the gateway reconciles
 #    the row against the export of the provider. The row is never zero and never the output cap.
-# 3. *What does not normalise across providers?* Three things do not normalise. The first is the stream shapes (named
-#    events against chunks, whole function calls against argument fragments, no `[DONE]` from Anthropic). The second is
+# 3. *What does not normalise across providers?* Three things do not normalise. The first is the stream shapes: named
+#    events against chunks, whole function calls against argument fragments, no `[DONE]` from Anthropic. The second is
 #    the location of the reasoning text. The third is the time when the counts arrive.
 #
 #    The thinking tokens of Anthropic come only in the final `message_delta`. Thus, if the stream is cut before
