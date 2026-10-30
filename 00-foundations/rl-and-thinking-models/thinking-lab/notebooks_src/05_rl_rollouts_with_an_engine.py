@@ -10,7 +10,7 @@
 #
 # ![Three ways to schedule rollouts and training: a synchronous step where each side waits for the other, one-step-off-policy where generation of the next step overlaps training, and fully asynchronous rollouts on separate GPUs with stale samples.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/00-foundations/rl-and-thinking-models/figures/rl-step-timeline.svg)
 #
-# *Figure from the topic primer, §8 The RL training stack in brief: three schedules of one RL step. In the synchronous step, the batch waits for its longest completion. The one-step-off-policy trainer generates step k + 1 while it trains on step k.*
+# *Figure from the topic primer, §8 The RL training stack in brief: three schedules of one RL step. The worked example and Exercise 5.4 measure the idle slots while the synchronous batch waits for its longest completion. In the one-step-off-policy schedule, the engine generates step k + 1 while the trainer trains on step k.*
 #
 # ## The one-minute version
 #

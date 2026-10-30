@@ -4,6 +4,10 @@
 # **Tier:** T0 (CPU only, about 15 seconds, no network). Every number in this notebook is a **simulated** number from
 # `fleetsim`.
 #
+# ![The simulated SLO attainment of every xPyD split of eight L4 replicas, against aggregated serving and the analytic plan.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/05-orchestrator/serving-orchestration/figures/pd-split-slo-attainment.svg)
+#
+# *Figure from the primer, §5.3: see the SLO attainment of each xPyD split of eight L4 replicas. The best split is 3P5D, near the analytic plan. The first worked example computes these values with `search_pd` and `pd_plan`.*
+#
 # ## The one-minute version
 # Prefill is compute-bound, and its load comes in bursts. Decode is memory-bound, and its load is steady. On a shared
 # engine, one 2,048-token prefill chunk makes every decode request in the batch wait half a second (on an L4).

@@ -4,6 +4,10 @@
 # **Tier:** T0 (CPU only, a few seconds, no network). Every number in this notebook is a **simulated** number from
 # `fleetsim`. The tier bandwidths are assumptions that we state, not measurements.
 #
+# ![On eviction, KV moves down the tiers, from HBM to a remote store, and above the break-even bandwidth a fetch wins over a recompute.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/05-orchestrator/serving-orchestration/figures/kv-tiers-fetch-or-recompute.svg)
+#
+# *Figure from the primer, §6.2: see how LRU eviction moves the KV of an idle session one tier down, and a fetch brings it back. Above the break-even bandwidth, a fetch is faster than a recompute: 0.50 GB/s on an L4, 4.05 GB/s on an H100.*
+#
 # ## The one-minute version
 # An agent session sends its full history again at every turn, and this history becomes longer at each turn. Between
 # turns, the session pauses while tools run. Thus its KV cache is the most reusable state in the fleet. It also has

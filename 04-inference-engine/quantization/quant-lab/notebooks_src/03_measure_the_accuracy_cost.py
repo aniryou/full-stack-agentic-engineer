@@ -6,6 +6,10 @@
 # format (illustrative)**, which it parses and compares. T1: the same commands run `lm_eval` against a real
 # checkpoint on a GPU, or against a `vllm serve` that runs (`QUANTLAB_URL`, `local-completions`).
 #
+# ![The smallest accuracy drop that an unpaired comparison of two models can tell from noise, against the number of eval items per model.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/04-inference-engine/quantization/figures/visible-drop-vs-eval-items.svg)
+#
+# *Figure from the topic primer, §8: the smallest drop that an unpaired comparison can see decreases as the eval items increase. At 250 items and 76.8% accuracy, that drop is about 7.6 points. Exercise 3.2 computes the same rule at 30% accuracy.*
+#
 # ## The one-minute version
 #
 # The question "Did quantization hurt?" has three measurements, and they can disagree:

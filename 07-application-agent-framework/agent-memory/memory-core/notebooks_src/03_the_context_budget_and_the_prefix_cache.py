@@ -6,6 +6,10 @@
 # `cached_tokens` of a real vLLM server, are in `memory-lab` notebook `03_memory_layouts_and_the_prefix_cache` (T0
 # simulated, T1 measured).
 #
+# ![The prompt at turn 8 in the four layouts, to scale, with the cached prefix and the uncached part the engine prefills again: 56 tokens with no memory or a pinned profile, 1,560 with memory before the history, 600 with memory at the tail.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/07-application-agent-framework/agent-memory/figures/prompt-layouts-turn-8.svg)
+#
+# *Figure from the topic primer, §5 Where memory sits in the prompt: see the cached and the uncached part of each layout at turn 8. Worked example 4 prints the same uncached tokens: 56, 1,560, 56 and 600.*
+#
 # ## The one-minute version
 # Memory costs tokens two times: the tokens that you inject, and the prefix-cache hits that you destroy. An engine uses
 # KV again only for an **exact prefix, in full blocks**. In vLLM, a block is 16 tokens, and a chained hash names each

@@ -4,6 +4,10 @@
 # **Tier:** T0. It uses only a CPU, it needs no model and no network, and it takes less than ten seconds. A real
 # embedder on the paraphrase subset is in `memory-lab` notebook `05_evaluate_forget_and_audit` (T1, optional).
 #
+# ![The normalised recency term of A, B and C against the hours from the last access, in the paper form and the code form.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/07-application-agent-framework/agent-memory/figures/recency-two-forms.svg)
+#
+# *Figure from the topic primer, §3 Retrieval: similarity, recency and importance: see the two recency forms on A, B and C. The paper form gives A the full term, and the code form gives it to C. Worked example 2 computes the same values.*
+#
 # ## The one-minute version
 # Retrieval decides which memories get to the prompt. Thus it decides what the agent "remembers". Similarity alone
 # returns the memory that is most *on-topic*. The generative-agents score (Park et al. 2023) adds **recency** and

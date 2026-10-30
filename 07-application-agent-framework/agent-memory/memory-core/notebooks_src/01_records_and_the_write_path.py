@@ -5,6 +5,10 @@
 # few seconds. The same write path on SQLite with FTS5 and vectors is in `memory-lab` notebook
 # `01_a_memory_store_on_sqlite` (T0, and pgvector with Docker).
 #
+# ![Working memory is the context window of one session and ends with it; long-term memory is typed records that survive across sessions until a TTL or a deletion.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/07-application-agent-framework/agent-memory/figures/memory-lifetimes.svg)
+#
+# *Figure from the topic primer, §1 What an agent remembers: see that the transcript ends with the session. The three kinds of typed record survive it. A new value closes the old fact, and the store keeps it.*
+#
 # ## The one-minute version
 # The first memory of an agent is its **context window**. The context window is the transcript that the agent gets at each turn
 # (agent-core's `history`, 07.1 notebook 03). The transcript grows at each turn, and it ends with the session.

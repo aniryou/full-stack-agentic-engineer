@@ -7,6 +7,10 @@
 # whose boot disk is a tier much different from the SSD of your laptop. Concepts: primer §6 "Storage and cold start"
 # ([`../../PRIMER.md`](../../PRIMER.md)).
 #
+# ![The three cold-start scenarios as bars on one time scale, with the largest stage of each row marked.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/01-hardware-gpu-fabric/roofline-and-fabric/figures/cold-start-timeline.svg)
+#
+# *Figure from the primer, §6.2 The anatomy of a cold start: see three cold starts on one time scale. Orange marks the largest stage of each row. Section 4 of this notebook calculates the same budget with the disk rate that you measure.*
+#
 # **Predicted first in** [roofline-core notebook 04](../../roofline-core/notebooks/04_loading_reliability_and_cost.ipynb)
 # (Ex 4.1 streamed loading, Ex 4.2 the cold-start budget) from datasheet tier rates. In this notebook, you measure the
 # tier that you actually have. You decide which of your numbers is the correct one for a plan. Then you give that

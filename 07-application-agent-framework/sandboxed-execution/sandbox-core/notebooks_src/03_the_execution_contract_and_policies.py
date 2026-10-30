@@ -4,6 +4,10 @@
 # **Tier:** T0: a laptop, a Colab CPU or CI, free, seconds. The lab applies the rendered manifests for real
 # (`../sandbox-lab`, notebooks 02 and 05). Here, the notebook builds and validates them offline.
 #
+# ![The enforcement points on Kubernetes: the Job or the warm pool creates the Pod, admission examines it, and the NetworkPolicy leaves only the proxy open.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/07-application-agent-framework/sandboxed-execution/figures/k8s-enforcement-points.svg)
+#
+# *Figure from the sandboxed-execution primer, §5 Sandboxes on Kubernetes: one policy object renders to each enforcement point. See the Job, the admission policy, the RuntimeClass and the NetworkPolicy that worked example 3 renders.*
+#
 # ## The one-minute version
 # A sandbox is an **API with a contract**, not a place. The request carries the code, its inputs and a **budget for
 # every resource the code can exhaust**. The result carries truncated output and an **exit reason** that the caller

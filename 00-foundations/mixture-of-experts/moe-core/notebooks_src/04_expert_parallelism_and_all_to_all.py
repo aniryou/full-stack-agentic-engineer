@@ -8,7 +8,7 @@
 #
 # ![Time of one direct Mixtral dispatch all-to-all on 8 GPUs against the tokens per GPU, on NVLink 4 and on 400 Gb/s InfiniBand.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/00-foundations/mixture-of-experts/figures/dispatch-time-vs-tokens.svg)
 #
-# *Figure from the primer, §6.2 Expert parallelism: dispatch and combine: see the time of a Mixtral dispatch on 8 GPUs against the tokens per GPU (simulated). Worked example 1 calculates it: the latency α sets the time at decode sizes, and the bytes set it at prefill sizes.*
+# *Figure from the primer, §6.2: see the time of one Mixtral dispatch on 8 GPUs against the tokens per GPU (simulated). Worked example 1 calculates it: the latency α sets the time at decode sizes, and the bytes set it at prefill sizes.*
 #
 # ## The one-minute version
 # **Expert parallelism** (EP) puts $E/p$ whole experts on each of $p$ GPUs. Every MoE layer then moves *tokens*, not

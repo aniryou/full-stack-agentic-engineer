@@ -11,7 +11,7 @@
 #
 # ![Cumulative cost against output tokens: the teacher line from zero, the student line from the one-off bill with a lower slope, and the crossing at 230.6 million tokens.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/00-foundations/distillation/figures/break-even.svg)
 #
-# *Figure from the PRIMER, §9 "The economics of a student": the student line starts at the one-off bill. It rises more slowly than the teacher line. Exercise 5.3 calculates where the two lines cross.*
+# *Figure from the PRIMER, §9 "The economics of a student": the student line starts at the one-off bill and has a lower slope. Exercise 5.3 gives the break-even point in days of serving. Its column for the self-hosted teacher uses the same numbers as these lines.*
 #
 # ## The one-minute version
 #

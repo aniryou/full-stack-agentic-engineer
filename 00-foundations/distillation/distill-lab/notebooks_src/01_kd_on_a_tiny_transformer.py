@@ -9,7 +9,7 @@
 #
 # ![Four panels show what each recipe of the core takes from the teacher: hard labels, logit KD, SeqKD and on-policy GKD.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/00-foundations/distillation/figures/four-recipes.svg)
 #
-# *Figure from the PRIMER, "The one-minute version": each panel shows what one recipe takes from the teacher. This notebook trains a student with each of the four recipes on the same task.*
+# *Figure from the PRIMER, "The one-minute version": each panel shows what one recipe takes from the teacher. This notebook trains a student with each of the four recipes on the same task. The numbers in the panels come from the toy of distill-core, not from this notebook.*
 #
 # ## The one-minute version
 #

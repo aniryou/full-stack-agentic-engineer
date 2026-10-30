@@ -5,6 +5,10 @@
 # containers, kind and GKE (`../sandbox-lab`, `bench.py`). The queueing model and the cost arithmetic are here, and
 # this notebook measures the two process-level latencies live on your machine.
 #
+# ![The share of requests that wait for a warm sandbox against the pool size, for a replace-after-use pool and a reuse pool at 5 executions/s.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/07-application-agent-framework/sandboxed-execution/figures/pool-wait-vs-slots.svg)
+#
+# *Figure from the sandboxed-execution primer, §6 Latency, throughput and cost per action: see $P(\text{wait})$ against the slot count at 5 executions/s. The replace-after-use curve goes below 0.2 at 31 slots, and the reuse curve at 14 slots.*
+#
 # ## The one-minute version
 # A sandbox per execution has a **cold start**:
 #

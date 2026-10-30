@@ -8,6 +8,10 @@
 # ComputeClass fallbacks. Offline, that notebook plans and examines. Current prices and
 # obtainability are in `COMPUTE.md` at the repo root.
 #
+# ![Nodes billed against time while a 16-node gang waits for its last node, in one simulated run: the ordinary pool creates each node at its grant, and the queued pool creates all 16 nodes together.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/03-kubernetes-gpu/gpu-scheduling/figures/queued-provisioning-billed-nodes.svg)
+#
+# *Figure from the concept primer (`../../PRIMER.md`), §7.3: the two lines are the seed-0 run of this notebook. The ordinary pool bills each node from its grant, but the queued pool creates all 16 nodes together and bills only the boot.*
+#
 # ## The one-minute version
 #
 # A Pending GPU pod is a request for a machine. The **cluster autoscaler** simulates the pending

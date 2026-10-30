@@ -5,6 +5,10 @@
 # (`k8s-gpu-lab`) has the same objects on a real cluster: notebook `02_kind_with_fake_gpus_and_kueue`
 # (kind with fake GPUs, T0 + Docker) and `04_gke_pools_dws_and_computeclasses` (GKE, T3).
 #
+# ![The control loop of the layer: a Job goes through Kueue's LocalQueue, ClusterQueue quota and whole-gang admission to kube-scheduler, which places one pod at a time on the integer that the kubelet advertises from the device plugin's healthy devices, and a Pending pod asks the cluster autoscaler for a new node.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/03-kubernetes-gpu/gpu-scheduling/figures/control-loop.svg)
+#
+# *Figure from the concept primer (`../../PRIMER.md`), "The one-minute version": this notebook works through the GPU node. The device plugin reports the healthy devices to the kubelet, and the node advertises one integer, `nvidia.com/gpu: 8`. After the bind, the kubelet admits the pod and calls Allocate.*
+#
 # ## The one-minute version
 #
 # Kubernetes does not know what a GPU is. A **device plugin** on each node tells the kubelet "I manage

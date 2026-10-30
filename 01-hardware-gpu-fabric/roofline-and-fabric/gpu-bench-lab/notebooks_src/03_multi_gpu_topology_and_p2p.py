@@ -8,6 +8,10 @@
 # or GCP `a2-highgpu-2g` (see `deploy/`). Concepts: primer §5 "Fabrics quantitatively"
 # ([`../../PRIMER.md`](../../PRIMER.md)).
 #
+# ![One HGX H100 node with NVSwitch, 8 GPUs and a NIC per GPU, and the rail leaf that each NIC connects to.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/01-hardware-gpu-fabric/roofline-and-fabric/figures/node-nvlink-nics-rails.svg)
+#
+# *Figure from the primer, §5.1 The link ladder: see the NVSwitch that joins the 8 GPUs, and the NIC that each GPU drives over PCIe. NIC i connects to the rail-i leaf. Sections 2 to 4 of this notebook read the same layout from sample `nvidia-smi topo -m` output.*
+#
 # **Predicted first in** [roofline-core notebook 03](../../roofline-core/notebooks/03_fabrics_and_collective_cost.ipynb):
 # in that notebook, you ran a ring all-reduce and derived the ring all-reduce from it. You also calculated the cost of
 # TP against an ITL target, and you read a topology matrix. In this notebook, you read real `nvidia-smi` output. You

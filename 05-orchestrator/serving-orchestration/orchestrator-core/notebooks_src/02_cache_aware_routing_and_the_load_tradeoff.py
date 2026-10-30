@@ -3,6 +3,10 @@
 #
 # **Tier:** T0. CPU only, about 15 seconds, no network. `fleetsim` **simulates** every number in this notebook.
 #
+# ![A replica that holds the first three block hashes prefills only the last block, and a replica with other prefixes prefills all four blocks again.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/05-orchestrator/serving-orchestration/figures/replica-prefix-cache-hit-miss.svg)
+#
+# *Figure from the primer, §1.1 Replicas are stateful caches: see why the prefill cost of a request changes with the replica. Replica A holds the first three block hashes and prefills only the last block. Replica B prefills all four blocks again.*
+#
 # ## The one-minute version
 # The prefix cache of a replica changes a 6,000-token prefill into a few hundred tokens. But this change occurs only on
 # the replica that holds the prefix. Thus routing has two goals that pull against each other:

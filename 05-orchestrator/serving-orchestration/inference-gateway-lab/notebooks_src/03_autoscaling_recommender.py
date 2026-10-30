@@ -5,6 +5,10 @@
 # v1.34 (`igwlab/autoscale.py`). The live part scrapes the in-process fake backends (emulated
 # timing). The long-horizon part is a *simulated* fluid model of a pool with cold starts.
 #
+# ![The simulated GPU utilisation and KV usage of one L4 replica against the offered chat load.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/05-orchestrator/serving-orchestration/figures/signals-vs-load.svg)
+#
+# *Figure from the topic primer, §4.2 Which signal: from 0.5 req/s, the "GPU util" of one L4 replica stays at 1.00 (simulated). Only the KV usage increases with the load. In this notebook, the "gpu busy" column also stays at 1.0.*
+#
 # ## The one-minute version
 #
 # The HorizontalPodAutoscaler is a proportional controller with guard rails:

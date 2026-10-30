@@ -7,6 +7,10 @@
 # the last section runs the same agent with a real model. That path gives measured results, and they are less
 # predictable.
 #
+# ![The memory mechanism: a turn feeds the write path into one partition of the store, retrieval packs records into the prompt of the next turn, and consolidation, forgetting and deletion run on the store.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/07-application-agent-framework/agent-memory/figures/memory-mechanism.svg)
+#
+# *Figure from the PRIMER, "The one-minute version": a turn goes through the write path into one partition per (tenant, user), and the read path packs records into the next prompt. This notebook puts the store behind a service that takes the partition from the token.*
+#
 # ## The one-minute version
 #
 # Put memory behind a service. Then you can enforce three properties, and a prompt can never enforce them:

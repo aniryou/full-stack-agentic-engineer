@@ -4,6 +4,10 @@
 # **Tier:** T0. It is a pure-Python scheduler that uses the plugin names, formulas and messages of
 # kube-scheduler. Lab notebook `03_why_is_my_pod_pending` reads real `FailedScheduling` events.
 #
+# ![Stranded GPUs for an 8-GPU pod as 1-GPU pods arrive one at a time at four empty 8-GPU nodes, under the default score and under MostAllocated with a GPU weight of 5.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/03-kubernetes-gpu/gpu-scheduling/figures/stranded-gpus-as-pods-arrive.svg)
+#
+# *Figure from the concept primer (`../../PRIMER.md`), §3.4 Fragmentation, measured: the two lines are the two runs of this notebook. After 16 pods, the default spread leaves 16 stranded GPUs, but MostAllocated with a GPU weight of 5 leaves 0.*
+#
 # ## The one-minute version
 #
 # kube-scheduler places **one pod at a time**. It sorts the queue by priority. In the **filter** step,

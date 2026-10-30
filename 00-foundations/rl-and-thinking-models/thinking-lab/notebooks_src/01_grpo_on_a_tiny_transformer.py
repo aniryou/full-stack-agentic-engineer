@@ -9,7 +9,7 @@
 #
 # ![One GRPO update: a group of G completions from one prompt, a verifier score per completion, group-normalised advantages that every token of a completion shares, and the clipped surrogate with the k3 KL term.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/00-foundations/rl-and-thinking-models/figures/grpo-group-update.svg)
 #
-# *Figure from the topic primer, §4 RL with verifiable rewards and GRPO: one GRPO update on one prompt. The group statistics turn the verifier scores into advantages, and every token of a completion carries the advantage of that completion.*
+# *Figure from the topic primer, §4 RL with verifiable rewards and GRPO: one GRPO update on one prompt. The group statistics turn the verifier scores into advantages, and every token of a completion carries the advantage of that completion. In Exercise 1.3, you write the clipped loss of the figure in torch.*
 #
 # ## The one-minute version
 #

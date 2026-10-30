@@ -7,6 +7,10 @@
 # student trains on its answers with torch on a CPU in about 15 seconds. The memory plans are **predicted** values
 # from a calculator.
 #
+# ![Four panels show what each recipe of the core takes from the teacher: hard labels, logit KD, SeqKD and on-policy GKD.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/00-foundations/distillation/figures/four-recipes.svg)
+#
+# *Figure from the PRIMER, "The one-minute version": each panel shows what one recipe takes from the teacher. Panel C shows the pipeline and the bill of Exercise 2.2. Panel D shows the per-token score of Exercise 2.3.*
+#
 # ## The one-minute version
 #
 # * **Sequence-level distillation's dataset is a pipeline with a yield at every stage:**

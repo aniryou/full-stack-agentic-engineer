@@ -9,7 +9,7 @@
 #
 # ![The accuracy of a majority vote against the number of samples, for one question where a sample is correct with p = 0.4, for four ways to spread the incorrect 60%.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/00-foundations/rl-and-thinking-models/figures/majority-vote-vs-n.svg)
 #
-# *Figure from the topic primer, §6 Test-time compute: the accuracy of a majority vote against the number of samples, for one question with p = 0.4. When one incorrect answer is more common than the correct answer, each extra vote lowers the accuracy.*
+# *Figure from the topic primer, §6 Test-time compute: the accuracy of a majority vote against the number of samples, for one question with p = 0.4. Against a dominant misconception, each extra vote lowers the accuracy. Against a narrow misconception, the vote helps at 15 votes and drops below one sample only past about 130.*
 #
 # ## The one-minute version
 #

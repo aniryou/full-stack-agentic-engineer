@@ -9,7 +9,7 @@
 #
 # ![Where three controls cut the output of a thinking model: max_tokens cuts inside the think block and leaves no answer, a thinking budget forces the end of the think block and then the model answers, and the two-call recipe continues in a second request.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/00-foundations/rl-and-thinking-models/figures/thinking-budget-cuts.svg)
 #
-# *Figure from the topic primer, §5 Thinking models: where three controls cut the output. `max_tokens` cuts inside the think block and leaves no answer. A thinking budget and the two-call recipe end the think block, and then the model answers.*
+# *Figure from the topic primer, §5 Thinking models: where three controls cut the output. The worked example on the `max_tokens` trap runs all three. The trap returns no answer, and the two-call recipe prefills the thinking again.*
 #
 # ## The one-minute version
 #
