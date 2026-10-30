@@ -257,7 +257,7 @@ each sequence also reads its own KV cache:
 
 ![One decode step of Llama-3.1-8B on an H100 in bf16 at 2K context against the batch: the weight stream takes the same time at every batch, and the KV read grows with the batch up to the HBM limit.](figures/decode-step-weights-vs-kv.svg)
 
-*The chart shows the time of one decode step against the batch, up to the HBM limit, and the two parts of that time. The weight stream (dashed) takes the same time at every batch, but the KV read (orange) grows with each sequence. The core computes the curves with `roofline.llm.decode()` and `decode_split()`, and `tests/test_figures.py` pins the chart.*
+*The chart shows the time of one decode step against the batch, up to the HBM limit, and the two parts of that time. The weight stream (dashed) takes the same time at every batch, but the KV read (orange, no points) grows with each sequence. The core computes the curves with `roofline.llm.decode()` and `decode_split()`, and `tests/test_figures.py` pins the chart.*
 
 Throughput increases with batch, and the speed per user decreases. This is the trade that you adjust
 against an ITL SLO. The table stops where HBM does: 208 sequences of 2K tokens fit beside the weights with
@@ -438,6 +438,10 @@ Take 4 ops (bias, GELU, dropout, residual add) on a 4096 × 8192 bf16 activation
 
 Fusion changes no FLOPs and removes 67% of the bytes. The fused kernel still reads each distinct input one
 time and writes the result one time.
+
+![Four elementwise ops as four kernels that write each intermediate result to HBM, and as one fused kernel that writes only the result.](figures/fusion-unfused-vs-fused.svg)
+
+*Count the arrows to and from HBM. Without fusion, each op reads its input from HBM and writes its result back, and the residual add also reads the residual. The fused kernel reads the two inputs one time and writes one result: 201 MB instead of 604 MB (`fusion_bytes()`).*
 
 FlashAttention is the standard example. It tiles Q, K and V into shared memory, computes softmax online, and
 never writes the $N \times N$ score matrix. See the
@@ -726,7 +730,7 @@ $$
 
 ![A time line with checkpoint writes, a failure, the lost work since the last checkpoint and a restart.](figures/checkpoint-interval-timeline.svg)
 
-*A job writes a checkpoint every $\tau$ seconds, and each write takes $\delta$. A failure loses the work since the last checkpoint, about $\tau/2$ on average, plus the restart $R$. The interval $\sqrt{2\,\delta M}$ gives the least lost time, and the restart $R$ does not move it (§7.2).*
+*A job writes a checkpoint every $\tau$ seconds, and each write takes $\delta$. The failure loses the work after the last checkpoint (the dashed box), about $\tau/2$ on average. After the restart $R$, the job computes that work again (§7.2).*
 
 Daly (2006) adds higher-order terms: `young_daly_interval(..., higher_order=True)`.
 

@@ -626,7 +626,7 @@ If one draft step costs $c$ target steps, a round costs $k\,c + 1$. Thus $\text{
 
 ![The speedup of speculative decoding against the draft depth k at an acceptance rate of 0.8, for a free draft and for a draft step that costs 0.1 of a target step.](figures/spec-speedup-vs-k.svg)
 
-*At $\alpha$ = 0.8 with a free draft ($c$ = 0), the speedup equals $E$, the tokens per pass, and it increases with $k$. At $c$ = 0.1, the speedup is highest at $k$ = 6, and the optimum is shallow. `spec.speedup()` computes both curves, and `tests/test_figures.py` pins the chart.*
+*At $\alpha$ = 0.8 with a free draft ($c$ = 0), the speedup equals $E$, the tokens per pass, and it increases with $k$. At $c$ = 0.1, the speedup is highest at $k$ = 6, and $k$ = 4 to 7 give almost the same speedup. `spec.speedup()` computes both curves, and `tests/test_figures.py` pins the chart.*
 
 In notebook 05, the core's small target and a 10× smaller draft agree with $\alpha$ ≈ 0.72 per position on average.
 The measured tokens per pass match the formula at $k$ = 1 and 2, but they are lower at $k$ = 4 (2.61 against 2.90).
@@ -684,7 +684,7 @@ first.
 
 ![The simulated speedup of speculative decoding with a 1B draft for an 8B target on an H100, against the concurrent requests, at contexts of 200 and 2,000 tokens.](figures/spec-speedup-vs-batch.svg)
 
-*At 200 tokens of context, the verify pass crosses the knee, and speculation becomes a slow-down at 128 requests (SIMULATED). At 2,000 tokens, the KV reads keep the gain, and memory sets the limit on the batch first. `perf.spec_speedup()` computes the curves, and `tests/test_figures.py` pins the chart.*
+*At 200 tokens of context, the target pass over the draft tokens crosses the knee, and speculation becomes a slow-down at 128 requests (SIMULATED). At 2,000 tokens, the KV reads keep the gain, and memory sets the limit on the batch first. `perf.spec_speedup()` computes the curves, and `tests/test_figures.py` pins the chart.*
 
 The batch-1 figure depends on the overhead assumption. Here the draft costs $c$ ≈ 0.19 of a target step, which gives ~1.6×.
 This cost is the 0.5 ms plus the draft's weights, which are 17% of the target's. With no per-draft overhead, $c$ ≈ 0.12 and the speedup

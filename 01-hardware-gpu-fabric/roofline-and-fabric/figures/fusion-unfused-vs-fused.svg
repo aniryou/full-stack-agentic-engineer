@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="370" viewBox="0 0 900 370" role="img" aria-label="Four elementwise ops as four kernels that write each intermediate result to HBM, and as one fused kernel that writes only the result." style="color: #E4EAE7">
+  <title>Four elementwise ops as four kernels that write each intermediate result to HBM, and as one fused kernel that writes only the result.</title>
+  <rect x="0" y="0" width="900" height="370" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="32" font-weight="600">4 ops on a 4096 × 8192 bf16 activation on an H100, unfused and fused (fusion_bytes())</text>
+    <text x="24" y="52" font-size="11" fill="#97A59F">bias, GELU, dropout, residual add; e = 1, because the residual add reads a second full tensor</text>
+    <text x="120" y="104" text-anchor="end" font-weight="600">unfused</text>
+    <text x="120" y="120" text-anchor="end" font-size="11" fill="#97A59F">one kernel per op</text>
+    <rect x="136" y="80" width="122" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="197" y="106" text-anchor="middle" font-weight="600">bias</text>
+    <rect x="288" y="80" width="122" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="349" y="106" text-anchor="middle" font-weight="600">GELU</text>
+    <rect x="440" y="80" width="122" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="501" y="106" text-anchor="middle" font-weight="600">dropout</text>
+    <rect x="592" y="80" width="122" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="653" y="106" text-anchor="middle" font-weight="600">residual add</text>
+    <rect x="136" y="164" width="578" height="32" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="425" y="185" text-anchor="middle" font-weight="600">HBM: every intermediate result goes out and comes back</text>
+    <g stroke="#97A59F" stroke-width="1.2" fill="none">
+      <path d="M160 164 L160 126" marker-end="url(#arr)"/>
+      <path d="M190 124 L190 162" marker-end="url(#arr)"/>
+      <path d="M312 164 L312 126" marker-end="url(#arr)"/>
+      <path d="M342 124 L342 162" marker-end="url(#arr)"/>
+      <path d="M464 164 L464 126" marker-end="url(#arr)"/>
+      <path d="M494 124 L494 162" marker-end="url(#arr)"/>
+      <path d="M616 164 L616 126" marker-end="url(#arr)"/>
+      <path d="M646 124 L646 162" marker-end="url(#arr)"/>
+      <path d="M676 164 L676 126" marker-end="url(#arr)"/>
+    </g>
+    <text x="156" y="149" text-anchor="end" font-size="11" fill="#97A59F">read</text>
+    <text x="194" y="149" font-size="11" fill="#97A59F">write</text>
+    <text x="680" y="149" font-size="11" fill="#97A59F">residual</text>
+    <text x="740" y="132" font-family="JetBrains Mono, monospace" font-size="11" fill="#97A59F">(2k + e) · n · b</text>
+    <text x="740" y="152" font-weight="600">604 MB, 180 µs</text>
+    <text x="120" y="254" text-anchor="end" font-weight="600">fused</text>
+    <text x="120" y="270" text-anchor="end" font-size="11" fill="#97A59F">one kernel</text>
+    <rect x="136" y="230" width="578" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="425" y="249" text-anchor="middle" font-weight="600">one kernel: bias, GELU, dropout, residual add</text>
+    <text x="425" y="266" text-anchor="middle" font-size="11.5" fill="#7ADACF">intermediate results never touch HBM</text>
+    <rect x="136" y="314" width="578" height="32" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="425" y="335" text-anchor="middle" font-weight="600">HBM: each distinct input read one time, the result written one time</text>
+    <g stroke="#97A59F" stroke-width="1.2" fill="none">
+      <path d="M160 314 L160 276" marker-end="url(#arr)"/>
+      <path d="M220 314 L220 276" marker-end="url(#arr)"/>
+      <path d="M690 274 L690 312" marker-end="url(#arr)"/>
+    </g>
+    <text x="156" y="299" text-anchor="end" font-size="11" fill="#97A59F">read</text>
+    <text x="224" y="299" font-size="11" fill="#97A59F">residual</text>
+    <text x="686" y="299" text-anchor="end" font-size="11" fill="#97A59F">write</text>
+    <text x="740" y="282" font-family="JetBrains Mono, monospace" font-size="11" fill="#97A59F">(2 + e) · n · b</text>
+    <text x="740" y="302" font-weight="600">201 MB, 60 µs</text>
+  </g>
+</svg>

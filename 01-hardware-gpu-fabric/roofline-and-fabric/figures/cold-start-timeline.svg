@@ -18,8 +18,8 @@
     <rect x="622.0" y="86" width="114.0" height="30" rx="3" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
     <line x1="611.0" y1="119" x2="619.0" y2="83" stroke="#E39A62" stroke-width="1.2"/>
     <line x1="614.0" y1="119" x2="622.0" y2="83" stroke="#E39A62" stroke-width="1.2"/>
-    <text x="604.0" y="105" text-anchor="end" font-size="11" fill="#E39A62">fetch weights</text>
-    <text x="628.0" y="105" font-size="11" fill="#E39A62">1,411 s (84%)</text>
+    <text x="553.0" y="105" text-anchor="middle" font-size="11" fill="#E39A62">fetch weights</text>
+    <text x="679.0" y="105" text-anchor="middle" font-size="11" fill="#E39A62">1,411 s (84%)</text>
     <line x1="736.0" y1="84" x2="736.0" y2="118" stroke="#97A59F" stroke-width="2"/>
     <text x="740.0" y="132" font-size="11" fill="#97A59F">copy to GPU 0.35 s</text>
     <rect x="738.0" y="86" width="153.0" height="30" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>

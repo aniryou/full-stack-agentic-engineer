@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="350" viewBox="0 0 900 350" role="img" aria-label="A job writes a checkpoint of cost delta every tau seconds; a failure loses the work since the last checkpoint, about tau over two on average, plus a restart R; the Young interval gives the least lost time, and R does not move it." style="color: #E4EAE7">
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="330" viewBox="0 0 900 330" role="img" aria-label="A job writes a checkpoint of cost delta every tau seconds; a failure loses the work since the last checkpoint, about tau over two on average, plus a restart R; the Young interval gives the least lost time, and R does not move it." style="color: #E4EAE7">
   <title>A job writes a checkpoint of cost delta every tau seconds; a failure loses the work since the last checkpoint, about tau over two on average, plus a restart R; the Young interval gives the least lost time, and R does not move it.</title>
-  <rect x="0" y="0" width="900" height="350" rx="8" fill="#161E1C"/>
+  <rect x="0" y="0" width="900" height="330" rx="8" fill="#161E1C"/>
   <defs>
     <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
     <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
@@ -42,6 +42,5 @@
     <rect x="390" y="272" width="14" height="12" rx="2" fill="none" stroke="#97A59F" stroke-width="1.2" stroke-dasharray="4 3"/>
     <text x="410" y="282" font-size="11" fill="#97A59F">work lost since the last checkpoint</text>
     <text x="24" y="312" font-size="12.5" font-weight="600">waste ≈ δ/τ + (τ/2 + R)/M,  least at τ* = √(2δM)  (Young, 1974)</text>
-    <text x="24" y="332" font-size="11.5" fill="#97A59F">16,384 GPUs, M = 3.09 h:  δ = 60 s → τ* = 19.3 min, waste 10.4%;  a restart R = 10 min adds R/M = 5.4% more</text>
   </g>
 </svg>

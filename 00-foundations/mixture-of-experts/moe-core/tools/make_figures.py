@@ -108,7 +108,7 @@ def spec_decode_step_bytes_vs_batch() -> dict:
             {"name": f"Mixtral-8x7B: {MIX.total() / 1e9:.2f}B total, {MIX.active() / 1e9:.2f}B active",
              "x": batches, "y": [gb(MIX, b) for b in batches], "style": "accent"},
             {"name": f"dense model of the active size ({dense.total() / 1e9:.1f}B)",
-             "x": batches, "y": [gb(dense, b) for b in batches], "style": "muted"},
+             "x": batches, "y": [gb(dense, b) for b in batches], "style": "muted", "dash": True},
         ],
         "marks": marks,
         "legend": "bottom-right",
@@ -123,8 +123,9 @@ def spec_experts_touched_vs_batch() -> dict:
     b_mix, b_q3 = _first_batch(MIX, 7.5), _first_batch(Q3, 120)      # §5: 7.5 of 8 and 120 of 128
     batches = _log2_grid(256, 8, extra=(8, 16, 32, 128, 256, b_mix, b_q3))
     share = lambda cfg, b: _sig(100 * T.experts_touched(cfg.n_experts, cfg.top_k, b) / cfg.n_experts)
+    # DeepSeek-V3 dashed, so that a dash and not only the colour tells it from Qwen3 (colour is never the only carrier)
     series = [{"name": f"{cfg.name}: E = {cfg.n_experts}, k = {cfg.top_k}", "x": batches,
-               "y": [share(cfg, b) for b in batches], "style": st} for cfg, st in models]
+               "y": [share(cfg, b) for b in batches], "style": st, "dash": cfg is DS} for cfg, st in models]
     n = lambda cfg, b: T.experts_touched(cfg.n_experts, cfg.top_k, b)
     # §5: "Mixtral touches 7.5 of its 8 experts per layer from batch 10, Qwen3 120 of 128 from batch 43", and the
     # DeepSeek-V3 counts at 8, 32 and 128 tokens; §3.7 and §5: Qwen3 touches 82.4 of 128 at batch 16
@@ -165,8 +166,9 @@ def spec_experts_touched_vs_batch() -> dict:
 def spec_dispatch_time_vs_tokens() -> dict:
     tokens = _log2_grid(8192, 4, extra=(8, 256, 4096))
     t_us = lambda n, link: E.a2a_time(E.dispatch_bytes(n, MIX.top_k, MIX.d_model), EP_GPUS, link) * 1e6
-    series = [{"name": name, "x": tokens, "y": [_sig(t_us(n, link)) for n in tokens], "style": st}
-              for name, link, st in (("NVLink 4", NVLINK, "accent"), ("400 Gb/s IB", IB, "warm"))]
+    # IB dashed, so that a dash and not only the colour tells the two links apart
+    series = [{"name": name, "x": tokens, "y": [_sig(t_us(n, link)) for n in tokens], "style": st, "dash": dash}
+              for name, link, st, dash in (("NVLink 4", NVLINK, "accent", False), ("400 Gb/s IB", IB, "warm", True))]
     pt = lambda n, link, st, anchor, dy, label: {"kind": "point", "x": n, "y": _sig(t_us(n, link)), "style": st,
                                                   "anchor": anchor, "dy": dy, "label": label}
     marks = [

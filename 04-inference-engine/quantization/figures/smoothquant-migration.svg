@@ -60,17 +60,17 @@
       <text x="168" y="306">·</text>
       <text x="184" y="306" fill="#7ADACF">s_w[j]</text>
       <text x="240" y="306">·</text>
-      <text x="256" y="306" fill="#E39A62">Σ_k</text>
+      <text x="256" y="306">Σ_k</text>
       <text x="296" y="306">qx[t, k] · qw[j, k]</text>
     </g>
     <g stroke="#97A59F" stroke-width="1" fill="none">
       <path d="M134 312 L134 360"/>
       <path d="M206 312 L206 342"/>
-      <path d="M268 312 L268 324" stroke="#E39A62"/>
+      <path d="M268 312 L268 324"/>
     </g>
     <text x="140" y="364" font-size="11" fill="#7ADACF">one scale per token, set at run time</text>
     <text x="212" y="346" font-size="11" fill="#7ADACF">one scale per output channel</text>
-    <text x="274" y="328" font-size="11" fill="#E39A62">k is the reduction axis: no scale can change along it</text>
+    <text x="274" y="328" font-size="11" fill="currentColor">k is the reduction axis: no scale can change along it</text>
     <text x="24" y="394" font-size="11.5" fill="#97A59F">Thus a per-input-channel factor cannot be a scale of the GEMM. SmoothQuant moves it into W, and the norm absorbs 1/s at no cost at run time.</text>
   </g>
 </svg>
