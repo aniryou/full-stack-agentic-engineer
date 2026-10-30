@@ -9,7 +9,7 @@ capacity primer plus a roofline step.*
 
 This primer explains four things:
 
-- What occurs to a language model after pretraining. It goes through supervised fine-tuning, learning from
+- What a language model goes through after pretraining. The stages are supervised fine-tuning, learning from
   preferences (reward models, RLHF, DPO) and reinforcement learning with verifiable rewards (GRPO and its
   corrections).
 - How that last stage made *thinking models*. A thinking model spends thousands of tokens before it answers.
@@ -204,7 +204,7 @@ strings):
 
 The penalty exists for three reasons:
 
-- The reward is trustworthy only near the data that it comes from.
+- The reward is trustworthy only near its training data.
 - Fluency and language come from the reference.
 - The penalty slows the collapse onto one answer.
 
@@ -277,7 +277,7 @@ $$
 rewards (0, 0, 1), values (0.5, 0.6, 0.8), γ = 1: λ = 0 → (0.1, 0.2, 0.2); λ = 0.5 → (0.25, 0.3, 0.2);
 λ = 1 → (0.5, 0.4, 0.2)
 
-$\lambda = 0$ trusts $V$. Then the advantage has a low variance, but it has a bias when $V$ is incorrect. $\lambda = 1$ trusts the sampled return.
+$\lambda = 0$ trusts $V$. With $\lambda = 0$, the advantage has a low variance, but it has a bias when $V$ is incorrect. $\lambda = 1$ trusts the sampled return.
 In RLHF, the reward-model score sits on the last token, and $-\beta \log(\pi/\pi_{\text{ref}})$ sits on every token.
 Four networks are in memory: the policy, the reference, the reward model and the value model. DPO and GRPO each
 remove part of this cost.
@@ -473,7 +473,7 @@ TRL's `entropy_coef` (default 0.0, verify) has the same intent, but it adds a di
 is the mean per-token entropy of the full next-token distribution, with no baseline and no loss-type rescale. It is a
 different estimator on a different scale. Thus c = 0.05 here is not a TRL setting.
 
-**How the loss is averaged: the length bias.** TRL's `loss_type` decides what one token is worth
+**How the trainer averages the loss: the length bias.** TRL's `loss_type` decides what one token is worth
 (`grpo.token_weights()`). The table gives the weights for completions of 10 and 50 tokens in a group of two, with
 `max_len` 100:
 
@@ -530,8 +530,8 @@ The DAPO run used 512 prompts × 16 responses and a maximum generation of 20,480
 
 - $G\times$ generation, the dominant cost (§1),
 - a forward pass for the log-probabilities of $\pi_{\text{ref}}$, if $\beta > 0$,
-- the same for $\pi_{\text{old}}$, if $\mu > 1$. Instead, the trainer can take these log-probabilities from the rollout
-  engine. In that case, train–inference mismatch enters (§8),
+- the same for $\pi_{\text{old}}$, if $\mu > 1$, or no pass if the trainer takes these log-probabilities from the rollout
+  engine, where train–inference mismatch enters (§8),
 - one forward + backward pass of the policy.
 
 The memory holds the policy with gradients and optimizer state, the reference if $\beta > 0$, and the rollout
@@ -624,7 +624,7 @@ the server (verify). The same templates drop the thinking of earlier turns from 
 
 *Where three controls cut the output of a thinking model. `max_tokens` counts reasoning and answer together, so a request that still thinks at the cap returns empty content with `finish_reason="length"`. A thinking budget forces the end of the think block, and then the model answers. The two-call recipe gets the same effect with a second request, which does the prefill again.*
 
-**A thinking token is billed as an output token.** `completion_tokens` counts reasoning plus answer. vLLM fills
+**The provider bills a thinking token as an output token.** `completion_tokens` counts reasoning plus answer. vLLM fills
 `usage.completion_tokens_details.reasoning_tokens` when a reasoning parser is on. `include_reasoning: false` hides
 the reasoning, but the engine still generates it (verify).
 
@@ -849,7 +849,7 @@ trace that outgrows the pool preempts the newest request.
 
 ### Multi-turn prompts and the reasoning parser
 
-**Thinking is dropped from history: prefix-cache implications.** Qwen3's template (and gpt-oss's: "CoT is dropped
+**The chat template drops thinking from history: prefix-cache implications.** Qwen3's template (and gpt-oss's: "CoT is dropped
 during all previous turns") renders earlier assistant turns without their reasoning (verify). The KV of turn N holds
 prompt + thinking + answer. The prompt of turn N+1 contains only the answer.
 Thus the prefix-cache hit
@@ -1043,7 +1043,7 @@ correct answer."
    `loss_type`. A per-sequence average gives less weight to long completions. In the core, its update has cosine
    0.67 with the true gradient and increases truncation. Then examine `mask_truncated_completions` and a soft
    overlong penalty. Also examine if the reward charges anything for length.
-4. *We turned on thinking for our assistant at the same QPS. What occurs to the fleet?* Concurrency scales with
+4. *We turned on thinking for our assistant at the same QPS. What is the effect on the fleet?* Concurrency scales with
    output length, and KV per session scales with average context. Thus memory binds. In the capacity primer's
    example, 10× output needed 18× the GPUs for memory. The numbers are 5.12 against 0.28 at the SLO's TPOT, 2.75
    against 0.15 at the step the fleet runs at. That is 3 H100s instead of 1. Also, a tight ITL SLO caps the batch

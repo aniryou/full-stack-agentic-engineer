@@ -39,7 +39,7 @@ Modern accelerators use **HBM** (High Bandwidth Memory). HBM is a set of DRAM st
 
 The generation of a response has two phases with **opposite** hardware characteristics. If you learn this fully, most deployment decisions become clear.
 
-![Prefill reads the whole prompt in one forward pass and is compute-bound; decode loads the entire set of weights from HBM at each step to produce one token and is memory-bandwidth-bound, and batching lets one load serve 64 requests.](figures/prefill-vs-decode.svg)
+![Prefill reads the whole prompt in one forward pass and is compute-bound; decode loads the full set of weights from HBM at each step to produce one token and is memory-bandwidth-bound, and batching lets one load serve 64 requests.](figures/prefill-vs-decode.svg)
 
 *Prefill (top) is compute-bound: it reads all the input tokens in one forward pass and uses each loaded weight for much arithmetic. Decode (bottom) is memory-bandwidth-bound: at each step, it loads the full set of weights from HBM to produce one token. With batching, the same loaded weights serve 64 requests in one step, which amortises the high-cost part 64× (§2).*
 
@@ -155,7 +155,7 @@ Put a full copy of the model on each GPU or group. Use a load balancer to divide
 For Mixture-of-Experts models, put different experts on different GPUs and route the tokens to them. The communication is an all-to-all shuffle. This shuffle needs much bandwidth, and load imbalance often occurs in it. MoE is now standard for frontier models. Thus EP is more important now than it was before.
 
 ### Sequence / context parallelism
-Divide a single long sequence across GPUs. This is necessary for long context windows, where the KV cache for one request is too large for one GPU.
+Divide a single long sequence across GPUs. This is necessary when a context window is so long that the KV cache for one request is too large for one GPU.
 
 ### The rule that follows from all of this
 
@@ -247,7 +247,7 @@ Do not write your own loop to serve the model. The engines implement a set of te
 - **PagedAttention**: allocate the KV cache in fixed-size blocks, as OS virtual memory does. Do not make one contiguous reservation per request. This removes fragmentation. Usually, it gives 2–4× more concurrent requests from the same memory.
 - **Prefix caching**: use the KV cache again for shared prefixes. If 10,000 requests share a 2,000-token system prompt, you compute that prompt one time. The gain is large for agentic workloads with long, stable system prompts.
 - **Chunked prefill**: divide long prefills into chunks, and interleave the chunks with decode steps. Thus one long prompt does not block the token streams of all the other users.
-- **Speculative decoding**: a small draft model proposes several tokens. Then the large model verifies them in one pass. This uses spare compute to get a lower latency. Decode is memory-bound and has spare compute. Thus speculative decoding works.
+- **Speculative decoding**: a small draft model proposes several tokens. Then the large model verifies them in one pass. This uses spare compute to get a lower latency. Speculative decoding works because decode is memory-bound and has spare compute.
 - **Quantisation**: FP8 or FP4 weights and KV cache.
 
 Which engine to select: **vLLM** is the default open-source choice, with the broadest model coverage. **SGLang** is strong on structured output and on prefix-heavy workloads. Its RadixAttention prefix cache is excellent. **TensorRT-LLM** gives the best raw performance on NVIDIA hardware. The cost is a compilation step and less flexibility.
@@ -290,7 +290,7 @@ flowchart TB
   D1 --> U([token stream to the user])
 ```
 
-*The router sends a request to a prefill worker, which processes the whole prompt in one pass. When prefill finishes, the system transfers the KV cache over the fabric to a decode worker, and the decode worker starts to generate tokens immediately. For a 4K-token request, the transfer is about 1.3 GB and must complete in a couple hundred milliseconds for a TTFT under 500 ms (§8).*
+*The router sends a request to a prefill worker, which processes the whole prompt in one pass. When prefill finishes, the system transfers the KV cache over the fabric to a decode worker, and the decode worker starts to generate tokens immediately. For a 4K-token request, the transfer is about 1.3 GB and must complete in approximately two hundred milliseconds for a TTFT under 500 ms (§8).*
 
 **Why it helps:**
 
@@ -299,7 +299,7 @@ flowchart TB
 - Long prefills never block the decode workers. Thus the token streams stay smooth.
 - You can even use different hardware for each phase.
 
-**Why it is hard:** you must move the KV cache sufficiently fast that the decode worker is not idle. Think about a request of 4K tokens with approximately 1.3 GB of KV cache, and a TTFT budget under 500 ms. For this request, the transfer must complete in a couple hundred milliseconds. This needs RDMA and careful design work.
+**Why it is hard:** you must move the KV cache sufficiently fast that the decode worker is not idle. Think about a request of 4K tokens with approximately 1.3 GB of KV cache, and a TTFT budget under 500 ms. For this request, the transfer must complete in approximately two hundred milliseconds. This needs RDMA and careful design work.
 
 **Tools:** NVIDIA **Dynamo** is an orchestration layer above the engines. It has a smart router, a planner, and NIXL for transfers. Its Kubernetes-native equivalent, built on vLLM, is **llm-d** (Red Hat/IBM/Google, donated to CNCF in March 2026). Both vLLM and SGLang support disaggregation directly.
 
@@ -321,7 +321,7 @@ Training clusters and inference clusters have greatly different shapes. If you c
 | Key metric | MFU (Model FLOPs Utilisation) | Tokens/sec/GPU, $/M tokens, latency SLOs |
 | Elasticity | Poor. The allocation does not change for weeks. | Good. It autoscales on queue depth. |
 
-At 10,000 GPUs, something fails constantly. Thus training needs checkpoints and fault tolerance as first-class concerns. Inference needs the opposite: fast, independent, low-cost replicas.
+Training needs checkpoints and fault tolerance as first-class concerns, because at 10,000 GPUs something fails constantly. Inference needs the opposite: fast, independent, low-cost replicas.
 
 ---
 
@@ -336,14 +336,14 @@ At 10,000 GPUs, something fails constantly. Thus training needs checkpoints and 
 **Throughput**
 
 - Output tokens/sec/GPU is the honest efficiency number.
-- **Goodput**: the requests/sec that actually met their SLO. A throughput that you measure with a 10-second TTFT is a lie. Thus goodput is better than raw throughput.
+- **Goodput**: the requests/sec that actually met their SLO. Goodput is better than raw throughput, because a throughput that you measure with a 10-second TTFT is a lie.
 
 **Efficiency**
 
 - **MFU**: the fraction of the theoretical FLOPs that you get. 40–50% is good for training. Inference decode is memory-bound, so MFU is naturally low. Measure the bandwidth utilisation instead.
 - **$/million tokens**: the number that your finance team cares about. It is also the honest basis for build-vs-buy.
 
-**The tradeoff you cannot escape:** larger batches increase throughput and decrease the cost per token, but they increase latency. No configuration optimises both. Select your SLO first. Then make the throughput as large as possible in the limit of that SLO.
+**The tradeoff you cannot escape:** larger batches increase throughput and decrease the cost per token, but they increase latency. No configuration optimises both. Select your SLO first. Then make the throughput as large as possible, but do not go above the limit of that SLO.
 
 ---
 
@@ -354,7 +354,7 @@ This architecture is one 8×H100/H200 server. The model fits with tensor paralle
 *Use it for: most enterprise deployments, 7B–70B models, internal tools.*
 
 ### B. Kubernetes cluster (tens to hundreds of GPUs)
-This architecture has many nodes and GPU Operator, with TP in the nodes and DP across them. It autoscales horizontally on queue depth. Prefix caching is on. It has separate node pools per model and per workload class. A gateway does the routing, the quotas and the per-tenant cost accounting.
+This architecture has GPU Operator and more than one node, with TP in the nodes and DP across them. It autoscales horizontally on queue depth. Prefix caching is on. It has separate node pools per model and per workload class. A gateway does the routing, the quotas and the per-tenant cost accounting.
 *Use it for: multi-tenant platforms, several models, production SLOs.*
 
 ### C. Rack-scale disaggregated (hundreds to thousands of GPUs)

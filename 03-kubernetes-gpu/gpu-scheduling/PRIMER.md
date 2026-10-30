@@ -36,7 +36,7 @@ A GPU is an **integer** to Kubernetes.
   overcommits the GPUs. Labels tell *which* GPU. Taints keep other pods off GPU nodes.
 - The scheduler places **one pod at a time**: filter, score, bind. Its default score spreads pods by CPU and
   memory, and ignores GPUs. Thus small GPU pods cause **fragmentation** on nodes, until a large pod fits on no
-  node, but half the GPUs are free. Bin-pack GPU pools instead.
+  node, even when half the GPUs are free. Bin-pack GPU pools instead.
 - Distributed jobs are **gangs**. A gang has no use unless every pod runs, and it is slow unless its pods are
   **near** each other (same NVLink domain, sub-block, block). If the scheduler places their pods one at a time,
   the cluster can go into a deadlock. Admit gangs whole (Kueue). Use topology-aware placement for them (Kueue
@@ -139,7 +139,7 @@ The resource name tells nothing about the model of the GPU. Placement by GPU typ
 
 | Source | Example labels |
 |---|---|
-| GKE | `cloud.google.com/gke-accelerator=nvidia-l4`, `cloud.google.com/gke-nodepool`, Spot and MIG labels (verify names in GKE docs). Also, cluster-autoscaler uses the first label as the key for GPU nodes. |
+| GKE | `cloud.google.com/gke-accelerator=nvidia-l4`, `cloud.google.com/gke-nodepool`, Spot and MIG labels (verify names in GKE docs). Cluster-autoscaler also uses the `cloud.google.com/gke-accelerator` label as the key for GPU nodes. |
 | NVIDIA GPU Feature Discovery (in the GPU Operator) | `nvidia.com/gpu.product=NVIDIA-H100-80GB-HBM3`, `nvidia.com/gpu.memory` (MiB), `nvidia.com/gpu.count`, `nvidia.com/gpu.family`, `nvidia.com/cuda.driver-version.full`, `nvidia.com/mig.strategy`, `nvidia.com/gpu.replicas`, `nvidia.com/gpu.clique` (multi-node NVLink domain) |
 | Node Feature Discovery | PCI vendor labels, for example `feature.node.kubernetes.io/pci-10de.present=true`. 10de is the PCI vendor ID of NVIDIA. The exact form depends on the NFD config (verify). |
 | GCE topology | `cloud.google.com/gce-topology-block`, `-subblock`, `-host` (verify). See section 5. |
@@ -418,7 +418,7 @@ To select from the candidate nodes (`plugins.pick_preemption_node()`), it compar
 
 1. the fewest PodDisruptionBudget violations,
 2. the lowest priority of the highest-priority victim,
-3. the lowest sum of victim priorities. Each priority has an offset of 2³¹. Thus a node with fewer victims wins first.
+3. the lowest sum of victim priorities, each with an offset of 2³¹, so that fewer victims win first,
 4. the fewest victims,
 5. the latest start time of the highest-priority victims.
 
@@ -479,7 +479,7 @@ stateDiagram-v2
 
 *Under Kueue, the webhook suspends a gang Job at creation, and Kueue reserves logical quota for the whole Workload.
 TAS or a ProvisioningRequest does the check of physical capacity, and then Kueue unsuspends the Job. If the pods are
-not all Ready in 30 min, `waitForPodsReady` evicts the job and requeues it with backoff.*
+not all Ready after 30 min, `waitForPodsReady` evicts the job and requeues it with backoff.*
 
 ### 4.3 JobSet and LeaderWorkerSet
 
@@ -487,7 +487,7 @@ A gang also needs a workload API that treats its pods as one thing:
 
 * **JobSet** (`jobset.x-k8s.io/v1alpha2`) is a group of Jobs for training and HPC. It has `replicatedJobs` (for
   example, one driver and $N$ workers) and a headless Service for stable hostnames. It has
-  `failurePolicy.maxRestarts`. A failed Job creates the whole set again. Thus, resume from a checkpoint. It also has
+  `failurePolicy.maxRestarts`. Under this policy, a failed Job creates the whole set again. Thus, resume from a checkpoint. It also has
   `successPolicy`, `startupPolicy.startupPolicyOrder: InOrder`, and
   `alpha.jobset.sigs.k8s.io/exclusive-topology`, which gives each child Job a whole topology domain. Kueue admits a
   JobSet as one Workload.
@@ -577,10 +577,10 @@ holds 5, so the preferred constraint widens to block b1. The host pass then give
 
 Select the constraint for each workload:
 
-- **required** for a multi-host inference group whose shards exchange activations every token. A slow replica is
-  slow for its whole life.
-- **preferred** for long training jobs. A wait forever for a perfect block is worse than a block that is slightly
-  slower.
+- **required** for a multi-host inference group whose shards exchange activations every token, because a slow
+  replica is slow for its whole life.
+- **preferred** for long training jobs, because a wait forever for a perfect block is worse than a block that is
+  slightly slower.
 - **unconstrained** for embarrassingly parallel batch.
 
 When it can, TAS also replaces a failed node inside the assigned domain (hot swap). When it cannot, TAS evicts the
@@ -744,7 +744,7 @@ pending pods ─► simulate them on each node pool's template node ─► bin-p
 * **Down again**: a node goes away after it stays unneeded for `--scale-down-unneeded-time` (10 min), and no
   scale-up occurred for `--scale-down-delay-after-add` (10 min). For GPU nodes, only GPU utilisation counts
   against `--scale-down-gpu-utilization-threshold` (0.5). The autoscaler stops its wait for nodes that do not
-  register in `--max-node-provision-time` (15 min).
+  register before the end of `--max-node-provision-time` (15 min).
 
 Scale from zero, simulated (`autoscaler.simulate()`, notebook 05, which models both 10-minute delays): a 1-hour job
 goes onto an empty 1-GPU pool. The nodes of the pool take 300 s to show allocatable GPUs. The job starts at 300 s
@@ -807,7 +807,7 @@ probability per minute that the cloud grants it. In one run (seed 0), the gang c
 pool.
 
 The ordinary pool paid **31.3 node-hours (251 GPU-hours)** for nodes that waited for their peers. The queued pool
-paid **1.3**, and in every run it pays only for the boot. Also, over 200 seeds the ordinary pool averages **22.4 node-hours** and a
+paid **1.3**, and in every run it paid only for the boot. Also, over 200 seeds the ordinary pool averages **22.4 node-hours** and a
 1.95 h start. Queued provisioning does not create capacity. With it, you do not pay for the partial set.
 
 ```mermaid
@@ -911,7 +911,7 @@ This is the cluster view:
 
 The trap with time-slicing: a container that requests 2 "GPUs" can get two slices of the **same** physical GPU.
 The NVIDIA plugin takes replicas from the least-loaded GPUs. Thus, on a busy node, one lightly used GPU supplies
-both slices (`DevicePlugin(replicas=10)`, notebook 01, exercise 1.6). This behaviour is the default `distributed`
+both slices (`DevicePlugin(replicas=10)`, notebook 01, exercise 1.6). This behaviour comes from the default `distributed`
 allocation policy of the plugin.
 
 Its `--shared-devices-allocation-policy` flag (v0.20.0 and later, verify) also offers `packed`, which fills the
@@ -1030,8 +1030,8 @@ and weights come from a cache."
    team A lent its unused quota to the cohort, and `reclaimWithinCohort` is `Never`. Thus the borrowers keep the
    quota until they complete. Turn on reclaim, or set a `lendingLimit` to keep part of the quota home.
 4. *Required or preferred topology for a 2-node tensor-parallel serving group, and for a 32-node training
-   job?* For serving, use the required constraint at the smallest multi-node domain. A split replica is slow
-   for its whole life. For training, use the preferred constraint at block level (locality, but not at the
+   job?* For serving, use the required constraint at the smallest multi-node domain, because a split replica is slow
+   all its life. For training, use the preferred constraint at block level (locality, but not at the
    price of an indefinite wait).
 5. *Why not run a 16-node training job on an autoscaled Spot pool?* Any reclaim restarts the gang. Survival
    decreases as $e^{-N \cdot \lambda \cdot T}$ (14.7% for 16 nodes over 24 h at $\lambda$ = 0.005/node-h,

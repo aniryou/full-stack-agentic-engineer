@@ -1148,7 +1148,7 @@ returns no reasons. `VLLM_ATTENTION_BACKEND` no longer exists in `vllm/envs.py`.
 | T4 | 7.5 | FlashAttention needs ≥ 8.0, and the floor of FlashInfer is 8.0. Thus the selector uses **Triton attention**. | Triton MLA |
 | A100 / L4 | 8.0 / 8.9 | **FlashAttention (FA2)**, then FlashInfer, then Triton, then FlexAttention | FA MLA, then FlashMLA (SM 9.x/10.x only), then FlashInfer MLA, then Triton MLA |
 | H100 / H200 | 9.0 | **FlashAttention (FA3)**, then FlashInfer, then Triton, then FlexAttention | the same list |
-| B200 / GB200 | 10.0 | **FlashInfer** (TRT-LLM kernels), then FlashAttention (FA4 if there is support for it), then Triton, then FlexAttention | FlashInfer MLA, then TokenSpeed MLA, then CUTLASS MLA, then FA MLA, then FlashMLA, then Triton MLA |
+| B200 / GB200 | 10.0 | **FlashInfer** (TRT-LLM kernels), then FlashAttention, then Triton, then FlexAttention. The FlashAttention version is FA4 if there is support for it. | FlashInfer MLA, then TokenSpeed MLA, then CUTLASS MLA, then FA MLA, then FlashMLA, then Triton MLA |
 | RTX PRO 6000 / 5090 | 12.0 | FlashAttention, then FlashInfer, then Triton | Triton MLA |
 
 The floors come from the `supports_compute_capability` of each backend:
@@ -1179,7 +1179,7 @@ priority, the selector gives a warning. It suggests that you remove the flag.
 ### 6.4 GQA and MLA change the bytes, not the paging
 
 With grouped-query attention, `num_kv_heads < num_heads`. In Llama-3.1-8B, 32 query heads share 8 KV heads. Thus
-the KV is 4× smaller than in the 32-head equivalent, and the kernel handles the shared heads. With MLA,
+the KV is 4× smaller than in the 32-head equivalent. The kernel handles the shared heads. With MLA,
 `MLAAttentionSpec` stores one latent vector per token per layer (`head_size_v = 0`, one "head",
 `vllm/v1/kv_cache_interface.py`). The numbers for DeepSeek-V3 (61 layers, latent 512 + RoPE 64 = 576 values,
 config `(verify)`) are these:
@@ -1193,7 +1193,7 @@ The 57× assumes 128-dim keys and values. But the MHA-style heads of DeepSeek-V3
 and 128-dim values. Thus the like-for-like figure is 61 × 128 × (192 + 128) × 2 B ≈ 5.0 MB/token, 71× the latent
 cache.
 
-This is why MLA has its own kernels (FlashMLA, CUTLASS MLA, FlashInfer MLA) and its own KV dtypes (`fp8_ds_mla`,
+Thus MLA has its own kernels (FlashMLA, CUTLASS MLA, FlashInfer MLA) and its own KV dtypes (`fp8_ds_mla`,
 `nvfp4_ds_mla`).
 
 ---
@@ -1267,10 +1267,10 @@ bit-identical.
 
 1. **Compile**: `preprocess_add_request` calls `grammar_init` in the input thread. `grammar_init` sends the
    compilation to a thread pool. The request waits in `WAITING_FOR_STRUCTURED_OUTPUT_GRAMMAR`. During that time,
-   the scheduler skips it (`Scheduler._try_promote_blocked_waiting_request`).
+   the scheduler skips the request (`Scheduler._try_promote_blocked_waiting_request`).
 2. **Backend**: `--structured-outputs-config` sets `backend = auto` (default), `xgrammar`, `guidance`, `outlines`
-   or `lm-format-enforcer` (`vllm/config/structured_outputs.py`). There is one backend for each engine ("We do NOT
-   support different backends on a per-request basis in V1"). The constraints come from
+   or `lm-format-enforcer` (`vllm/config/structured_outputs.py`). There is one backend for each engine. The source says: "We do NOT
+   support different backends on a per-request basis in V1". The constraints come from
    `SamplingParams.structured_outputs` (`json`, `regex`, `choice`, `grammar`, `json_object`, `structural_tag`).
 3. **Mask**: in each step, `Scheduler.get_grammar_bitmask` and then `grammar_bitmask` fill a packed int32
    bitmask, while the GPU runs the forward (`EngineCore.step`). The bitmask has one bit for each vocabulary entry.
@@ -1282,7 +1282,7 @@ bit-identical.
    invalid draft becomes `-1`, and the rejection sampler always rejects `-1`.
 
 Size: a 128,256-token vocabulary needs `ceil(128256 / 32) = 4,008` int32 words = 16,032 B per row. 256 rows are
-4.1 MB, and 1,024 rows are 16.4 MB. This is why the shared-memory chunk of the executor defaults to 24 MiB
+4.1 MB, and 1,024 rows are 16.4 MB. Thus the shared-memory chunk of the executor defaults to 24 MiB
 (Section 5.1).
 
 ![One step with structured output: EngineCore fills the grammar bitmask on the CPU while the GPU runs the forward, the worker applies the bitmask to the logits before sampling, and a row of the bitmask is 4,008 int32 words.](figures/grammar-bitmask-step.svg)
@@ -1296,7 +1296,7 @@ Size: a 128,256-token vocabulary needs `ceil(128256 / 32) = 4,008` int32 words =
 - `ngram`: a prompt lookup on the CPU, a Numba KMP search for the longest suffix that matches
   (`vllm/v1/spec_decode/ngram_proposer.py`).
 - `ngram_gpu`, `draft_model`.
-- `eagle` and `eagle3`: a light head that receives the hidden states of the target. EAGLE-3 uses auxiliary hidden
+- `eagle` and `eagle3`: a light head that gets the hidden states of the target. EAGLE-3 uses auxiliary hidden
   states from several layers (`vllm/v1/spec_decode/eagle.py`, `llm_base_proposer.py`).
 - many model-specific **MTP** types (`deepseek_mtp`, `qwen3_next_mtp`, `glm4_moe_mtp`, …, in `MTPModelTypes`).
   They use the multi-token-prediction layers of the checkpoint again.
@@ -1371,7 +1371,7 @@ checkpoint. If there is none, it treats the weights as unquantized, in `--dtype`
 | online, at load time | `fp8_per_tensor`, `fp8_per_block`, `fp8_per_channel`, `mxfp8`, `mxfp4`, `int8_per_channel_weight_only`, `nvfp4_per_token` | `OnlineQuantizationConfig` (`vllm/config/quantization.py: _ONLINE_SHORTHANDS`) | vLLM quantizes a BF16 checkpoint while it reads the weights. |
 | GPTQ / AWQ | `gptq`, `gptq_marlin`, `auto_gptq` / `awq`, `awq_marlin`, `auto_awq` | `AutoGPTQConfig` ("using Marlin kernels"), `AutoAWQConfig` (Triton, Marlin, XPU, with min capability 7.5) | |
 | llm-compressor | `compressed-tensors` | `CompressedTensorsConfig` | the schemes W8A8 FP8/INT8, W8A16 FP8, W4A16, W4A8, W4A4 NVFP4/MXFP4 (`compressed_tensors/schemes/`) |
-| vendor formats | `modelopt*`, `quark`, `torchao`, `inc`, `mxfp4`, `gpt_oss_mxfp4`, `moe_wna16`, `experts_int8`, … | various | deprecated: `fbgemm_fp8`, `fp_quant` |
+| vendor formats | `modelopt*`, `quark`, `torchao`, `inc`, `mxfp4`, `gpt_oss_mxfp4`, `moe_wna16`, `experts_int8`, … | different classes | deprecated: `fbgemm_fp8`, `fp_quant` |
 
 vLLM selects the kernels for each layer. Weight-only int4/int8 layers go through `choose_mp_linear_kernel`. Its CUDA
 list is `CutlassW4A8`, `Machete` (Hopper only), `Marlin` (capability ≥ 7.5), `Conch`, `Exllama`, `TritonW4A16`,
@@ -1416,7 +1416,7 @@ $\max(\text{FLOPs}/\text{peak}, \text{bytes}/\text{bandwidth})$:
 
 The advantage of W4A16 is the byte ratio (3.85× at $M = 1$). This advantage disappears when the step carries more
 than about 120 tokens on an L4 (85 on an H100). There, the BF16 math becomes the ceiling. Dequantization also
-adds real cost. This is why weight-only INT4 can be *slower* than BF16 in large prefills.
+adds real cost. Thus weight-only INT4 can be *slower* than BF16 in large prefills.
 
 FP8 W8A8 halves both ceilings, so it helps at every $M$. It needs FP8 tensor cores (Ada, Hopper, Blackwell). The
 last section of the notebook recomputes this table.
@@ -1430,7 +1430,7 @@ Typical FP8 and GPTQ/AWQ checkpoints quantize only the linear layers. They keep 
 norms in BF16. The llm-compressor recipes list `lm_head` under `ignore` `(verify)`. Embeddings are not linear
 layers. Examine the `quantization_config` of your checkpoint.
 
-For Llama-3.1-8B, this leaves 1.05 B of the 8.03 B parameters in BF16. The byte counts come from
+For Llama-3.1-8B, the layers that stay in BF16 hold 1.05 B of the 8.03 B parameters. The byte counts come from
 `servelab.sizing.weight_bytes` (INT4 at 4.16 bits per weight with group-128 scales and zero points). The freed
 blocks come from `size(...).num_blocks`, against the BF16 row of Section 4.7:
 
@@ -1698,7 +1698,7 @@ are `model_name` and `engine`. `prometheus_client` exposes the counters with a `
 | `vllm:num_requests_running` | gauge | requests in model execution batches | occupancy against `max_num_seqs` |
 | `vllm:num_requests_waiting` (+ `_by_reason`: `capacity`/`deferred`) | gauge | the requests in the `waiting` and `skipped_waiting` queues. The deferred reasons are LoRA budget, KV transfer, blocked status. | saturation against blocked requests, autoscaling |
 | `vllm:kv_cache_usage_perc` | gauge 0–1 | `BlockPool.get_usage`: referenced blocks only | headroom, not cache fullness (4.6) |
-| `vllm:prefix_cache_queries`, `vllm:prefix_cache_hits` | counters (tokens) | token-weighted lookups and hits at first admission (the counters do not count re-admissions after preemption, 4.4) | hit rate |
+| `vllm:prefix_cache_queries`, `vllm:prefix_cache_hits` | counters (tokens) | token-weighted lookups and hits at first admission. The counters do not count re-admissions after preemption (4.4). | hit rate |
 | `vllm:external_prefix_cache_queries/_hits` | counters (tokens) | hits that a KV connector serves | offload value |
 | `vllm:num_preemptions` | counter | cumulative preemptions | KV pressure (3.7) |
 | `vllm:prompt_tokens`, `vllm:generation_tokens`, `vllm:prompt_tokens_by_source`, `vllm:prompt_tokens_cached` | counters | prefill and generated tokens, prompt tokens by computed/local-cache/external | throughput, effective prefill work |
@@ -1709,7 +1709,7 @@ are `model_name` and `engine`. `prometheus_client` exposes the counters with a `
 | `vllm:request_success` (`finished_reason`) | counter | requests finished by `stop`/`length`/`abort`/`error`/`repetition` | error and truncation rates |
 | `vllm:spec_decode_num_drafts`, `_num_draft_tokens`, `_num_accepted_tokens`, `_num_accepted_tokens_per_pos` | counters | proposals and acceptances (`vllm/v1/spec_decode/metrics.py`) | acceptance length |
 | `vllm:kv_block_lifetime_seconds`, `_idle_before_evict_`, `_reuse_gap_` | histograms | sampled block residency (`--kv-cache-metrics`) | the cache size for reuse |
-| `vllm:mm_cache_queries/_hits`, `vllm:lora_requests_info`, `vllm:cache_config_info`, `vllm:corrupted_requests`, `vllm:engine_sleep_state` | various | MM cache, LoRA mix, `CacheConfig` as labels (a gauge set to 1 that emulates Info), NaN logits, sleep level | configuration and faults |
+| `vllm:mm_cache_queries/_hits`, `vllm:lora_requests_info`, `vllm:cache_config_info`, `vllm:corrupted_requests`, `vllm:engine_sleep_state` | different types | MM cache, LoRA mix, `CacheConfig` as labels, NaN logits, sleep level. The `CacheConfig` labels are on a gauge set to 1 that emulates Info. | configuration and faults |
 
 Keep these queries:
 
@@ -1738,7 +1738,7 @@ reqs, Waiting: W reqs, [Deferred: D reqs,] [Preemptions: P,] GPU KV cache usage:
 It also writes acceptance lines when speculation is on.
 
 Waiting > 0 with KV usage near 100% means that the engine is capacity-bound. Waiting > 0 with low usage means that
-it is budget-bound (`max_num_seqs`, `max_num_batched_tokens`) or blocked (examine Deferred). Nonzero Preemptions
+the engine is budget-bound (`max_num_seqs`, `max_num_batched_tokens`) or blocked (examine Deferred). Nonzero Preemptions
 means that the pool is too small for the admitted mix.
 
 ---
@@ -1755,8 +1755,8 @@ means that the pool is too small for the admitted mix.
 
 ### 13.2 Put everything in one process
 
-The fastest way to understand a mechanism is to stop inside it. Three settings put all of vLLM into one process that
-you can debug (T1: it needs a GPU, and a 0.6B model fits anywhere):
+The fastest way to know how a mechanism works is to stop inside it. Three settings put all of vLLM into one process that
+you can debug. The recipe is T1: it needs a GPU, and a 0.6B model fits anywhere.
 
 ```python
 # debug_one_process.py  (T1)
@@ -1849,7 +1849,7 @@ ranges, `GPUModelRunner._register_layerwise_nvtx_hooks`). Then run under `nsys p
 
 ### 13.6 Common errors
 
-| Symptom | Cause | Fix | Message source |
+| Symptom | Cause | Solution | Message source |
 |---|---|---|---|
 | `To serve at least one request with the model's max seq len (N), (X GiB KV cache is needed, which is larger than the available KV cache memory (Y GiB)` | The default `max_model_len` is too long for the pool (4.7). | Decrease `--max-model-len`, or set it to `auto`. Or use FP8 KV, quantized weights, a larger GPU or TP. | `_check_enough_kv_cache_memory` |
 | `No available memory for the cache blocks` | The weights and the activations are more than `requested`. | Increase `--gpu-memory-utilization`. Decrease `--max-num-batched-tokens`/`--max-num-seqs`. Quantize the weights. | same |
@@ -1892,7 +1892,7 @@ This is what the rows mean as mechanisms:
     exact to the token, and the structure of the shared parts is explicit: every child shares the prefix of its
     parent. Its cost is a tree walk, and node splits on insert, on the CPU path of the scheduler.
 
-    Eviction is LRU over leaves. This gives the same "tail before root" order as in vLLM. In vLLM, that order
+    Eviction is LRU over leaves. This eviction gives the same "tail before root" order as in vLLM. In vLLM, that order
     comes from the way it frees each chain: in reverse, onto an LRU queue. It is `(verify)` if current SGLang still
     uses pages of one token.
 
@@ -2011,7 +2011,7 @@ Concurrency is max_num_seqs, bounded by that capacity."
 
     No. The adapter name is an extra key in every block hash. With the default `--max-loras 1`, they cannot even
     share a step. The scheduler does not admit the requests of the second adapter while any request on the first is
-    RUNNING. Thus their TTFT includes whole generations of the other tenant. They can starve under steady
+    RUNNING. Thus the TTFT of those requests includes whole generations of the other tenant. Those requests can starve under steady
     first-tenant traffic.
 
 8. **Does speculative decoding change outputs?**
@@ -2031,14 +2031,14 @@ Concurrency is max_num_seqs, bounded by that capacity."
 | `SchedulerOutput` | the per-step plan that goes to the workers: new requests, deltas, tokens per request |
 | token budget | `max_num_batched_tokens`: the tokens that the engine computes per step across all requests |
 | `num_computed_tokens` | how far the engine has computed the KV of a request. The scheduler moves it toward `num_tokens_with_spec`. |
-| chunked prefill | the computation of a prompt over several steps, within the budget |
+| chunked prefill | the computation of a prompt over several steps, inside the budget |
 | preemption | the release of the blocks of a RUNNING request and the return of that request to the queue, for recompute |
 | KV block / null block | `block_size` token slots (default 16) per layer of a group / block 0, a placeholder |
 | block hash, extra keys | the hash of (parent hash, block tokens, extra keys: LoRA name, MM item id and offset, cache salt, prompt-embeds digest) |
 | free block queue | a doubly linked list of free blocks in reuse order. Cached blocks are at the tail. |
 | KV cache group | layers that share a cache type and a block table (hybrid models have several) |
 | slot mapping | for each token, `block_id × block_size + offset`, the location where the engine writes its K/V |
-| persistent batch / Model Runner V2 | the incrementally updated `InputBatch` of MRV1 / slot-based GPU request state with Triton input preparation |
+| persistent batch / Model Runner V2 | the incrementally updated `InputBatch` of MRV1 / slot-based request state on the GPU, with Triton input preparation |
 | piecewise / full CUDA graph | graphs over compiled pieces between attention ops / one graph for the whole forward |
 | capture size | a token count that has a captured graph. The engine pads a batch up to one. |
 | async scheduling | the schedule of step $N+1$ while step $N$ runs, with output placeholders |
@@ -2107,7 +2107,7 @@ Other engines: the `README.md` of `sgl-project/sglang` and of `NVIDIA/TensorRT-L
 
 ## Verify list (dated 2026-09-26)
 
-| Item | Value used | Why it needs checking |
+| Item | Value used | Why it needs a check |
 |---|---|---|
 | vLLM state | `main` at `5840d95` (2026-09-25), PyPI latest 0.30.0 (2026-09-22), `torch == 2.13.0` build pin | `main` moves daily. The line numbers in `source-map.md` go out of date. |
 | Flags newer than the wheel | `--max-num-active-seqs` and `--long-prefill-token-threshold-adaptive` are in `SchedulerConfig`/`EngineArgs` at `5840d95` but not at the `v0.30.0` tag | `vllm serve` from the 0.30.0 wheel rejects them. Read the release notes of the next release. |
@@ -2122,7 +2122,7 @@ Other engines: the `README.md` of `sgl-project/sglang` and of `NVIDIA/TensorRT-L
 | Same-step prefix hits | vLLM hashes blocks at allocation. Thus a later request in the same `schedule()` can get a hit on them. | inferred from `allocate_slots`. Do a test to make sure. |
 | DeepSeek-V3 MLA shape | 61 layers, latent 512 + RoPE 64 | This primer did not fetch the model config. |
 | NIXL proxy convention | the prefill request with `max_tokens = 1` and `do_remote_decode` | Proxy and router implementations are different. |
-| GGUF and bitsandbytes loading | not in the loader registry at this commit: out-of-tree plugins `vllm-gguf-plugin` 0.0.5 and `vllm-bnb-plugin` 0.0.3 (the quantization topic read them, 2026-09-26) | plugin versions, and if either returns in-tree |
+| GGUF and bitsandbytes loading | not in the loader registry at this commit: out-of-tree plugins `vllm-gguf-plugin` 0.0.5 and `vllm-bnb-plugin` 0.0.3. The quantization topic read them on 2026-09-26. | plugin versions, and if either returns in-tree |
 | `--enforce-eager` ITL cost | larger on small models than on large ones | Measure it in the serving lab. |
 | SGLang and TensorRT-LLM specifics marked `(verify)` | from READMEs and the SGLang paper only | Examine their docs and code before a decision. |
 | Orchestrator support | llm-d, Dynamo and KServe integrate vLLM | from FACTS.md (Dynamo) and project descriptions. Examine each support matrix. |
