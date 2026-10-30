@@ -28,7 +28,7 @@ The notebooks also run when you do not install the package. A bootstrap cell put
 Open `notebooks/NN_*.ipynb` in sequence. Each notebook is a short course on one topic. It starts with
 worked examples that you run and read. Then come **Exercise** cells with `# YOUR CODE HERE`, which you
 fill in. A **Check** cell comes after each Exercise cell. The Check cell fails loudly until your solution
-is correct, and it prints ✅ when your solution is correct.
+is correct. Then it prints ✅.
 
 The fully solved version of every notebook is in `solutions/`. Try the exercise first, then compare. Each
 notebook ends with *The one-minute version*: how to explain that topic in a design review.
@@ -98,7 +98,7 @@ September 2026, verify). The author wrote the adapter against the `google-genai`
 changed to 2.x in May 2026. Thus, *make sure that the adapter works before you trust it*.
 
 The details are in [`docs/GEMINI_ADAPTER.md`](docs/GEMINI_ADAPTER.md). The mapping to Google's Agent
-Development Kit (2.x on PyPI since May 2026, verify) is in [`docs/LAB_TO_ADK.md`](docs/LAB_TO_ADK.md).
+Development Kit (2.x on PyPI from May 2026, verify) is in [`docs/LAB_TO_ADK.md`](docs/LAB_TO_ADK.md).
 
 ## Honesty notes
 

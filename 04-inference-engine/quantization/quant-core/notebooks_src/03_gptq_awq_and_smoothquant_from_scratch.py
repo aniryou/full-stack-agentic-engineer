@@ -91,7 +91,7 @@ print(f"act-order on blocks.0.down: output error {G.output_error(Xn, W, gptq.gpt
       f"-> {G.output_error(Xn, W, gptq.gptq(W, Xn, bits=4, group_size=32, actorder=True).w_hat):.4f}")
 
 # %% [markdown]
-# GPTQ recovers INT4 to within a point, and INT3 to 6 points. **Act-order** helps slightly more. It visits the
+# With GPTQ, INT4 costs less than a point, and INT3 costs 6 points. **Act-order** helps slightly more. It visits the
 # most-used inputs first, while the most columns stay to absorb their error. With static groups, the checkpoint
 # layout does not change.
 #
@@ -130,7 +130,7 @@ for method in ("rtn", "awq", "gptq"):
 # On the layers with outlier channels, AWQ beats GPTQ. On the model as a whole, the gains of GPTQ on the
 # down-projections dominate. Also, the two compose: first the scales of AWQ, then the rounding of GPTQ
 # (llm-compressor's `AWQModifier`, then a `GPTQModifier`). This gives the lowest KL of all. With the two methods
-# together, accuracy moves within its error bars at INT4 and gains a point at INT3.
+# together, accuracy at INT4 moves only inside its error bars, and accuracy at INT3 gains a point.
 #
 # ## Worked example 4 — SmoothQuant for W8A8
 # W8A8 quantizes the input of the up-projection per token. Its four outlier channels set the scale of every token.
@@ -161,8 +161,8 @@ for label, logits in (("INT8 W8A8", w8a8_logits(m)), ("INT8 W8A8 + SmoothQuant 0
 
 # %% [markdown]
 # SmoothQuant cuts the output error of the up-projection 2.7× and the KL of the model 2.7×, at no cost at run
-# time. Accuracy changes only by a small quantity either way (W8A8 is gentle on this model). That is exactly why the eval
-# must look at KL too (notebook 04 and primer §8). FP8 without SmoothQuant keeps accuracy, but here it has 6× the
+# time. Accuracy changes only by a small quantity either way, because W8A8 causes only a small loss on this model.
+# This small change in accuracy is exactly why the eval must look at KL too (notebook 04 and primer §8). FP8 without SmoothQuant keeps accuracy, but here it has 6× the
 # INT8 KL. Its per-token scale handles the outliers. But for well-scaled values, 3 mantissa bits are coarser than
 # the 7 of INT8.
 #
@@ -183,8 +183,8 @@ accs = [E.compare(ref, quantize_model(m, "gptq", 3, 32, calib=D).forward(X), y)[
 print("GPTQ INT3 g32, three other 256-sample draws: acc " + ", ".join(f"{a:.1%}" for a in accs))
 
 # %% [markdown]
-# More samples help until the estimate of $H$ is good (a few hundred here, and recipes use 128–512 sequences of
-# 512–2,048 tokens). After that point, *which* samples you drew is about as important as how many. Three other
+# More samples help until the estimate of $H$ is good. Here, that point is a few hundred samples, and recipes use
+# 128–512 sequences of 512–2,048 tokens. After that point, *which* samples you drew is about as important as how many. Three other
 # 256-sample draws spread over about a point. This is more than the 0.6 points between 256 and 1,024 samples.
 #
 # A narrow or even random calibration set does surprisingly well on this toy. The reason is that GPTQ and AWQ need
@@ -344,7 +344,7 @@ print(f"✅ {n_enough} samples ({res[n_enough]:.1%} vs {res[1024]:.1%} at 1,024,
 #
 # **Drills**
 # 1. *What does GPTQ need from calibration data, and why a few hundred samples?* Only $H = \frac{2}{n} X^\top X$
-#    per layer. It must be well conditioned in the input dimension, and damping (1% of the mean diagonal) covers
+#    per layer. It must be well conditioned in the input dimension. The damp term (1% of the mean diagonal) covers
 #    the rest.
 # 2. *AWQ multiplies weight columns by $s$. Why is the model unchanged?* AWQ divides the activations by $s$. It
 #    folds that division into the previous RMSNorm gain (or the rows of the previous linear):

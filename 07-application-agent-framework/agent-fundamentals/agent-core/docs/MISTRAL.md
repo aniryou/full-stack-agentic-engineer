@@ -47,7 +47,7 @@ In 1.x, it is `from mistralai import Mistral`. The adapter tries both. The call 
 `MistralLLM.request(messages, tools)` returns exactly those keyword arguments. It
 sends nothing.
 
-`tool_choice` accepts `"auto"`, `"any"` (the model must call a tool), or `"none"`. The
+`tool_choice` accepts `"auto"`, `"any"` or `"none"`. With `"any"`, the model must call a tool. The
 surface of the SDK changes. If a call fails, read https://docs.mistral.ai.
 
 ## Choosing a model (list prices 2026-09-19, verify)
@@ -99,7 +99,7 @@ requirements select, and why.
   a build target.
 - **Agents / Conversations API**: Mistral's higher-level agent runtime, with built-in
   tools and persistent conversations. This lab builds the loop by hand, so that you
-  understand what that API does for you. When the hand-built loop is not sufficient for
+  know what that API does for you. When the hand-built loop is not sufficient for
   you, look at that API.
 - **Structured outputs / JSON mode**: for tools whose results a program uses.
 

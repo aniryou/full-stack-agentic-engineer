@@ -87,10 +87,10 @@ For prices, free tiers and how to get GPUs on GCP and elsewhere, see [`COMPUTE.m
 - **Toys, labelled.** The teachers and students of the core are one-hidden-layer networks on a toy language with a
   known truth. Tests pin the direction of each effect, but the magnitudes are those of the toy. The reasoning toy
   is the ThinkTask formula of rlcore, not a language model.
-- **Bounds, not measurements.** The serving costs are those of an ideal roofline decode step. This is the arithmetic
+- **Bounds, not measurements.** The serving costs are those of an ideal roofline decode step. The costs use the arithmetic
   of `roofline.llm` and `roofline.cost` in layer 01, and the tests reproduce it. Real engines reach a fraction of the
   throughput of this ideal step. The measured throughput, the real teachers and the real students are in the T1 runs
-  of the lab. The fake server and the bundled outputs of the lab are labelled simulated or illustrative.
+  of the lab. The lab labels its fake server and its bundled outputs simulated or illustrative.
 - **Dated facts.** The facts that follow are as of September 2026, and each one has the mark `(verify)`. They are
   the distillation trainers and defaults of TRL 1.14.0, and the speculative-decoding flags and metrics of vLLM
   0.30.0. They are also the Qwen3, DeepSeek-R1, Minitron and EAGLE results, the licences and all prices. The

@@ -26,7 +26,7 @@ You do this first on a bundled 300 K-parameter model on a laptop. Then you do it
 ## What you get
 
 *Tiers: T0 is a laptop or Colab CPU, free. T1 is one small GPU (a Colab/Kaggle T4 or a rented 24 GB
-card). T2 is a multi-GPU box, rented for an hour (nothing in this lab needs one). T3 is the Google Cloud
+card). T2 is a multi-GPU box, rented for an hour. Nothing in this lab needs one. T3 is the Google Cloud
 deployment, optional.*
 
 Each notebook starts with *the one-minute version*. Then it shows worked examples that use the library.
@@ -38,7 +38,7 @@ The answers are in [`solutions/`](solutions/). The section numbers refer to the 
 | # | Notebook | Tier | You will be able to explain | Primer | Time |
 |---|---|---|---|---|---|
 | 01 | [`quantize_a_checkpoint`](notebooks/01_quantize_a_checkpoint.ipynb) | T0 (+T1 llm-compressor) | What a compressed-tensors checkpoint holds (packed INT4 words, FP8 bytes, bf16 scales, the `quantization_config`). How to predict its size. Why RTN INT4 loses the columns that meet outlier activations, and GPTQ/AWQ do not. The divisibility rule for the group size. The llm-compressor recipe for a 0.5B model. | §3, §4, §9 | ~2 h |
-| 02 | [`serve_and_compare_schemes`](notebooks/02_serve_and_compare_schemes.ipynb) | T0 simulated / T1 | The scheme × GPU table (FP8 is weight-only below sm_89, NVFP4 W4A4 only on sm_100+, INT8 W8A8 refused on Blackwell). One GEMM on the roofline (the table of vllm-internals §8.1, recomputed). Where W4A16 becomes compute-bound (~120 tokens per step on an L4), and where its advantage over BF16 is gone (~460). TTFT and TPOT per scheme from an emulator and over HTTP. How to select a scheme per GPU and workload. | §1, §4, §10 | ~2 h |
+| 02 | [`serve_and_compare_schemes`](notebooks/02_serve_and_compare_schemes.ipynb) | T0 simulated / T1 | The scheme × GPU table: FP8 is weight-only below sm_89, NVFP4 W4A4 runs only on sm_100+, and vLLM refuses INT8 W8A8 on Blackwell. One GEMM on the roofline (the table of vllm-internals §8.1, recomputed). Where W4A16 becomes compute-bound (~120 tokens per step on an L4), and where its advantage over BF16 is gone (~460). TTFT and TPOT per scheme from an emulator and over HTTP. How to select a scheme per GPU and workload. | §1, §4, §10 | ~2 h |
 | 03 | [`measure_the_accuracy_cost`](notebooks/03_measure_the_accuracy_cost.ipynb) | T0 / T1 lm-eval | A comparison of KL, argmax agreement and task accuracy on nine schemes. Where the errors occur. How many questions a drop needs to be visible. Paired flips (McNemar). An accuracy budget and the lowest-cost scheme that meets it. Over a long generation, the damage compounds. The lm-eval commands and results. | §8 | ~2 h |
 | 04 | [`kv_cache_quantization_in_vllm`](notebooks/04_kv_cache_quantization_in_vllm.ipynb) | T0 / T1 on Ada or newer (`QUANTLAB_VLLM_LOG`, `QUANTLAB_URL`) | `--kv-cache-dtype fp8`: from 2,363 to 4,727 blocks for an 8B model on an L4 (the serving lab's block calculation, reproduced). Which attention backend reads which KV dtype (none on a T4, FlashInfer on L4/A100). Where the KV read becomes larger than the weight read. The per-tensor scale that ruins FP8 KV, and the one that does not matter. | §6 | ~1.5 h |
 | 05 | [`fp4_and_the_blackwell_path`](notebooks/05_fp4_and_the_blackwell_path.ipynb) | T0 (calculators, with (verify) tags) / T1 on one Blackwell GPU | E2M1 and its rounding. The power-of-two scale of MXFP4 against the two-level scale of NVFP4. Checkpoint layouts and bytes. Why FP4 *activations* collapse without smoothing. Why weight-only FP4 is slower than BF16 at prefill sizes on Blackwell. | §2, §5 | ~1.5 h |
@@ -91,7 +91,7 @@ With `QUANTLAB_RUN_T1=1`, notebooks 01 and 03 run llm-compressor and lm-eval the
 | `fp4.py` | E2M1 rounding and packing, NVFP4 (E4M3 per 16 + FP32 global) and MXFP4 (E8M0 per 32) quantizers in compressed-tensors' conventions, checkpoint layouts and bits per weight. |
 | `report.py` | Tables whose every section says where its numbers came from: exact, simulated, measured, sample. |
 | `numerics.py`, `stio.py` | FP8 E4M3/E5M2 and bf16 bit patterns, compared with the casts of torch when torch is present. INT4 packing in compressed-tensors order. Safetensors read/write with no dependencies, compared with the `safetensors` package when it is present. |
-| `tinymodel.py`, `data/tiny-adder/` | The bundled model: a 2-layer Llama (RMSNorm, RoPE, GQA, SwiGLU, `LlamaForCausalLM` tensor names, bf16 safetensors). [`tools/train_tiny.py`](tools/train_tiny.py) trained it to 100% on 3-digit addition and 6-digit reversal. A rescale that does not change the function planted two massive-activation channels in it. The purpose is to make calibration matter as it does at scale. |
+| `tinymodel.py`, `data/tiny-adder/` | The bundled model: a 2-layer Llama (RMSNorm, RoPE, GQA, SwiGLU, `LlamaForCausalLM` tensor names, bf16 safetensors). [`tools/train_tiny.py`](tools/train_tiny.py) trained it to 100% on 3-digit addition and 6-digit reversal. A rescale that does not change the function planted two massive-activation channels in the model. The purpose is to make calibration matter as it does at scale. |
 
 ### Names in the core and in the lab
 
@@ -152,7 +152,7 @@ make check                                              # tests + notebooks + ba
   (top-1 probability above 0.999 at every answer position). Its inputs are also low-rank (a 16-token
   vocabulary, 128-wide layers). Because of these two properties, GPTQ INT4 looks as near to BF16 as FP8 does, and KL differences of
   1e-8 against 1e-9 mean nothing. On real models, expect FP8 and INT8 W8A8 to cost least, INT4 GPTQ/AWQ
-  more and INT4 RTN most (PRIMER §10). Its result that RTN g32 is worse than RTN g128 comes from the two
+  more and INT4 RTN most (PRIMER §10). On the tiny model, RTN g32 is worse than RTN g128. This result comes from the two
   planted outlier columns (notebook 01), not from group size.
 - **The scheme table is read from source, not run.** Kernel names, capability floors and backend rules
   come from vLLM v0.30.0 / main (Sep 2026). On your version, the startup log is the ground truth.

@@ -219,7 +219,7 @@ flowchart LR
     BASE["the org tier:<br/>10 M TPM baseline"] --> CMP
 ```
 
-*The rates of §3.2, with the numbers of the anchor scenario. Each box multiplies the rate before it. At the end, the input tokens a minute go against the baseline of the org tier.*
+*The rates of §3.2, with the numbers of the anchor scenario. Each multiplication gives the next rate, from conversations to input tokens a minute. Then the input tokens a minute go against the baseline of the org tier.*
 
 ```mermaid
 flowchart LR

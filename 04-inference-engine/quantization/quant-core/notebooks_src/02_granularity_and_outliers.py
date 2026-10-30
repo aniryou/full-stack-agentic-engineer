@@ -54,8 +54,8 @@ for fmt, gran, g, bits in [("int8", "tensor", None, 8), ("int8", "channel", None
 #
 # ## Worked example 2 — an outlier row, and an outlier column
 # First, the case of serving-engine §8: one output channel is 100× larger. Then, the harder case for INT4 weights:
-# one weight **input column** is 20× larger than the rest. This is a *weight* outlier. Its cousin, an
-# *activation* outlier channel, is worked example 3. There, the weight column is ordinary, and the problem is a
+# one weight **input column** is 20× larger than the rest. This is a *weight* outlier. Worked example 3 is about its
+# cousin, an *activation* outlier channel. There, the weight column is ordinary, and the problem is a
 # different one.
 
 # %%
@@ -163,7 +163,7 @@ print(f"dynamic per token                  : output error {np.linalg.norm(Y - re
 # ## Worked example 5 — block scales (DeepSeek-V3's FP8)
 # The FP8 checkpoints of DeepSeek-V3 store one FP32 scale per 128×128 weight tile. The scheme quantizes
 # activations per token per 128 channels, at run time. A block is a 2-D group. It is finer than per-tensor, and it
-# is still aligned with the tiles that a GEMM kernel works on.
+# still aligns with the tiles that a GEMM kernel works on.
 
 # %%
 Wb = rng.standard_normal((512, 512))
@@ -254,7 +254,8 @@ print(f"✅ predicted {predicted:.3f}, measured {measured:.3f}: one channel at 6
 # Select `static_amax` for the INT8 static per-tensor input scale of the up-projection from the four candidates
 # of worked example 4. Give each candidate a score: the output error on the **calibration** activations `A`.
 # Never use the test set. Calibration means that you select the scale on calibration data only. The check
-# measures your choice on the held-out `At`. Your choice must be within 10% of the best candidate there.
+# measures your choice on the held-out `At`. There, the error of your choice must be at most 10% more than the
+# error of the best candidate.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -302,7 +303,7 @@ print(f"✅ 16 scales for a 512x512 weight; the hot tile's scale is {s[0, 0] / n
 # The weight columns that they meet are ordinary. But those inputs multiply the rounding error of these columns
 # (98% of the error of our toy up-projection), and AWQ corrects that multiplied error. Also, these channels set a
 # per-token INT8 activation scale that leaves the other channels ~4 bits. Dynamic per-token FP8 keeps them at 3 mantissa bits.
-# This is why FP8 W8A8 usually needs no smoothing, and INT8 W8A8 does.
+# This is why FP8 W8A8 usually needs no SmoothQuant, and INT8 W8A8 does.
 #
 # "We prefer dynamic activation scales, because a static scale saturates any value that calibration did not see.
 # Also, we never trust an aggregate error number. We look per channel."
