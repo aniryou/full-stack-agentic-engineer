@@ -81,6 +81,10 @@ A turn with two tool calls has four segments on the critical path. They are the 
 
 Also, because turns are long, Little's law connects latency to concurrency. At 20 turns per second, a 6-second turn means 125 turns in flight, and a 12-second turn means 250. Each turn in flight holds memory, a session lock and an open client connection. Slowdowns *are* capacity problems.
 
+![Turns in flight against the arrival rate of turns, for a 6-second turn and a 12-second turn (Little's law).](figures/inflight-turns-littles-law.svg)
+
+*Turns in flight against the arrival rate of turns. At the same rate, a 12-second turn puts twice as many turns in flight as a 6-second turn. `scalelab.capacity.plan` computes the lines and the limit of the 10 M TPM baseline (§3.3), and `tests/test_figures.py` pins the chart.*
+
 ### 1.4 Cost scales with context, and context grows
 
 The bill is tokens, and input is the largest part of it. A support turn sends 4–6 k tokens of system prompt, tool schemas, customer context and history. It gets 300–400 tokens back. Without compaction, the input grows by several hundred tokens each turn. Thus the cost of the tenth turn is a multiple of the cost of the first turn.
@@ -111,6 +115,10 @@ The loop has these steps:
 4. Longer turns put more turns in flight (Little's law).
 5. More turns in flight cause more memory, more queued model calls and more retries.
 6. These cause more 429s.
+
+![The six steps of the feedback loop of §1.6 make a cycle that starts and ends with more 429s.](figures/overload-feedback-loop.svg)
+
+*The feedback loop of §1.6. Each step causes the next step, and the last step causes more 429s again. Little's law connects the longer turns to more turns in flight.*
 
 Without a circuit breaker on the loop, an agent system under overload does not fail fast. It slows down for everyone until the turn deadlines expire and the users go away. By then, the users have already used the tokens.
 
@@ -212,17 +220,6 @@ The token budget also puts a cap on concurrency. 10 M TPM ÷ 60 ≈ 167 k tokens
 
 ```mermaid
 flowchart LR
-    C(["100,000 a day ÷ 86,400<br/>≈ 1.16 conversations<br/>a second"]) --> T["× 6 turns<br/>≈ 7 turns<br/>a second"]
-    T --> M["× 2.2 calls<br/>≈ 15 calls<br/>a second"]
-    M --> TPM["× 5,000 tokens × 60<br/>≈ 4.6 M input tokens<br/>a minute (13.75 M<br/>at peak, 45.8 M in<br/>an incident)"]
-    TPM --> CMP["against the baseline:<br/>0.46× at average,<br/>1.38× at peak,<br/>4.58× in an incident"]
-    BASE["the org tier:<br/>10 M TPM baseline"] --> CMP
-```
-
-*The rates of §3.2, with the numbers of the anchor scenario. Each multiplication gives the next rate, from conversations to input tokens a minute. Then the input tokens a minute go against the baseline of the org tier.*
-
-```mermaid
-flowchart LR
     C(["≈ 1.16 conversations<br/>a second"]) --> T["≈ 7 turns a second"]
     T -- "Little's law:<br/>× 6 s" --> IF["in-flight turns:<br/>42 at average,<br/>125 at peak,<br/>417 in an incident"]
     C -- "× 400 s" --> S["concurrent sessions:<br/>460 at average,<br/>4,600 in an incident"]
@@ -230,7 +227,7 @@ flowchart LR
     B -- "÷ 2 k tokens/s<br/>a turn" --> CAP["about 85 turns<br/>in flight: the<br/>in-flight cap,<br/>below peak demand"]
 ```
 
-*The concurrency of §3.3, from Little's law. The turn duration gives the turns in flight, and the length of a conversation gives the concurrent sessions. The same baseline gives the initial in-flight cap (`scalelab.capacity`).*
+*The concurrency of §3.3. In the upper part, the turn duration gives the turns in flight, and the length of a conversation gives the concurrent sessions (Little's law). In the lower row, the 10 M TPM baseline gives the initial in-flight cap of about 85 turns. This cap is below the 125 turns of the peak (`scalelab.capacity`).*
 
 ### 3.4 Cost per conversation
 
@@ -247,6 +244,10 @@ The calculation for one 3.5 Flash call:
 - 350 output tokens at $9/M.
 
 The call costs $0.00345 + $0.0004 + $0.00315 ≈ $0.0070. Thirteen calls in a conversation come to ≈ $0.092. When you route a third of them to Flash-Lite at $0.00165, the cost goes down to $0.068. With self-hosted models, the same lever is a distilled student behind a cascade. The price of that student, with its break-even, is in [distillation §9](../../../../00-foundations/distillation/PRIMER.md#9-the-economics-of-a-student).
+
+![Cost per conversation against the share of model calls on 3.5 Flash-Lite, with no caching and with the prefix cached.](figures/cost-per-conversation-flash-lite-share.svg)
+
+*Cost per conversation against the share of model calls on 3.5 Flash-Lite. The cached prefix and a larger share on Flash-Lite each decrease the cost. `scalelab.capacity.plan` computes both lines, and `tests/test_figures.py` pins the chart.*
 
 Compared with a contact that a person handles, at several dollars, all three rows are low-cost. Compared with each other, the highest cost per conversation is 2× the lowest. At this volume, the difference is $220 k a month. Output tokens are the largest single line, but there are fourteen times fewer of them. The reason is that, on this model, the price of output is six times the price of input. Thus output caps and thinking levels are cost levers, not only latency levers.
 
@@ -278,6 +279,10 @@ The anchor call has a burndown of 2,000 + 300 + 2,100 ≈ 4,400–4,700 tokens. 
 | 1 year | 2.74 | 1.13 | 75 % |
 
 Thus PT is not a discount unless you commit for a year *and* keep the units three-quarters busy. If you buy PT for the peak (207 GSUs), it is 33 % utilised on average and costs more than pay-as-you-go. The usual answer has two parts. Buy PT for the base (69 GSUs, $138 k a month on a 1-year term). Then let the peaks spill over to Priority or Standard PayGo.
+
+![The price per M burndown tokens on Provisioned Throughput against the utilisation of the GSUs, for each term, and the PayGo price.](figures/pt-break-even-utilisation.svg)
+
+*The price per M burndown tokens on PT against the utilisation of the GSUs, for each term. A term costs less than PayGo only above its break-even utilisation: 75 % for 1 year and 90 % for 3 months. `scalelab.capacity.plan` computes the curves, and `tests/test_figures.py` pins the chart.*
 
 PT buys an SLA and immunity from the contention of the shared pool, for the traffic that is most important. That is why the request headers let you say, per call, "dedicated only", "spill over to Priority" or "bypass PT".
 
@@ -445,6 +450,27 @@ The loop writes a checkpoint of every step in Firestore *before* it acts on the 
 - After the tool step, the checkpoint holds the tool results, compacted.
 
 On redelivery, the orchestrator replays the turn from the checkpoint, and skips the completed steps. The tool executor makes a key for every write from the turn, the step, the call index and a hash of the arguments. It stores the result under that key for a day. Thus a redelivered turn that already opened a ticket gets the same ticket back. The crash test of the lab (notebook 02) stops the process immediately after the checkpoint of the ticket. It shows one ticket after redelivery, with four of five steps resumed.
+
+```mermaid
+sequenceDiagram
+    participant P as Pub/Sub
+    participant O as orchestrator
+    participant T as tool executor
+    participant F as Firestore
+    P->>O: push the turn
+    O->>F: checkpoint of the model call
+    O->>T: open a ticket, with its key
+    T-->>O: the ticket, stored under the key
+    Note over O,T: the process stops before<br/>the checkpoint of the ticket
+    P->>O: redelivery, because<br/>no 2xx came back
+    O->>F: load the checkpoints
+    Note over O: skip the completed steps
+    O->>T: the same write, the same key
+    T-->>O: the same ticket
+    O-->>P: 200 for the terminal outcome
+```
+
+*The case of §1.5: the process stops after the ticket write and before its checkpoint. On redelivery, the orchestrator skips the steps with a checkpoint. The key gives the stored ticket back, not a second ticket.*
 
 The queue contract is the other half. Pub/Sub push acknowledges on any 2xx. On any other response, it sends the message again, with a push backoff that grows from 100 ms to 60 s. The retry policy of the subscription adds a 10–600 s exponential backoff. After five attempts, the message goes to a dead-letter topic that has its own alert.
 
@@ -624,12 +650,12 @@ The order of adoption is important. Add durability (checkpoints, idempotency) be
 
 ```mermaid
 flowchart LR
-    P["Pilot<br/>≤ 1,000"] -- "p95 in the<br/>peak hour crosses<br/>the budget:<br/>add the queue" --> V1["Production v1<br/>1,000–20,000"]
-    V1 -- "durability<br/>before admission<br/>control" --> S["Scale<br/>20,000–200,000"]
-    S -- "PT before<br/>multi-region: a<br/>residency or<br/>availability<br/>requirement" --> E["Enterprise<br/>> 200,000,<br/>multi-brand"]
+    P["Pilot<br/>≤ 1,000"] -- "p95 crosses<br/>the budget:<br/>add the queue" --> V1["Production v1<br/>1,000–20,000"]
+    V1 -- "durability<br/>before admission<br/>control" --> S["Scale<br/>20,000–<br/>200,000"]
+    S -- "PT before<br/>multi-region" --> E["Enterprise<br/>> 200,000,<br/>multi-brand"]
 ```
 
-*The growth path of §7 as the order of adoption: durability before admission control, admission control before PT, and PT before multi-region. The numbers are conversations a day. Each edge names the rule of order or the measurement that starts the next stage.*
+*The growth path of §7. The numbers are conversations a day. Each edge names the rule of order or the measurement that starts the next stage.*
 
 ---
 

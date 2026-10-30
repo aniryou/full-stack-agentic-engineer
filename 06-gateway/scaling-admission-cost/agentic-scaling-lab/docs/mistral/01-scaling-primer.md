@@ -122,16 +122,17 @@ Without a brake, the system becomes slower for all users. Then the deadlines exp
 
 ```mermaid
 flowchart LR
-  A([More load]) --> B[The model is slower<br/>or pushes back]
-  B --> C[Retries and<br/>longer calls]
-  C --> D[Longer turns]
+  accTitle: More load makes the model slower, which gives retries, longer turns and more turns in flight, and these make the model slower again.
+  A([More load]) --> B["Model slower<br/>or pushes back"]
+  B --> C["Retries,<br/>longer calls"]
+  C --> D[Longer<br/>turns]
   D --> E[More turns<br/>in flight]
   E --> B
   B -- on the API --> F[429 storm]
-  B -- on a fleet --> G[The batch grows<br/>without errors]
+  B -- on a fleet --> G["Batch grows,<br/>no errors"]
 ```
 
-*The feedback loop of §1.6, without a brake. Step 6 closes the loop back to step 2, so each pass puts more turns in flight. On the API, the loop shows itself as a 429 storm, and on a fleet, the batch grows without an error.*
+*The feedback loop of §1.6, without a brake. The long arrow back from More turns in flight is step 6 of the list. The two labelled arrows are its two forms: a 429 storm on the API, and a batch that grows without errors on a fleet.*
 
 The load generator (`scalelab/sim.py`, notebook 05) reproduces the two forms (simulated). The simulated API pool has 3 M TPM. In it, 120 users with simple retries push the p95 turn to 39 s. The run has 394 rate-limit responses and 35 failed turns.
 
@@ -374,7 +375,7 @@ At peak, everything fits (0.76× and 0.72× on the hosted limits, 0.69× on the 
 
 ![The reference architecture of Part 4: the gateway, RabbitMQ, the orchestrator, the vLLM fleet with the Mistral API as spill-over, the tools and the stores.](figures/hybrid-reference-architecture.svg)
 
-*The reference architecture of Part 4. The gateway and the orchestrator are two Deployments with a RabbitMQ queue between them. The model gateway sends calls to the vLLM fleet first, and the Mistral API gets only the policy-gated spill-over.*
+*The reference architecture of Part 4. The gateway and the orchestrator are two Deployments with a RabbitMQ queue between them. The model gateway sends calls to the vLLM fleet first, and the Mistral API gets only the policy-gated spill-over on the dashed arrow.*
 
 This is a turn from end to end. The ingress applies the WAF and a per-caller limit. Then the gateway does these steps:
 
@@ -489,6 +490,7 @@ The gate is policy. A turn is eligible when its traffic carries no personal data
 
 ```mermaid
 flowchart LR
+  accTitle: A call goes to the vLLM fleet, and above a saturation of 0.9 only a turn with no personal data goes to the Mistral API.
   M([Model call]) --> S{Fleet saturation<br/>above 0.9?}
   S -- no --> F[vLLM fleet]
   S -- yes --> E{"Eligible turn:<br/>no personal data?"}
@@ -537,6 +539,25 @@ Two details make the difference between an implementation that works and a diagr
 The loop (`run_turn` in `scalelab/loop.py`) writes a checkpoint for every step in Postgres *before* it acts on the result. After the model call, the checkpoint holds the model's response, and after the tool step, it holds the compacted tool results. On redelivery, the orchestrator replays from the checkpoint. The tool executor gives every write a key. The key comes from the turn, the step, the call index and the tool name (plus a hash of the arguments in production). The executor keeps the result under that key in Redis for a day.
 
 Thus a redelivered turn that already opened a ticket gets the same ticket back. The lab's crash test (notebook 02) stops the process immediately after the checkpoint of the ticket. It shows one ticket after redelivery.
+
+```mermaid
+sequenceDiagram
+  accTitle: RabbitMQ delivers a turn two times, and the tool executor returns the same ticket for the same key, so the turn opens one ticket only.
+  participant Q as RabbitMQ
+  participant O as orchestrator
+  participant T as tool executor
+  Q->>O: deliver the turn
+  O->>T: open a ticket, with its key
+  T-->>O: the ticket, kept under the key
+  Note over Q,T: the process stops before it records the ticket
+  Q->>O: redelivery
+  Note over O: replay from the<br/>checkpoints in Postgres
+  O->>T: the same write, the same key
+  T-->>O: the same ticket
+  O->>Q: acknowledge the terminal outcome
+```
+
+*The case of §1.5, with the keys of §5.4: the process stops after the tool executor opens the ticket and before the orchestrator records it. On redelivery, the same key gets the same ticket back from Redis. The lab's crash test stops later, after the checkpoint, so its replay skips the tool step.*
 
 The queue contract is the other half. `agent-turns` is a quorum queue. Consumers acknowledge manually, with prefetch set to the concurrency of the pod (80). The orchestrator acknowledges every *terminal* outcome, and a graceful failure is a terminal outcome too. A turn that ended with "a colleague will follow up" must not get a redelivery, because a redelivery gives a second bill. The orchestrator rejects with requeue only for transient infrastructure trouble.
 

@@ -157,9 +157,9 @@ operand one time and writes each result one time. A perfectly fused and tiled ke
 | GEMM 64 × 4096 × 4096 | 2mnk | (mk + kn + mn) × 2 | 62 | 208 TFLOP/s, memory-bound |
 | GEMM 4096 × 4096 × 4096 | 2n³ | 3n² × 2 | 1,365 | 989 TFLOP/s, compute-bound |
 
-![The H100 roofline in dense bf16 on log axes, with the kernels of the table and the decode and prefill steps of section 3 at their intensities.](figures/roofline-h100-bf16.svg)
+![The roofline of the H100 and the L4 in dense bf16 on log axes: attainable TFLOP/s against arithmetic intensity, with the kernels of the table and the decode and prefill steps of section 3 on the H100.](figures/roofline-h100-bf16.svg)
 
-*The figure draws the H100 roofline in dense bf16 to scale on log axes. The kernels of the table sit on the slope or on the roof at their intensities. Teal marks the decode and prefill steps of §3.*
+*The chart shows the attainable TFLOP/s against the arithmetic intensity on log axes, for the H100 and the L4 in dense bf16. The kernels of the table sit on the H100 line as white points, and the teal points are the decode and prefill steps of §3. The core computes each line with `roofline.roofline.attainable()` and the steps with `roofline.llm.decode()` and `prefill()`, and `tests/test_figures.py` pins the chart.*
 
 Remember the GEMM formula:
 
@@ -255,9 +255,9 @@ each sequence also reads its own KV cache:
 | 128 | 41.7 | 14.74 ms | 8,682 | 68 | 70% |
 | 208 (HBM limit) | 47.2 | 21.16 ms | 9,832 | 47 | 79% |
 
-![One decode step per batch row: the weight stream takes the same time in every row and the KV read grows with the batch.](figures/decode-step-weights-vs-kv.svg)
+![One decode step of Llama-3.1-8B on an H100 in bf16 at 2K context against the batch: the weight stream takes the same time at every batch, and the KV read grows with the batch up to the HBM limit.](figures/decode-step-weights-vs-kv.svg)
 
-*Each bar is one decode step. The weight stream (teal) takes the same time in every row, because the batch shares it. The KV read (orange) grows with each sequence, until it is most of the bytes (§3.4).*
+*The chart shows the time of one decode step against the batch, up to the HBM limit, and the two parts of that time. The weight stream (dashed) takes the same time at every batch, but the KV read (orange, no points) grows with each sequence. The core computes the curves with `roofline.llm.decode()` and `decode_split()`, and `tests/test_figures.py` pins the chart.*
 
 Throughput increases with batch, and the speed per user decreases. This is the trade that you adjust
 against an ITL SLO. The table stops where HBM does: 208 sequences of 2K tokens fit beside the weights with
@@ -439,6 +439,10 @@ Take 4 ops (bias, GELU, dropout, residual add) on a 4096 × 8192 bf16 activation
 Fusion changes no FLOPs and removes 67% of the bytes. The fused kernel still reads each distinct input one
 time and writes the result one time.
 
+![Four elementwise ops as four kernels that each read from HBM and write back to it, and as one fused kernel that reads its inputs and writes the result one time.](figures/fusion-unfused-vs-fused.svg)
+
+*Count the arrows to and from HBM. Without fusion, each op reads its input from HBM and writes its result back, and the residual add also reads the residual. The fused kernel reads the two inputs one time and writes one result: 201 MB instead of 604 MB (`fusion_bytes()`).*
+
 FlashAttention is the standard example. It tiles Q, K and V into shared memory, computes softmax online, and
 never writes the $N \times N$ score matrix. See the
 [FlashAttention primer](../../04-inference-engine/flash-attention/flash-attention-primer.md). Its §3
@@ -495,6 +499,10 @@ Take 8 H100s over NVLink 4 as a worked example. The two terms of the ring meet a
 400 Gb/s NIC: 2.0 MB). A 1 GiB all-reduce takes 4.20 ms — algbw 255 GB/s. For this all-reduce, nccl-tests reports
 **$\text{busbw} = \text{algbw} \times 2(p-1)/p$ = 447 GB/s**, the number to compare with the link's 450
 (`busbw()`). Layer 02 covers busbw, NCCL algorithms and protocols in depth.
+
+![All-reduce time over 8 GPUs against the message size on log axes: a ring and recursive doubling over NVLink 4, and a ring through 400 Gb/s NICs.](figures/allreduce-time-vs-message-size.svg)
+
+*The chart shows the all-reduce time over 8 GPUs against the message size, with the 70B decode and prefill messages of §5.3. The two points with the label "terms meet" show the size where the latency term and the bandwidth term of a ring are equal. The decode message is latency-bound, and the prefill message is bandwidth-bound. The core computes the curves with `roofline.fabric.ring_allreduce_time()` and `recursive_doubling_allreduce_time()`, and `tests/test_figures.py` pins the chart.*
 
 ### 5.3 Tensor parallelism: the collective inside every layer
 
@@ -720,9 +728,9 @@ $$
 \end{aligned}
 $$
 
-![A time line with checkpoint writes, a failure, the lost work since the last checkpoint and a restart.](figures/checkpoint-interval-timeline.svg)
+![A time line with checkpoint writes, a failure, the lost work after the last checkpoint and a restart.](figures/checkpoint-interval-timeline.svg)
 
-*A job writes a checkpoint every $\tau$ seconds, and each write takes $\delta$. A failure loses the work since the last checkpoint, about $\tau/2$ on average, plus the restart $R$. The interval $\sqrt{2\,\delta M}$ gives the least lost time, and the restart $R$ does not move it (§7.2).*
+*A job writes a checkpoint every $\tau$ seconds, and each write takes $\delta$. The failure loses the work after the last checkpoint (the dashed box), about $\tau/2$ on average. After the restart $R$, the job computes that work again (§7.2).*
 
 Daly (2006) adds higher-order terms: `young_daly_interval(..., higher_order=True)`.
 
@@ -741,6 +749,10 @@ asynchronous checkpoints to host memory and local disk, then to storage in the b
 adds $R/{M}$ on top, and it does not move $\tau^{*}$. At this failure rate, a 10-minute restart (5.4%)
 costs more than everything a 10 s checkpoint wastes (4.2%). Thus fast restart is a lever next to fast
 checkpoints: hot spare nodes, checkpoints replicated in peer memory, pre-initialised jobs.
+
+![The share of wall-clock time that a 16,384-GPU job loses at each checkpoint interval, for a 60 s and a 10 s checkpoint and for a 60 s checkpoint with a 10-minute restart.](figures/checkpoint-waste-vs-interval.svg)
+
+*For each checkpoint interval, the chart shows the share of wall-clock time that the 16,384-GPU job loses. Each curve has its least value at its $\tau^{*}$, and the restart $R$ moves the curve up, not to the side. The core computes the curves with `roofline.reliability.wasted_fraction()` and `young_daly_interval()`, and `tests/test_figures.py` pins the chart.*
 
 ### 7.3 Inference: replicas are failure domains
 
@@ -790,10 +802,9 @@ largest batch that meets an **ITL of 10 ms** (100 tokens/s per user) and fits in
 flowchart LR
   SLO(["ITL SLO<br/>10 ms"]) --> B["best_batch_under_itl()<br/>meets the ITL<br/>fits in HBM"]
   B --> T["decode()<br/>tokens/s"]
-  P["$/GPU-hr"] --> C
-  T --> C["cost_per_million_tokens()"]
+  P(["$/GPU-hr"]) --> C
+  T --> C["cost_per_million_tokens()<br/>$/M output tokens"]
   U["utilisation()"] --> C
-  C --> R["$/M output tokens"]
 ```
 
 *The ITL SLO and the HBM capacity set the batch, and the decode step sets the tokens per second. The price per GPU-hour and the utilisation then set the cost of a token (§8.1 and §8.2).*

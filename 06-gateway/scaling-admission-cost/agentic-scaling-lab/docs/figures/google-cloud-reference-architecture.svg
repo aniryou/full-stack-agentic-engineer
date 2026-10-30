@@ -23,7 +23,7 @@
     <!-- Pub/Sub -->
     <ellipse cx="336" cy="226" rx="84" ry="8" fill="none" stroke="currentColor" stroke-width="1.2"/>
     <path d="M252 226 L252 318 A84 8 0 0 0 420 318 L420 226" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    <text x="336" y="256" text-anchor="middle" font-weight="600">Pub/Sub agent-turns</text>
+    <text x="336" y="256" text-anchor="middle" font-weight="600">Pub/Sub</text>
     <text x="336" y="276" text-anchor="middle" font-size="11.5" fill="#97A59F">ack 600 s</text>
     <text x="336" y="293" text-anchor="middle" font-size="11.5" fill="#97A59F">retry 10–600 s</text>
     <text x="336" y="310" text-anchor="middle" font-size="11.5" fill="#97A59F">DLQ after 5</text>
@@ -54,10 +54,10 @@
     <text x="800" y="414" text-anchor="middle" font-size="11.5" fill="#97A59F">Cloud Run</text>
     <text x="800" y="436" text-anchor="middle" font-size="11.5">profile · policy admin</text>
     <text x="800" y="453" text-anchor="middle" font-size="11.5">claims · documents · MCP</text>
-    <!-- Memorystore Valkey -->
+    <!-- Redis on Memorystore -->
     <ellipse cx="336" cy="376" rx="84" ry="8" fill="none" stroke="currentColor" stroke-width="1.2"/>
     <path d="M252 376 L252 444 A84 8 0 0 0 420 444 L420 376" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    <text x="336" y="402" text-anchor="middle" font-weight="600">Memorystore Valkey</text>
+    <text x="336" y="402" text-anchor="middle" font-weight="600">Redis</text>
     <text x="336" y="420" text-anchor="middle" font-size="11.5" fill="#97A59F">streams · locks · buckets</text>
     <text x="336" y="437" text-anchor="middle" font-size="11.5" fill="#97A59F">idempotency · level</text>
     <!-- Firestore -->

@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="360" viewBox="0 0 880 360" role="img" aria-label="The speedup of speculative decoding against the draft depth k at an acceptance rate of 0.8, for a draft cost c of 0 and 0.1." style="color: #E4EAE7">
+  <title>The speedup of speculative decoding against the draft depth k at an acceptance rate of 0.8, for a draft cost c of 0 and 0.1.</title>
+  <desc>{"kind":"line","legend":"bottom-right","marks":[{"anchor":"end","dy":-10,"kind":"point","label":"k = 4: 3.36","style":"plain","x":4,"y":3.3616},{"anchor":"middle","dy":22,"kind":"point","label":"k = 4: 2.40×","style":"accent","x":4,"y":2.4011},{"anchor":"middle","dy":22,"kind":"point","label":"best k = 6: 2.47×","style":"accent","x":6,"y":2.4696}],"note":"computed by minengine.spec.speedup, expected_tokens and best_k (alpha = 0.8)","series":[{"dash":true,"markers":true,"name":"c = 0: E[tokens per pass]","style":"muted","x":[1,2,3,4,5,6,7,8,9,10,11,12],"y":[1.8,2.44,2.952,3.3616,3.6893,3.9514,4.1611,4.3289,4.4631,4.5705,4.6564,4.7251]},{"markers":true,"name":"c = 0.1","style":"accent","x":[1,2,3,4,5,6,7,8,9,10,11,12],"y":[1.6364,2.0333,2.2708,2.4011,2.4595,2.4696,2.4477,2.405,2.349,2.2853,2.2173,2.1478]}],"title":"The speedup of speculative decoding against the draft depth k at an acceptance rate of 0.8, for a draft cost c of 0 and 0.1.","x":{"label":"draft tokens per round, k","max":12,"min":1,"ticks":[1,2,3,4,5,6,7,8,9,10,11,12]},"y":{"label":"speedup over plain decode (×)","max":5,"min":0,"ticks":[0,1,2,3,4,5]}}</desc>
+  <rect x="0" y="0" width="880" height="360" rx="8" fill="#161E1C"/>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12" fill="currentColor">
+    <g stroke="#27322E" stroke-width="1">
+      <line x1="66.0" y1="290.0" x2="858.0" y2="290.0"/>
+      <line x1="66.0" y1="236.4" x2="858.0" y2="236.4"/>
+      <line x1="66.0" y1="182.8" x2="858.0" y2="182.8"/>
+      <line x1="66.0" y1="129.2" x2="858.0" y2="129.2"/>
+      <line x1="66.0" y1="75.6" x2="858.0" y2="75.6"/>
+      <line x1="66.0" y1="22.0" x2="858.0" y2="22.0"/>
+    </g>
+    <g stroke="#55635E" stroke-width="1.2">
+      <line x1="66.0" y1="290.0" x2="858.0" y2="290.0"/>
+      <line x1="66.0" y1="290.0" x2="66.0" y2="22.0"/>
+    </g>
+    <g font-size="11" fill="#97A59F">
+      <text x="58.0" y="293.5" text-anchor="end">0</text>
+      <text x="58.0" y="239.9" text-anchor="end">1</text>
+      <text x="58.0" y="186.3" text-anchor="end">2</text>
+      <text x="58.0" y="132.7" text-anchor="end">3</text>
+      <text x="58.0" y="79.1" text-anchor="end">4</text>
+      <text x="58.0" y="25.5" text-anchor="end">5</text>
+      <text x="66.0" y="306.0" text-anchor="middle">1</text>
+      <text x="138.0" y="306.0" text-anchor="middle">2</text>
+      <text x="210.0" y="306.0" text-anchor="middle">3</text>
+      <text x="282.0" y="306.0" text-anchor="middle">4</text>
+      <text x="354.0" y="306.0" text-anchor="middle">5</text>
+      <text x="426.0" y="306.0" text-anchor="middle">6</text>
+      <text x="498.0" y="306.0" text-anchor="middle">7</text>
+      <text x="570.0" y="306.0" text-anchor="middle">8</text>
+      <text x="642.0" y="306.0" text-anchor="middle">9</text>
+      <text x="714.0" y="306.0" text-anchor="middle">10</text>
+      <text x="786.0" y="306.0" text-anchor="middle">11</text>
+      <text x="858.0" y="306.0" text-anchor="middle">12</text>
+    </g>
+    <text x="462.0" y="332.0" text-anchor="middle" fill="#97A59F">draft tokens per round, k</text>
+    <text x="16" y="156.0" text-anchor="middle" fill="#97A59F" transform="rotate(-90 16 156.0)">speedup over plain decode (×)</text>
+    <clipPath id="plot"><rect x="65.0" y="16.0" width="794.0" height="275.0"/></clipPath>
+    <g clip-path="url(#plot)">
+      <path d="M66.0 193.5 L138.0 159.2 L210.0 131.8 L282.0 109.8 L354.0 92.3 L426.0 78.2 L498.0 67.0 L570.0 58.0 L642.0 50.8 L714.0 45.0 L786.0 40.4 L858.0 36.7" fill="none" stroke="#97A59F" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="6 4"/>
+      <circle cx="66.0" cy="193.5" r="3" fill="#161E1C" stroke="#97A59F" stroke-width="1.6"/>
+      <circle cx="138.0" cy="159.2" r="3" fill="#161E1C" stroke="#97A59F" stroke-width="1.6"/>
+      <circle cx="210.0" cy="131.8" r="3" fill="#161E1C" stroke="#97A59F" stroke-width="1.6"/>
+      <circle cx="282.0" cy="109.8" r="3" fill="#161E1C" stroke="#97A59F" stroke-width="1.6"/>
+      <circle cx="354.0" cy="92.3" r="3" fill="#161E1C" stroke="#97A59F" stroke-width="1.6"/>
+      <circle cx="426.0" cy="78.2" r="3" fill="#161E1C" stroke="#97A59F" stroke-width="1.6"/>
+      <circle cx="498.0" cy="67.0" r="3" fill="#161E1C" stroke="#97A59F" stroke-width="1.6"/>
+      <circle cx="570.0" cy="58.0" r="3" fill="#161E1C" stroke="#97A59F" stroke-width="1.6"/>
+      <circle cx="642.0" cy="50.8" r="3" fill="#161E1C" stroke="#97A59F" stroke-width="1.6"/>
+      <circle cx="714.0" cy="45.0" r="3" fill="#161E1C" stroke="#97A59F" stroke-width="1.6"/>
+      <circle cx="786.0" cy="40.4" r="3" fill="#161E1C" stroke="#97A59F" stroke-width="1.6"/>
+      <circle cx="858.0" cy="36.7" r="3" fill="#161E1C" stroke="#97A59F" stroke-width="1.6"/>
+      <path d="M66.0 202.3 L138.0 181.0 L210.0 168.3 L282.0 161.3 L354.0 158.2 L426.0 157.6 L498.0 158.8 L570.0 161.1 L642.0 164.1 L714.0 167.5 L786.0 171.2 L858.0 174.9" fill="none" stroke="#4CC5B7" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <circle cx="66.0" cy="202.3" r="3" fill="#161E1C" stroke="#4CC5B7" stroke-width="1.6"/>
+      <circle cx="138.0" cy="181.0" r="3" fill="#161E1C" stroke="#4CC5B7" stroke-width="1.6"/>
+      <circle cx="210.0" cy="168.3" r="3" fill="#161E1C" stroke="#4CC5B7" stroke-width="1.6"/>
+      <circle cx="282.0" cy="161.3" r="3" fill="#161E1C" stroke="#4CC5B7" stroke-width="1.6"/>
+      <circle cx="354.0" cy="158.2" r="3" fill="#161E1C" stroke="#4CC5B7" stroke-width="1.6"/>
+      <circle cx="426.0" cy="157.6" r="3" fill="#161E1C" stroke="#4CC5B7" stroke-width="1.6"/>
+      <circle cx="498.0" cy="158.8" r="3" fill="#161E1C" stroke="#4CC5B7" stroke-width="1.6"/>
+      <circle cx="570.0" cy="161.1" r="3" fill="#161E1C" stroke="#4CC5B7" stroke-width="1.6"/>
+      <circle cx="642.0" cy="164.1" r="3" fill="#161E1C" stroke="#4CC5B7" stroke-width="1.6"/>
+      <circle cx="714.0" cy="167.5" r="3" fill="#161E1C" stroke="#4CC5B7" stroke-width="1.6"/>
+      <circle cx="786.0" cy="171.2" r="3" fill="#161E1C" stroke="#4CC5B7" stroke-width="1.6"/>
+      <circle cx="858.0" cy="174.9" r="3" fill="#161E1C" stroke="#4CC5B7" stroke-width="1.6"/>
+    </g>
+    <circle cx="282.0" cy="109.8" r="4.5" fill="#E4EAE7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="273.0" y="99.8" text-anchor="end" font-size="11" fill="#E4EAE7">k = 4: 3.36</text>
+    <circle cx="282.0" cy="161.3" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="282.0" y="183.3" text-anchor="middle" font-size="11" fill="#4CC5B7">k = 4: 2.40×</text>
+    <circle cx="426.0" cy="157.6" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="426.0" y="179.6" text-anchor="middle" font-size="11" fill="#4CC5B7">best k = 6: 2.47×</text>
+    <g font-size="11.5">
+      <rect x="645.0" y="238.0" width="205.0" height="44.0" rx="5" fill="#161E1C" fill-opacity="0.9" stroke="#27322E"/>
+      <line x1="655.0" y1="251.0" x2="673.0" y2="251.0" stroke="#97A59F" stroke-width="2" stroke-dasharray="6 4"/>
+      <text x="679.0" y="255.0" fill="currentColor">c = 0: E[tokens per pass]</text>
+      <line x1="655.0" y1="268.0" x2="673.0" y2="268.0" stroke="#4CC5B7" stroke-width="2"/>
+      <text x="679.0" y="272.0" fill="currentColor">c = 0.1</text>
+    </g>
+    <text x="10" y="353.0" font-size="10.5" fill="#97A59F" font-family="JetBrains Mono, monospace">computed by minengine.spec.speedup, expected_tokens and best_k (alpha = 0.8)</text>
+  </g>
+</svg>

@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="360" viewBox="0 0 880 360" role="img" aria-label="Concurrent sessions on one H100 against the context length, for the 24B model in bf16 and in fp8, with the ~100 live sessions of the bank example." style="color: #E4EAE7">
+  <title>Concurrent sessions on one H100 against the context length, for the 24B model in bf16 and in fp8, with the ~100 live sessions of the bank example.</title>
+  <desc>{"kind":"line","legend":"bottom-left","marks":[{"kind":"hline","label":"~100 live sessions","style":"warm","y":100.606},{"anchor":"start","dy":-9,"kind":"point","label":"fp8: ~355 sessions, 1 GPU","style":"accent","x":1650,"y":355.114},{"anchor":"end","dy":18,"kind":"point","label":"bf16: ~89 sessions, 2 GPUs","style":"plain","x":1650,"y":88.7784}],"note":"computed by capacity.max_concurrent_sessions; the hline by capacity.concurrency","series":[{"name":"fp8 (weights and KV)","style":"accent","x":[500,595,707,841,1000,1189,1414,1682,2000,2378,2828,3364,4000,4757,5657,6727,8000,9514,11314,13454,16000,19027,22627,26909,32000,38055,45255,53817,64000,76109,90510,107635,128000],"y":[1171.88,984.769,828.766,696.715,585.938,492.799,414.383,348.358,292.969,246.399,207.191,174.179,146.484,123.174,103.577,87.1023,73.2422,61.5869,51.7887,43.5512,36.6211,30.7951,25.8955,21.7748,18.3105,15.3971,12.9475,10.8876,9.15527,7.69866,6.47373,5.44375,4.57764]},{"name":"bf16 (weights and KV)","style":"plain","x":[500,595,707,841,1000,1189,1414,1682,2000,2378,2828,3364,4000,4757,5657,6727,8000,9514,11314,13454,16000,19027,22627,26909,32000,38055,45255,53817,64000,76109,90510,107635,128000],"y":[292.969,246.192,207.191,174.179,146.484,123.2,103.596,87.0894,73.2422,61.5998,51.7979,43.5447,36.6211,30.7934,25.8944,21.7756,18.3105,15.3967,12.9472,10.8878,9.15527,7.69876,6.47388,5.44369,4.57764,3.84928,3.23687,2.7219,2.28882,1.92467,1.61843,1.36094,1.14441]}],"title":"Concurrent sessions on one H100 against the context length, for the 24B model in bf16 and in fp8, with the ~100 live sessions of the bank example.","x":{"label":"context length per session (tokens)","scale":"log","tick_labels":["500","1K","2K","4K","8K","16K","32K","64K","128K"],"ticks":[500,1000,2000,4000,8000,16000,32000,64000,128000]},"y":{"label":"concurrent sessions per H100","max":2000,"min":1,"scale":"log","tick_labels":["1","10","100","1,000"],"ticks":[1,10,100,1000]}}</desc>
+  <rect x="0" y="0" width="880" height="360" rx="8" fill="#161E1C"/>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12" fill="currentColor">
+    <g stroke="#27322E" stroke-width="1">
+      <line x1="66.0" y1="290.0" x2="858.0" y2="290.0"/>
+      <line x1="66.0" y1="208.8" x2="858.0" y2="208.8"/>
+      <line x1="66.0" y1="127.6" x2="858.0" y2="127.6"/>
+      <line x1="66.0" y1="46.4" x2="858.0" y2="46.4"/>
+    </g>
+    <g stroke="#55635E" stroke-width="1.2">
+      <line x1="66.0" y1="290.0" x2="858.0" y2="290.0"/>
+      <line x1="66.0" y1="290.0" x2="66.0" y2="22.0"/>
+    </g>
+    <g font-size="11" fill="#97A59F">
+      <text x="58.0" y="293.5" text-anchor="end">1</text>
+      <text x="58.0" y="212.3" text-anchor="end">10</text>
+      <text x="58.0" y="131.1" text-anchor="end">100</text>
+      <text x="58.0" y="49.9" text-anchor="end">1,000</text>
+      <text x="66.0" y="306.0" text-anchor="middle">500</text>
+      <text x="165.0" y="306.0" text-anchor="middle">1K</text>
+      <text x="264.0" y="306.0" text-anchor="middle">2K</text>
+      <text x="363.0" y="306.0" text-anchor="middle">4K</text>
+      <text x="462.0" y="306.0" text-anchor="middle">8K</text>
+      <text x="561.0" y="306.0" text-anchor="middle">16K</text>
+      <text x="660.0" y="306.0" text-anchor="middle">32K</text>
+      <text x="759.0" y="306.0" text-anchor="middle">64K</text>
+      <text x="858.0" y="306.0" text-anchor="middle">128K</text>
+    </g>
+    <text x="462.0" y="332.0" text-anchor="middle" fill="#97A59F">context length per session (tokens)</text>
+    <text x="16" y="156.0" text-anchor="middle" fill="#97A59F" transform="rotate(-90 16 156.0)">concurrent sessions per H100</text>
+    <clipPath id="plot"><rect x="65.0" y="16.0" width="794.0" height="275.0"/></clipPath>
+    <g clip-path="url(#plot)">
+      <path d="M66.0 40.8 L90.8 47.0 L115.5 53.1 L140.3 59.2 L165.0 65.3 L189.7 71.4 L214.5 77.5 L239.3 83.6 L264.0 89.7 L288.7 95.8 L313.5 101.9 L338.3 108.1 L363.0 114.2 L387.8 120.3 L412.5 126.4 L437.2 132.5 L462.0 138.6 L486.8 144.7 L511.5 150.8 L536.2 156.9 L561.0 163.0 L585.7 169.2 L610.5 175.3 L635.3 181.4 L660.0 187.5 L684.8 193.6 L709.5 199.7 L734.2 205.8 L759.0 211.9 L783.7 218.0 L808.5 224.1 L833.3 230.3 L858.0 236.4" fill="none" stroke="#4CC5B7" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="M66.0 89.7 L90.8 95.9 L115.5 101.9 L140.3 108.1 L165.0 114.2 L189.7 120.3 L214.5 126.4 L239.3 132.5 L264.0 138.6 L288.7 144.7 L313.5 150.8 L338.3 156.9 L363.0 163.0 L387.8 169.2 L412.5 175.3 L437.2 181.4 L462.0 187.5 L486.8 193.6 L511.5 199.7 L536.2 205.8 L561.0 211.9 L585.7 218.0 L610.5 224.1 L635.3 230.3 L660.0 236.4 L684.8 242.5 L709.5 248.6 L734.2 254.7 L759.0 260.8 L783.7 266.9 L808.5 273.0 L833.3 279.1 L858.0 285.2" fill="none" stroke="#E4EAE7" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    </g>
+    <line x1="66.0" y1="127.4" x2="858.0" y2="127.4" stroke="#E39A62" stroke-width="1.2" stroke-dasharray="4 3"/>
+    <text x="854.0" y="122.4" text-anchor="end" font-size="11" fill="#E39A62">~100 live sessions</text>
+    <circle cx="236.5" cy="82.9" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="245.5" y="73.9" text-anchor="start" font-size="11" fill="#4CC5B7">fp8: ~355 sessions, 1 GPU</text>
+    <circle cx="236.5" cy="131.8" r="4.5" fill="#E4EAE7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="227.5" y="149.8" text-anchor="end" font-size="11" fill="#E4EAE7">bf16: ~89 sessions, 2 GPUs</text>
+    <g font-size="11.5">
+      <rect x="76.0" y="238.0" width="179.2" height="44.0" rx="5" fill="#161E1C" fill-opacity="0.9" stroke="#27322E"/>
+      <line x1="86.0" y1="251.0" x2="104.0" y2="251.0" stroke="#4CC5B7" stroke-width="2"/>
+      <text x="110.0" y="255.0" fill="currentColor">fp8 (weights and KV)</text>
+      <line x1="86.0" y1="268.0" x2="104.0" y2="268.0" stroke="#E4EAE7" stroke-width="2"/>
+      <text x="110.0" y="272.0" fill="currentColor">bf16 (weights and KV)</text>
+    </g>
+    <text x="10" y="353.0" font-size="10.5" fill="#97A59F" font-family="JetBrains Mono, monospace">computed by capacity.max_concurrent_sessions; the hline by capacity.concurrency</text>
+  </g>
+</svg>

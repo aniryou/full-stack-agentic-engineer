@@ -49,9 +49,9 @@ This primer links to these primers, and it does not repeat them:
 
 ![Bytes one decode step reads against the batch for Mixtral-8x7B and for a dense model of its active size, on an H200 at 1K context.](figures/decode-step-bytes-vs-batch.svg)
 
-*This chart shows the bytes that one decode step reads against the batch, for Mixtral-8x7B on an H200 at 1K
-context (`touched.decode_step()`, simulated). At batch 1 the step reads 2.00 of 8 experts per layer, the same
-cost as a dense model of the active size. By batch 16 it reads almost all of the 93.4 GB of weights.*
+*`touched.decode_step()` computes the bytes of one decode step against the batch on an H200 at 1K context
+(simulated), and `tests/test_figures.py` pins the chart. At batch 1, Mixtral-8x7B reads almost the same bytes as a
+dense model of its active size. By batch 16, Mixtral reads almost all of its 93.4 GB of weights.*
 
 ---
 
@@ -256,9 +256,9 @@ experts. The other experts are dead weight in HBM, and the model becomes a small
 
 ![The feedback loop of router collapse and where each balance method acts: the auxiliary loss at the scores, the selection bias and expert choice at the top-k, the capacity factor at the training step.](figures/collapse-loop-and-balance.svg)
 
-*The feedback loop of §3.1 is a cycle, and each balance method acts at one point of it. The task loss rewards
-the expert that is already good, thus the early winner gets more tokens. The auxiliary loss, the selection bias
-and the capacity factor each limit the loop, and expert choice reverses the choice.*
+*Read the middle row from left to right, then follow the teal return path. The task loss rewards expert e, and the
+early winner gets more tokens. Each dashed arrow shows the point where one balance method of §3.2 to §3.5 acts. With
+no balance method, the loop ends in router collapse, the warm box.*
 
 `moecore.train` shows this with gradients written by hand. A check against finite differences shows that the
 gradients are correct. The toy has these parts:
@@ -350,6 +350,20 @@ No gradient touches the router. Thus the task gradient stays clean. Take a froze
 [416, 237, 61, …] over 8 experts, top-2). On it, 400 bias steps of 0.002 bring max/mean load to 1.03
 (`routing.update_bias()`, notebook 02 exercise 2.3). In the toy, the bias method gets the lowest loss of the three
 runs (0.036 at seed 6). It also gives the cleanest one-cluster-per-expert placement.
+
+```mermaid
+flowchart LR
+  S["router scores<br/>sigmoid"] --> K["top-k<br/>selection only"]
+  B["expert_bias"] -->|"added"| K
+  K -->|"which k"| W["combine weights<br/>renormalised × 2.5"]
+  S -->|"unbiased scores"| W
+  K -->|"load"| U[["get_updated_<br/>expert_bias"]]
+  U -.->|"update_direction"| B
+```
+
+*Start at the router scores: they reach the combine weights unbiased, and only the top-k selection sees
+`expert_bias` (§2.2). The lower loop is `get_updated_expert_bias`: after each step, it moves `expert_bias` against
+the load of each expert.*
 
 Batch-level balance can hide a collapse in each sequence. Take four sequences that each send every token to a
 different expert. To the batch loss, they look perfect (1.0, Megatron convention). To a per-sequence loss, they look
@@ -461,9 +475,9 @@ every expert at every step.
 
 ![The share of the experts that one layer touches, against the batch, for Mixtral-8x7B, Qwen3-30B-A3B and DeepSeek-V3.](figures/experts-touched-vs-batch.svg)
 
-*This chart shows the share of the E experts that one layer touches, against the batch, for three granularities
-(`touched.experts_touched()`). Mixtral reads almost all of its 8 experts from batch 10. The fine experts of
-Qwen3-30B-A3B and DeepSeek-V3 keep the decrease in bytes up to larger batches.*
+*`touched.experts_touched()` computes the share of the E experts that one layer touches against the batch, and
+`tests/test_figures.py` pins the chart. Mixtral reads almost all of its 8 experts from batch 10. The fine experts
+of Qwen3-30B-A3B and DeepSeek-V3 keep the decrease in bytes up to larger batches.*
 
 **Skewed against uniform.** Skew (§3.7) touches fewer experts. Qwen3 at batch 16 under Zipf s = 1.0 reads 58.0 experts per
 layer instead of 82.4, a 1.36× faster step on one GPU. This number comes from the simulation (notebook 03, exercise
@@ -551,6 +565,12 @@ direct all-to-all (simulated, layer 01's illustrative links):
 | 8 (decode) | 400 Gb/s IB | 0.12 MiB, 7.3 µs | 0.45 MiB, 13.3 µs | 0.88 MiB, 21.1 µs |
 | 4,096 (prefill) | NVLink 4 | 64 MiB, 132.5 µs | 231 MiB, 473.0 µs | 448 MiB, 915.4 µs |
 | 4,096 (prefill) | 400 Gb/s IB | 64 MiB, 1,179.4 µs | 231 MiB, 4,243.9 µs | 448 MiB, 8,225.8 µs |
+
+![Time of one direct Mixtral dispatch all-to-all on 8 GPUs against the tokens per GPU, on NVLink 4 and on 400 Gb/s InfiniBand.](figures/dispatch-time-vs-tokens.svg)
+
+*`ep.a2a_time()` computes the time of one Mixtral dispatch against the tokens per GPU for two links (simulated),
+and `tests/test_figures.py` pins the chart. At decode sizes, the latency α sets the time. At prefill sizes, the
+bytes set the time, and IB is approximately 9× slower than NVLink 4.*
 
 Decode is latency-bound: α is most of the time. Prefill is bandwidth-bound, and across 400 Gb/s NICs it is approximately
 9× slower than on NVLink. These are the numbers behind the rule of the deployment primer: "tensor and expert
@@ -699,6 +719,12 @@ a 17.6 ms step with no overlap (`ep.decode_on(per_node=8, intra=...)`, simulated
 the NIC, the upper bound, gives 6.6 ms. This is the reason for NVL72-class racks, DeepEP's RDMA kernels and two-batch
 overlap (vLLM `--enable-dbo`, SGLang TBO).
 
+![Two 8-GPU nodes under EP 16: each GPU has 7 peers over NVLink in its node and 8 peers in the other node behind its one 400 Gb/s InfiniBand NIC.](figures/ep16-on-two-nodes.svg)
+
+*Follow GPU 3, the teal box. Its 7 peers in node A share NVLink, but its 8 peers in node B are behind one NIC,
+the warm box. Thus half of its all-to-all traffic crosses the 400 Gb/s link, and the all-to-alls take 3.8 ms against
+0.9 ms (`ep.decode_on()`, simulated).*
+
 The wide-EP guide of llm-d runs DeepSeek-R1 on 32 H200 or B200 GPUs as 16-way DP prefill plus 16-way DP decode
 (verify). The single-node form of SGLang is
 `--tp 8 --dp-size 8 --ep 8 --enable-dp-attention --moe-a2a-backend deepep` (verify).
@@ -777,9 +803,9 @@ on one small GPU, the overheads are the whole margin. The 3B active count helps 
 
 ![The memory of one 24 GB L4 for Qwen3-30B-A3B in bf16, FP8 and with 4.25-bit experts, and the budget of vLLM for the checkpoint that fits.](figures/memory-on-one-l4.svg)
 
-*This figure shows the memory of one 24 GB L4 for Qwen3-30B-A3B, with the budget of vLLM
-(`sizing.kv_room_gib()`). Only the checkpoint with 4.25-bit experts fits. It leaves 2.0 GiB for KV: 21,593
-tokens, five sequences of 4K.*
+*Look first at the dashed box of the L4: only the bar of the checkpoint with 4.25-bit experts ends inside it. The
+zoomed bar below shows how the budget of vLLM (`sizing.kv_room_gib()`) divides that L4. The KV room is 2.0 GiB:
+21,593 tokens, five sequences of 4K.*
 
 **Prefill, worked.** An 8,192-token prompt costs a dense Llama-3.1-70B 5.48× the FLOPs it costs Mixtral-8x7B. At
 50% of an H100's bf16 peak, Mixtral prefills it in 427 ms (simulated). In prefill, you see the full decrease in

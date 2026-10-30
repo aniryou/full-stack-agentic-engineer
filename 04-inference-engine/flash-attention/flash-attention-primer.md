@@ -168,15 +168,15 @@ Training needs gradients. The textbook backward pass for attention needs $P$, an
 ```mermaid
 flowchart LR
   F["forward pass<br/>tiles in SRAM<br/>online softmax"] --> O["keep O<br/>N × d"]
-  F --> L["keep L =<br/>m + log(ℓ)<br/>N numbers, not N²"]
+  F --> L["keep L =<br/>m + log(ℓ)<br/>N, not N²"]
   F -.-> P["P: N × N<br/>never written"]
   O --> B["backward<br/>pass"]
   L --> B
   B --> R["load Q, K, V<br/>tiles into<br/>SRAM again"]
-  R --> G["calculate S, P tiles<br/>again with saved L<br/>then gradients"]
+  R --> G["S, P tiles again<br/>with saved L<br/>then gradients"]
 ```
 
-*The forward pass keeps only $O$ and the log-sum-exp $L$ of each row, and it never writes $P$. The backward pass loads the $Q$, $K$ and $V$ tiles again, calculates each $S$ and $P$ tile again, and normalizes with the saved $L$. This costs more FLOPs than a stored $P$, but the GPU has unused arithmetic capacity, and bandwidth is scarce.*
+*Read the figure from left to right. The forward pass keeps only $O$ and the log-sum-exp $L$ of each row, and the dotted edge marks $P$, which it never writes. The backward pass loads the $Q$, $K$ and $V$ tiles again, calculates each $S$ and $P$ tile again, and normalizes with the saved $L$.*
 
 FlashAttention **recomputes** $P$ instead. During the forward pass, it keeps only $O$ ($N \times d$) and the final softmax statistics for each row. It packs the statistics as the log-sum-exp $L = m + \log(\ell)$, that is, $N$ numbers, not $N^2$. In the backward pass, it loads the $Q$, $K$, $V$ tiles into SRAM again. Then it calculates each $S$ and $P$ tile again when it needs the tile. It uses the saved $L$ to normalize correctly without a second reduction pass.
 

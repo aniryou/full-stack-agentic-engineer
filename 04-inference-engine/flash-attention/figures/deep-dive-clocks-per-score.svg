@@ -1,44 +1,64 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="880" height="370" viewBox="0 0 880 370" role="img" aria-label="Clocks per score per SM when each unit runs alone, d = 128: the tensor-core bar halves from A100 to H100 to B200 while the EX2 bar stays at 0.0625." style="color: #E4EAE7">
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="360" viewBox="0 0 880 360" role="img" aria-label="Clocks per score per SM when each unit runs alone, d = 128: the tensor-core bar halves from A100 to H100 to B200 while the EX2 bar stays at 0.0625." style="color: #E4EAE7">
   <title>Clocks per score per SM when each unit runs alone, d = 128: the tensor-core bar halves from A100 to H100 to B200 while the EX2 bar stays at 0.0625.</title>
-  <rect x="0" y="0" width="880" height="370" rx="8" fill="#161E1C"/>
-  <defs>
-    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
-    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
-  </defs>
-  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
-    <text x="24" y="28" fill="#97A59F">Clocks per score per SM when each unit runs alone, d = 128: 512 MMA FLOPs, one EX2, ≈ 5 FP32 instructions (§4.3)</text>
-    <text x="24" y="46" fill="#97A59F" font-family="JetBrains Mono, monospace" font-size="11">fa_calculators.clocks_per_score()</text>
-    <text x="24" y="84" font-weight="600">A100</text>
-    <text x="166" y="83" text-anchor="end" font-size="11" fill="#97A59F">tensor cores</text>
-    <rect x="176" y="70" width="480" height="18" rx="3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
-    <text x="664" y="83" font-size="11" fill="#7ADACF">0.25</text>
-    <text x="166" y="107" text-anchor="end" font-size="11" fill="#97A59F">EX2 on MUFU</text>
-    <rect x="176" y="94" width="120" height="18" rx="3" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
-    <text x="304" y="107" font-size="11" fill="#E39A62">0.0625 (25% of MMA time)</text>
-    <text x="166" y="131" text-anchor="end" font-size="11" fill="#97A59F">≈ 5 FP32 instr.</text>
-    <rect x="176" y="118" width="150" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    <text x="334" y="131" font-size="11" fill="#97A59F">0.078 (31%)</text>
-    <text x="24" y="174" font-weight="600">H100</text>
-    <text x="166" y="173" text-anchor="end" font-size="11" fill="#97A59F">tensor cores</text>
-    <rect x="176" y="160" width="240" height="18" rx="3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
-    <text x="424" y="173" font-size="11" fill="#7ADACF">0.125</text>
-    <text x="166" y="197" text-anchor="end" font-size="11" fill="#97A59F">EX2 on MUFU</text>
-    <rect x="176" y="184" width="120" height="18" rx="3" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
-    <text x="304" y="197" font-size="11" fill="#E39A62">0.0625 (50%)</text>
-    <text x="166" y="221" text-anchor="end" font-size="11" fill="#97A59F">≈ 5 FP32 instr.</text>
-    <rect x="176" y="208" width="75" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    <text x="259" y="221" font-size="11" fill="#97A59F">0.039 (31%)</text>
-    <text x="24" y="264" font-weight="600">B200</text>
-    <text x="166" y="263" text-anchor="end" font-size="11" fill="#97A59F">tensor cores</text>
-    <rect x="176" y="250" width="120" height="18" rx="3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
-    <text x="304" y="263" font-size="11" fill="#7ADACF">0.0625</text>
-    <text x="166" y="287" text-anchor="end" font-size="11" fill="#97A59F">EX2 on MUFU</text>
-    <rect x="176" y="274" width="120" height="18" rx="3" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
-    <text x="304" y="287" font-size="11" fill="#E39A62">0.0625 (100%)</text>
-    <text x="166" y="311" text-anchor="end" font-size="11" fill="#97A59F">≈ 5 FP32 instr.</text>
-    <rect x="176" y="298" width="75" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    <text x="259" y="311" font-size="11" fill="#97A59F">0.039 (62.5%)</text>
-    <path d="M176 60 L176 330" fill="none" stroke="#2A3634" stroke-width="0.8"/>
-    <text x="24" y="352" font-size="11.5" fill="#97A59F">16 MUFU instructions per SM per clock on all three, against 2,048, 4,096 and ≈ 8,192 dense bf16 tensor-core FLOPs · (verify) for B200</text>
+  <desc>{"categories":["A100","H100","B200"],"kind":"bar","legend":"top-right","note":"computed by fa_calculators.clocks_per_score; the B200 row is an estimate (verify)","series":[{"name":"tensor cores","style":"accent","y":[0.25,0.125,0.0625]},{"name":"EX2 on MUFU","style":"warm","y":[0.0625,0.0625,0.0625]},{"name":"about 5 FP32 instructions","style":"plain","y":[0.078,0.039,0.039]}],"title":"Clocks per score per SM when each unit runs alone, d = 128: the tensor-core bar halves from A100 to H100 to B200 while the EX2 bar stays at 0.0625.","x":{"tick_labels":["A100\nEX2 = 25% of MMA time","H100\nEX2 = 50% of MMA time","B200\nEX2 = 100% of MMA time"]},"y":{"label":"SM clocks per score, d = 128","max":0.3,"min":0,"ticks":[0,0.05,0.1,0.15,0.2,0.25,0.3]}}</desc>
+  <rect x="0" y="0" width="880" height="360" rx="8" fill="#161E1C"/>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12" fill="currentColor">
+    <g stroke="#27322E" stroke-width="1">
+      <line x1="66.0" y1="290.0" x2="858.0" y2="290.0"/>
+      <line x1="66.0" y1="245.3" x2="858.0" y2="245.3"/>
+      <line x1="66.0" y1="200.7" x2="858.0" y2="200.7"/>
+      <line x1="66.0" y1="156.0" x2="858.0" y2="156.0"/>
+      <line x1="66.0" y1="111.3" x2="858.0" y2="111.3"/>
+      <line x1="66.0" y1="66.7" x2="858.0" y2="66.7"/>
+      <line x1="66.0" y1="22.0" x2="858.0" y2="22.0"/>
+    </g>
+    <g stroke="#55635E" stroke-width="1.2">
+      <line x1="66.0" y1="290.0" x2="858.0" y2="290.0"/>
+      <line x1="66.0" y1="290.0" x2="66.0" y2="22.0"/>
+    </g>
+    <g font-size="11" fill="#97A59F">
+      <text x="58.0" y="293.5" text-anchor="end">0</text>
+      <text x="58.0" y="248.8" text-anchor="end">0.05</text>
+      <text x="58.0" y="204.2" text-anchor="end">0.1</text>
+      <text x="58.0" y="159.5" text-anchor="end">0.15</text>
+      <text x="58.0" y="114.8" text-anchor="end">0.2</text>
+      <text x="58.0" y="70.2" text-anchor="end">0.25</text>
+      <text x="58.0" y="25.5" text-anchor="end">0.3</text>
+      <text x="198.0" y="306.0" text-anchor="middle"><tspan x="198.0" dy="0">A100</tspan><tspan x="198.0" dy="12">EX2 = 25% of MMA time</tspan></text>
+      <text x="462.0" y="306.0" text-anchor="middle"><tspan x="462.0" dy="0">H100</tspan><tspan x="462.0" dy="12">EX2 = 50% of MMA time</tspan></text>
+      <text x="726.0" y="306.0" text-anchor="middle"><tspan x="726.0" dy="0">B200</tspan><tspan x="726.0" dy="12">EX2 = 100% of MMA time</tspan></text>
+    </g>
+    <text x="16" y="156.0" text-anchor="middle" fill="#97A59F" transform="rotate(-90 16 156.0)">SM clocks per score, d = 128</text>
+    <clipPath id="plot"><rect x="65.0" y="16.0" width="794.0" height="275.0"/></clipPath>
+    <g clip-path="url(#plot)">
+      <rect x="104.0" y="66.7" width="61.4" height="223.3" rx="2" fill="#4CC5B7" fill-opacity="0.85"/>
+      <text x="134.6" y="61.7" text-anchor="middle" font-size="10.5" fill="#4CC5B7">0.25</text>
+      <rect x="368.0" y="178.3" width="61.4" height="111.7" rx="2" fill="#4CC5B7" fill-opacity="0.85"/>
+      <text x="398.6" y="173.3" text-anchor="middle" font-size="10.5" fill="#4CC5B7">0.125</text>
+      <rect x="632.0" y="234.2" width="61.4" height="55.8" rx="2" fill="#4CC5B7" fill-opacity="0.85"/>
+      <text x="662.6" y="229.2" text-anchor="middle" font-size="10.5" fill="#4CC5B7">0.0625</text>
+      <rect x="167.3" y="234.2" width="61.4" height="55.8" rx="2" fill="#E39A62" fill-opacity="0.85"/>
+      <text x="198.0" y="229.2" text-anchor="middle" font-size="10.5" fill="#E39A62">0.0625</text>
+      <rect x="431.3" y="234.2" width="61.4" height="55.8" rx="2" fill="#E39A62" fill-opacity="0.85"/>
+      <text x="462.0" y="229.2" text-anchor="middle" font-size="10.5" fill="#E39A62">0.0625</text>
+      <rect x="695.3" y="234.2" width="61.4" height="55.8" rx="2" fill="#E39A62" fill-opacity="0.85"/>
+      <text x="726.0" y="229.2" text-anchor="middle" font-size="10.5" fill="#E39A62">0.0625</text>
+      <rect x="230.7" y="220.3" width="61.4" height="69.7" rx="2" fill="#E4EAE7" fill-opacity="0.85"/>
+      <text x="261.4" y="215.3" text-anchor="middle" font-size="10.5" fill="#E4EAE7">0.078</text>
+      <rect x="494.7" y="255.2" width="61.4" height="34.8" rx="2" fill="#E4EAE7" fill-opacity="0.85"/>
+      <text x="525.4" y="250.2" text-anchor="middle" font-size="10.5" fill="#E4EAE7">0.039</text>
+      <rect x="758.7" y="255.2" width="61.4" height="34.8" rx="2" fill="#E4EAE7" fill-opacity="0.85"/>
+      <text x="789.4" y="250.2" text-anchor="middle" font-size="10.5" fill="#E4EAE7">0.039</text>
+    </g>
+    <g font-size="11.5">
+      <rect x="645.0" y="30.0" width="205.0" height="61.0" rx="5" fill="#161E1C" fill-opacity="0.9" stroke="#27322E"/>
+      <rect x="655.0" y="38.0" width="16" height="9" rx="2" fill="#4CC5B7" fill-opacity="0.85"/>
+      <text x="679.0" y="47.0" fill="currentColor">tensor cores</text>
+      <rect x="655.0" y="55.0" width="16" height="9" rx="2" fill="#E39A62" fill-opacity="0.85"/>
+      <text x="679.0" y="64.0" fill="currentColor">EX2 on MUFU</text>
+      <rect x="655.0" y="72.0" width="16" height="9" rx="2" fill="#E4EAE7" fill-opacity="0.85"/>
+      <text x="679.0" y="81.0" fill="currentColor">about 5 FP32 instructions</text>
+    </g>
+    <text x="10" y="353.0" font-size="10.5" fill="#97A59F" font-family="JetBrains Mono, monospace">computed by fa_calculators.clocks_per_score; the B200 row is an estimate (verify)</text>
   </g>
 </svg>

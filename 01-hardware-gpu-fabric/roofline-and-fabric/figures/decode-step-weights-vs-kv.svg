@@ -1,43 +1,67 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="340" viewBox="0 0 900 340" role="img" aria-label="One decode step of Llama-3.1-8B on an H100 at 2K context for batches 1 to 208: the weight stream takes the same time in every row and the KV read grows with the batch, from 2% to 79% of the bytes." style="color: #E4EAE7">
-  <title>One decode step of Llama-3.1-8B on an H100 at 2K context for batches 1 to 208: the weight stream takes the same time in every row and the KV read grows with the batch, from 2% to 79% of the bytes.</title>
-  <rect x="0" y="0" width="900" height="340" rx="8" fill="#161E1C"/>
-  <defs>
-    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
-    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
-  </defs>
-  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
-    <text x="24" y="32" font-weight="600">Llama-3.1-8B, H100, bf16, 2K context: one decode step per row (decode())</text>
-    <rect x="24" y="44" width="14" height="12" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <text x="44" y="54" font-size="11" fill="#7ADACF">weights: 15.0 GB, streamed once per step, shared by the batch</text>
-    <rect x="400" y="44" width="14" height="12" rx="2" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
-    <text x="420" y="54" font-size="11" fill="#E39A62">KV cache: 128 KiB per token, read for each sequence</text>
-    <text x="140" y="88" text-anchor="end" font-size="12">batch 1</text>
-    <rect x="150" y="72" width="105.3" height="24" rx="3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="255.3" y="72" width="1.9" height="24" rx="3" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
-    <text x="267.2" y="88" font-size="11.5" fill="#97A59F">4.56 ms · 219 tok/s · 219 per user · KV 2%</text>
-    <text x="140" y="126" text-anchor="end" font-size="12">batch 8</text>
-    <rect x="150" y="110" width="105.3" height="24" rx="3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="255.3" y="110" width="15.1" height="24" rx="3" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
-    <text x="280.4" y="126" font-size="11.5" fill="#97A59F">5.12 ms · 1,562 tok/s · 195 per user · KV 13%</text>
-    <text x="140" y="164" text-anchor="end" font-size="12">batch 32</text>
-    <rect x="150" y="148" width="105.3" height="24" rx="3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="255.3" y="148" width="60.3" height="24" rx="3" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
-    <text x="325.6" y="164" font-size="11.5" fill="#97A59F">7.05 ms · 4,542 tok/s · 142 per user · KV 36%</text>
-    <text x="140" y="202" text-anchor="end" font-size="12">batch 64</text>
-    <rect x="150" y="186" width="105.3" height="24" rx="3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="255.3" y="186" width="120.6" height="24" rx="3" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
-    <text x="315.6" y="202" text-anchor="middle" font-size="11" fill="#E39A62">KV 53%</text>
-    <text x="385.9" y="202" font-size="11.5" fill="#97A59F">9.61 ms · 6,659 tok/s · 104 per user</text>
-    <text x="140" y="240" text-anchor="end" font-size="12">batch 128</text>
-    <rect x="150" y="224" width="105.3" height="24" rx="3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="255.3" y="224" width="241.1" height="24" rx="3" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
-    <text x="375.9" y="240" text-anchor="middle" font-size="11" fill="#E39A62">KV 70%</text>
-    <text x="506.4" y="240" font-size="11.5" fill="#97A59F">14.74 ms · 8,682 tok/s · 68 per user</text>
-    <text x="140" y="278" text-anchor="end" font-size="12">batch 208 (HBM limit)</text>
-    <rect x="150" y="262" width="105.3" height="24" rx="3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
-    <rect x="255.3" y="262" width="391.9" height="24" rx="3" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
-    <text x="451.2" y="278" text-anchor="middle" font-size="11" fill="#E39A62">KV 79%</text>
-    <text x="657.2" y="278" font-size="11.5" fill="#97A59F">21.16 ms · 9,832 tok/s · 47 per user</text>
-    <text x="24" y="326" font-size="11" fill="#97A59F">bar length = step time = bytes ÷ 3.35 TB/s (every row is memory-bound); the KV share of bytes is the share of the bar</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="380" viewBox="0 0 880 380" role="img" aria-label="One decode step of Llama-3.1-8B on an H100 in bf16 at 2K context against the batch: the weight stream takes the same time at every batch, and the KV read grows with the batch up to the HBM limit." style="color: #E4EAE7">
+  <title>One decode step of Llama-3.1-8B on an H100 in bf16 at 2K context against the batch: the weight stream takes the same time at every batch, and the KV read grows with the batch up to the HBM limit.</title>
+  <desc>{"height":380,"kind":"line","legend":"top-left","marks":[{"anchor":"start","dy":22,"kind":"point","label":"batch 1: 4.56 ms","style":"accent","x":1,"y":4.56056},{"anchor":"middle","dy":-16,"kind":"point","label":"batch 8: 5.12 ms","style":"accent","x":8,"y":5.12177},{"anchor":"start","dy":18,"kind":"point","label":"batch 32: 7.05 ms","style":"accent","x":32,"y":7.04588},{"anchor":"end","dy":-10,"kind":"point","label":"batch 64: 9.61 ms","style":"accent","x":64,"y":9.61137},{"anchor":"end","dy":-10,"kind":"point","label":"batch 128: 14.74 ms","style":"accent","x":128,"y":14.7424},{"anchor":"end","dy":-6,"kind":"point","label":"batch 208 (HBM limit): 21.16 ms","style":"accent","x":208,"y":21.1561}],"note":"computed by roofline.llm.decode and decode_split (roofline-core)","series":[{"name":"step time","style":"accent","x":[1,2,3,4,5,6,7,8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160,168,176,184,192,200,208],"y":[4.56056,4.64074,4.72091,4.80108,4.88125,4.96142,5.04159,5.12177,5.76314,6.40451,7.04588,7.68726,8.32863,8.97,9.61137,10.2527,10.8941,11.5355,12.1769,12.8182,13.4596,14.101,14.7424,15.3837,16.0251,16.6665,17.3078,17.9492,18.5906,19.232,19.8733,20.5147,21.1561]},{"dash":true,"name":"weight stream","style":"plain","x":[1,2,3,4,5,6,7,8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160,168,176,184,192,200,208],"y":[4.4804,4.4804,4.4804,4.4804,4.48041,4.48041,4.48041,4.48041,4.48043,4.48045,4.48047,4.48049,4.48051,4.48053,4.48055,4.48057,4.48059,4.48061,4.48063,4.48065,4.48067,4.48069,4.48071,4.48073,4.48075,4.48076,4.48078,4.4808,4.48082,4.48084,4.48086,4.48088,4.4809]},{"name":"KV read","style":"warm","x":[1,2,3,4,5,6,7,8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160,168,176,184,192,200,208],"y":[0.0801691,0.160338,0.240507,0.320676,0.400846,0.481015,0.561184,0.641353,1.28271,1.92406,2.56541,3.20676,3.84812,4.48947,5.13082,5.77218,6.41353,7.05488,7.69623,8.33759,8.97894,9.62029,10.2616,10.903,11.5444,12.1857,12.8271,13.4684,14.1098,14.7511,15.3925,16.0338,16.6752]}],"title":"One decode step of Llama-3.1-8B on an H100 in bf16 at 2K context against the batch: the weight stream takes the same time at every batch, and the KV read grows with the batch up to the HBM limit.","width":880,"x":{"label":"batch (sequences of 2K tokens)","max":224,"min":-8,"scale":"linear","ticks":[0,32,64,96,128,160,192,224]},"y":{"label":"step time (ms)","max":24,"min":0,"ticks":[0,4,8,12,16,20,24]}}</desc>
+  <rect x="0" y="0" width="880" height="380" rx="8" fill="#161E1C"/>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12" fill="currentColor">
+    <g stroke="#27322E" stroke-width="1">
+      <line x1="66.0" y1="310.0" x2="858.0" y2="310.0"/>
+      <line x1="66.0" y1="262.0" x2="858.0" y2="262.0"/>
+      <line x1="66.0" y1="214.0" x2="858.0" y2="214.0"/>
+      <line x1="66.0" y1="166.0" x2="858.0" y2="166.0"/>
+      <line x1="66.0" y1="118.0" x2="858.0" y2="118.0"/>
+      <line x1="66.0" y1="70.0" x2="858.0" y2="70.0"/>
+      <line x1="66.0" y1="22.0" x2="858.0" y2="22.0"/>
+    </g>
+    <g stroke="#55635E" stroke-width="1.2">
+      <line x1="66.0" y1="310.0" x2="858.0" y2="310.0"/>
+      <line x1="66.0" y1="310.0" x2="66.0" y2="22.0"/>
+    </g>
+    <g font-size="11" fill="#97A59F">
+      <text x="58.0" y="313.5" text-anchor="end">0</text>
+      <text x="58.0" y="265.5" text-anchor="end">4</text>
+      <text x="58.0" y="217.5" text-anchor="end">8</text>
+      <text x="58.0" y="169.5" text-anchor="end">12</text>
+      <text x="58.0" y="121.5" text-anchor="end">16</text>
+      <text x="58.0" y="73.5" text-anchor="end">20</text>
+      <text x="58.0" y="25.5" text-anchor="end">24</text>
+      <text x="93.3" y="326.0" text-anchor="middle">0</text>
+      <text x="202.6" y="326.0" text-anchor="middle">32</text>
+      <text x="311.8" y="326.0" text-anchor="middle">64</text>
+      <text x="421.0" y="326.0" text-anchor="middle">96</text>
+      <text x="530.3" y="326.0" text-anchor="middle">128</text>
+      <text x="639.5" y="326.0" text-anchor="middle">160</text>
+      <text x="748.8" y="326.0" text-anchor="middle">192</text>
+      <text x="858.0" y="326.0" text-anchor="middle">224</text>
+    </g>
+    <text x="462.0" y="352.0" text-anchor="middle" fill="#97A59F">batch (sequences of 2K tokens)</text>
+    <text x="16" y="166.0" text-anchor="middle" fill="#97A59F" transform="rotate(-90 16 166.0)">step time (ms)</text>
+    <clipPath id="plot"><rect x="65.0" y="16.0" width="794.0" height="295.0"/></clipPath>
+    <g clip-path="url(#plot)">
+      <path d="M96.7 255.3 L100.1 254.3 L103.6 253.3 L107.0 252.4 L110.4 251.4 L113.8 250.5 L117.2 249.5 L120.6 248.5 L147.9 240.8 L175.2 233.1 L202.6 225.4 L229.9 217.8 L257.2 210.1 L284.5 202.4 L311.8 194.7 L339.1 187.0 L366.4 179.3 L393.7 171.6 L421.0 163.9 L448.3 156.2 L475.7 148.5 L503.0 140.8 L530.3 133.1 L557.6 125.4 L584.9 117.7 L612.2 110.0 L639.5 102.3 L666.8 94.6 L694.1 86.9 L721.4 79.2 L748.8 71.5 L776.1 63.8 L803.4 56.1" fill="none" stroke="#4CC5B7" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="M96.7 256.2 L100.1 256.2 L103.6 256.2 L107.0 256.2 L110.4 256.2 L113.8 256.2 L117.2 256.2 L120.6 256.2 L147.9 256.2 L175.2 256.2 L202.6 256.2 L229.9 256.2 L257.2 256.2 L284.5 256.2 L311.8 256.2 L339.1 256.2 L366.4 256.2 L393.7 256.2 L421.0 256.2 L448.3 256.2 L475.7 256.2 L503.0 256.2 L530.3 256.2 L557.6 256.2 L584.9 256.2 L612.2 256.2 L639.5 256.2 L666.8 256.2 L694.1 256.2 L721.4 256.2 L748.8 256.2 L776.1 256.2 L803.4 256.2" fill="none" stroke="#E4EAE7" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="6 4"/>
+      <path d="M96.7 309.0 L100.1 308.1 L103.6 307.1 L107.0 306.2 L110.4 305.2 L113.8 304.2 L117.2 303.3 L120.6 302.3 L147.9 294.6 L175.2 286.9 L202.6 279.2 L229.9 271.5 L257.2 263.8 L284.5 256.1 L311.8 248.4 L339.1 240.7 L366.4 233.0 L393.7 225.3 L421.0 217.6 L448.3 209.9 L475.7 202.3 L503.0 194.6 L530.3 186.9 L557.6 179.2 L584.9 171.5 L612.2 163.8 L639.5 156.1 L666.8 148.4 L694.1 140.7 L721.4 133.0 L748.8 125.3 L776.1 117.6 L803.4 109.9" fill="none" stroke="#E39A62" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    </g>
+    <circle cx="96.7" cy="255.3" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="105.7" y="277.3" text-anchor="start" font-size="11" fill="#4CC5B7">batch 1: 4.56 ms</text>
+    <circle cx="120.6" cy="248.5" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="120.6" y="232.5" text-anchor="middle" font-size="11" fill="#4CC5B7">batch 8: 5.12 ms</text>
+    <circle cx="202.6" cy="225.4" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="211.6" y="243.4" text-anchor="start" font-size="11" fill="#4CC5B7">batch 32: 7.05 ms</text>
+    <circle cx="311.8" cy="194.7" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="302.8" y="184.7" text-anchor="end" font-size="11" fill="#4CC5B7">batch 64: 9.61 ms</text>
+    <circle cx="530.3" cy="133.1" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="521.3" y="123.1" text-anchor="end" font-size="11" fill="#4CC5B7">batch 128: 14.74 ms</text>
+    <circle cx="803.4" cy="56.1" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="794.4" y="50.1" text-anchor="end" font-size="11" fill="#4CC5B7">batch 208 (HBM limit): 21.16 ms</text>
+    <g font-size="11.5">
+      <rect x="76.0" y="30.0" width="127.7" height="61.0" rx="5" fill="#161E1C" fill-opacity="0.9" stroke="#27322E"/>
+      <line x1="86.0" y1="43.0" x2="104.0" y2="43.0" stroke="#4CC5B7" stroke-width="2"/>
+      <text x="110.0" y="47.0" fill="currentColor">step time</text>
+      <line x1="86.0" y1="60.0" x2="104.0" y2="60.0" stroke="#E4EAE7" stroke-width="2" stroke-dasharray="6 4"/>
+      <text x="110.0" y="64.0" fill="currentColor">weight stream</text>
+      <line x1="86.0" y1="77.0" x2="104.0" y2="77.0" stroke="#E39A62" stroke-width="2"/>
+      <text x="110.0" y="81.0" fill="currentColor">KV read</text>
+    </g>
+    <text x="10" y="373.0" font-size="10.5" fill="#97A59F" font-family="JetBrains Mono, monospace">computed by roofline.llm.decode and decode_split (roofline-core)</text>
   </g>
 </svg>

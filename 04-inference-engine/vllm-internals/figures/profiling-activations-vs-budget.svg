@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="360" viewBox="0 0 880 360" role="img" aria-label="The estimated activation peak of the profiling pass against max_num_batched_tokens for Llama-3.1-8B in BF16, with 256 and 1,024 sampler rows." style="color: #E4EAE7">
+  <title>The estimated activation peak of the profiling pass against max_num_batched_tokens for Llama-3.1-8B in BF16, with 256 and 1,024 sampler rows.</title>
+  <desc>{"kind":"line","legend":"top-left","marks":[{"anchor":"start","dy":18,"kind":"point","label":"L4, 2,048-token profile: 0.42 GiB","style":"accent","x":2048,"y":0.4165},{"anchor":"end","dy":-10,"kind":"point","label":"H100, 8,192-token profile: 1.67 GiB","style":"violet","x":8192,"y":1.666}],"note":"ESTIMATE: computed by servelab.sizing.overhead_estimate (MLP activations + FP32 sampler logits)","series":[{"name":"1,024-row sampler (H100 default)","style":"violet","x":[512,609,724,861,1024,1218,1448,1722,2048,2435,2896,3444,4096,4871,5793,6889,8192,9742,11585,13777,16384],"y":[1.0215,1.0296,1.0393,1.0508,1.0645,1.0807,1.1,1.123,1.1504,1.1829,1.2216,1.2675,1.3223,1.3873,1.4647,1.5567,1.666,1.7961,1.9508,2.1347,2.3535]},{"name":"256-row sampler (L4 default)","style":"accent","x":[512,609,724,861,1024,1218,1448,1722,2048,2435,2896,3444,4096,4871,5793,6889,8192,9742,11585,13777,16384],"y":[0.2876,0.2957,0.3054,0.3169,0.3306,0.3468,0.3661,0.3891,0.4165,0.449,0.4877,0.5337,0.5884,0.6534,0.7308,0.8228,0.9321,1.0622,1.2169,1.4008,1.6196]}],"title":"The estimated activation peak of the profiling pass against max_num_batched_tokens for Llama-3.1-8B in BF16, with 256 and 1,024 sampler rows.","x":{"label":"max_num_batched_tokens (tokens in the profiling forward)","scale":"log","ticks":[512,1024,2048,4096,8192,16384]},"y":{"label":"activations + sampler logits (GiB)","max":2.5,"min":0,"ticks":[0,0.5,1,1.5,2,2.5]}}</desc>
+  <rect x="0" y="0" width="880" height="360" rx="8" fill="#161E1C"/>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12" fill="currentColor">
+    <g stroke="#27322E" stroke-width="1">
+      <line x1="66.0" y1="290.0" x2="858.0" y2="290.0"/>
+      <line x1="66.0" y1="236.4" x2="858.0" y2="236.4"/>
+      <line x1="66.0" y1="182.8" x2="858.0" y2="182.8"/>
+      <line x1="66.0" y1="129.2" x2="858.0" y2="129.2"/>
+      <line x1="66.0" y1="75.6" x2="858.0" y2="75.6"/>
+      <line x1="66.0" y1="22.0" x2="858.0" y2="22.0"/>
+    </g>
+    <g stroke="#55635E" stroke-width="1.2">
+      <line x1="66.0" y1="290.0" x2="858.0" y2="290.0"/>
+      <line x1="66.0" y1="290.0" x2="66.0" y2="22.0"/>
+    </g>
+    <g font-size="11" fill="#97A59F">
+      <text x="58.0" y="293.5" text-anchor="end">0</text>
+      <text x="58.0" y="239.9" text-anchor="end">0.5</text>
+      <text x="58.0" y="186.3" text-anchor="end">1</text>
+      <text x="58.0" y="132.7" text-anchor="end">1.5</text>
+      <text x="58.0" y="79.1" text-anchor="end">2</text>
+      <text x="58.0" y="25.5" text-anchor="end">2.5</text>
+      <text x="66.0" y="306.0" text-anchor="middle">512</text>
+      <text x="224.4" y="306.0" text-anchor="middle">1,024</text>
+      <text x="382.8" y="306.0" text-anchor="middle">2,048</text>
+      <text x="541.2" y="306.0" text-anchor="middle">4,096</text>
+      <text x="699.6" y="306.0" text-anchor="middle">8,192</text>
+      <text x="858.0" y="306.0" text-anchor="middle">16,384</text>
+    </g>
+    <text x="462.0" y="332.0" text-anchor="middle" fill="#97A59F">max_num_batched_tokens (tokens in the profiling forward)</text>
+    <text x="16" y="156.0" text-anchor="middle" fill="#97A59F" transform="rotate(-90 16 156.0)">activations + sampler logits (GiB)</text>
+    <clipPath id="plot"><rect x="65.0" y="16.0" width="794.0" height="275.0"/></clipPath>
+    <g clip-path="url(#plot)">
+      <path d="M66.0 180.5 L105.6 179.6 L145.2 178.6 L184.8 177.4 L224.4 175.9 L264.0 174.1 L303.6 172.1 L343.2 169.6 L382.8 166.7 L422.4 163.2 L462.0 159.0 L501.6 154.1 L541.2 148.2 L580.8 141.3 L620.4 133.0 L660.0 123.1 L699.6 111.4 L739.2 97.5 L778.8 80.9 L818.4 61.2 L858.0 37.7" fill="none" stroke="#B7A3F0" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="M66.0 259.2 L105.6 258.3 L145.2 257.3 L184.8 256.0 L224.4 254.6 L264.0 252.8 L303.6 250.8 L343.2 248.3 L382.8 245.4 L422.4 241.9 L462.0 237.7 L501.6 232.8 L541.2 226.9 L580.8 220.0 L620.4 211.7 L660.0 201.8 L699.6 190.1 L739.2 176.1 L778.8 159.5 L818.4 139.8 L858.0 116.4" fill="none" stroke="#4CC5B7" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    </g>
+    <circle cx="382.8" cy="245.4" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="391.8" y="263.4" text-anchor="start" font-size="11" fill="#4CC5B7">L4, 2,048-token profile: 0.42 GiB</text>
+    <circle cx="699.6" cy="111.4" r="4.5" fill="#B7A3F0" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="690.6" y="101.4" text-anchor="end" font-size="11" fill="#B7A3F0">H100, 8,192-token profile: 1.67 GiB</text>
+    <g font-size="11.5">
+      <rect x="76.0" y="30.0" width="250.1" height="44.0" rx="5" fill="#161E1C" fill-opacity="0.9" stroke="#27322E"/>
+      <line x1="86.0" y1="43.0" x2="104.0" y2="43.0" stroke="#B7A3F0" stroke-width="2"/>
+      <text x="110.0" y="47.0" fill="currentColor">1,024-row sampler (H100 default)</text>
+      <line x1="86.0" y1="60.0" x2="104.0" y2="60.0" stroke="#4CC5B7" stroke-width="2"/>
+      <text x="110.0" y="64.0" fill="currentColor">256-row sampler (L4 default)</text>
+    </g>
+    <text x="10" y="353.0" font-size="10.5" fill="#97A59F" font-family="JetBrains Mono, monospace">ESTIMATE: computed by servelab.sizing.overhead_estimate (MLP activations + FP32 sampler logits)</text>
+  </g>
+</svg>

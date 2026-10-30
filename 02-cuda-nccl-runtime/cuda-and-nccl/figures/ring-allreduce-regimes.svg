@@ -1,60 +1,59 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="440" viewBox="0 0 900 440" role="img" aria-label="Ring all-reduce time against message size on 8 H100s in the alpha-beta model: flat near 2(p-1) alpha below the 7.2 MB crossover, where decode's 512 KiB all-reduce sits, and growing with S/B above it, where prefill's 128 MiB all-reduce sits." style="color: #E4EAE7">
-  <title>Ring all-reduce time against message size on 8 H100s in the alpha-beta model: flat near 2(p-1) alpha below the 7.2 MB crossover, where decode's 512 KiB all-reduce sits, and growing with S/B above it, where prefill's 128 MiB all-reduce sits.</title>
-  <rect x="0" y="0" width="900" height="440" rx="8" fill="#161E1C"/>
-  <defs>
-    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
-    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
-  </defs>
-  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
-    <text x="24" y="30" font-weight="600">ring all-reduce on 8 H100s: α = 2 µs per step, B = 450 GB/s per direction (simulated, α-β model)</text>
-    <line x1="104" y1="340" x2="850" y2="340" stroke="currentColor" stroke-width="1"/>
-    <line x1="104" y1="60" x2="104" y2="340" stroke="currentColor" stroke-width="1"/>
-    <line x1="100" y1="297.8332660177329" x2="104" y2="297.8332660177329" stroke="currentColor" stroke-width="1"/>
-    <line x1="104" y1="297.8332660177329" x2="850" y2="297.8332660177329" stroke="#97A59F" stroke-width="0.4"/>
-    <text x="96" y="301.8332660177329" text-anchor="end" font-size="11" fill="#97A59F">28.3</text>
-    <line x1="100" y1="249.5211815136284" x2="104" y2="249.5211815136284" stroke="currentColor" stroke-width="1"/>
-    <line x1="104" y1="249.5211815136284" x2="850" y2="249.5211815136284" stroke="#97A59F" stroke-width="0.4"/>
-    <text x="96" y="253.5211815136284" text-anchor="end" font-size="11" fill="#97A59F">93.2</text>
-    <line x1="100" y1="177.56614898053726" x2="104" y2="177.56614898053726" stroke="currentColor" stroke-width="1"/>
-    <line x1="104" y1="177.56614898053726" x2="850" y2="177.56614898053726" stroke="#97A59F" stroke-width="0.4"/>
-    <text x="96" y="181.56614898053726" text-anchor="end" font-size="11" fill="#97A59F">550.0</text>
-    <line x1="100" y1="95.1277066250436" x2="104" y2="95.1277066250436" stroke="currentColor" stroke-width="1"/>
-    <line x1="104" y1="95.1277066250436" x2="850" y2="95.1277066250436" stroke="#97A59F" stroke-width="0.4"/>
-    <text x="96" y="99.1277066250436" text-anchor="end" font-size="11" fill="#97A59F">4203.7</text>
-    <text x="34" y="200" text-anchor="middle" font-size="11" fill="#97A59F" transform="rotate(-90 34 200)">time in µs, the rows of the sweep (log scale)</text>
-    <line x1="104.0" y1="340" x2="104.0" y2="344" stroke="currentColor" stroke-width="1"/>
-    <text x="104.0" y="358" text-anchor="start" font-size="11" fill="#97A59F" font-family="JetBrains Mono, monospace">65536</text>
-    <line x1="317.1428571428571" y1="340" x2="317.1428571428571" y2="344" stroke="currentColor" stroke-width="1"/>
-    <text x="317.1428571428571" y="358" text-anchor="middle" font-size="11" fill="#97A59F" font-family="JetBrains Mono, monospace">1048576</text>
-    <line x1="530.2857142857142" y1="340" x2="530.2857142857142" y2="344" stroke="currentColor" stroke-width="1"/>
-    <text x="530.2857142857142" y="358" text-anchor="middle" font-size="11" fill="#97A59F" font-family="JetBrains Mono, monospace">16777216</text>
-    <line x1="690.1428571428571" y1="340" x2="690.1428571428571" y2="344" stroke="currentColor" stroke-width="1"/>
-    <text x="690.1428571428571" y="358" text-anchor="middle" font-size="11" fill="#97A59F" font-family="JetBrains Mono, monospace">134217728</text>
-    <line x1="850.0" y1="340" x2="850.0" y2="344" stroke="currentColor" stroke-width="1"/>
-    <text x="850.0" y="358" text-anchor="end" font-size="11" fill="#97A59F" font-family="JetBrains Mono, monospace">1073741824</text>
-    <text x="477.0" y="376" text-anchor="middle" font-size="11" fill="#97A59F">message size S in bytes, the sizes of the sweep in §5.5 (log scale)</text>
-    <line x1="104" y1="298.26525040805956" x2="583.5714285714287" y2="298.26525040805956" stroke="#97A59F" stroke-width="1" stroke-dasharray="4 3"/>
-    <text x="591.5714285714287" y="291.26525040805956" font-size="11" fill="#97A59F">2(p−1)·α: the latency term, 14 steps</text>
-    <line x1="386.1019594240589" y1="340.0" x2="850.0" y2="95.39896221583055" stroke="#97A59F" stroke-width="1" stroke-dasharray="4 3"/>
-    <text x="644.8571428571429" y="225.78349393038357" font-size="11" fill="#97A59F">2(p−1)/p · S/B: the bandwidth term</text>
-    <line x1="465.2539889289876" y1="60" x2="465.2539889289876" y2="340" stroke="#E39A62" stroke-width="1" stroke-dasharray="4 3"/>
-    <text x="465.2539889289876" y="54" text-anchor="middle" font-size="11" fill="#E39A62">S* = p·α·B = 7.2 MB</text>
-    <text x="455.2539889289876" y="76" text-anchor="end" font-size="11" fill="#97A59F">latency-bound</text>
-    <text x="475.2539889289876" y="76" font-size="11" fill="#97A59F">bandwidth-bound</text>
-    <polyline points="104.0,297.9 109.3,297.9 114.7,297.8 120.0,297.8 125.3,297.8 130.6,297.7 136.0,297.7 141.3,297.7 146.6,297.6 152.0,297.6 157.3,297.5 162.6,297.5 167.9,297.4 173.3,297.4 178.6,297.3 183.9,297.2 189.3,297.2 194.6,297.1 199.9,297.0 205.2,296.9 210.6,296.8 215.9,296.7 221.2,296.6 226.6,296.5 231.9,296.4 237.2,296.2 242.5,296.1 247.9,295.9 253.2,295.8 258.5,295.6 263.9,295.4 269.2,295.2 274.5,295.0 279.8,294.8 285.2,294.5 290.5,294.3 295.8,294.0 301.2,293.7 306.5,293.4 311.8,293.1 317.1,292.8 322.5,292.4 327.8,292.0 333.1,291.6 338.5,291.1 343.8,290.7 349.1,290.2 354.4,289.7 359.8,289.1 365.1,288.5 370.4,287.9 375.8,287.3 381.1,286.6 386.4,285.8 391.7,285.1 397.1,284.3 402.4,283.4 407.7,282.6 413.1,281.6 418.4,280.7 423.7,279.7 429.0,278.6 434.4,277.5 439.7,276.3 445.0,275.2 450.4,273.9 455.7,272.6 461.0,271.3 466.3,269.9 471.7,268.4 477.0,267.0 482.3,265.4 487.7,263.8 493.0,262.2 498.3,260.5 503.6,258.8 509.0,257.0 514.3,255.2 519.6,253.4 525.0,251.4 530.3,249.5 535.6,247.5 540.9,245.5 546.3,243.4 551.6,241.3 556.9,239.2 562.3,237.0 567.6,234.8 572.9,232.6 578.2,230.3 583.6,228.0 588.9,225.7 594.2,223.3 599.6,220.9 604.9,218.5 610.2,216.1 615.5,213.7 620.9,211.2 626.2,208.7 631.5,206.2 636.9,203.7 642.2,201.1 647.5,198.5 652.8,196.0 658.2,193.4 663.5,190.8 668.8,188.2 674.2,185.5 679.5,182.9 684.8,180.2 690.1,177.6 695.5,174.9 700.8,172.2 706.1,169.5 711.5,166.8 716.8,164.1 722.1,161.4 727.4,158.7 732.8,156.0 738.1,153.3 743.4,150.5 748.8,147.8 754.1,145.0 759.4,142.3 764.7,139.5 770.1,136.8 775.4,134.0 780.7,131.3 786.1,128.5 791.4,125.7 796.7,123.0 802.0,120.2 807.4,117.4 812.7,114.6 818.0,111.8 823.4,109.1 828.7,106.3 834.0,103.5 839.3,100.7 844.7,97.9 850.0,95.1" fill="none" stroke="#4CC5B7" stroke-width="1.6"/>
-    <circle cx="104.0" cy="297.8" r="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
-    <circle cx="317.1" cy="292.7" r="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
-    <circle cx="530.3" cy="249.5" r="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
-    <circle cx="690.1" cy="177.6" r="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
-    <circle cx="850.0" cy="95.1" r="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
-    <text x="325.1428571428571" y="313" font-size="11" fill="#7ADACF">32.1 µs</text>
-    <text x="842.0" y="86" text-anchor="end" font-size="11" fill="#7ADACF">busbw 447 GB/s</text>
-    <rect x="258.9" y="290.5" width="10" height="10" fill="#3A2C25" stroke="#E39A62" stroke-width="1.4"/>
-    <text x="263.8571428571429" y="269.4686828928315" text-anchor="middle" font-weight="600" font-size="11" fill="#E39A62">decode, batch 32</text>
-    <text x="263.8571428571429" y="283.4686828928315" text-anchor="middle" font-size="11" fill="#E39A62">512 KiB · 30.0 µs</text>
-    <rect x="685.1" y="172.6" width="10" height="10" fill="#3A2C25" stroke="#E39A62" stroke-width="1.4"/>
-    <text x="680" y="149" text-anchor="end" font-weight="600" font-size="11" fill="#E39A62">prefill, 8,192 tokens</text>
-    <text x="680" y="164" text-anchor="end" font-size="11" fill="#E39A62">128 MiB · 550 µs</text>
-    <text x="24" y="420" font-size="11" fill="#97A59F">the five circles are the rows of the simulated sweep (gpusim.collectives.sweep()); the squares are the two steps of §5.6</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="380" viewBox="0 0 880 380" role="img" aria-label="Ring all-reduce time against message size on 8 H100s in the alpha-beta model: flat near the latency term below the 7.2 MB crossover, where the 512 KiB all-reduce of decode sits, and growing with the bandwidth term above it, where the 128 MiB all-reduce of prefill sits." style="color: #E4EAE7">
+  <title>Ring all-reduce time against message size on 8 H100s in the alpha-beta model: flat near the latency term below the 7.2 MB crossover, where the 512 KiB all-reduce of decode sits, and growing with the bandwidth term above it, where the 128 MiB all-reduce of prefill sits.</title>
+  <desc>{"height":380,"kind":"line","legend":"top-left","marks":[{"kind":"vline","label":"S* = p·α·B = 7.2 MB","style":"warm","x":7200000.0},{"anchor":"end","kind":"text","text":"latency-bound","x":5760000.0,"y":2000},{"anchor":"start","kind":"text","text":"bandwidth-bound","x":9000000.0,"y":2000},{"anchor":"middle","dy":-12,"kind":"point","label":"decode, 512 KiB: 30.0 µs","style":"accent","x":524288,"y":30.0389},{"anchor":"end","kind":"point","label":"prefill, 128 MiB: 550 µs","style":"accent","x":134217728,"y":549.9578},{"anchor":"end","kind":"point","label":"1 GiB: 4.20 ms","style":"accent","x":1073741824,"y":4203.6626}],"note":"computed by gpusim.collectives.model_time, cost_terms, crossover_bytes and tp_comm (cuda-nccl-core)","series":[{"name":"ring all-reduce","style":"accent","x":[65536,77936,92682,110218,131072,155872,185364,220436,262144,311744,370728,440872,524288,623487,741455,881744,1048576,1246974,1482910,1763488,2097152,2493948,2965821,3526975,4194304,4987896,5931642,7053950,8388608,9975792,11863283,14107901,16777216,19951585,23726566,28215802,33554432,39903169,47453133,56431603,67108864,79806339,94906266,112863206,134217728,159612677,189812531,225726413,268435456,319225354,379625062,451452825,536870912,638450708,759250125,902905651,1073741824],"y":[28.2549,28.3031,28.3604,28.4286,28.5097,28.6062,28.7209,28.8573,29.0194,29.2123,29.4417,29.7145,30.0389,30.4247,30.8834,31.429,32.0778,32.8493,33.7669,34.858,36.1556,37.6987,39.5337,41.716,44.3112,47.3974,51.0675,55.432,60.6224,66.7947,74.135,82.8641,93.2447,105.5895,120.27,137.7281,158.4895,183.179,212.54,247.4562,288.9789,338.358,397.0799,466.9125,549.9578,648.716,766.1598,905.8249,1071.9157,1269.4319,1504.3197,1783.6499,2115.8313,2510.8639,2980.6394,3539.2998,4203.6626]},{"dash":true,"name":"latency term 2(p−1)·α, 14 steps","style":"muted","x":[65536,77936,92682,110218,131072,155872,185364,220436,262144,311744,370728,440872,524288,623487,741455,881744,1048576,1246974,1482910,1763488,2097152,2493948,2965821,3526975,4194304,4987896,5931642,7053950,8388608,9975792,11863283,14107901,16777216,19951585,23726566,28215802,33554432,39903169,47453133,56431603,67108864,79806339,94906266,112863206,134217728,159612677,189812531,225726413,268435456,319225354,379625062,451452825,536870912,638450708,759250125,902905651,1073741824],"y":[28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0,28.0]},{"dash":true,"name":"bandwidth term 2(p−1)/p · S/B","style":"yellow","x":[65536,77936,92682,110218,131072,155872,185364,220436,262144,311744,370728,440872,524288,623487,741455,881744,1048576,1246974,1482910,1763488,2097152,2493948,2965821,3526975,4194304,4987896,5931642,7053950,8388608,9975792,11863283,14107901,16777216,19951585,23726566,28215802,33554432,39903169,47453133,56431603,67108864,79806339,94906266,112863206,134217728,159612677,189812531,225726413,268435456,319225354,379625062,451452825,536870912,638450708,759250125,902905651,1073741824],"y":[0.2549,0.3031,0.3604,0.4286,0.5097,0.6062,0.7209,0.8573,1.0194,1.2123,1.4417,1.7145,2.0389,2.4247,2.8834,3.429,4.0778,4.8493,5.7669,6.858,8.1556,9.6987,11.5337,13.716,16.3112,19.3974,23.0675,27.432,32.6224,38.7947,46.135,54.8641,65.2447,77.5895,92.27,109.7281,130.4895,155.179,184.54,219.4562,260.9789,310.358,369.0799,438.9125,521.9578,620.716,738.1598,877.8249,1043.9157,1241.4319,1476.3197,1755.6499,2087.8313,2482.8639,2952.6394,3511.2998,4175.6626]}],"title":"Ring all-reduce time against message size on 8 H100s in the alpha-beta model: flat near the latency term below the 7.2 MB crossover, where the 512 KiB all-reduce of decode sits, and growing with the bandwidth term above it, where the 128 MiB all-reduce of prefill sits.","x":{"label":"message size S (bytes, log scale)","max":1073741824,"min":65536,"scale":"log","tick_labels":["64 KiB","256 KiB","1 MiB","4 MiB","16 MiB","64 MiB","256 MiB","1 GiB"],"ticks":[65536,262144,1048576,4194304,16777216,67108864,268435456,1073741824]},"y":{"label":"time (µs, log scale)","max":10000,"min":10,"scale":"log","ticks":[10,100,1000,10000]}}</desc>
+  <rect x="0" y="0" width="880" height="380" rx="8" fill="#161E1C"/>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12" fill="currentColor">
+    <g stroke="#27322E" stroke-width="1">
+      <line x1="66.0" y1="310.0" x2="858.0" y2="310.0"/>
+      <line x1="66.0" y1="214.0" x2="858.0" y2="214.0"/>
+      <line x1="66.0" y1="118.0" x2="858.0" y2="118.0"/>
+      <line x1="66.0" y1="22.0" x2="858.0" y2="22.0"/>
+    </g>
+    <g stroke="#55635E" stroke-width="1.2">
+      <line x1="66.0" y1="310.0" x2="858.0" y2="310.0"/>
+      <line x1="66.0" y1="310.0" x2="66.0" y2="22.0"/>
+    </g>
+    <g font-size="11" fill="#97A59F">
+      <text x="58.0" y="313.5" text-anchor="end">10</text>
+      <text x="58.0" y="217.5" text-anchor="end">100</text>
+      <text x="58.0" y="121.5" text-anchor="end">1,000</text>
+      <text x="58.0" y="25.5" text-anchor="end">10,000</text>
+      <text x="66.0" y="326.0" text-anchor="middle">64 KiB</text>
+      <text x="179.1" y="326.0" text-anchor="middle">256 KiB</text>
+      <text x="292.3" y="326.0" text-anchor="middle">1 MiB</text>
+      <text x="405.4" y="326.0" text-anchor="middle">4 MiB</text>
+      <text x="518.6" y="326.0" text-anchor="middle">16 MiB</text>
+      <text x="631.7" y="326.0" text-anchor="middle">64 MiB</text>
+      <text x="744.9" y="326.0" text-anchor="middle">256 MiB</text>
+      <text x="858.0" y="326.0" text-anchor="middle">1 GiB</text>
+    </g>
+    <text x="462.0" y="352.0" text-anchor="middle" fill="#97A59F">message size S (bytes, log scale)</text>
+    <text x="16" y="166.0" text-anchor="middle" fill="#97A59F" transform="rotate(-90 16 166.0)">time (µs, log scale)</text>
+    <clipPath id="plot"><rect x="65.0" y="16.0" width="794.0" height="295.0"/></clipPath>
+    <g clip-path="url(#plot)">
+      <path d="M66.0 266.7 L80.1 266.6 L94.3 266.5 L108.4 266.4 L122.6 266.3 L136.7 266.2 L150.9 266.0 L165.0 265.8 L179.1 265.6 L193.3 265.3 L207.4 265.0 L221.6 264.6 L235.7 264.1 L249.9 263.6 L264.0 263.0 L278.1 262.3 L292.3 261.4 L306.4 260.4 L320.6 259.3 L334.7 257.9 L348.9 256.4 L363.0 254.7 L377.1 252.7 L391.3 250.5 L405.4 247.9 L419.6 245.1 L433.7 242.0 L447.9 238.6 L462.0 234.9 L476.1 230.8 L490.3 226.5 L504.4 221.8 L518.6 216.9 L532.7 211.7 L546.9 206.3 L561.0 200.7 L575.1 194.8 L589.3 188.8 L603.4 182.6 L617.6 176.2 L631.7 169.8 L645.9 163.2 L660.0 156.5 L674.1 149.8 L688.3 142.9 L702.4 136.0 L716.6 129.1 L730.7 122.1 L744.9 115.1 L759.0 108.1 L773.1 101.0 L787.3 93.9 L801.4 86.8 L815.6 79.6 L829.7 72.5 L843.9 65.3 L858.0 58.1" fill="none" stroke="#4CC5B7" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="M66.0 267.1 L80.1 267.1 L94.3 267.1 L108.4 267.1 L122.6 267.1 L136.7 267.1 L150.9 267.1 L165.0 267.1 L179.1 267.1 L193.3 267.1 L207.4 267.1 L221.6 267.1 L235.7 267.1 L249.9 267.1 L264.0 267.1 L278.1 267.1 L292.3 267.1 L306.4 267.1 L320.6 267.1 L334.7 267.1 L348.9 267.1 L363.0 267.1 L377.1 267.1 L391.3 267.1 L405.4 267.1 L419.6 267.1 L433.7 267.1 L447.9 267.1 L462.0 267.1 L476.1 267.1 L490.3 267.1 L504.4 267.1 L518.6 267.1 L532.7 267.1 L546.9 267.1 L561.0 267.1 L575.1 267.1 L589.3 267.1 L603.4 267.1 L617.6 267.1 L631.7 267.1 L645.9 267.1 L660.0 267.1 L674.1 267.1 L688.3 267.1 L702.4 267.1 L716.6 267.1 L730.7 267.1 L744.9 267.1 L759.0 267.1 L773.1 267.1 L787.3 267.1 L801.4 267.1 L815.6 267.1 L829.7 267.1 L843.9 267.1 L858.0 267.1" fill="none" stroke="#97A59F" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="6 4"/>
+      <path d="M66.0 463.0 L80.1 455.8 L94.3 448.5 L108.4 441.3 L122.6 434.1 L136.7 426.9 L150.9 419.6 L165.0 412.4 L179.1 405.2 L193.3 398.0 L207.4 390.7 L221.6 383.5 L235.7 376.3 L249.9 369.1 L264.0 361.8 L278.1 354.6 L292.3 347.4 L306.4 340.2 L320.6 332.9 L334.7 325.7 L348.9 318.5 L363.0 311.3 L377.1 304.1 L391.3 296.8 L405.4 289.6 L419.6 282.4 L433.7 275.2 L447.9 267.9 L462.0 260.7 L476.1 253.5 L490.3 246.3 L504.4 239.0 L518.6 231.8 L532.7 224.6 L546.9 217.4 L561.0 210.1 L575.1 202.9 L589.3 195.7 L603.4 188.5 L617.6 181.2 L631.7 174.0 L645.9 166.8 L660.0 159.6 L674.1 152.3 L688.3 145.1 L702.4 137.9 L716.6 130.7 L730.7 123.4 L744.9 116.2 L759.0 109.0 L773.1 101.8 L787.3 94.5 L801.4 87.3 L815.6 80.1 L829.7 72.9 L843.9 65.6 L858.0 58.4" fill="none" stroke="#E6C85C" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="6 4"/>
+    </g>
+    <line x1="449.5" y1="22.0" x2="449.5" y2="310.0" stroke="#E39A62" stroke-width="1.2" stroke-dasharray="4 3"/>
+    <text x="454.5" y="34.0" text-anchor="start" font-size="11" fill="#E39A62">S* = p·α·B = 7.2 MB</text>
+    <text x="431.3" y="89.1" text-anchor="end" font-size="11" fill="#97A59F">latency-bound</text>
+    <text x="467.7" y="89.1" text-anchor="start" font-size="11" fill="#97A59F">bandwidth-bound</text>
+    <circle cx="235.7" cy="264.1" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="235.7" y="252.1" text-anchor="middle" font-size="11" fill="#4CC5B7">decode, 512 KiB: 30.0 µs</text>
+    <circle cx="688.3" cy="142.9" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="679.3" y="133.9" text-anchor="end" font-size="11" fill="#4CC5B7">prefill, 128 MiB: 550 µs</text>
+    <circle cx="858.0" cy="58.1" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="849.0" y="49.1" text-anchor="end" font-size="11" fill="#4CC5B7">1 GiB: 4.20 ms</text>
+    <g font-size="11.5">
+      <rect x="76.0" y="30.0" width="243.6" height="61.0" rx="5" fill="#161E1C" fill-opacity="0.9" stroke="#27322E"/>
+      <line x1="86.0" y1="43.0" x2="104.0" y2="43.0" stroke="#4CC5B7" stroke-width="2"/>
+      <text x="110.0" y="47.0" fill="currentColor">ring all-reduce</text>
+      <line x1="86.0" y1="60.0" x2="104.0" y2="60.0" stroke="#97A59F" stroke-width="2" stroke-dasharray="6 4"/>
+      <text x="110.0" y="64.0" fill="currentColor">latency term 2(p−1)·α, 14 steps</text>
+      <line x1="86.0" y1="77.0" x2="104.0" y2="77.0" stroke="#E6C85C" stroke-width="2" stroke-dasharray="6 4"/>
+      <text x="110.0" y="81.0" fill="currentColor">bandwidth term 2(p−1)/p · S/B</text>
+    </g>
+    <text x="10" y="373.0" font-size="10.5" fill="#97A59F" font-family="JetBrains Mono, monospace">computed by gpusim.collectives.model_time, cost_terms, crossover_bytes and tp_comm (cuda-nccl-core)</text>
   </g>
 </svg>

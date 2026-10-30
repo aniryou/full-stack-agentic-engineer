@@ -367,6 +367,13 @@ On the left, sixteen GPUs are free, and an 8-GPU pod can use none of them. A use
 GPUs for a pod shape**. These are the free GPUs that cannot hold one more pod of that shape. Also,
 **fragmentation** = stranded / free.
 
+![Stranded GPUs for an 8-GPU pod as 1-GPU pods arrive one at a time at four empty 8-GPU nodes, under the default score and under MostAllocated with a GPU weight of 5.](figures/stranded-gpus-as-pods-arrive.svg)
+
+*The chart shows the stranded GPUs for an 8-GPU pod after each 1-GPU pod, for the default spread (the dashed
+line) and for MostAllocated. At 16 pods, the default leaves 16 stranded GPUs, but MostAllocated leaves 0, because it
+fills one node before the next. `scheduler.Scheduler` and `scheduler.stranded_gpus()` compute the two lines, and
+`tests/test_figures.py` pins the chart.*
+
 A pod shape is a bundle: $k$ GPUs *plus* CPU and memory. Thus, in general, node $n$ can take
 $\mathit{fits}_n = \min_{\text{resources } r} \lfloor \mathit{free}_{n,r} / \mathit{request}_r \rfloor$ more such
 pods. Its usable GPUs are $k \cdot \mathit{fits}_n$, and $\text{stranded} = \sum_{\text{nodes}} (\text{free GPUs}_n - k \cdot \mathit{fits}_n)$.
@@ -427,6 +434,12 @@ The preemptor gets `nominatedNodeName`, and it binds after the graceful terminat
 Worked example (notebook 02): node *a* runs two priority-0 batch pods of 4 GPUs. Node *b* runs one priority-500
 evaluation pod of 8 GPUs. A priority-1000 serving pod needs 4 GPUs. Node *a* costs one priority-0 victim, and node
 *b* costs one priority-500 victim. Thus the scheduler evicts the newer batch pod on *a*.
+
+![For a priority-1000 serving pod, node a loses its newer priority-0 batch pod, node b loses its priority-500 pod, and the scheduler selects node a.](figures/preemption-victims.svg)
+
+*The figure shows the worked example of `plugins.select_victims()` and `plugins.pick_preemption_node()`. On node a,
+the scheduler adds the older batch pod back first, and it fits, so the newer batch pod is the only victim. The
+scheduler selects node a, because its victim has priority 0, and the victim on node b has priority 500.*
 
 Preemption does **not** do these things: evict pods of equal or higher priority, consolidate free GPUs, or
 know about jobs. Preemption can make room for the first pod of an 8-pod job. But that room is of no use if the
@@ -785,6 +798,12 @@ uses an illustrative $\lambda$ = 0.005 per node-hour, and a 24-hour job with $R$
 The size of the gang multiplies the hazard. Write checkpoints at the interval that layer 01 §7.2 calculates
 (Young/Daly). Or put large gangs on reserved or flex-start capacity.
 
+![Expected wall-clock hours of a 24-hour job on Spot against the number of nodes in the gang, when every reclaim restarts the whole gang, at 0.005 reclaims per node-hour and a 15-minute restart.](figures/spot-gang-wall-clock.svg)
+
+*The chart shows the expected wall-clock hours of the 24-hour job against the gang size, with the three table rows
+as points. Each label also gives the probability that the gang survives 24 h. `autoscaler.expected_runtime_h()` and
+`autoscaler.gang_survival()` compute the values, and `tests/test_figures.py` pins the chart.*
+
 ### 7.3 Queued provisioning, ComputeClass, Autopilot
 
 A gang has a problem that an ordinary scale-up cannot solve. Nodes arrive one at a time, and the cloud bills every
@@ -810,6 +829,12 @@ The ordinary pool paid **31.3 node-hours (251 GPU-hours)** for nodes that waited
 paid **1.3**, and in every run it paid only for the boot. Also, over 200 seeds the ordinary pool averages **22.4 node-hours** and a
 1.95 h start. Queued provisioning does not create capacity. With it, you do not pay for the partial set.
 
+![Nodes billed against time while a 16-node gang waits for its last node, in one simulated run: the ordinary pool creates each node at its grant, and the queued pool creates all 16 nodes together.](figures/queued-provisioning-billed-nodes.svg)
+
+*The chart shows the nodes that each pool pays for while the gang waits, in the simulated run with seed 0. The
+ordinary pool creates each node at its grant, but the queued pool creates all 16 nodes together and pays only for
+the boot. `autoscaler.provision()` computes both lines, and `tests/test_figures.py` pins the chart.*
+
 ```mermaid
 sequenceDiagram
     participant J as Job
@@ -821,12 +846,11 @@ sequenceDiagram
     Note over K,C: the pool holds the request until capacity exists,<br/>then creates the whole gang at once
     C-->>K: Provisioned, 300 s boot
     K->>J: admitted: Job unsuspended, pods bind
-    Note over J,C: simulated, 16 nodes: the ordinary pool pays 31.3 node-hours for nodes that wait, the queued pool 1.3
 ```
 
-*The figure shows a ProvisioningRequest as a Kueue admission check. Kueue reserves the quota, creates the request,
-and admits the job only when the capacity is `Provisioned`. The cloud creates the whole gang at once, so the queued
-pool pays only the boot (simulated).*
+*Kueue reserves the quota, creates the ProvisioningRequest as an admission check, and admits the job only when the
+capacity is `Provisioned`. The cloud creates the whole gang at once. Thus the queued pool pays only for the boot
+(simulated), as the chart above shows.*
 
 A **custom ComputeClass** (`cloud.google.com/v1`, verify) gives one class of workload an ordered fallback list.
 An example is reservation, then Spot, then on-demand, then flex-start. GKE's node auto-provisioning creates node

@@ -78,7 +78,7 @@ first.
 Thus each replica holds a different subset of the reusable state of the fleet, and this subset changes all the
 time. The router decides which subset a request can use.
 
-![A request with four full prompt blocks goes through the router to one of two replicas: the replica that holds the first three block hashes prefills only the last block, and the replica that holds other prefixes prefills every block again.](figures/replica-prefix-cache-hit-miss.svg)
+![A replica that holds the first three block hashes prefills only the last block, and a replica with other prefixes prefills all four blocks again.](figures/replica-prefix-cache-hit-miss.svg)
 
 *The same request costs a different prefill on each replica. Replica A holds the first three block hashes and prefills only the last block. Replica B holds other prefixes, so the engine prefills every block again at 3,781 tokens/s (§1.1, `fleetsim.replica.BlockPool`).*
 
@@ -269,19 +269,20 @@ trade-off in one number, in TTFT seconds.
 
 ```mermaid
 flowchart LR
+    accTitle: The chart default sends the endpoints through three weighted scorers, and the optimized baseline sends them through the prefix-cache-affinity-filter and the token-load-scorer, to one endpoint.
     E(["endpoints of the<br/>InferencePool"]) --> SA & SB & SC
     subgraph A["chart default (verify)"]
         direction LR
         SA["prefix-cache-<br/>scorer × 3"] --> K1["max-score-<br/>picker"]
-        SB["queue-scorer × 2"] --> K1
-        SC["kv-cache-utilization-<br/>scorer × 2"] --> K1
+        SB["queue-<br/>scorer × 2"] --> K1
+        SC["kv-cache-<br/>utilization-<br/>scorer × 2"] --> K1
     end
     E --> F2
     subgraph B["optimized baseline"]
         direction LR
         F2["prefix-cache-<br/>affinity-filter"] --> S2["token-load-<br/>scorer"] --> K2["max-score-<br/>picker"]
     end
-    K1 --> D["one endpoint"]
+    K1 --> D["one<br/>endpoint"]
     K2 --> D
 ```
 
@@ -391,7 +392,7 @@ requests expire (`defaultRequestTTL`).
 If no endpoint is under its cap, it holds the request in the router, highest priority first and FCFS in each
 priority. It counts the TTL rejections and the queue-bound rejections as `shed`.
 
-![Requests from the gateway wait in the router queue by priority band, the router sends one to an endpoint only when the concurrency-detector says that the endpoint is under its cap, and the router sheds requests after their TTL or when the queue is full.](figures/flow-control-router-queue.svg)
+![The router queue holds requests by priority band, sends one only to an endpoint under its cap, and sheds requests on TTL or overflow.](figures/flow-control-router-queue.svg)
 
 *Flow control holds a burst in the router, with the higher priority band first and FCFS in each band (§3.1). The router sends a request only to an endpoint under its cap (the concurrency-detector). The router sheds a request after its TTL, or when the queue is full, and the gateway returns 429 or 503.*
 
@@ -461,16 +462,16 @@ The first two rows absorb a burst in milliseconds. Autoscaling (§4) restores th
 
 ```mermaid
 flowchart LR
+    accTitle: Every 15 s the HPA turns the metrics into a replica count, and a scale-up adds capacity only after the cold start.
     M["metrics<br/>every<br/>15 s"] --> R["ratio, band,<br/>largest of<br/>metrics"]
-    R --> S["stabilization<br/>window"]
-    S --> P["policies,<br/>then clamp"]
-    P --> N["replica<br/>count"]
+    R --> S["stabilization<br/>window, policies,<br/>clamp"]
+    S --> N["replica<br/>count"]
     N -- "scale-up" --> K["cold start:<br/>node, image,<br/>weights,<br/>warm-up"]
     K --> M
     N -- "scale-down" --> M
 ```
 
-*The HPA loop of §4.1 to §4.3. Every 15 s the controller turns a metric into a replica count through the band, the stabilization window, the policies and the clamp. A scale-up becomes capacity only after the cold start, and the new pod counts as 0 on a scale-up while it is Pending.*
+*Every 15 s, the HPA controller turns each metric into a ratio, applies the band and takes the largest result (§4.1). Then it applies the stabilization window, the policies and the clamp. A scale-up becomes capacity only after the cold start (§4.3), and the new pod counts as 0 on a scale-up while it is Pending.*
 
 ### 4.1 The HPA algorithm, exactly
 
@@ -548,6 +549,10 @@ The table shows one L4 replica under a chat load that increases (simulated, note
 "GPU utilisation" is the fraction of time when a kernel runs. This is what `nvidia-smi` reports. It is 1.00 at a
 seventh of the load that the replica can serve while the replica meets a 1 s TTFT SLO. The cause is continuous batching: it always
 runs a step while any request is in flight. Layer 02 §8 has the DCGM fields that measure more.
+
+![The simulated GPU utilisation and KV usage of one L4 replica against the offered chat load.](figures/signals-vs-load.svg)
+
+*From 0.5 req/s, the "GPU util" of one L4 replica stays at 1.00, but the KV usage increases with the load (simulated). Of these two signals, only the KV usage grows in proportion to the load, but it has a cap at 1.0. `fleetsim.sim.Fleet` computes both signals as averages from 60 s to 300 s, and `tests/test_figures.py` pins the chart.*
 
 The next table shows a step from 1.5 to 7.5 req/s, with each HPA on one signal. The HPAs have min 1, max 8 and a
 30 s cold start (simulated, notebook 03):
@@ -674,7 +679,7 @@ that serve ~6,000-token RAG prompts, ITL p50 was 64 ms and ITL p99 545 ms (simul
 prefill to its own pool, nothing interrupts the decode steps (ITL p99 about 72 ms for every split that §5.3
 searched). Also, you can batch and parallelise each pool for its own bottleneck, or run it on different hardware.
 
-![The EPP selects the decode pod first, and a prefill pod too at nonCachedTokens uncached tokens or more, and the sidecar of the decode pod controls the sequence: the prefill, then the KV transfer over NIXL from the prefill pool, then the decode steps, which no prefill chunk stalls.](figures/pd-disaggregation-kv-transfer.svg)
+![The EPP selects the pods, and the decode sidecar controls the order: the prefill, the KV transfer over NIXL, then the decode steps.](figures/pd-disaggregation-kv-transfer.svg)
 
 *In llm-d, the EPP selects the decode pod first, and a prefill pod too at `nonCachedTokens` uncached tokens or more (§5.4). The sidecar of the decode pod controls the sequence: prefill, then KV pull over NIXL, then decode (§5.5). The transfer of the KV blocks is the cost of the split (§5.2).*
 
@@ -724,6 +729,10 @@ SLO:
 A simulation of every split of eight replicas used `search_pd()` (notebook 04, SLO TTFT ≤ 3 s, TPOT ≤ 80 ms).
 **3P5D** won with 0.86 SLO attainment. In aggregated serving, the chunk stall breaks the tight TPOT. Thus aggregated serving reached 0.68.
 Unbalanced splits collapsed: 1P7D to a 106 s TTFT p95, and 7P1D to a 2.4 s TPOT p95.
+
+![The simulated SLO attainment of every xPyD split of eight L4 replicas, against aggregated serving and the analytic plan.](figures/pd-split-slo-attainment.svg)
+
+*The SLO attainment is highest at 3P5D, near the 2.75 prefill replicas of the analytic plan, and aggregated serving reaches 0.68 (simulated). The unbalanced splits collapse: 1P7D on TTFT, 7P1D on TPOT. `fleetsim.disagg.search_pd` and `pd_plan` compute the values, and `tests/test_figures.py` pins the chart.*
 
 The decode batch is the number to calculate by hand (the exercise of notebook 04). The KV pool sets a cap of
 2,193 ÷ 387 = 5 on it. But if only the ITL SLO sets the limit, the batch can be 8.
@@ -789,6 +798,10 @@ $$
 
 A fetch wins when $\text{tier bandwidth} > \text{KV bytes/token} \times \text{prefill tokens/s}$ (`breakeven_gb_s`).
 
+![The time to get the KV of ten thousand tokens: a fetch against the tier bandwidth, and a recompute on an L4 and an H100.](figures/fetch-or-recompute-vs-bandwidth.svg)
+
+*A fetch is faster than a recompute to the right of each break-even point: 0.50 GB/s on an L4, 4.05 GB/s on an H100. For ten thousand tokens on the H100, a fetch over 25 GbE is slower than the recompute, and a fetch from host DRAM is faster. `fleetsim.kvtier.onload_s`, `recompute_s` and `breakeven_gb_s` compute the lines, and `tests/test_figures.py` pins the chart.*
+
 The break-even is the rate at which prefill *produces* KV. It is **0.50 GB/s** for the 8B model on an L4, and
 **4.05 GB/s** on an H100 (`breakeven_gb_s()`). For ten thousand tokens on the H100:
 
@@ -801,9 +814,9 @@ the attention FLOPs, which add about 16 % at 10,000 tokens and 50 % at 30,000 fo
 long-context recompute is slower, and the fetch wins by more. The bandwidths are assumptions to measure: see
 layer 01 §5–6.)
 
-![The working set of agent sessions is far larger than HBM, so KV moves down the tiers HBM, host DRAM, local NVMe and a remote or shared store on eviction and comes back by a fetch, which wins over a recompute when the tier bandwidth is above the break-even rate.](figures/kv-tiers-fetch-or-recompute.svg)
+![On eviction, KV moves down the tiers, from HBM to a remote store, and above the break-even bandwidth a fetch wins over a recompute.](figures/kv-tiers-fetch-or-recompute.svg)
 
-*The KV tiers below HBM, and the choice between a fetch and a recompute (§6.2, §6.3). The tier bandwidths are assumptions to measure. A fetch wins above the break-even bandwidth: 0.50 GB/s on an L4, 4.05 GB/s on an H100 (`breakeven_gb_s`).*
+*LRU eviction moves the KV of an idle session one tier down, and a fetch brings it back (§6.2, §6.3). The tier bandwidths are assumptions to measure. Above the break-even bandwidth, a fetch wins over the recompute (the warm box): 0.50 GB/s on an L4, 4.05 GB/s on an H100 (`breakeven_gb_s`).*
 
 ### 6.3 The tiers and the software
 
@@ -917,6 +930,7 @@ batches, and autoscaling (HPA/KEDA, a planner) sets the size of the pools.
 
 ```mermaid
 sequenceDiagram
+    accTitle: The Gateway asks the EPP for an endpoint over ext-proc, then sends the request to that pod, which returns the tokens through the Gateway.
     participant C as client
     participant G as Gateway
     participant E as EPP

@@ -175,6 +175,18 @@ The engine makes the retries *explicit* (a new attempt, a delayed task). Thus th
 
 Timeouts are **absolute timestamps**, so they stay correct after a restart. The reaper applies them.
 
+```mermaid
+stateDiagram-v2
+    direction LR
+    RUNNING --> WAITING: step returns Wait
+    WAITING --> RUNNING: resume, key matches
+    WAITING --> RUNNING: timeout, resume<br/>with a marker
+    WAITING --> FAILED: timeout, fail
+    note right of WAITING: enqueues nothing
+```
+
+*A step returns `Wait`, and the engine writes `status=WAITING` and enqueues nothing. A resume event with the correct key moves the run back to `RUNNING` at `then`. On a timeout, the reaper applies the policy: fail, or resume with a marker.*
+
 **GCP.** Three equivalent mechanisms are available. Select one by its layer:
 - Engine: `POST /runs/{id}/events` (this repo).
 - Cloud Workflows: `events.create_callback_endpoint` and `events.await_callback`. The execution can wait up to a year. The callback URL *is* the capability.
@@ -199,7 +211,7 @@ Each completion of a child increases the counter of the parent in one atomic ope
 
 ```mermaid
 flowchart LR
-    P(["planner step<br/>FanOut"]) --> F[("parent run<br/>fan_in")]
+    P(["planner<br/>FanOut"]) --> F[("parent<br/>run<br/>fan_in")]
     subgraph CH["child runs"]
         C1["child 1"]
         C2["child 2"]
@@ -211,8 +223,8 @@ flowchart LR
     C1 --> N
     C2 --> N
     C3 --> N
-    N["fan_in counter<br/>completed"] --> D{"completed =<br/>expected?"}
-    D -->|yes| T["parent goes<br/>to then"]
+    N["fan_in<br/>counter"] --> D{"completed<br/>= expected?"}
+    D -->|yes| T["parent<br/>to then"]
 ```
 
 *The parent writes `fan_in` in a checkpoint before it spawns the child runs. Each child completion increases the counter of the parent in one atomic operation. The completion that gets to `expected` moves the parent to `then`.*
@@ -232,6 +244,22 @@ For a fan-out that does not change, Cloud Workflows `parallel` and `concurrency_
 **Shape.** A step with side effects declares a `compensate` function. If a non-retryable failure occurs (or a cancel, or a budget breach), the engine runs the compensations of the *completed* steps in reverse sequence. The engine retries each compensation, and each compensation is idempotent. Each compensation uses the **effect record** (the payment id), and does not calculate the value again.
 
 If a compensation fails after its retries, the engine puts the run in `FAILED` and sends an alert that is easy to see. Now a person must solve the problem. To hide the failure is worse.
+
+```mermaid
+flowchart TB
+    subgraph FW["steps, in sequence"]
+        direction LR
+        R["reserve stock"] --> C["charge card"] --> B["book shipment"]
+    end
+    subgraph CP["compensations, reverse sequence"]
+        direction LR
+        UC["compensate charge<br/>with payment id"] --> UR["compensate<br/>reserve stock"]
+    end
+    FW -->|"step 3 fails"| CP
+    CP -->|"fails after retries"| A["FAILED<br/>and alert"]
+```
+
+*The top row shows the steps in sequence, and step 3, book shipment, fails. The engine then runs the compensations of the completed steps in reverse sequence, and the charge compensation uses the payment id from the effect record. If a compensation fails after its retries, the run goes to `FAILED` with an alert.*
 
 **GCP.** No special service is necessary. This is logic in the engine. The alert goes to a Pub/Sub topic that is only for alerts (`agent-alerts`). This topic connects to the on-call system.
 

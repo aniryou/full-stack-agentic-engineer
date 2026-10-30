@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="930" height="410" viewBox="0 0 930 410" role="img" aria-label="Requests from the gateway wait in the router queue by priority band, the router sends one to an endpoint only when the concurrency-detector says that the endpoint is under its cap, and the router sheds requests after their TTL or when the queue is full." style="color: #E4EAE7">
-  <title>Requests from the gateway wait in the router queue by priority band, the router sends one to an endpoint only when the concurrency-detector says that the endpoint is under its cap, and the router sheds requests after their TTL or when the queue is full.</title>
+<svg xmlns="http://www.w3.org/2000/svg" width="930" height="410" viewBox="0 0 930 410" role="img" aria-label="The router queue holds requests by priority band, sends one only to an endpoint under its cap, and sheds requests on TTL or overflow." style="color: #E4EAE7">
+  <title>The router queue holds requests by priority band, sends one only to an endpoint under its cap, and sheds requests on TTL or overflow.</title>
   <rect x="0" y="0" width="930" height="410" rx="8" fill="#161E1C"/>
   <defs>
     <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
@@ -15,21 +15,21 @@
     <rect x="206" y="40" width="400" height="338" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
     <text x="406" y="62" text-anchor="middle" fill="#97A59F">llm-d EPP flow control (the router)</text>
     <!-- the queue -->
-    <rect x="230" y="78" width="352" height="140" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <rect x="218" y="78" width="376" height="140" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
     <text x="406" y="100" text-anchor="middle" font-weight="600">Router queue</text>
-    <text x="406" y="117" text-anchor="middle" font-size="11.5" fill="#7ADACF">highest priority first, FCFS within a band</text>
+    <text x="406" y="117" text-anchor="middle" font-size="11.5" fill="#7ADACF">highest priority first, FCFS in each band</text>
     <rect x="246" y="128" width="320" height="28" rx="4" fill="none" stroke="#7ADACF" stroke-width="1"/>
     <text x="406" y="146" text-anchor="middle" font-size="11.5">priority 1 band: interactive chat, served first</text>
     <rect x="246" y="162" width="320" height="28" rx="4" fill="none" stroke="#7ADACF" stroke-width="1"/>
     <text x="406" y="180" text-anchor="middle" font-size="11.5">priority 0 band: batch RAG burst, waits</text>
     <text x="406" y="207" text-anchor="middle" font-size="11" fill="#97A59F">bounds: maxRequests, maxBytes · expiry: defaultRequestTTL</text>
     <!-- the saturation detector -->
-    <rect x="338" y="244" width="244" height="72" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    <text x="460" y="266" text-anchor="middle" font-weight="600">Saturation detector</text>
-    <text x="460" y="284" text-anchor="middle" font-size="11" fill="#97A59F">concurrency-detector: maxConcurrency,</text>
-    <text x="460" y="300" text-anchor="middle" font-size="11" fill="#97A59F">a cap per endpoint on requests in flight</text>
+    <rect x="334" y="244" width="260" height="72" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="464" y="266" text-anchor="middle" font-weight="600">Saturation detector</text>
+    <text x="464" y="284" text-anchor="middle" font-size="11" fill="#97A59F">concurrency-detector: maxConcurrency,</text>
+    <text x="464" y="300" text-anchor="middle" font-size="11" fill="#97A59F">a cap per endpoint on requests in flight</text>
     <!-- shed -->
-    <rect x="230" y="332" width="352" height="36" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <rect x="218" y="332" width="376" height="36" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
     <text x="406" y="354" text-anchor="middle" font-weight="600">shed: TTL expired, or the queue is full</text>
     <!-- the endpoints -->
     <rect x="696" y="40" width="212" height="338" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
@@ -48,18 +48,18 @@
     <text x="802" y="307" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">in flight &lt; cap</text>
     <!-- edges -->
     <g stroke="#97A59F" stroke-width="1.2" fill="none">
-      <path d="M152 168 L228 168" marker-end="url(#arr)"/>
+      <path d="M152 168 L216 168" marker-end="url(#arr)"/>
       <path d="M460 218 L460 242" marker-end="url(#arr)"/>
-      <path d="M582 302 L694 302" marker-end="url(#arr)"/>
-      <path d="M694 278 L584 278" marker-end="url(#arr)" stroke-dasharray="4 3"/>
+      <path d="M594 302 L694 302" marker-end="url(#arr)"/>
+      <path d="M694 278 L596 278" marker-end="url(#arr)" stroke-dasharray="4 3"/>
       <path d="M246 218 L246 330" marker-end="url(#arr)" stroke-dasharray="4 3"/>
-      <path d="M230 350 L86 350 L86 216" marker-end="url(#arr)"/>
+      <path d="M218 350 L86 350 L86 216" marker-end="url(#arr)"/>
     </g>
-    <text x="179" y="160" text-anchor="middle" font-size="11" fill="#97A59F">arrive</text>
+    <text x="184" y="160" text-anchor="middle" font-size="11" fill="#97A59F">arrive</text>
     <text x="468" y="236" font-size="11" fill="#97A59F">head of the queue</text>
-    <text x="651" y="252" text-anchor="middle" font-size="11" fill="#97A59F">in flight</text>
-    <text x="651" y="265" text-anchor="middle" font-size="11" fill="#97A59F">per endpoint</text>
-    <text x="651" y="318" text-anchor="middle" font-size="11" fill="#97A59F">dispatch</text>
+    <text x="645" y="252" text-anchor="middle" font-size="11" fill="#97A59F">in flight</text>
+    <text x="645" y="265" text-anchor="middle" font-size="11" fill="#97A59F">per endpoint</text>
+    <text x="645" y="318" text-anchor="middle" font-size="11" fill="#97A59F">dispatch</text>
     <text x="256" y="268" font-size="11" fill="#97A59F">TTL expired,</text>
     <text x="256" y="282" font-size="11" fill="#97A59F">queue full</text>
     <text x="95" y="286" font-size="11" fill="#97A59F">429 or 503,</text>

@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="512" viewBox="0 0 1000 512" role="img" aria-label="The three reference architectures as three panels, each read from the top: what wakes the run, who owns the orchestration, where the steps run, where the state lives and the main cost; A is a durable loop on Cloud Run, B is Cloud Workflows as the orchestrator, C is ADK 2 on Cloud Run with Cloud SQL sessions." style="color: #E4EAE7">
-  <title>The three reference architectures as three panels, each read from the top: what wakes the run, who owns the orchestration, where the steps run, where the state lives and the main cost; A is a durable loop on Cloud Run, B is Cloud Workflows as the orchestrator, C is ADK 2 on Cloud Run with Cloud SQL sessions.</title>
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="512" viewBox="0 0 1000 512" role="img" aria-label="Three panels compare a durable loop on Cloud Run, Cloud Workflows and ADK 2 on Cloud Run, each from the wake-up to the main cost." style="color: #E4EAE7">
+  <title>Three panels compare a durable loop on Cloud Run, Cloud Workflows and ADK 2 on Cloud Run, each from the wake-up to the main cost.</title>
   <rect x="0" y="0" width="1000" height="512" rx="8" fill="#161E1C"/>
   <defs>
     <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>

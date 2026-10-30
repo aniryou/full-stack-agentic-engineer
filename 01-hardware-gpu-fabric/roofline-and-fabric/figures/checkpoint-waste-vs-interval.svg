@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="400" viewBox="0 0 880 400" role="img" aria-label="The share of wall-clock time that a 16,384-GPU job loses at each checkpoint interval, for a 60 s and a 10 s checkpoint and for a 60 s checkpoint with a 10-minute restart." style="color: #E4EAE7">
+  <title>The share of wall-clock time that a 16,384-GPU job loses at each checkpoint interval, for a 60 s and a 10 s checkpoint and for a 60 s checkpoint with a 10-minute restart.</title>
+  <desc>{"height":400,"kind":"line","legend":"bottom-right","marks":[{"anchor":"middle","dy":18,"kind":"point","label":"τ* = 19.3 min: 10.4%","style":"accent","x":19.2658,"y":10.3811},{"anchor":"middle","dy":18,"kind":"point","label":"τ* = 7.9 min: 4.2%","style":"violet","x":7.86521,"y":4.23807},{"anchor":"middle","dy":-10,"kind":"point","label":"with R: 15.8%","style":"warm","x":19.2658,"y":15.7695},{"anchor":"end","kind":"vline","label":"hourly","style":"muted","x":60},{"anchor":"end","dy":-6,"kind":"point","label":"17.8%","style":"accent","x":60,"y":17.8318},{"anchor":"start","dy":14,"kind":"point","label":"16.4%","style":"violet","x":60,"y":16.4429}],"note":"computed by roofline.reliability.wasted_fraction and young_daly_interval (roofline-core)","series":[{"dash":false,"name":"δ = 60 s","style":"accent","x":[2.0,2.19656,2.41244,2.64954,2.90994,3.19593,3.51003,3.85499,4.23387,4.64997,5.10698,5.60889,6.16014,6.76556,7.43049,8.16076,8.96281,9.84368,10.8111,11.8737,13.0406,14.3222,15.7298,17.2758,18.9737,20.8384,22.8864,25.1357,27.6061,30.3192,33.299,36.5717,40.166,44.1135,48.449,53.2106,58.4402,64.1838,70.4918,77.4198,85.0287,93.3854,102.563,112.643,123.714,135.873,149.226,163.893,180.0],"y":[50.5388,46.1175,42.1018,38.4562,35.149,32.1508,29.4355,26.979,24.7597,22.7583,20.957,19.34,17.8931,16.6035,15.46,14.4524,13.572,12.8109,12.1625,11.621,11.1817,10.8408,10.5953,10.4429,10.3823,10.4131,10.5354,10.7504,11.06,11.4668,11.9745,12.5875,13.3111,14.1519,15.1171,16.2153,17.456,18.8503,20.4104,22.15,24.0844,26.2306,28.6074,31.2359,34.1392,37.3427,40.8744,44.766,49.0509]},{"dash":false,"name":"δ = 10 s","style":"violet","x":[2.0,2.19656,2.41244,2.64954,2.90994,3.19593,3.51003,3.85499,4.23387,4.64997,5.10698,5.60889,6.16014,6.76556,7.43049,8.16076,8.96281,9.84368,10.8111,11.8737,13.0406,14.3222,15.7298,17.2758,18.9737,20.8384,22.8864,25.1357,27.6061,30.3192,33.299,36.5717,40.166,44.1135,48.449,53.2106,58.4402,64.1838,70.4918,77.4198,85.0287,93.3854,102.563,112.643,123.714,135.873,149.226,163.893,180.0],"y":[8.87217,8.17942,7.55859,7.00424,6.51149,6.07601,5.69397,5.36201,5.07719,4.83704,4.63942,4.48261,4.36522,4.28623,4.24492,4.24095,4.27428,4.34521,4.45434,4.60266,4.79144,5.02236,5.29746,5.61916,5.99028,6.41406,6.89426,7.4351,8.04133,8.71827,9.47189,10.3088,11.2364,12.2628,13.3971,14.6492,16.0301,17.552,19.2282,21.0736,23.1043,25.3382,27.7949,30.4961,33.4656,36.7294,40.316,44.2575,48.588]},{"dash":true,"name":"δ = 60 s, R = 10 min","style":"warm","x":[2.0,2.19656,2.41244,2.64954,2.90994,3.19593,3.51003,3.85499,4.23387,4.64997,5.10698,5.60889,6.16014,6.76556,7.43049,8.16076,8.96281,9.84368,10.8111,11.8737,13.0406,14.3222,15.7298,17.2758,18.9737,20.8384,22.8864,25.1357,27.6061,30.3192,33.299,36.5717,40.166,44.1135,48.449,53.2106,58.4402,64.1838,70.4918,77.4198,85.0287,93.3854,102.563,112.643,123.714,135.873,149.226,163.893,180.0],"y":[55.9272,51.5059,47.4901,43.8446,40.5373,37.5392,34.8238,32.3674,30.1481,28.1467,26.3453,24.7284,23.2814,21.9919,20.8484,19.8408,18.9603,18.1992,17.5508,17.0093,16.5701,16.2292,15.9836,15.8312,15.7707,15.8015,15.9238,16.1388,16.4484,16.8552,17.3628,17.9758,18.6995,19.5403,20.5055,21.6036,22.8444,24.2387,25.7988,27.5384,29.4728,31.619,33.9958,36.6243,39.5276,42.7311,46.2628,50.1544,54.4393]}],"title":"The share of wall-clock time that a 16,384-GPU job loses at each checkpoint interval, for a 60 s and a 10 s checkpoint and for a 60 s checkpoint with a 10-minute restart.","width":880,"x":{"label":"checkpoint interval τ (min)","max":180,"min":2,"scale":"log","ticks":[2,5,10,20,60,180]},"y":{"label":"waste (% of wall-clock time)","max":30,"min":0,"ticks":[0,5,10,15,20,25,30]}}</desc>
+  <rect x="0" y="0" width="880" height="400" rx="8" fill="#161E1C"/>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12" fill="currentColor">
+    <g stroke="#27322E" stroke-width="1">
+      <line x1="66.0" y1="330.0" x2="858.0" y2="330.0"/>
+      <line x1="66.0" y1="278.7" x2="858.0" y2="278.7"/>
+      <line x1="66.0" y1="227.3" x2="858.0" y2="227.3"/>
+      <line x1="66.0" y1="176.0" x2="858.0" y2="176.0"/>
+      <line x1="66.0" y1="124.7" x2="858.0" y2="124.7"/>
+      <line x1="66.0" y1="73.3" x2="858.0" y2="73.3"/>
+      <line x1="66.0" y1="22.0" x2="858.0" y2="22.0"/>
+    </g>
+    <g stroke="#55635E" stroke-width="1.2">
+      <line x1="66.0" y1="330.0" x2="858.0" y2="330.0"/>
+      <line x1="66.0" y1="330.0" x2="66.0" y2="22.0"/>
+    </g>
+    <g font-size="11" fill="#97A59F">
+      <text x="58.0" y="333.5" text-anchor="end">0</text>
+      <text x="58.0" y="282.2" text-anchor="end">5</text>
+      <text x="58.0" y="230.8" text-anchor="end">10</text>
+      <text x="58.0" y="179.5" text-anchor="end">15</text>
+      <text x="58.0" y="128.2" text-anchor="end">20</text>
+      <text x="58.0" y="76.8" text-anchor="end">25</text>
+      <text x="58.0" y="25.5" text-anchor="end">30</text>
+      <text x="66.0" y="346.0" text-anchor="middle">2</text>
+      <text x="227.3" y="346.0" text-anchor="middle">5</text>
+      <text x="349.3" y="346.0" text-anchor="middle">10</text>
+      <text x="471.3" y="346.0" text-anchor="middle">20</text>
+      <text x="664.6" y="346.0" text-anchor="middle">60</text>
+      <text x="858.0" y="346.0" text-anchor="middle">180</text>
+    </g>
+    <text x="462.0" y="372.0" text-anchor="middle" fill="#97A59F">checkpoint interval τ (min)</text>
+    <text x="16" y="176.0" text-anchor="middle" fill="#97A59F" transform="rotate(-90 16 176.0)">waste (% of wall-clock time)</text>
+    <clipPath id="plot"><rect x="65.0" y="16.0" width="794.0" height="315.0"/></clipPath>
+    <g clip-path="url(#plot)">
+      <path d="M66.0 -188.9 L82.5 -143.5 L99.0 -102.2 L115.5 -64.8 L132.0 -30.9 L148.5 -0.1 L165.0 27.8 L181.5 53.0 L198.0 75.8 L214.5 96.3 L231.0 114.8 L247.5 131.4 L264.0 146.3 L280.5 159.5 L297.0 171.3 L313.5 181.6 L330.0 190.7 L346.5 198.5 L363.0 205.1 L379.5 210.7 L396.0 215.2 L412.5 218.7 L429.0 221.2 L445.5 222.8 L462.0 223.4 L478.5 223.1 L495.0 221.8 L511.5 219.6 L528.0 216.5 L544.5 212.3 L561.0 207.1 L577.5 200.8 L594.0 193.3 L610.5 184.7 L627.0 174.8 L643.5 163.5 L660.0 150.8 L676.5 136.5 L693.0 120.5 L709.5 102.6 L726.0 82.7 L742.5 60.7 L759.0 36.3 L775.5 9.3 L792.0 -20.5 L808.5 -53.4 L825.0 -89.6 L841.5 -129.6 L858.0 -173.6" fill="none" stroke="#4CC5B7" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="M66.0 238.9 L82.5 246.0 L99.0 252.4 L115.5 258.1 L132.0 263.1 L148.5 267.6 L165.0 271.5 L181.5 275.0 L198.0 277.9 L214.5 280.3 L231.0 282.4 L247.5 284.0 L264.0 285.2 L280.5 286.0 L297.0 286.4 L313.5 286.5 L330.0 286.1 L346.5 285.4 L363.0 284.3 L379.5 282.7 L396.0 280.8 L412.5 278.4 L429.0 275.6 L445.5 272.3 L462.0 268.5 L478.5 264.1 L495.0 259.2 L511.5 253.7 L528.0 247.4 L544.5 240.5 L561.0 232.8 L577.5 224.2 L594.0 214.6 L610.5 204.1 L627.0 192.5 L643.5 179.6 L660.0 165.4 L676.5 149.8 L693.0 132.6 L709.5 113.6 L726.0 92.8 L742.5 69.9 L759.0 44.6 L775.5 16.9 L792.0 -13.6 L808.5 -47.1 L825.0 -83.9 L841.5 -124.4 L858.0 -168.8" fill="none" stroke="#B7A3F0" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="M66.0 -244.2 L82.5 -198.8 L99.0 -157.6 L115.5 -120.1 L132.0 -86.2 L148.5 -55.4 L165.0 -27.5 L181.5 -2.3 L198.0 20.5 L214.5 41.0 L231.0 59.5 L247.5 76.1 L264.0 91.0 L280.5 104.2 L297.0 116.0 L313.5 126.3 L330.0 135.3 L346.5 143.2 L363.0 149.8 L379.5 155.4 L396.0 159.9 L412.5 163.4 L429.0 165.9 L445.5 167.5 L462.0 168.1 L478.5 167.8 L495.0 166.5 L511.5 164.3 L528.0 161.1 L544.5 157.0 L561.0 151.7 L577.5 145.4 L594.0 138.0 L610.5 129.4 L627.0 119.5 L643.5 108.2 L660.0 95.5 L676.5 81.1 L693.0 65.1 L709.5 47.3 L726.0 27.4 L742.5 5.4 L759.0 -19.0 L775.5 -46.0 L792.0 -75.8 L808.5 -108.7 L825.0 -145.0 L841.5 -184.9 L858.0 -228.9" fill="none" stroke="#E39A62" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="6 4"/>
+    </g>
+    <circle cx="464.7" cy="223.4" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="464.7" y="241.4" text-anchor="middle" font-size="11" fill="#4CC5B7">τ* = 19.3 min: 10.4%</text>
+    <circle cx="307.0" cy="286.5" r="4.5" fill="#B7A3F0" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="307.0" y="304.5" text-anchor="middle" font-size="11" fill="#B7A3F0">τ* = 7.9 min: 4.2%</text>
+    <circle cx="464.7" cy="168.1" r="4.5" fill="#E39A62" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="464.7" y="158.1" text-anchor="middle" font-size="11" fill="#E39A62">with R: 15.8%</text>
+    <line x1="664.6" y1="22.0" x2="664.6" y2="330.0" stroke="#97A59F" stroke-width="1.2" stroke-dasharray="4 3"/>
+    <text x="659.6" y="34.0" text-anchor="end" font-size="11" fill="#97A59F">hourly</text>
+    <circle cx="664.6" cy="146.9" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="655.6" y="140.9" text-anchor="end" font-size="11" fill="#4CC5B7">17.8%</text>
+    <circle cx="664.6" cy="161.2" r="4.5" fill="#B7A3F0" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="673.6" y="175.2" text-anchor="start" font-size="11" fill="#B7A3F0">16.4%</text>
+    <g font-size="11.5">
+      <rect x="677.2" y="261.0" width="172.8" height="61.0" rx="5" fill="#161E1C" fill-opacity="0.9" stroke="#27322E"/>
+      <line x1="687.2" y1="274.0" x2="705.2" y2="274.0" stroke="#4CC5B7" stroke-width="2"/>
+      <text x="711.2" y="278.0" fill="currentColor">δ = 60 s</text>
+      <line x1="687.2" y1="291.0" x2="705.2" y2="291.0" stroke="#B7A3F0" stroke-width="2"/>
+      <text x="711.2" y="295.0" fill="currentColor">δ = 10 s</text>
+      <line x1="687.2" y1="308.0" x2="705.2" y2="308.0" stroke="#E39A62" stroke-width="2" stroke-dasharray="6 4"/>
+      <text x="711.2" y="312.0" fill="currentColor">δ = 60 s, R = 10 min</text>
+    </g>
+    <text x="10" y="393.0" font-size="10.5" fill="#97A59F" font-family="JetBrains Mono, monospace">computed by roofline.reliability.wasted_fraction and young_daly_interval (roofline-core)</text>
+  </g>
+</svg>

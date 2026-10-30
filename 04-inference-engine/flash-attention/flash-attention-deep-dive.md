@@ -63,7 +63,7 @@ flowchart LR
   D --> S
 ```
 
-*The solid chain is the prefill kernel, and each label names the bottleneck that the next generation removed. These are HBM traffic, the round trip of $O$ through HBM, and EX2 at 50% and 100% of the MMA time (§4.3). The dashed edges show where the merge of the ${(m, l, o)}$ state (§2.3) applies: FA1's tiles, the decode splits, cascade attention and context parallelism.*
+*The solid chain is the prefill kernel, and each edge label names the bottleneck that made the next generation necessary. These are HBM traffic, the round trip of $O$ through HBM, and EX2 at 50% and 100% of the MMA time (§4.3). The dashed edges show where the merge of the ${(m, l, o)}$ state (§2.3) applies: FA1's tiles, the decode splits, cascade attention and context parallelism.*
 
 ---
 
@@ -141,7 +141,7 @@ These values are lower limits. They assume that every kernel moves data at 100% 
 
 ![Naive attention at 62.1 FLOP/B sits below the ridge of the H100 (295) and the L4 (403), and the compulsory traffic of a fused schedule at 2,040 FLOP/B is past both.](figures/deep-dive-naive-roofline.svg)
 
-*The chart puts the numbers of §1.4 and §1.5 on the roofline of an H100 and an L4. The naive schedule at 62.1 FLOP/B is under both ridges, because $S$ and $P$ cross HBM. A fused schedule with only the compulsory traffic is at 2,040 FLOP/B, on the compute side of both.*
+*The naive schedule at 62.1 FLOP/B is under the ridge of the H100 (295) and of the L4 (403), because $S$ and $P$ cross HBM. At 2,040 FLOP/B, the compulsory traffic of §1.5 is compute-bound on both, at 8.7 µs (H100) and 71 µs (L4). `fa_calculators.roofline()`, `naive_traffic()` and `compulsory_bytes()` calculate the roofs and the points, and `test_figures.py` pins the chart.*
 
 The second failure is capacity. At $N$ = 32,768, $S$ is 2.15 GB **per head, per sequence**. A 32-head layer needs 68.7 GB for $S$ alone, and the same quantity again for $P$. That is more than an L4's 24 GB, and most of an H100's 80 GB before you load one weight. At long context, the naive schedule is not only slow. It also does not fit.
 
@@ -400,6 +400,10 @@ The IO-complexity model assumes that no data stays in a cache between SRAM and H
 | FA2 order, causal | 36.7 MB / 117 | 2,173 MB / 127 |
 | Compulsory ($4Nd \cdot b$ + LSE) | 4.2 MB / 2,040 | 33.7 MB / 16,320 |
 
+![HBM bytes of one head against the sequence length, d = 128, bf16: the naive schedule and the FA2 order without L2 increase as N squared, and the compulsory traffic increases as N.](figures/deep-dive-hbm-bytes-vs-n.svg)
+
+*The naive schedule and the FA2 order without L2 move bytes in proportion to $N^2$, and the compulsory traffic moves bytes in proportion to $N$. Thus the ratio of the two upper lines to the compulsory line increases with $N$. `fa_calculators.naive_traffic()`, `flash_traffic()` and `compulsory_bytes()` calculate the three lines, and `test_figures.py` pins the chart.*
+
 There are two lessons.
 
 **Only $B_r$ sets the per-tile intensity.** In the FA2 order, the kernel loads each K/V tile once per Q block, and the $B_r$ query rows of that CTA use the tile. That is $4 \cdot B_r \cdot B_c \cdot d$ FLOPs for $2 \cdot B_c \cdot d \cdot b$ bytes, or $2 \cdot B_r/b$ FLOP/B. In bf16, this value is $B_r$. With $B_r$ = 128, that is 128 FLOP/B, which is still below the H100 ridge (295). $B_r$ cannot increase much more, because the output accumulator for $B_r \times d$ fp32 values must fit in registers.
@@ -535,7 +539,7 @@ Different units run at the same time when different warps supply them with work.
 
 ![Clocks per score per SM when each unit runs alone, d = 128: the tensor-core bar halves from A100 to H100 to B200 while the EX2 bar stays at 0.0625.](figures/deep-dive-clocks-per-score.svg)
 
-*The bars draw the §4.3 table to scale. From A100 to H100 to B200, the tensor cores take fewer clocks per score, but the EX2 on the MUFU takes the same 0.0625. On an H100, the exponential alone is 50% of the MMA time, and on a B200 it is 100%.*
+*From A100 to H100 to B200, the tensor cores take fewer clocks per score, but the EX2 on the MUFU takes the same 0.0625. The label under each GPU gives the EX2 time as a fraction of the MMA time: 25%, 50% and 100%. `fa_calculators.clocks_per_score()` calculates the bars, and `test_figures.py` pins the chart.*
 
 ### 4.4 Causal block skipping
 
@@ -812,6 +816,10 @@ The step reads the weights once, for any batch size. Take a Llama-3-8B-shaped mo
 
 The share column is the same on all GPUs, because both terms divide by the same bandwidth. On an L4 at 0.30 TB/s, each time is 11.2× longer. Also, only the first two rows fit next to 16 GB of bf16 weights in 24 GB. KV bytes equal weight bytes at approximately 122,500 cached tokens per batch, that is, approximately 3,800 per sequence at batch 32. After that point, KV compression (GQA, MLA, FP8 KV) and paging efficiency change decode throughput more than any change to the matrix multiplies. [The capacity-planning primer](../../00-foundations/gpu-capacity-planning/PRIMER.md) shows how to calculate TPOT from these bytes (`fa_calculators.decode_attention_bytes()`).
 
+![The share of the bytes of one decode step that the KV read takes, against the cached tokens in the batch, for the 8B-shaped model of section 6.5 in bf16.](figures/deep-dive-decode-kv-share.svg)
+
+*The KV read is 1.6% of the step's bytes at 2,048 cached tokens, 52% at 131,072 and 68% at 262,144. It equals the weights read at approximately 122,500 tokens, and the share is the same on all GPUs. `fa_calculators.decode_kv_share()` and `decode_kv_crossover_tokens()` calculate the curve and the crossover, and `test_figures.py` pins the chart.*
+
 ---
 
 ## 7. Paged KV and serving kernels
@@ -840,7 +848,7 @@ K tile pointer     = k_ptr + block_table[block_table_idx] * k_batch_stride + blo
 
 The page size puts limits on the load path. In FA2's public `flash_attn_with_kvcache`, `page_block_size` must be a multiple of 256, thus a K/V tile never goes across two pages. FA3 accepts any page size ("page_block_size can be arbitrary (e.g, 1, 2, 3, 64, etc.)"). But with small pages, the TMA's rectangular tile loads do not work. Thus FA3 changes to per-row asynchronous copies (`paged_kv_non_TMA`), which also make the tile smaller (section 5.5). The FlashAttention backend of vLLM accepts block sizes that are multiples of 16, through its own build of the kernels (`vllm.vllm_flash_attn`).
 
-![A paged KV cache gives the kernel one pool per layer and a block table per sequence; the kernel translates each K/V tile through the table, inside one page in FA2 and across small pages in FA3.](figures/deep-dive-paged-kv-gather.svg)
+![A paged KV cache gives the kernel one pool per layer and a block table per sequence, and the kernel translates each K/V tile through the table, inside one page in FA2 and across small pages in FA3.](figures/deep-dive-paged-kv-gather.svg)
 
 *The kernel sees one pool per layer and a block table per sequence, and it translates each K/V tile through the table. In FA2's `flash_attn_with_kvcache`, a tile stays inside one page, because a page holds a multiple of 256 tokens. FA3 accepts 16-token pages, and its per-row copies load a tile across several pages.*
 
@@ -916,6 +924,22 @@ The KV-cache dtype changes this result. vLLM's FA2 path has no FP8 KV cache. Thu
 | `scheduler_metadata` | FA3 only: schedule precomputed ahead of time (`aot_schedule`) with `get_scheduler_metadata` | `scheduler_metadata` |
 | `max_num_splits` | set only when the step runs under a full CUDA graph | `num_splits` |
 | `use_cascade`, `common_prefix_len`, ... | a prefix shared by every request in the batch | two kernel calls + merge |
+
+```mermaid
+flowchart LR
+  B(["scheduler's<br/>batch"])
+  MB["FlashAttention<br/>MetadataBuilder<br/>.build()"]
+  subgraph L["per layer"]
+    W[["reshape_and_<br/>cache_flash"]]
+    A[["flash_attn_<br/>varlen_func"]]
+  end
+  B -->|"once per<br/>engine step"| MB
+  MB -->|"slot_mapping"| W
+  MB -->|"block_table,<br/>query_start_loc,<br/>seq_lens"| A
+  W -->|"new K/V<br/>in pages"| A
+```
+
+*Once per engine step, `FlashAttentionMetadataBuilder.build()` changes the scheduler's batch into metadata. In each layer, `reshape_and_cache_flash` first writes the new K/V rows to their pages with `slot_mapping`. Then one `flash_attn_varlen_func` call reads the pages through `block_table` for the whole mixed batch.*
 
 Two details from the source are useful to quote in a review. On splits, the source says: "Setting num_splits > 1 may increase the memory usage, because the intermediate buffers of size [num_splits, num_heads, num_tokens, head_size] are allocated. Therefore, we only set num_splits when using cuda graphs." Also, if you set `VLLM_BATCH_INVARIANT`, then `max_num_splits = 1` (section 9.3).
 
@@ -1037,14 +1061,14 @@ The tensor cores take bf16 or fp16 operands and accumulate in fp32. Thus $S$ and
 
 ```mermaid
 flowchart LR
-  I["Q, K, V<br/>bf16 or fp16"]
+  I["Q, K, V<br/>bf16 or<br/>fp16"]
   S["S<br/>fp32 in<br/>registers"]
   RP["convert P<br/>to the<br/>input dtype"]
   O["O<br/>accumulator<br/>fp32"]
   RO["convert O<br/>once at<br/>the end"]
   I -->|"QKᵀ"| S
   S -->|"softmax"| RP
-  RP -->|"each P · V"| O
+  RP -->|"each<br/>P · V"| O
   O --> RO
 ```
 
@@ -1281,7 +1305,7 @@ def flash_attention(q, k, v, causal=True, block_m=128, block_n=64, num_stages=2)
     return o, lse
 ```
 
-![The Triton forward launches one program per Q block and (batch, head) pair; each program loads its Q block once, walks the K/V tiles up to hi, and stores one O block and one LSE row.](figures/deep-dive-triton-program-grid.svg)
+![The Triton forward launches one program per Q block and (batch, head) pair, and each program loads its Q block once, walks the K/V tiles up to hi, and stores one O block and one LSE row.](figures/deep-dive-triton-program-grid.svg)
 
 *The launch makes one program per Q block and (batch, head) pair, which is the FA2 grid of §4.1. Each program loads its Q block once and keeps `m_i`, `l_i` and `acc` in fp32. It walks the K/V tiles up to `hi` and stores one O block and one LSE row.*
 

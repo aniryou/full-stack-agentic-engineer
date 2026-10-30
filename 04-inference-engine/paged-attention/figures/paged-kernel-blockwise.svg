@@ -8,7 +8,7 @@
     <text x="24" y="26" fill="#97A59F">One decode step of one sequence: the kernel reads K and V through the block table · <tspan font-family="JetBrains Mono, monospace" font-size="11">paged_attention_blockwise</tspan></text>
 
     <rect x="24" y="48" width="216" height="150" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    <text x="40" y="70" font-weight="600">block table of the sequence</text>
+    <text x="40" y="70" font-weight="600">block table</text>
     <g font-family="JetBrains Mono, monospace" font-size="11">
       <text x="40" y="96">logical 0  ·  physical 7</text>
       <text x="40" y="118">logical 1  ·  physical 1</text>

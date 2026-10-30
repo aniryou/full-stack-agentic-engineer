@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="360" viewBox="0 0 880 360" role="img" aria-label="The smallest accuracy drop that an unpaired comparison of two models can tell from noise, against the number of eval items per model." style="color: #E4EAE7">
+  <title>The smallest accuracy drop that an unpaired comparison of two models can tell from noise, against the number of eval items per model.</title>
+  <desc>{"kind":"line","legend":"top-right","marks":[{"kind":"point","label":"250 items: ~7.6 points","style":"accent","x":250,"y":7.5661},{"anchor":"end","dy":18,"kind":"point","label":"14,169 items per model: 1 point at 77%","style":"warm","x":14169,"y":1.003}],"note":"computed by quantcore.eval.diff_stderr","series":[{"name":"2 × the unpaired standard error, at 76.8%","style":"accent","x":[100,112,126,141,158,178,200,224,250,251,282,316,355,398,447,501,562,631,708,794,891,1000,1122,1259,1413,1585,1778,1995,2239,2512,2818,3162,3548,3981,4467,5012,5623,6310,7079,7943,8913,10000,11220,12589,14125,15849,17783,19953,22387,25119,28184,31623,35481,39811,40000],"y":[11.9992,11.332,10.6786,10.0903,9.5284,8.9739,8.4634,7.995,7.5661,7.5509,7.1222,6.7269,6.3455,5.992,5.6533,5.3393,5.0407,4.7566,4.4901,4.2397,4.002,3.7773,3.5659,3.3661,3.1773,2.9998,2.8322,2.6737,2.5237,2.3826,2.2494,2.1235,2.0047,1.8925,1.7865,1.6866,1.5923,1.5031,1.4191,1.3397,1.2647,1.194,1.1272,1.0641,1.0046,0.9484,0.8953,0.8452,0.798,0.7533,0.7112,0.6714,0.6338,0.5984,0.597]}],"title":"The smallest accuracy drop that an unpaired comparison of two models can tell from noise, against the number of eval items per model.","x":{"label":"eval items per model","max":40000,"scale":"log","ticks":[100,1000,10000]},"y":{"label":"smallest visible drop (points)","max":20,"min":0.5,"scale":"log","ticks":[0.5,1,2,5,10,20]}}</desc>
+  <rect x="0" y="0" width="880" height="360" rx="8" fill="#161E1C"/>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12" fill="currentColor">
+    <g stroke="#27322E" stroke-width="1">
+      <line x1="66.0" y1="290.0" x2="858.0" y2="290.0"/>
+      <line x1="66.0" y1="239.6" x2="858.0" y2="239.6"/>
+      <line x1="66.0" y1="189.3" x2="858.0" y2="189.3"/>
+      <line x1="66.0" y1="122.7" x2="858.0" y2="122.7"/>
+      <line x1="66.0" y1="72.4" x2="858.0" y2="72.4"/>
+      <line x1="66.0" y1="22.0" x2="858.0" y2="22.0"/>
+    </g>
+    <g stroke="#55635E" stroke-width="1.2">
+      <line x1="66.0" y1="290.0" x2="858.0" y2="290.0"/>
+      <line x1="66.0" y1="290.0" x2="66.0" y2="22.0"/>
+    </g>
+    <g font-size="11" fill="#97A59F">
+      <text x="58.0" y="293.5" text-anchor="end">0.5</text>
+      <text x="58.0" y="243.1" text-anchor="end">1</text>
+      <text x="58.0" y="192.8" text-anchor="end">2</text>
+      <text x="58.0" y="126.2" text-anchor="end">5</text>
+      <text x="58.0" y="75.9" text-anchor="end">10</text>
+      <text x="58.0" y="25.5" text-anchor="end">20</text>
+      <text x="66.0" y="306.0" text-anchor="middle">100</text>
+      <text x="370.4" y="306.0" text-anchor="middle">1,000</text>
+      <text x="674.7" y="306.0" text-anchor="middle">10,000</text>
+    </g>
+    <text x="462.0" y="332.0" text-anchor="middle" fill="#97A59F">eval items per model</text>
+    <text x="16" y="156.0" text-anchor="middle" fill="#97A59F" transform="rotate(-90 16 156.0)">smallest visible drop (points)</text>
+    <clipPath id="plot"><rect x="65.0" y="16.0" width="794.0" height="275.0"/></clipPath>
+    <g clip-path="url(#plot)">
+      <path d="M66.0 59.1 L81.0 63.3 L96.6 67.6 L111.4 71.7 L126.5 75.9 L142.2 80.2 L157.6 84.5 L172.6 88.6 L187.1 92.6 L187.7 92.8 L203.0 97.0 L218.1 101.2 L233.5 105.4 L248.6 109.6 L263.9 113.8 L279.0 117.9 L294.2 122.1 L309.5 126.3 L324.7 130.5 L339.9 134.7 L355.1 138.9 L370.4 143.1 L385.6 147.3 L400.8 151.5 L416.1 155.7 L431.3 159.8 L446.4 164.0 L461.7 168.2 L476.9 172.4 L492.1 176.6 L507.3 180.7 L522.5 184.9 L537.8 189.1 L553.0 193.3 L568.2 197.5 L583.4 201.7 L598.6 205.8 L613.9 210.0 L629.1 214.2 L644.3 218.4 L659.5 222.6 L674.7 226.8 L690.0 230.9 L705.2 235.1 L720.4 239.3 L735.6 243.5 L750.8 247.7 L766.1 251.9 L781.3 256.0 L796.5 260.2 L811.7 264.4 L826.9 268.6 L842.2 272.8 L857.4 276.9 L858.0 277.1" fill="none" stroke="#4CC5B7" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    </g>
+    <circle cx="187.1" cy="92.6" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="196.1" y="83.6" text-anchor="start" font-size="11" fill="#4CC5B7">250 items: ~7.6 points</text>
+    <circle cx="720.8" cy="239.4" r="4.5" fill="#E39A62" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="711.8" y="257.4" text-anchor="end" font-size="11" fill="#E39A62">14,169 items per model: 1 point at 77%</text>
+    <g font-size="11.5">
+      <rect x="542.0" y="30.0" width="308.0" height="27.0" rx="5" fill="#161E1C" fill-opacity="0.9" stroke="#27322E"/>
+      <line x1="552.0" y1="43.0" x2="570.0" y2="43.0" stroke="#4CC5B7" stroke-width="2"/>
+      <text x="576.0" y="47.0" fill="currentColor">2 × the unpaired standard error, at 76.8%</text>
+    </g>
+    <text x="10" y="353.0" font-size="10.5" fill="#97A59F" font-family="JetBrains Mono, monospace">computed by quantcore.eval.diff_stderr</text>
+  </g>
+</svg>

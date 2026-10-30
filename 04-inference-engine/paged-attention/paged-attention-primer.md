@@ -22,7 +22,7 @@ The PagedAttention paper measured that only about 20–40% of KV cache memory in
 
 ![Contiguous reservations at the maximum length cause three kinds of waste, but with fixed-size KV blocks at any position in the pool, the waste is at most one partial block per sequence.](figures/kv-waste-contiguous-vs-paged.svg)
 
-*The top row shows three requests with contiguous reservations in illustrative proportions. Each reservation holds token state, reservation waste and internal fragmentation, and the gaps between reservations are external fragmentation. The bottom row shows the same three requests in KV blocks of one constant size, at any position in the pool. The waste is at most one partially filled block per sequence.*
+*The top row shows three requests with contiguous reservations in illustrative proportions: token state, reservation waste and internal fragmentation, with external fragmentation in the gaps. The bottom row shows the same requests in KV blocks of one constant size, at any position in the pool. Compare the waste: with paging, it is only the warm empty tail of at most one partially filled block per sequence.*
 
 ## The core idea: virtual memory, applied to attention
 
@@ -56,7 +56,7 @@ This accumulation is the same numerically stable method that FlashAttention uses
 
 ![The PagedAttention kernel takes the block table, visits the physical blocks of the sequence one at a time in logical order, and folds each block into a running max, denominator and weighted sum.](figures/paged-kernel-blockwise.svg)
 
-*The kernel takes the block table of the sketch above and visits physical blocks 7, 1, 4 and 2 in logical order. For each block, it calculates the scores, keeps the maximum so far, rescales the old sums by `alpha` and adds the block. After the last block, it divides the weighted sum by the denominator once. `kerncore.paged.paged_attention_blockwise` is this loop in numpy, and the FlashAttention primer draws the same accumulator in its §5.*
+*The kernel takes the block table of the sketch above and visits physical blocks 7, 1, 4 and 2 in logical order. For each block, it calculates the scores, keeps the maximum so far, rescales the old sums by `alpha` and adds the block. `kerncore.paged.paged_attention_blockwise` is this loop in numpy, and the FlashAttention primer draws the same accumulator in its §5.*
 
 It is useful to be precise about the relation to FlashAttention, because people often confuse the two. FlashAttention is about how to *calculate* attention with efficient IO: it never puts the full score matrix in HBM. PagedAttention is about how to *store* the KV cache flexibly. The two are orthogonal, and you can use them together. Modern kernels (FlashAttention-2/3, FlashInfer) accept paged KV layouts natively. Also, "paged KV" is now the standard interface contract for attention kernels in the software stacks that serve LLMs.
 
@@ -66,7 +66,7 @@ The indirection of the block table makes it almost free to share the KV cache. E
 
 ![After a fork, A and B share the blocks of the prompt with refcount 2, and a write by B into the shared partial block copies it into a new block for B.](figures/copy-on-write-fork.svg)
 
-*Two sequences A and B share the two blocks of one prompt after a fork, and each block has refcount 2. In the right panel, the full block stays shared, and B writes into the partial block. The engine allocates a new block, copies the contents, decreases the old refcount and points the block table of B to the new block. `kerncore.paged.PagedSequence.fork` and `append` do the same steps.*
+*Two sequences A and B share the two blocks of one prompt after a fork, and each block has refcount 2. In the right panel, the full block stays shared, and B writes into the partial block. `kerncore.paged.PagedSequence.fork` and `append` do the steps of the figure.*
 
 Three workloads get a benefit.
 
@@ -81,6 +81,17 @@ The engine allocates memory block by block as sequences grow. Thus the scheduler
 Paging combines with continuous (iteration-level) batching from Orca. In continuous batching, finished sequences leave the batch immediately, and sequences that wait can join at any step. Together, the two increase the effective batch size by a large factor. For example, vLLM reported 2–4× throughput over FasterTransformer and Orca at equivalent latency. The gains were larger for long sequences, large models and complex decoding.
 
 A design question of interest is this: what occurs when no free blocks stay in the pool while requests are in progress? The engine promised the blocks optimistically, so this situation can occur. vLLM preempts victim sequences with one of two mechanisms.
+
+```mermaid
+flowchart LR
+    N(["A sequence needs<br/>a new block"]) --> F{"Free blocks<br/>in the pool?"}
+    F -->|yes| A["Allocate<br/>a block"]
+    F -->|no| P["Preempt a victim<br/>sequence: evict<br/>all its blocks"]
+    P --> SW["Swapping: copy<br/>blocks to CPU RAM<br/>and later back"]
+    P --> RC["Recomputation:<br/>free blocks, later<br/>a single prefill"]
+```
+
+*When the pool has no free block, follow the "no" edge: vLLM preempts a victim sequence and evicts all of its blocks. It uses one of two mechanisms. Which is better depends on block size and hardware: small blocks favor recomputation, and large blocks favor swapping.*
 
 Swapping copies the blocks of a sequence out to CPU RAM, and later back. PCIe bandwidth sets the limit on its speed. Recomputation frees the blocks. When the scheduler schedules the sequence again, the engine replays its full prompt-plus-generated-so-far as a single prefill. Recomputation often takes less time than swapping. The reason is that prefill is one large parallel pass, but swapping moves many small blocks over a slow bus.
 

@@ -13,9 +13,9 @@ from-scratch implementation and a fuller lab: `roofline-and-fabric` (01), `cuda-
 with written exercises and no code; the rest are usually a primer plus practice notebooks or a lab; each topic's or
 lab's README says what it contains.
 
-![The repository map: eight layers from the agent at the top to the GPUs at the bottom, with the foundations beneath, and the topic folders of each layer; the twelve primer + core + lab topics are highlighted](site/assets/repo-map.svg)
+![The repository map: the eight layers, from the agents (07) at the top down to the hardware (01) and the foundations (00) beneath it, each with its job in one line and its topic folders; the twelve primer + core + lab topics are marked](site/assets/repo-map.svg)
 
-*The map: each layer's job in one line, then its topic folders. The twelve highlighted topics come as a primer, a from-scratch core and a fuller lab; [The stack](#the-stack) below has the same layers as text, and [What is inside](#what-is-inside) says what each layer teaches.*
+*Read the map from 01 at the bottom up to 07, with 00 beneath the stack: each row gives a layer's job in one line, then its topic folders. The twelve teal pills with a dot are the topics that come as a primer, a from-scratch core and a fuller lab; [The stack](#the-stack) below has the same layers as text, and [What is inside](#what-is-inside) says what each layer teaches.*
 
 ## Start here
 

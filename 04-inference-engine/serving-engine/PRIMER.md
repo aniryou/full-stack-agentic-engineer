@@ -211,6 +211,10 @@ you must replace them with measurements. With these assumptions, an H100 step fo
 | Step time | 7.6 ms | 7.6 ms | 8.1 ms | 14.2 ms | 52.0 ms | 224 ms |
 | Per token | 7.6 ms | 0.12 ms | 0.032 ms | 0.028 ms | 0.025 ms | 0.027 ms |
 
+![The simulated step time of Llama-3.1-8B on an H100 against the tokens in the step, with the two roofline terms.](figures/step-time-vs-tokens.svg)
+
+*Below the knee, the weight read and the overhead set the H100 step for Llama-3.1-8B, and above it the compute term does (SIMULATED). The knee line is `perf.knee_tokens()` at these efficiencies (~221 tokens), and the LM head moves the point where the terms cross a small distance higher. `perf.step_cost()` and `perf.knee_tokens()` compute the chart, and `tests/test_figures.py` pins it.*
+
 ### Chunking long prompts
 
 **Interference.** Decode tokens cost almost nothing up to the knee. A prompt costs in proportion to its length. If
@@ -270,6 +274,10 @@ amortised chunks. Thus TTFT doubles at 6/s, goodput decreases by ~10%, and capac
 run and a full prefill chunk. Then examine the capacity under a load that saturates the engine. Take 64 requests
 that decode at 2,000 tokens of context, and a p99 ITL target of 25 ms. 512 tokens gives a 14.4 ms step, and 1,024 gives
 26.7 ms. Thus select 512 (notebook 02, exercise 2.4).
+
+![The simulated worst step of 64 decodes and one prefill chunk on an H100 against the token budget, with the 25 ms ITL target.](figures/token-budget-worst-step.svg)
+
+*The worst step holds the 64 decodes at 2,000 tokens and one full prefill chunk, and the dashed line is the 64 decodes alone (SIMULATED). The points are the candidates of notebook 02, exercise 2.4: 512 is the largest below the 25 ms line, and 1,024 gives 26.7 ms. `perf.step_time()` computes the points up to 2,048, and `tests/test_figures.py` pins the chart.*
 
 vLLM adds finer knobs. `long_prefill_token_threshold` sets a limit on the chunk of a long prompt, so that several
 prompts progress together (0 = off by default). It has an `_adaptive` variant. `max_num_active_seqs` sets a limit on
@@ -360,6 +368,19 @@ The scheduler puts the request at the *front* of the queue of requests that wait
 
 The engine keeps the generated tokens of the request. When the scheduler admits it again, the engine prefills its
 whole sequence again ("recompute"), and generation continues where it stopped.
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    state "FINISHED_{STOPPED,<br/>LENGTH_CAPPED,<br/>ABORTED}" as FINISHED
+    [*] --> WAITING
+    WAITING --> RUNNING: admit, blocks free now
+    RUNNING --> FINISHED: EOS, stop token, max_tokens or abort
+    RUNNING --> PREEMPTED: free queue empty,<br/>preempt newest
+    PREEMPTED --> WAITING: front of the queue
+```
+
+*The figure shows the request states of §1, with the names of vLLM's `RequestStatus`. When a request that runs needs a block and the free queue is empty, the scheduler preempts the newest request under FCFS. The victim goes to the front of the queue, and the engine computes its whole sequence again after the next admission.*
 
 Preemption does not show in the outputs (the core's tests compare against the reference with no preemption). But it
 shows clearly in latency. In notebook 02, a workload that needs ~4,000 blocks on an H100 gives these results
@@ -549,6 +570,17 @@ Thus the difficult part is to calculate, per grammar state, which of 100k tokens
 legal only if each of its characters is legal, from that state. The calculation must be sufficiently fast to overlap
 with the forward pass of the GPU.
 
+```mermaid
+flowchart LR
+    C["automaton of<br/>the grammar"] -- "start()" --> M["grammar mask<br/>allowed(state)"]
+    F["forward pass"] -- "logits" --> M
+    M -- "masked logits" --> S["sampler"]
+    S -- "token" --> A["advance(state, token)"]
+    A -- "next step" --> M
+```
+
+*Start at the automaton of `ChoiceFSM` and its `start()`. The forward pass gives logits, and the grammar mask gives $-\infty$ to each token that takes the text out of the grammar. The sampler draws a token, and `advance(state, token)` gives the state for the mask of the next step.*
+
 Notebook 04 (worked example 6, exercise 4.6) compiles the schema `{"n": <non-negative integer>}` into a 10-state
 character automaton. For each state, it precomputes the next state after each of 36 tokens (single characters and
 multi-character merges). The results are:
@@ -616,6 +648,10 @@ If one draft step costs $c$ target steps, a round costs $k\,c + 1$. Thus $\text{
 (`spec.speedup()`). For $\alpha$ = 0.8 and $c$ = 0.1, the best depth is $k$ = 6 at 2.47×. $k$ = 4, 5, 6, 7 give 2.40,
 2.46, 2.47, 2.45, which is a shallow optimum (`spec.best_k()`).
 
+![The speedup of speculative decoding against the draft depth k at an acceptance rate of 0.8, for a draft cost c of 0 and 0.1.](figures/spec-speedup-vs-k.svg)
+
+*At $\alpha$ = 0.8 with a free draft ($c$ = 0), the speedup equals $E$, the tokens per pass, and it increases with $k$. At $c$ = 0.1, the speedup is highest at $k$ = 6, and $k$ = 4 to 7 give almost the same speedup. `spec.expected_tokens()` and `spec.speedup()` compute the two curves, and `tests/test_figures.py` pins the chart.*
+
 In notebook 05, the core's small target and a 10× smaller draft agree with $\alpha$ ≈ 0.72 per position on average.
 The measured tokens per pass match the formula at $k$ = 1 and 2, but they are lower at $k$ = 4 (2.61 against 2.90).
 The formula assumes that the target accepts each position independently, with one $\alpha$. Real acceptance changes
@@ -669,6 +705,10 @@ The robust conclusion is the shape of the table. At short contexts, speculation 
 concurrent requests. Here that point is 128, and 256 if a draft forward costs only its roofline time. At long contexts,
 decode stays bound by KV reads, which the verify pass amortises. Thus speculation still pays, and memory sets the limit on the batch
 first.
+
+![The simulated speedup of a 1B draft for an 8B target on an H100 against the concurrent requests, at 200 and 2,000 tokens of context.](figures/spec-speedup-vs-batch.svg)
+
+*At 200 tokens of context, the verify pass crosses the knee, and speculation becomes a slow-down at 128 requests (SIMULATED). At 2,000 tokens, the KV reads keep the gain, and memory sets the limit on the batch first, at the dashed vertical line. `perf.spec_speedup()` computes the curves, the dashed one with drafts at their roofline time, and `tests/test_figures.py` pins the chart.*
 
 The batch-1 figure depends on the overhead assumption. Here the draft costs $c$ ≈ 0.19 of a target step, which gives ~1.6×.
 This cost is the 0.5 ms plus the draft's weights, which are 17% of the target's. With no per-draft overhead, $c$ ≈ 0.12 and the speedup
@@ -910,6 +950,21 @@ notebook 02 (SIMULATED), a saturated engine produces 1,700–2,300 tok/s. But it
   output tokens hold their KV for the whole generation
   ([RL and thinking-models §7](../../00-foundations/rl-and-thinking-models/PRIMER.md#7-what-thinking-does-to-serving)).
 - **Hold everything else constant**: model, dtype, engine version, flags and GPU clocks. Change one knob at a time.
+
+```mermaid
+flowchart LR
+    subgraph closed["Closed loop"]
+        direction LR
+        U(["N users"]) -- "next request" --> E2["server"]
+        E2 -- "response" --> U
+    end
+    subgraph open["Open loop"]
+        direction LR
+        P(["Poisson arrivals"]) -- "constant rate" --> Q[("queue")] --> E1["server"]
+    end
+```
+
+*In the open loop, Poisson arrivals come at a constant rate, whatever the server does, and the queue shows overload. In the closed loop, each of N users sends the next request after the response, and the load slows down with the server. The return edge sets a limit of N on concurrency and hides overload.*
 
 **The knobs and what each trades.**
 

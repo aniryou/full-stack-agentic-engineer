@@ -1,0 +1,140 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="424" viewBox="0 0 960 424" role="img" aria-label="HNSW is a multi-layer graph that a greedy search goes down from the sparse upper layers to the dense bottom layer that holds every point, and IVF-PQ scans only the n_probe nearest of the n_list lists and stores one byte per sub-vector." style="color: #E4EAE7">
+  <title>HNSW is a multi-layer graph that a greedy search goes down from the sparse upper layers to the dense bottom layer that holds every point, and IVF-PQ scans only the n_probe nearest of the n_list lists and stores one byte per sub-vector.</title>
+  <rect x="0" y="0" width="960" height="424" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <rect x="16" y="16" width="456" height="392" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="244" y="40" text-anchor="middle" font-weight="600">graph-based: HNSW</text>
+    <rect x="488" y="16" width="456" height="392" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="716" y="40" text-anchor="middle" font-weight="600">clustering and quantization: IVF-PQ</text>
+    <rect x="32" y="56" width="424" height="64" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-opacity="0.7"/>
+    <text x="44" y="73" font-size="11" fill="#97A59F">upper layer: sparse, the express lanes</text>
+    <rect x="32" y="132" width="424" height="64" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-opacity="0.7"/>
+    <text x="44" y="149" font-size="11" fill="#97A59F">upper layer</text>
+    <rect x="32" y="208" width="424" height="64" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-opacity="0.7"/>
+    <text x="44" y="225" font-size="11" fill="#97A59F">bottom layer: every point</text>
+    <path d="M208 105 L208 171" stroke="#97A59F" stroke-width="1" stroke-dasharray="2 3"/>
+    <path d="M336 105 L336 171" stroke="#97A59F" stroke-width="1" stroke-dasharray="2 3"/>
+    <path d="M208 181 L208 251" stroke="#97A59F" stroke-width="1" stroke-dasharray="2 3"/>
+    <path d="M272 181 L272 253" stroke="#97A59F" stroke-width="1" stroke-dasharray="2 3"/>
+    <path d="M336 181 L336 251" stroke="#97A59F" stroke-width="1" stroke-dasharray="2 3"/>
+    <path d="M176 246 L208 256" stroke="#97A59F" stroke-width="1" stroke-opacity="0.8"/>
+    <path d="M208 256 L240 242" stroke="#97A59F" stroke-width="1" stroke-opacity="0.8"/>
+    <path d="M240 242 L272 258" stroke="#97A59F" stroke-width="1" stroke-opacity="0.8"/>
+    <path d="M272 258 L304 246" stroke="#97A59F" stroke-width="1" stroke-opacity="0.8"/>
+    <path d="M304 246 L336 256" stroke="#97A59F" stroke-width="1" stroke-opacity="0.8"/>
+    <path d="M336 256 L368 244" stroke="#97A59F" stroke-width="1" stroke-opacity="0.8"/>
+    <path d="M368 244 L400 256" stroke="#97A59F" stroke-width="1" stroke-opacity="0.8"/>
+    <path d="M176 246 L240 242" stroke="#97A59F" stroke-width="1" stroke-opacity="0.8"/>
+    <path d="M240 242 L304 246" stroke="#97A59F" stroke-width="1" stroke-opacity="0.8"/>
+    <path d="M304 246 L368 244" stroke="#97A59F" stroke-width="1" stroke-opacity="0.8"/>
+    <path d="M208 176 L272 176" stroke="#97A59F" stroke-width="1"/>
+    <path d="M272 176 L336 176" stroke="#97A59F" stroke-width="1"/>
+    <path d="M215 100 L328 100" stroke="#4CC5B7" stroke-width="1.6" marker-end="url(#arrA)"/>
+    <path d="M336 106 L336 168" stroke="#4CC5B7" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#arrA)"/>
+    <path d="M342 176 L392 176" stroke="#4CC5B7" stroke-width="1.6" marker-end="url(#arrA)"/>
+    <path d="M400 182 L400 248" stroke="#4CC5B7" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#arrA)"/>
+    <path d="M406 254 L423 247" stroke="#4CC5B7" stroke-width="1.6" marker-end="url(#arrA)"/>
+    <circle cx="176" cy="246" r="4" fill="currentColor"/>
+    <circle cx="208" cy="256" r="4" fill="currentColor"/>
+    <circle cx="240" cy="242" r="4" fill="currentColor"/>
+    <circle cx="272" cy="258" r="4" fill="currentColor"/>
+    <circle cx="304" cy="246" r="4" fill="currentColor"/>
+    <circle cx="336" cy="256" r="4" fill="currentColor"/>
+    <circle cx="368" cy="244" r="4" fill="currentColor"/>
+    <circle cx="400" cy="256" r="4" fill="currentColor"/>
+    <circle cx="432" cy="246" r="4" fill="currentColor"/>
+    <circle cx="208" cy="176" r="4" fill="currentColor"/>
+    <circle cx="272" cy="176" r="4" fill="currentColor"/>
+    <circle cx="336" cy="176" r="4" fill="currentColor"/>
+    <circle cx="400" cy="176" r="4" fill="currentColor"/>
+    <circle cx="208" cy="100" r="4" fill="currentColor"/>
+    <circle cx="336" cy="100" r="4" fill="currentColor"/>
+    <circle cx="432" cy="246" r="7" fill="none" stroke="#4CC5B7" stroke-width="1.4"/>
+    <circle cx="208" cy="100" r="7" fill="none" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="444" y="288" text-anchor="end" font-size="11" fill="#7ADACF">the result</text>
+    <text x="32" y="316" font-size="11.5" fill="#7ADACF">the search is greedy best-first, and it goes down the layers</text>
+    <rect x="32" y="360" width="424" height="34" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="244" y="381" text-anchor="middle" font-size="11.5">RAM-resident: 10M × 1024-d is ~40 GB of raw vectors alone</text>
+    <text x="504" y="70" font-size="11" fill="#97A59F">IVF: k-means puts the vectors into <tspan font-family="JetBrains Mono, monospace">n_list</tspan> centroids</text>
+    <rect x="508" y="82" width="62" height="58" rx="6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-opacity="0.55" stroke-dasharray="3 3"/>
+    <path d="M534.0 106.0 L544.0 116.0 M534.0 116.0 L544.0 106.0" stroke="#97A59F" stroke-width="1.6"/>
+    <circle cx="527" cy="113" r="2.5" fill="#97A59F"/>
+    <circle cx="533" cy="127" r="2.5" fill="#97A59F"/>
+    <circle cx="545" cy="93" r="2.5" fill="#97A59F"/>
+    <circle cx="517" cy="125" r="2.5" fill="#97A59F"/>
+    <circle cx="528" cy="100" r="2.5" fill="#97A59F"/>
+    <rect x="580" y="82" width="62" height="58" rx="6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-opacity="0.55" stroke-dasharray="3 3"/>
+    <path d="M606.0 106.0 L616.0 116.0 M606.0 116.0 L616.0 106.0" stroke="#97A59F" stroke-width="1.6"/>
+    <circle cx="634" cy="110" r="2.5" fill="#97A59F"/>
+    <circle cx="626" cy="110" r="2.5" fill="#97A59F"/>
+    <circle cx="617" cy="96" r="2.5" fill="#97A59F"/>
+    <circle cx="617" cy="126" r="2.5" fill="#97A59F"/>
+    <circle cx="612" cy="121" r="2.5" fill="#97A59F"/>
+    <rect x="652" y="82" width="62" height="58" rx="6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-opacity="0.55" stroke-dasharray="3 3"/>
+    <path d="M678.0 106.0 L688.0 116.0 M678.0 116.0 L688.0 106.0" stroke="#97A59F" stroke-width="1.6"/>
+    <circle cx="691" cy="93" r="2.5" fill="#97A59F"/>
+    <circle cx="695" cy="115" r="2.5" fill="#97A59F"/>
+    <circle cx="674" cy="91" r="2.5" fill="#97A59F"/>
+    <circle cx="700" cy="110" r="2.5" fill="#97A59F"/>
+    <circle cx="693" cy="127" r="2.5" fill="#97A59F"/>
+    <rect x="724" y="82" width="62" height="58" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <path d="M750.0 106.0 L760.0 116.0 M750.0 116.0 L760.0 106.0" stroke="#7ADACF" stroke-width="1.6"/>
+    <circle cx="765" cy="129" r="2.5" fill="currentColor"/>
+    <circle cx="750" cy="124" r="2.5" fill="currentColor"/>
+    <circle cx="752" cy="129" r="2.5" fill="currentColor"/>
+    <circle cx="772" cy="94" r="2.5" fill="currentColor"/>
+    <circle cx="738" cy="99" r="2.5" fill="currentColor"/>
+    <rect x="796" y="82" width="62" height="58" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <path d="M822.0 106.0 L832.0 116.0 M822.0 116.0 L832.0 106.0" stroke="#7ADACF" stroke-width="1.6"/>
+    <circle cx="848" cy="108" r="2.5" fill="currentColor"/>
+    <circle cx="833" cy="103" r="2.5" fill="currentColor"/>
+    <circle cx="827" cy="118" r="2.5" fill="currentColor"/>
+    <circle cx="820" cy="127" r="2.5" fill="currentColor"/>
+    <circle cx="831" cy="128" r="2.5" fill="currentColor"/>
+    <rect x="868" y="82" width="62" height="58" rx="6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-opacity="0.55" stroke-dasharray="3 3"/>
+    <path d="M894.0 106.0 L904.0 116.0 M894.0 116.0 L904.0 106.0" stroke="#97A59F" stroke-width="1.6"/>
+    <circle cx="907" cy="129" r="2.5" fill="#97A59F"/>
+    <circle cx="915" cy="132" r="2.5" fill="#97A59F"/>
+    <circle cx="907" cy="97" r="2.5" fill="#97A59F"/>
+    <circle cx="916" cy="131" r="2.5" fill="#97A59F"/>
+    <circle cx="918" cy="114" r="2.5" fill="#97A59F"/>
+    <text x="716" y="160" text-anchor="middle" font-size="11.5" fill="#7ADACF">the query scans only the <tspan font-family="JetBrains Mono, monospace">n_probe</tspan> nearest lists</text>
+    <text x="504" y="196" font-size="11" fill="#97A59F">PQ: divide d into m sub-vectors, k-means on each into 256 centroids</text>
+    <text x="588" y="227" text-anchor="end" font-size="11" fill="#97A59F">4 KB fp32</text>
+    <text x="744.4" y="227" text-anchor="middle" font-size="12.5">…</text>
+    <rect x="600" y="210" width="330" height="26" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <path d="M641.2 210 L641.2 236" stroke="currentColor" stroke-width="1"/>
+    <path d="M682.5 210 L682.5 236" stroke="currentColor" stroke-width="1"/>
+    <path d="M723.8 210 L723.8 236" stroke="currentColor" stroke-width="1"/>
+    <path d="M765.0 210 L765.0 236" stroke="currentColor" stroke-width="1"/>
+    <path d="M806.2 210 L806.2 236" stroke="currentColor" stroke-width="1"/>
+    <path d="M847.5 210 L847.5 236" stroke="currentColor" stroke-width="1"/>
+    <path d="M888.8 210 L888.8 236" stroke="currentColor" stroke-width="1"/>
+    <text x="588" y="279" text-anchor="end" font-size="11" fill="#97A59F">m sub-vectors:</text>
+    <text x="588" y="293" text-anchor="end" font-size="11" fill="#97A59F">64–128 bytes</text>
+    <path d="M620.6 238 L620.6 266" stroke="#97A59F" stroke-width="1.1" marker-end="url(#arr)"/>
+    <rect x="609.6" y="270" width="22" height="22" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <path d="M661.9 238 L661.9 266" stroke="#97A59F" stroke-width="1.1" marker-end="url(#arr)"/>
+    <rect x="650.9" y="270" width="22" height="22" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <path d="M703.1 238 L703.1 266" stroke="#97A59F" stroke-width="1.1" marker-end="url(#arr)"/>
+    <rect x="692.1" y="270" width="22" height="22" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="744.4" y="285" text-anchor="middle" font-size="12.5">…</text>
+    <path d="M785.6 238 L785.6 266" stroke="#97A59F" stroke-width="1.1" marker-end="url(#arr)"/>
+    <rect x="774.6" y="270" width="22" height="22" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <path d="M826.9 238 L826.9 266" stroke="#97A59F" stroke-width="1.1" marker-end="url(#arr)"/>
+    <rect x="815.9" y="270" width="22" height="22" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <path d="M868.1 238 L868.1 266" stroke="#97A59F" stroke-width="1.1" marker-end="url(#arr)"/>
+    <rect x="857.1" y="270" width="22" height="22" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <path d="M909.4 238 L909.4 266" stroke="#97A59F" stroke-width="1.1" marker-end="url(#arr)"/>
+    <rect x="898.4" y="270" width="22" height="22" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="765" y="312" text-anchor="middle" font-size="11.5">one byte per sub-vector</text>
+    <text x="504" y="340" font-size="11" fill="#97A59F">the distances come from lookup tables</text>
+    <text x="504" y="356" font-size="11" fill="#97A59F">(asymmetric distance computation)</text>
+    <rect x="504" y="368" width="424" height="26" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="716" y="385" text-anchor="middle" font-size="11.5">then rerank by full vectors</text>
+  </g>
+</svg>

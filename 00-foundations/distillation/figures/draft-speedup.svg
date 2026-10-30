@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="360" viewBox="0 0 880 360" role="img" aria-label="Speedup of a draft against its acceptance rate α at c ≈ 0.148, for k = 4 drafted tokens." style="color: #E4EAE7">
+  <title>Speedup of a draft against its acceptance rate α at c ≈ 0.148, for k = 4 drafted tokens.</title>
+  <desc>{"kind":"line","legend":"none","marks":[{"anchor":"end","kind":"point","label":"1.45× at α = 0.6","style":"accent","x":0.6,"y":1.44761895},{"anchor":"end","kind":"point","label":"1.74× at α = 0.7","style":"accent","x":0.7,"y":1.74114856},{"anchor":"end","kind":"point","label":"2.11× at α = 0.8","style":"accent","x":0.8,"y":2.11065053},{"anchor":"start","kind":"text","style":"muted","text":"c ≈ 0.148 by weight bytes","x":0.62,"y":3.9}],"note":"computed by distillcore.draft.speedup and draft.draft_cost","series":[{"name":"k = 4","style":"accent","x":[0.4,0.41,0.42,0.43,0.44,0.45,0.46,0.47,0.48,0.49,0.5,0.51,0.52,0.53,0.54,0.55,0.56,0.57,0.58,0.59,0.6,0.61,0.62,0.63,0.64,0.65,0.66,0.67,0.68,0.69,0.7,0.71,0.72,0.73,0.74,0.75,0.76,0.77,0.78,0.79,0.8,0.81,0.82,0.83,0.84,0.85,0.86,0.87,0.88,0.89,0.9,0.91,0.92,0.93,0.94,0.95,0.96,0.97,0.98,0.99,1.0],"y":[1.0357357,1.05185855,1.06838809,1.08533436,1.10270751,1.12051788,1.13877593,1.15749228,1.17667773,1.19634317,1.2164997,1.23715854,1.25833107,1.28002881,1.30226344,1.32504679,1.34839085,1.37230774,1.39680974,1.42190928,1.44761895,1.47395148,1.50091976,1.52853681,1.55681583,1.58577015,1.61541326,1.64575879,1.67682053,1.70861242,1.74114856,1.77444317,1.80851066,1.84336555,1.87902256,1.91549651,1.9528024,1.99095538,2.02997074,2.06986392,2.11065053,2.15234631,2.19496715,2.23852911,2.28304839,2.32854132,2.37502443,2.42251435,2.47102788,2.52058199,2.57119377,2.62288048,2.67565952,2.72954845,2.78456497,2.84072694,2.89805237,2.95655941,3.01626638,3.07719173,3.13935407]}],"title":"Speedup of a draft against its acceptance rate α at c ≈ 0.148, for k = 4 drafted tokens.","x":{"label":"acceptance rate α","max":1.0,"min":0.4,"ticks":[0.4,0.5,0.6,0.7,0.8,0.9,1.0]},"y":{"label":"speedup (×)","max":4.5,"min":0,"ticks":[0,1,2,3,4]}}</desc>
+  <rect x="0" y="0" width="880" height="360" rx="8" fill="#161E1C"/>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12" fill="currentColor">
+    <g stroke="#27322E" stroke-width="1">
+      <line x1="66.0" y1="290.0" x2="858.0" y2="290.0"/>
+      <line x1="66.0" y1="230.4" x2="858.0" y2="230.4"/>
+      <line x1="66.0" y1="170.9" x2="858.0" y2="170.9"/>
+      <line x1="66.0" y1="111.3" x2="858.0" y2="111.3"/>
+      <line x1="66.0" y1="51.8" x2="858.0" y2="51.8"/>
+    </g>
+    <g stroke="#55635E" stroke-width="1.2">
+      <line x1="66.0" y1="290.0" x2="858.0" y2="290.0"/>
+      <line x1="66.0" y1="290.0" x2="66.0" y2="22.0"/>
+    </g>
+    <g font-size="11" fill="#97A59F">
+      <text x="58.0" y="293.5" text-anchor="end">0</text>
+      <text x="58.0" y="233.9" text-anchor="end">1</text>
+      <text x="58.0" y="174.4" text-anchor="end">2</text>
+      <text x="58.0" y="114.8" text-anchor="end">3</text>
+      <text x="58.0" y="55.3" text-anchor="end">4</text>
+      <text x="66.0" y="306.0" text-anchor="middle">0.4</text>
+      <text x="198.0" y="306.0" text-anchor="middle">0.5</text>
+      <text x="330.0" y="306.0" text-anchor="middle">0.6</text>
+      <text x="462.0" y="306.0" text-anchor="middle">0.7</text>
+      <text x="594.0" y="306.0" text-anchor="middle">0.8</text>
+      <text x="726.0" y="306.0" text-anchor="middle">0.9</text>
+      <text x="858.0" y="306.0" text-anchor="middle">1</text>
+    </g>
+    <text x="462.0" y="332.0" text-anchor="middle" fill="#97A59F">acceptance rate α</text>
+    <text x="16" y="156.0" text-anchor="middle" fill="#97A59F" transform="rotate(-90 16 156.0)">speedup (×)</text>
+    <clipPath id="plot"><rect x="65.0" y="16.0" width="794.0" height="275.0"/></clipPath>
+    <g clip-path="url(#plot)">
+      <path d="M66.0 228.3 L79.2 227.4 L92.4 226.4 L105.6 225.4 L118.8 224.3 L132.0 223.3 L145.2 222.2 L158.4 221.1 L171.6 219.9 L184.8 218.8 L198.0 217.6 L211.2 216.3 L224.4 215.1 L237.6 213.8 L250.8 212.4 L264.0 211.1 L277.2 209.7 L290.4 208.3 L303.6 206.8 L316.8 205.3 L330.0 203.8 L343.2 202.2 L356.4 200.6 L369.6 199.0 L382.8 197.3 L396.0 195.6 L409.2 193.8 L422.4 192.0 L435.6 190.1 L448.8 188.2 L462.0 186.3 L475.2 184.3 L488.4 182.3 L501.6 180.2 L514.8 178.1 L528.0 175.9 L541.2 173.7 L554.4 171.4 L567.6 169.1 L580.8 166.7 L594.0 164.3 L607.2 161.8 L620.4 159.3 L633.6 156.7 L646.8 154.0 L660.0 151.3 L673.2 148.6 L686.4 145.7 L699.6 142.8 L712.8 139.9 L726.0 136.9 L739.2 133.8 L752.4 130.6 L765.6 127.4 L778.8 124.2 L792.0 120.8 L805.2 117.4 L818.4 113.9 L831.6 110.4 L844.8 106.7 L858.0 103.0" fill="none" stroke="#4CC5B7" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    </g>
+    <circle cx="330.0" cy="203.8" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="321.0" y="194.8" text-anchor="end" font-size="11" fill="#4CC5B7">1.45× at α = 0.6</text>
+    <circle cx="462.0" cy="186.3" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="453.0" y="177.3" text-anchor="end" font-size="11" fill="#4CC5B7">1.74× at α = 0.7</text>
+    <circle cx="594.0" cy="164.3" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="585.0" y="155.3" text-anchor="end" font-size="11" fill="#4CC5B7">2.11× at α = 0.8</text>
+    <text x="356.4" y="57.7" text-anchor="start" font-size="11" fill="#97A59F">c ≈ 0.148 by weight bytes</text>
+    <text x="10" y="353.0" font-size="10.5" fill="#97A59F" font-family="JetBrains Mono, monospace">computed by distillcore.draft.speedup and draft.draft_cost</text>
+  </g>
+</svg>

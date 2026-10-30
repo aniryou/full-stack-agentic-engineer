@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="720" height="520" viewBox="0 0 720 520" role="img" aria-label="The states of a turn and the transitions between them." style="color: #E4EAE7">
-  <title>The states of a turn and the transitions between them.</title>
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="520" viewBox="0 0 720 520" role="img" aria-label="A turn goes from queued to running and ends in completed or failed, or goes back to queued and, after 5 delivery attempts, to dead_letter." style="color: #E4EAE7">
+  <title>A turn goes from queued to running and ends in completed or failed, or goes back to queued and, after 5 delivery attempts, to dead_letter.</title>
   <rect x="0" y="0" width="720" height="520" rx="8" fill="#161E1C"/>
   <defs>
     <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
@@ -40,8 +40,8 @@
       <text x="334" y="70">gateway admits, publishes</text>
       <text x="461" y="104" text-anchor="middle">5 delivery attempts</text>
       <text x="283" y="196" text-anchor="end">push delivered, lock taken</text>
-      <text x="357" y="186">RetryLater (overloaded,</text>
-      <text x="357" y="201">store unavailable) → redelivery</text>
+      <text x="357" y="186">RetryLater (503, store</text>
+      <text x="357" y="201">unavailable) → redelivery</text>
       <text x="196" y="268" text-anchor="end">model step / tool step</text>
       <text x="196" y="283" text-anchor="end">checkpointed</text>
       <text x="232" y="340" text-anchor="end">final answer</text>

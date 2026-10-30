@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="980" height="612" viewBox="0 0 980 612" role="img" aria-label="One step of a run from one wake-up to the next, as eight stages in sequence: wake-up, lease, read the run, decide, intent, act, checkpoint and enqueue next; beside each stage, the invariant that protects it and its mechanism in code." style="color: #E4EAE7">
-  <title>One step of a run from one wake-up to the next, as eight stages in sequence: wake-up, lease, read the run, decide, intent, act, checkpoint and enqueue next; beside each stage, the invariant that protects it and its mechanism in code.</title>
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="612" viewBox="0 0 980 612" role="img" aria-label="One step of a run as eight stages, from wake-up to enqueue next, each beside the invariant that protects it and its mechanism in code." style="color: #E4EAE7">
+  <title>One step of a run as eight stages, from wake-up to enqueue next, each beside the invariant that protects it and its mechanism in code.</title>
   <rect x="0" y="0" width="980" height="612" rx="8" fill="#161E1C"/>
   <defs>
     <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>

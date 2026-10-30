@@ -37,7 +37,7 @@ Classical IAM has two kinds of principals. The first kind is **humans**: interac
 
 ![Three parties share one tool call: the user asks, the model selects the tool and its arguments from a context window that holds instructions and untrusted data in one channel, and the agent runtime makes the call with a credential, under its own authority or on behalf of the user.](agent-three-parties.svg)
 
-*Three parties share one tool call. The user asks. The model selects the tool and the arguments from a context window that mixes instructions and untrusted data. The agent runtime makes the call with a credential, under its own authority or on behalf of the user (§0, §3.2).*
+*Read the chain from left to right: the user asks, the model selects the tool, and the agent runtime makes the call. The orange box is the context window, where instructions and untrusted data share one channel. The teal box is the agent runtime: it holds the credential and acts under one of the two authorities at the bottom right (§0, §3.2).*
 
 | Assumption in classical IAM | What agents do instead | Consequence |
 |---|---|---|
@@ -91,6 +91,7 @@ Two habits make a threat model credible when you draw it on a whiteboard:
 
 ```mermaid
 flowchart TB
+    accTitle: Flows go from the user through the front-end to the agent runtime, and from it to six destinations, each with its OWASP risks.
     U(["User"]) -- "ASI09" --> FE["Front-end"]
     FE -- "identity and consent" --> AG["Agent runtime<br/>ASI03, ASI10"]
     AG --> M["Model<br/>endpoint<br/>ASI01"]
@@ -131,6 +132,7 @@ You cannot use one authority in place of the other. A common design error is to 
 
 ```mermaid
 flowchart LR
+    accTitle: The design error gives the agent a broad grant to read everyone's tickets, and delegation lets it read only this user's tickets.
     subgraph DEL ["delegation"]
         direction LR
         A2(["Agent"]) -- "this user's token" --> RS["the resource<br/>authorizes the user"]
@@ -176,9 +178,9 @@ Agent Identity does not replace the rest of Google Cloud IAM. You use them toget
 
 ### 3.5 Delegation mechanics (standards you should be able to draw)
 
-![Delegation as token exchange: the user's subject token and the agent's certificate-bound actor token become one delegated token naming both](delegation-token-exchange.svg)
+![The STS exchanges the user's subject token and the agent's actor token for one delegated token that names both, and the MCP server verifies it.](delegation-token-exchange.svg)
 
-*Delegation as token exchange: the STS combines the user's subject token and the agent's certificate-bound actor token into one short-lived token. That token names both (`sub` + `act`), is scoped to one audience, and stays bound to the agent's certificate. The resource server examines all three. The lab's `TokenIssuer.exchange()` does exactly this.*
+*Read from left to right: the STS takes the two input tokens and issues one short-lived delegated token, the teal box. That token names the user in `sub` and the agent in `act`, has one audience and one scope, and stays bound to the agent's certificate. The MCP server examines `aud`, `scope` and `cnf`, and the lab's `TokenIssuer.exchange()` issues this token.*
 
 - **RFC 8693 token exchange**: the standard way to show "agent A acts for user U". The STS takes the user's `subject_token` and the agent's `actor_token`. It issues a token whose `sub` is the user and whose `act` claim identifies the agent. That token is scoped to an `audience` and `scope`.
 
@@ -211,7 +213,7 @@ As the agent developer, you control the runtime layer most. The resource and net
 
 ![One tool call goes through Model Armor, the decision of SecurityPlugin, the broker, Agent Gateway and VPC-SC, and the resource server.](figures/tool-call-enforcement-points.svg)
 
-*One tool call goes through the four policy enforcement points of §4.1. Model Armor screens the model call. The runtime layer decides on the tool call: `PolicyEngine.evaluate()` denies by default, asks for a confirmation, or permits. Then the broker narrows the credential to the call, the gateway and the perimeter check the destination, and IAM on the resource decides last.*
+*Read from the top: Model Armor screens the model call, then the tool call goes through the other three policy enforcement points of §4.1. The teal box is the runtime layer: `PolicyEngine.evaluate()` denies by default, asks for a confirmation, or permits. Then the broker narrows the credential to the call, the gateway and the perimeter check the destination, and IAM on the resource decides last.*
 
 ### 4.2 Tool tiers and deny-by-default
 
@@ -283,7 +285,7 @@ Everything that enters the context window from outside the developer's own instr
 
 ![The user's prompt and each tool result go through a check before the model reads them, and the answer goes through screen_response().](figures/untrusted-content-checks.svg)
 
-*Untrusted text enters through the user's prompt and through each tool result, and each path has a check. Model Armor screens the prompt on the way in and the response on the way out. The plugin sanitizes each tool result and tags it with its provenance before the model reads it. Schemas and the egress allowlist constrain the arguments of each tool call.*
+*Untrusted text reaches the model by two paths: the user's prompt on the top row, and each tool result from the orange box. Model Armor screens the prompt on the way in and the response on the way out. The plugin sanitizes and tags each tool result on the left, and schemas and the egress allowlist constrain each tool call on the right.*
 
 ### 6.2 Code execution and sandboxes
 
@@ -315,6 +317,24 @@ The MCP authorization specification (revision 2025-11-25) sets the roles. The **
 - Clients **MUST** send the **`resource` parameter** (RFC 8707) in both authorization and token requests. Its value is the canonical URI of the MCP server. Servers **MUST** validate that the authorization server issued the tokens *for them* (audience).
 - **No token passthrough.** A server must not accept tokens issued for other resources. It must not forward the token that it got to upstream APIs. If it calls upstream, it is a separate OAuth client with a separate token. This is the confused-deputy guard.
 - Tokens go in `Authorization: Bearer`, never in query strings. A `403 insufficient_scope` with a `scope` challenge starts step-up authorization. Redirect URIs are localhost or HTTPS. Access tokens are short-lived. Public clients use refresh-token rotation.
+
+```mermaid
+sequenceDiagram
+    accTitle: The MCP client gets a 401, reads the Protected Resource Metadata, gets a token from the authorization server and calls the MCP server again.
+    participant AS as authorization<br/>server
+    participant C as MCP client
+    participant S as MCP server
+    C->>S: request without a token
+    S-->>C: 401 and resource_metadata
+    C->>S: GET /.well-known/oauth-protected-resource
+    S-->>C: metadata names the authorization server
+    C->>AS: PKCE S256 and the resource parameter
+    AS-->>C: access token, audience = MCP server
+    C->>S: Authorization: Bearer token
+    Note over S: validates the audience,<br/>no token passthrough
+```
+
+*Read from the top: a 401 points the MCP client to the Protected Resource Metadata, and the metadata names the authorization server. One arrow to the authorization server stands for the authorization and token requests, which carry PKCE and the `resource` parameter. The MCP server accepts only a token whose audience is the server itself, and it never forwards that token.*
 
 The reference MCP server implements exactly this with the native auth of the `mcp` SDK (`TokenVerifier`, `AuthSettings(resource_server_url=…, required_scopes=…)`). It maps scopes to tools (`tickets:read` and `tickets:write`) and publishes `readOnlyHint`/`destructiveHint` annotations. As an option, it also enforces DPoP.
 
@@ -392,9 +412,9 @@ Treat instructions, tool lists and policies as versioned artifacts with review.
 
 ## 10. GCP mapping and the reference architecture
 
-![Reference architecture: a user authenticates at the front-end and reaches an agent on Agent Runtime with its own Agent Identity; tool calls cross an Agent Gateway to MCP servers, with IAM, VPC-SC and Model Armor as the enforcement points](reference-architecture.svg)
+![The user reaches the agent on Agent Runtime through the front-end, and the agent reaches MCP servers, peer agents and APIs through Agent Gateway.](reference-architecture.svg)
 
-*The reference architecture. Solid arrows are request paths, and they carry the credential that crosses each boundary. Dotted arrows are audit and consent flows. Three of the four PEPs are on this path (runtime, network, model). The fourth, IAM on the destination resource, is the governance plane at the top.*
+*Solid arrows are request paths with the credential that crosses each boundary, and dashed arrows are audit and consent flows. Three PEPs are on the request path: the runtime in the teal box, the network at Agent Gateway, and the model at Model Armor. The fourth PEP, IAM on the destination resource, is in the governance plane at the top.*
 
 | Primer concept | Google Cloud control | In this repository |
 |---|---|---|

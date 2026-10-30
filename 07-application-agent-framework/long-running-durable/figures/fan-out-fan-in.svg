@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="960" height="390" viewBox="0 0 960 390" role="img" aria-label="The six steps of P2: a planner LLM, a Pub/Sub topic, N idempotent workers, the counter on the run document, the named aggregate task and a synthesis LLM." style="color: #E4EAE7">
-  <title>The six steps of P2: a planner LLM, a Pub/Sub topic, N idempotent workers, the counter on the run document, the named aggregate task and a synthesis LLM.</title>
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="390" viewBox="0 0 960 390" role="img" aria-label="A planner LLM makes N subtasks, idempotent workers do them, and the write that reaches N on the run document enqueues the named aggregate task." style="color: #E4EAE7">
+  <title>A planner LLM makes N subtasks, idempotent workers do them, and the write that reaches N on the run document enqueues the named aggregate task.</title>
   <rect x="0" y="0" width="960" height="390" rx="8" fill="#161E1C"/>
   <defs>
     <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>

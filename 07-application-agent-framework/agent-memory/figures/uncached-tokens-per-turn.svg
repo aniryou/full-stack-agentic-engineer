@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="360" viewBox="0 0 880 360" role="img" aria-label="The tokens that the engine prefills again at each turn from turn 2 to turn 20, for the four layouts of memory in the prompt." style="color: #E4EAE7">
+  <title>The tokens that the engine prefills again at each turn from turn 2 to turn 20, for the four layouts of memory in the prompt.</title>
+  <desc>{"kind":"line","legend":"top-left","marks":[{"anchor":"end","dy":-9,"kind":"point","label":"turn 8: 1,560","style":"warm","x":8,"y":1560},{"anchor":"start","dy":-9,"kind":"point","label":"turn 8: 600","style":"violet","x":8,"y":600},{"anchor":"start","dy":-9,"kind":"point","label":"turn 8: 56","style":"accent","x":8,"y":56}],"note":"computed by memcore.budget.hits_per_turn","series":[{"dash":false,"markers":false,"name":"before_history","style":"warm","x":[2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20],"y":[600,760,920,1080,1240,1400,1560,1720,1880,2040,2200,2360,2520,2680,2840,3000,3160,3320,3480]},{"dash":false,"markers":false,"name":"pinned","style":"accent","x":[2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20],"y":[56,56,56,56,56,56,56,56,56,56,56,56,56,56,56,56,56,56,56]},{"dash":false,"markers":false,"name":"tail","style":"violet","x":[2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20],"y":[600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600]},{"dash":true,"markers":false,"name":"none (no memory)","style":"muted","x":[2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20],"y":[56,56,56,56,56,56,56,56,56,56,56,56,56,56,56,56,56,56,56]}],"title":"The tokens that the engine prefills again at each turn from turn 2 to turn 20, for the four layouts of memory in the prompt.","x":{"label":"turn of the session","max":20,"min":2,"ticks":[2,4,6,8,10,12,14,16,18,20]},"y":{"label":"uncached tokens per turn","max":3800,"min":-150,"ticks":[0,1000,2000,3000]}}</desc>
+  <rect x="0" y="0" width="880" height="360" rx="8" fill="#161E1C"/>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12" fill="currentColor">
+    <g stroke="#27322E" stroke-width="1">
+      <line x1="66.0" y1="279.8" x2="858.0" y2="279.8"/>
+      <line x1="66.0" y1="212.0" x2="858.0" y2="212.0"/>
+      <line x1="66.0" y1="144.1" x2="858.0" y2="144.1"/>
+      <line x1="66.0" y1="76.3" x2="858.0" y2="76.3"/>
+    </g>
+    <g stroke="#55635E" stroke-width="1.2">
+      <line x1="66.0" y1="290.0" x2="858.0" y2="290.0"/>
+      <line x1="66.0" y1="290.0" x2="66.0" y2="22.0"/>
+    </g>
+    <g font-size="11" fill="#97A59F">
+      <text x="58.0" y="283.3" text-anchor="end">0</text>
+      <text x="58.0" y="215.5" text-anchor="end">1,000</text>
+      <text x="58.0" y="147.6" text-anchor="end">2,000</text>
+      <text x="58.0" y="79.8" text-anchor="end">3,000</text>
+      <text x="66.0" y="306.0" text-anchor="middle">2</text>
+      <text x="154.0" y="306.0" text-anchor="middle">4</text>
+      <text x="242.0" y="306.0" text-anchor="middle">6</text>
+      <text x="330.0" y="306.0" text-anchor="middle">8</text>
+      <text x="418.0" y="306.0" text-anchor="middle">10</text>
+      <text x="506.0" y="306.0" text-anchor="middle">12</text>
+      <text x="594.0" y="306.0" text-anchor="middle">14</text>
+      <text x="682.0" y="306.0" text-anchor="middle">16</text>
+      <text x="770.0" y="306.0" text-anchor="middle">18</text>
+      <text x="858.0" y="306.0" text-anchor="middle">20</text>
+    </g>
+    <text x="462.0" y="332.0" text-anchor="middle" fill="#97A59F">turn of the session</text>
+    <text x="16" y="156.0" text-anchor="middle" fill="#97A59F" transform="rotate(-90 16 156.0)">uncached tokens per turn</text>
+    <clipPath id="plot"><rect x="65.0" y="16.0" width="794.0" height="275.0"/></clipPath>
+    <g clip-path="url(#plot)">
+      <path d="M66.0 239.1 L110.0 228.3 L154.0 217.4 L198.0 206.5 L242.0 195.7 L286.0 184.8 L330.0 174.0 L374.0 163.1 L418.0 152.3 L462.0 141.4 L506.0 130.6 L550.0 119.7 L594.0 108.8 L638.0 98.0 L682.0 87.1 L726.0 76.3 L770.0 65.4 L814.0 54.6 L858.0 43.7" fill="none" stroke="#E39A62" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="M66.0 276.0 L110.0 276.0 L154.0 276.0 L198.0 276.0 L242.0 276.0 L286.0 276.0 L330.0 276.0 L374.0 276.0 L418.0 276.0 L462.0 276.0 L506.0 276.0 L550.0 276.0 L594.0 276.0 L638.0 276.0 L682.0 276.0 L726.0 276.0 L770.0 276.0 L814.0 276.0 L858.0 276.0" fill="none" stroke="#4CC5B7" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="M66.0 239.1 L110.0 239.1 L154.0 239.1 L198.0 239.1 L242.0 239.1 L286.0 239.1 L330.0 239.1 L374.0 239.1 L418.0 239.1 L462.0 239.1 L506.0 239.1 L550.0 239.1 L594.0 239.1 L638.0 239.1 L682.0 239.1 L726.0 239.1 L770.0 239.1 L814.0 239.1 L858.0 239.1" fill="none" stroke="#B7A3F0" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="M66.0 276.0 L110.0 276.0 L154.0 276.0 L198.0 276.0 L242.0 276.0 L286.0 276.0 L330.0 276.0 L374.0 276.0 L418.0 276.0 L462.0 276.0 L506.0 276.0 L550.0 276.0 L594.0 276.0 L638.0 276.0 L682.0 276.0 L726.0 276.0 L770.0 276.0 L814.0 276.0 L858.0 276.0" fill="none" stroke="#97A59F" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="6 4"/>
+    </g>
+    <circle cx="330.0" cy="174.0" r="4.5" fill="#E39A62" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="321.0" y="165.0" text-anchor="end" font-size="11" fill="#E39A62">turn 8: 1,560</text>
+    <circle cx="330.0" cy="239.1" r="4.5" fill="#B7A3F0" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="339.0" y="230.1" text-anchor="start" font-size="11" fill="#B7A3F0">turn 8: 600</text>
+    <circle cx="330.0" cy="276.0" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="339.0" y="267.0" text-anchor="start" font-size="11" fill="#4CC5B7">turn 8: 56</text>
+    <g font-size="11.5">
+      <rect x="76.0" y="30.0" width="147.0" height="78.0" rx="5" fill="#161E1C" fill-opacity="0.9" stroke="#27322E"/>
+      <line x1="86.0" y1="43.0" x2="104.0" y2="43.0" stroke="#E39A62" stroke-width="2"/>
+      <text x="110.0" y="47.0" fill="currentColor">before_history</text>
+      <line x1="86.0" y1="60.0" x2="104.0" y2="60.0" stroke="#4CC5B7" stroke-width="2"/>
+      <text x="110.0" y="64.0" fill="currentColor">pinned</text>
+      <line x1="86.0" y1="77.0" x2="104.0" y2="77.0" stroke="#B7A3F0" stroke-width="2"/>
+      <text x="110.0" y="81.0" fill="currentColor">tail</text>
+      <line x1="86.0" y1="94.0" x2="104.0" y2="94.0" stroke="#97A59F" stroke-width="2" stroke-dasharray="6 4"/>
+      <text x="110.0" y="98.0" fill="currentColor">none (no memory)</text>
+    </g>
+    <text x="10" y="353.0" font-size="10.5" fill="#97A59F" font-family="JetBrains Mono, monospace">computed by memcore.budget.hits_per_turn</text>
+  </g>
+</svg>

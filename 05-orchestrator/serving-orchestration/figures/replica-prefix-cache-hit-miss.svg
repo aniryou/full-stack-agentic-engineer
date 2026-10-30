@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="880" height="330" viewBox="0 0 880 330" role="img" aria-label="A request with four full prompt blocks goes through the router to one of two replicas: the replica that holds the first three block hashes prefills only the last block, and the replica that holds other prefixes prefills every block again." style="color: #E4EAE7">
-  <title>A request with four full prompt blocks goes through the router to one of two replicas: the replica that holds the first three block hashes prefills only the last block, and the replica that holds other prefixes prefills every block again.</title>
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="330" viewBox="0 0 880 330" role="img" aria-label="A replica that holds the first three block hashes prefills only the last block, and a replica with other prefixes prefills all four blocks again." style="color: #E4EAE7">
+  <title>A replica that holds the first three block hashes prefills only the last block, and a replica with other prefixes prefills all four blocks again.</title>
   <rect x="0" y="0" width="880" height="330" rx="8" fill="#161E1C"/>
   <defs>
     <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
@@ -27,35 +27,36 @@
     <text x="370" y="158" text-anchor="middle" font-weight="600">Router</text>
     <text x="370" y="178" text-anchor="middle" font-size="11.5" fill="#97A59F">which replica?</text>
     <!-- replica A: a hit -->
-    <rect x="510" y="36" width="346" height="118" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
-    <text x="683" y="60" text-anchor="middle" font-weight="600">Replica A: holds the prefix</text>
+    <rect x="510" y="28" width="346" height="126" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="683" y="54" text-anchor="middle" font-weight="600">Replica A: holds the prefix</text>
     <g font-family="JetBrains Mono, monospace" font-size="11">
-      <rect x="591" y="72" width="40" height="26" rx="3" fill="none" stroke="#4CC5B7" stroke-width="1"/>
-      <text x="611" y="89" text-anchor="middle" fill="#7ADACF">h1</text>
-      <rect x="639" y="72" width="40" height="26" rx="3" fill="none" stroke="#4CC5B7" stroke-width="1"/>
-      <text x="659" y="89" text-anchor="middle" fill="#7ADACF">h2</text>
-      <rect x="687" y="72" width="40" height="26" rx="3" fill="none" stroke="#4CC5B7" stroke-width="1"/>
-      <text x="707" y="89" text-anchor="middle" fill="#7ADACF">h3</text>
-      <rect x="735" y="72" width="40" height="26" rx="3" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="3 2"/>
-      <text x="755" y="89" text-anchor="middle" fill="#97A59F">h4</text>
+      <rect x="591" y="66" width="40" height="26" rx="3" fill="none" stroke="#4CC5B7" stroke-width="1"/>
+      <text x="611" y="83" text-anchor="middle" fill="#7ADACF">h1</text>
+      <rect x="639" y="66" width="40" height="26" rx="3" fill="none" stroke="#4CC5B7" stroke-width="1"/>
+      <text x="659" y="83" text-anchor="middle" fill="#7ADACF">h2</text>
+      <rect x="687" y="66" width="40" height="26" rx="3" fill="none" stroke="#4CC5B7" stroke-width="1"/>
+      <text x="707" y="83" text-anchor="middle" fill="#7ADACF">h3</text>
+      <rect x="735" y="66" width="40" height="26" rx="3" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="3 2"/>
+      <text x="755" y="83" text-anchor="middle" fill="#97A59F">h4</text>
     </g>
-    <text x="683" y="120" text-anchor="middle" font-size="11.5" fill="#7ADACF">cache hit: the engine prefills block 4 only</text>
-    <text x="683" y="140" text-anchor="middle" font-size="11" fill="#97A59F">BlockPool: 2,193 blocks, LRU eviction, tail blocks first</text>
+    <text x="683" y="114" text-anchor="middle" font-size="11.5" fill="#7ADACF">cache hit: the engine prefills block 4 only</text>
+    <text x="683" y="136" text-anchor="middle" font-size="11" fill="#97A59F">BlockPool: 2,193 blocks, LRU eviction, tail blocks first</text>
     <!-- replica B: a miss -->
-    <rect x="510" y="176" width="346" height="118" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    <text x="683" y="200" text-anchor="middle" font-weight="600">Replica B: holds other prefixes</text>
+    <rect x="510" y="168" width="346" height="126" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="683" y="192" text-anchor="middle" font-weight="600">Replica B: holds other prefixes</text>
     <g font-family="JetBrains Mono, monospace" font-size="11" fill="#97A59F">
-      <rect x="591" y="212" width="40" height="26" rx="3" fill="none" stroke="#97A59F" stroke-width="1"/>
-      <text x="611" y="229" text-anchor="middle">h9</text>
-      <rect x="639" y="212" width="40" height="26" rx="3" fill="none" stroke="#97A59F" stroke-width="1"/>
-      <text x="659" y="229" text-anchor="middle">h10</text>
-      <rect x="687" y="212" width="40" height="26" rx="3" fill="none" stroke="#97A59F" stroke-width="1"/>
-      <text x="707" y="229" text-anchor="middle">h11</text>
-      <rect x="735" y="212" width="40" height="26" rx="3" fill="none" stroke="#97A59F" stroke-width="1"/>
-      <text x="755" y="229" text-anchor="middle">h12</text>
+      <rect x="591" y="204" width="40" height="26" rx="3" fill="none" stroke="#97A59F" stroke-width="1"/>
+      <text x="611" y="221" text-anchor="middle">h9</text>
+      <rect x="639" y="204" width="40" height="26" rx="3" fill="none" stroke="#97A59F" stroke-width="1"/>
+      <text x="659" y="221" text-anchor="middle">h10</text>
+      <rect x="687" y="204" width="40" height="26" rx="3" fill="none" stroke="#97A59F" stroke-width="1"/>
+      <text x="707" y="221" text-anchor="middle">h11</text>
+      <rect x="735" y="204" width="40" height="26" rx="3" fill="none" stroke="#97A59F" stroke-width="1"/>
+      <text x="755" y="221" text-anchor="middle">h12</text>
     </g>
-    <rect x="526" y="250" width="314" height="32" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
-    <text x="683" y="271" text-anchor="middle" font-size="11.5" font-weight="600">cache miss: prefill every block at 3,781 tokens/s</text>
+    <rect x="526" y="240" width="314" height="44" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="683" y="258" text-anchor="middle" font-size="11.5" font-weight="600">cache miss: prefill every block</text>
+    <text x="683" y="275" text-anchor="middle" font-size="11">again, at 3,781 tokens/s</text>
     <!-- edges -->
     <g stroke="#97A59F" stroke-width="1.2" fill="none">
       <path d="M234 164 L298 164" marker-end="url(#arr)"/>

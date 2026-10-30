@@ -58,6 +58,6 @@
     <g stroke="#97A59F" stroke-width="1" fill="none" marker-end="url(#arr)">
       <path d="M125 242 L164 267"/><path d="M285 242 L432 267"/><path d="M445 242 L520 267"/><path d="M605 242 L768 267"/>
     </g>
-    <text x="478" y="310" text-anchor="middle" font-size="10.5" fill="#E39A62">each 32-byte transaction serves one float, and you waste the rest of its bytes. 4 of the 32 transactions are drawn.</text>
+    <text x="478" y="310" text-anchor="middle" font-size="10.5" fill="#E39A62">each 32-byte transaction serves one float, and you waste the rest of its bytes. Only some of the 32 transactions are drawn.</text>
   </g>
 </svg>

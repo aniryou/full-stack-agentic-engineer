@@ -66,6 +66,25 @@ T0 path and print the commands to run on real hardware, so no notebook requires 
 What the GPUs you are likely to rent can and cannot show. All values `(verify)`; the dated catalogue the notebooks
 compute with is `roofline.specs` in [`roofline-core`](01-hardware-gpu-fabric/roofline-and-fabric/roofline-core/).
 
+```mermaid
+flowchart LR
+    accTitle: A decision flow that picks a GPU by asking in turn whether the experiment needs FP4, NVLink or MIG, or FP8, and ends on a free T4 when it needs none of them.
+    E([experiment]) --> F4{FP4?}
+    F4 -- yes --> BW["B200 or<br/>RTX PRO 6000"]
+    F4 -- no --> NV{NVLink<br/>or MIG?}
+    NV -- yes --> AH["A100 or H100<br/>SXM for NVLink"]
+    NV -- no --> F8{FP8?}
+    F8 -- yes --> CC["L4 or<br/>RTX 4090"]
+    F8 -- no --> T4["T4 with<br/>--dtype half"]
+```
+
+*Read it left to right: each diamond asks whether the experiment needs a feature that, by the bullets below, only
+some GPUs have, and the first yes names the cheapest GPUs that have it. The last no ends on a free T4, which has no BF16
+and no TF32, so vLLM runs with `--dtype half` there; a 7–8B model at 16-bit needs a 24 GB GPU instead (§1.1); a
+decode-bound measurement wants bandwidth per dollar, where an RTX 4090 has about 3× an L4's. One that needs two
+features, such as FP8 and NVLink, needs a GPU with both in the table, here an H100 SXM; the table also marks MIG on
+the RTX PRO 6000 `(verify)`, which has no NVLink.*
+
 | GPU | Memory | Bandwidth | Compute capability | BF16 | FP8 | NVLink | MIG | Cheapest places |
 |---|---|---|---|---|---|---|---|---|
 | T4 | 16 GB GDDR6 | ~320 GB/s | 7.5 | no (use FP16) | no | no | no | Colab free, Kaggle (2×), GCP N1 |
@@ -207,6 +226,39 @@ scale to zero.
 | Reservations and committed use | capacity held in a zone; 1- or 3-year commitments for discounts | billed whether used or not | idle cost | production only; a ComputeClass fallback list usually starts from one ([`CURRICULUM.md`](CURRICULUM.md) module 03.5) |
 
 ### 5.4 What the labs create, and what bills besides the GPU
+
+```mermaid
+sequenceDiagram
+    accTitle: In a GKE lab, the management fee and the CPU system pool bill from terraform apply to terraform destroy, the GPU node only while the Deployment has replicas and until the autoscaler removes it, and a PVC's disk can outlive the cluster.
+    participant You
+    participant C as GKE cluster
+    participant G as GPU node
+    participant D as PVC disk
+    You->>C: terraform apply
+    activate C
+    Note over C: fee and system<br/>pool bill
+    You->>C: Deployment with one replica
+    C->>D: adds a disk
+    activate D
+    C->>G: adds a GPU node
+    activate G
+    You->>C: kubectl scale --replicas=0
+    Note over G: empty for about<br/>ten minutes
+    C->>G: autoscaler removes the empty node
+    deactivate G
+    You->>C: terraform destroy
+    deactivate C
+    Note over D: can outlive<br/>its cluster
+    You->>D: sweep lists it, you delete it
+    deactivate D
+```
+
+*One session of a lab on GKE (the 02, 03 and 05 rows below, with the vLLM Deployment of the 04 GKE row), read top to
+bottom; the bar on a lifeline is the time that part bills. The GPU node bills only while the Deployment has replicas,
+plus the wait before the autoscaler removes the empty node (about ten minutes by default `(verify)`); the management
+fee and the CPU system pool bill from `terraform apply` until `terraform destroy` (the free tier offsets one zonal
+cluster's fee `(verify)`). A PVC's disk can outlive its cluster (the sweep in §8 lists unattached disks), and the 02
+and 03 rows add metric ingestion, the 05 row the load balancer.*
 
 | Lab deploy target | Creates (defaults) | Keeps billing while idle |
 |---|---|---|

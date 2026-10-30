@@ -63,13 +63,13 @@
       <text x="24" y="268" fill="#E39A62">deputy is the default state of an agent.</text>
     </g>
     <!-- the two authorities, bottom right -->
-    <rect x="428" y="196" width="488" height="90" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
-    <text x="672" y="213" text-anchor="middle" font-size="11" fill="#97A59F">every action is under one of two authorities (tokens, policy and logs show which)</text>
-    <rect x="442" y="224" width="224" height="50" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    <text x="554" y="244" text-anchor="middle" font-size="11" font-weight="600">own authority:</text>
-    <text x="554" y="260" text-anchor="middle" font-size="11" fill="#97A59F">the agent's identity and permissions</text>
-    <rect x="678" y="224" width="224" height="50" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    <text x="790" y="244" text-anchor="middle" font-size="11" font-weight="600">on behalf of a user (delegated):</text>
-    <text x="790" y="260" text-anchor="middle" font-size="11" fill="#97A59F">the user's consent and permissions</text>
+    <rect x="414" y="196" width="502" height="90" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="665" y="213" text-anchor="middle" font-size="11" fill="#97A59F">every action is under one of two authorities (tokens, policy and logs show which)</text>
+    <rect x="428" y="224" width="232" height="50" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="544" y="244" text-anchor="middle" font-size="11" font-weight="600">own authority:</text>
+    <text x="544" y="260" text-anchor="middle" font-size="11" fill="#97A59F">the agent's identity and permissions</text>
+    <rect x="670" y="224" width="232" height="50" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="786" y="244" text-anchor="middle" font-size="11" font-weight="600">on behalf of a user (delegated):</text>
+    <text x="786" y="260" text-anchor="middle" font-size="11" fill="#97A59F">the user's consent and permissions</text>
   </g>
 </svg>

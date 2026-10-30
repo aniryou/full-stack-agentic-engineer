@@ -156,9 +156,10 @@ Hours are estimates, as above.
 
 ```mermaid
 flowchart LR
+  accTitle: Rounds 1 to 4 of the learning path as four columns, each a top-to-bottom chain of its modules: the foundations and the engine at T0, the hardware and the runtime, the engine with a GPU and post-training, then Kubernetes and the orchestrator.
   subgraph R1["Round 1 · steps 1 to 5"]
     direction TB
-    S1["00.1 to 00.3<br/>foundations"] --> S3["04.0<br/>kernel topics"] --> S4["04.1 to 04.6<br/>serving-engine<br/>§1–8"] --> S5["04.1<br/>vllm-serving-lab<br/>01–02"]
+    S1["00.1 to 00.3<br/>foundations"] --> S3["04.0<br/>kernel topics"] --> S4["04.1 to 04.6<br/>serving-engine<br/>§1–8"] --> S5["04.1<br/>serving lab<br/>01–02"]
   end
   subgraph R2["Round 2 · steps 6 to 11"]
     direction TB
@@ -175,12 +176,14 @@ flowchart LR
   R1 --> R2 --> R3 --> R4
 ```
 
-*Rounds 1 to 4: the model and the engine at T0, the hardware, the engine with a GPU, post-training, and the
-fleet. Step 17 (04.7) is the Cloud Run GPU step, best at T3. Each box names the modules and
-their topic, and the table below gives the material, the hours and the tiers.*
+*Rounds 1 to 4, from left to right: the model and the engine at T0, the hardware and the runtime, the engine with a
+GPU and post-training, and the fleet. Read each column from the top; step 17 (04.7) is the Cloud Run GPU
+step, best at T3. Each box names the modules and their topic, and the table below gives the material, the
+hours and the tiers.*
 
 ```mermaid
 flowchart TB
+  accTitle: Rounds 5 and 6 of the learning path as two rows after round 4, each a chain of its steps from left to right, the gateway in steps 24 to 26 and then the agent in steps 27 to 31.
   R4P(["after round 4"]) --> R5
   subgraph R5["Round 5 · steps 24 to 26"]
     direction LR
@@ -193,7 +196,8 @@ flowchart TB
   R5 --> R6
 ```
 
-*Rounds 5 and 6 (steps 24 to 31) come after round 4: the gateway, then the agent, the workload that drives it all.
+*Rounds 5 and 6 (steps 24 to 31) follow round 4, one row each: the gateway, then the agent, the workload that drives
+it all.
 The two figures together show the 31 steps of the table below, grouped into the rounds of the spiral (§3.1).*
 
 | Step | Layer | Modules | Material | Hours | Min tier | Best |

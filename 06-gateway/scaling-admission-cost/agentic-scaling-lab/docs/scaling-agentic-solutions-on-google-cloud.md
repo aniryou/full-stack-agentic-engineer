@@ -75,6 +75,22 @@ Two consequences shape every design. First, the capacity plan is a *token* budge
 
 A turn with two tool calls has four segments on the critical path. They are the plan call, the tools, the answer call, and the streaming of the answer to the user. Model latency is the time-to-first-token plus the output tokens divided by the tokens per second. The time-to-first-token now includes *thinking* time.
 
+```mermaid
+flowchart LR
+  M(["the message"]) --> P["plan call"]
+  subgraph tools ["the tools"]
+    T1["tool call 1"]
+    T2["tool call 2"]
+  end
+  P --> T1
+  P --> T2
+  T1 --> A["answer call"]
+  T2 --> A
+  A --> S["streaming of<br/>the answer"]
+```
+
+*Read the four segments of §1.3 from left to right. Each segment waits for the segment before it, and the p95 of the turn is approximately the sum of their tails. With parallel tool calls, the tools cost only the slower call (§5.6).*
+
 Because the segments are sequential, the p95 of a turn is approximately the sum of their tails, not the tail of their sums. Thus a four-second p95 target makes four things necessary: parallel tool execution, streaming, prefetch, and a Flash-class model on the plan step.
 
 Also, because turns are long, Little's law connects latency to concurrency. At 20 turns per second, a six-second turn means 125 turns in flight, and a twelve-second turn means 250. Each turn in flight holds memory, a session lock and an open client connection. **Slowdowns are capacity problems**, not only experience problems.
@@ -118,7 +134,7 @@ The feedback loop has these steps:
 
 ![The six steps of the feedback loop of 1.6 make a cycle that starts and ends with more 429s.](figures/overload-feedback-loop.svg)
 
-*This is the feedback loop of 1.6. Each step causes the next step, and the last step causes more `429`s again. Little's law connects the longer turns to more turns in flight.*
+*Start at more load on the left. Each arrow means "causes", and the loop comes back to more `429`s. Little's law connects the longer turns to more turns in flight.*
 
 Without a circuit breaker on that loop, an agent system under overload does not fail fast. It slows down for everyone until the turn deadlines expire and the users go away. By then, the users used the tokens all the same. This is the failure mode with the highest cost of all, because you pay for all of it and you satisfy nobody.
 
@@ -320,7 +336,7 @@ The whole Cloud Run fleet for this system is a few dozen vCPUs. That is approxim
 
 ![The reference architecture of Part 4: the gateway and the orchestrator on Cloud Run, Pub/Sub between them, and the parts and stores they use.](figures/google-cloud-reference-architecture.svg)
 
-*In the reference architecture, the gateway and the orchestrator are two Cloud Run services, with a Pub/Sub queue between them. Both services use Firestore for durable state and Redis for hot state.*
+*Follow a turn from the app at the top left, down to the gateway, and across Pub/Sub to the orchestrator. The gateway and the orchestrator, the two accent boxes, are the separate services of §4.1, and Gemini, the binding constraint, is the warm box. Both services use Firestore for durable state and Redis for hot state.*
 
 This is the path of a turn from end to end. The client posts a message. The gateway authenticates the message. It examines the token bucket of the tenant and the global in-flight cap, and it decides the current degradation level. It writes the turn to Firestore and publishes to Pub/Sub, with the session id as ordering key. Then it starts to relay the event stream of the turn to the client over server-sent events.
 
@@ -382,6 +398,18 @@ The *capacity* of the bucket is the burst that you accept. Its *rate* is the sus
 If the bucket cannot admit a call in a bounded wait, make the gateway treat this failure as a rate-limit signal of its own. Make it count the signal toward the degradation level. Then make it try a sibling model with its own pool before it fails. When there is more than one orchestrator instance, the bucket must be in Redis. A Lua-scripted Redis bucket is atomic and costs one round-trip per call.
 
 Provisioned Throughput connects at the same place. For each request, you select *dedicated* (PT only, `429` when exhausted), *spill-over* (the default: PT first, then PayGo) or *shared* (PayGo only). You also select which tier takes the spill. The `traffic_type` field of the response tells you which pool served the call, and it belongs on your dashboard. At scale, PT enforcement windows are short: one to five seconds above 50 GSUs. Thus you must make bursts smooth to second granularity, not minute granularity, to stay inside a commitment.
+
+```mermaid
+flowchart LR
+  B(["token bucket<br/>per model"]) -- "no room" --> SIB["sibling model"]
+  B -- "room" --> M{"mode of the<br/>request"}
+  M -- "dedicated,<br/>spill-over" --> PT["Provisioned<br/>Throughput"]
+  M -- "shared" --> PG["PayGo tier"]
+  PT -- "exhausted,<br/>spill-over" --> PG
+  PT -- "exhausted,<br/>dedicated" --> E["429"]
+```
+
+*Start at the token bucket on the left: a call with no room in a bounded wait goes to a model with its own pool. The mode of each request selects the pool: dedicated, spill-over or shared. When Provisioned Throughput has no capacity left, a dedicated request gets a `429`, and a spill-over request goes to the PayGo tier.*
 
 > **Key figures.** The documented guidance for `429`s is exponential backoff, the global endpoint and smooth traffic over the minute. The Gemini 3.x context-cache minimum is 4,096 tokens (6,144 on 3.7/3.8 Flash and 3.1 Pro). The default TTL of an explicit cache is 60 minutes. Storage costs $1.00 per M tokens per hour on Flash, and $4.50 on 3.1 Pro.
 
@@ -448,6 +476,25 @@ The loop writes a checkpoint of every step to Firestore *before* it acts on the 
 
 On redelivery, the orchestrator replays the turn from its checkpoint and skips the completed steps. The tool executor gives every write a key from the turn, the step, the call index and a hash of the arguments. It stores the result under that key for a day. Thus a redelivered turn that already registered a notification of loss gets the same claim reference back, and does not create a second one. A simulated crash test (the lab's notebook 02) stops the process immediately after the checkpoint of the claim. After redelivery, the test shows one claim, and four of five steps resume from the checkpoint.
 
+```mermaid
+sequenceDiagram
+  participant P as Pub/Sub
+  participant O as orchestrator
+  participant F as Firestore
+  participant T as tool executor
+  P->>O: push the turn
+  O->>T: write, stored under a key
+  Note over O: the process stops
+  P->>O: redelivery
+  O->>F: load the checkpoints
+  O->>T: the same write, the same key
+  T-->>O: the stored result
+  O->>F: checkpoint of the step
+  O-->>P: 200
+```
+
+*The process stops after the write and before its checkpoint, the case of §1.5. The crash test of notebook 02 stops after the checkpoint, so the replay of the test skips that step. On redelivery, the same key gets the stored result back, not a second claim, and the `200` acknowledges the push.*
+
 The queue contract is the other half. Pub/Sub push acknowledges on any `2xx` and redelivers on anything else. Its push backoff grows from 100 ms to 60 s. The retry policy of the subscription adds a 10–600 s exponential backoff. After five attempts, the message goes to a dead-letter topic with its own alert.
 
 Make the orchestrator return `503` only for transient infrastructure trouble. Make it return `200` for every *terminal* outcome, graceful failure included. A turn can end with "I could not complete that; a colleague will follow up". Pub/Sub must not retry that turn into a second bill. The acknowledgement deadline (≤ 600 s) is the ceiling for one delivery. The turn budget (45 s) is well below it.
@@ -504,6 +551,23 @@ Tool services run as their own Cloud Run services, with their own service accoun
 ### 5.7 Streaming and connections
 
 Server-sent events over HTTP/1.1 chunked transfer is the correct transport for a chat agent on Cloud Run. It goes through every proxy, and it supports resume natively through `Last-Event-ID`. It is also a plain request. Thus it counts against instance concurrency, and the request timeout applies to it (default 5 minutes, maximum 60). For this reason, clients must reconnect with the last sequence number, and the relay must serve from the stream, not from memory.
+
+```mermaid
+sequenceDiagram
+  participant C as client
+  participant G as gateway
+  participant R as Redis stream
+  participant O as orchestrator
+  O->>R: events with sequence numbers
+  R->>G: read the events
+  G->>C: server-sent events
+  Note over C,G: the connection ends
+  C->>G: reconnect, Last-Event-ID
+  R->>G: the events after that id
+  G->>C: the missed events
+```
+
+*The orchestrator writes the events of the turn to the Redis stream, and the gateway relays them. After a reconnect, the gateway serves the missed events from the stream, not from memory (§4.1).*
 
 Responses without chunked transfer have a cap of 32 MiB, but streams do not. WebSockets also work, but they need session affinity, which is best-effort. They also need cross-instance fan-out through Redis in either case.
 
