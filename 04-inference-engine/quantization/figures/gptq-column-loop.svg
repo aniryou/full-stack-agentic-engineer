@@ -9,20 +9,20 @@
     <text x="24" y="26" fill="#97A59F">GPTQ (§4, <tspan font-family="JetBrains Mono, monospace" font-size="11">gptq.gptq()</tspan>): one pass over the input columns of W, from left to right</text>
 
     <!-- the pipeline from the calibration inputs to U -->
-    <rect x="24" y="70" width="206" height="52" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    <text x="127" y="92" text-anchor="middle" font-weight="600">calibration inputs X</text>
-    <text x="127" y="110" text-anchor="middle" font-size="11" fill="#97A59F">n tokens × in</text>
-    <path d="M127 122 L127 138" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
-    <rect x="24" y="140" width="206" height="64" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    <text x="127" y="162" text-anchor="middle" font-weight="600">H = 2/n Σ xₜ xₜᵀ</text>
-    <text x="127" y="180" text-anchor="middle" font-size="11" fill="#97A59F">in × in, from the activations</text>
-    <text x="127" y="194" text-anchor="middle" font-size="11" fill="#97A59F">damping: + 0.01 · mean(diag H) · I</text>
-    <path d="M127 204 L127 220" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
-    <rect x="24" y="222" width="206" height="64" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    <text x="127" y="244" text-anchor="middle" font-weight="600">U = chol(H⁻¹)ᵀ</text>
-    <text x="127" y="262" text-anchor="middle" font-size="11" fill="#97A59F">upper triangular, H⁻¹ = UᵀU</text>
-    <text x="127" y="276" text-anchor="middle" font-size="11" fill="#97A59F">row j weights the update</text>
-    <path d="M230 270 L298 270" stroke="#4CC5B7" stroke-width="1.2" fill="none" stroke-dasharray="4 3" marker-end="url(#arrA)"/>
+    <rect x="24" y="70" width="222" height="52" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="135" y="92" text-anchor="middle" font-weight="600">calibration inputs X</text>
+    <text x="135" y="110" text-anchor="middle" font-size="11" fill="#97A59F">n tokens × in</text>
+    <path d="M135 122 L135 138" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+    <rect x="24" y="140" width="222" height="64" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="135" y="162" text-anchor="middle" font-weight="600">H = 2/n Σ xₜ xₜᵀ</text>
+    <text x="135" y="180" text-anchor="middle" font-size="11" fill="#97A59F">in × in, from the activations</text>
+    <text x="135" y="194" text-anchor="middle" font-size="11" fill="#97A59F">damping: + 0.01 · mean(diag H) · I</text>
+    <path d="M135 204 L135 220" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+    <rect x="24" y="222" width="222" height="64" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="135" y="244" text-anchor="middle" font-weight="600">U = chol(H⁻¹)ᵀ</text>
+    <text x="135" y="262" text-anchor="middle" font-size="11" fill="#97A59F">upper triangular, H⁻¹ = UᵀU</text>
+    <text x="135" y="276" text-anchor="middle" font-size="11" fill="#97A59F">row j weights the update</text>
+    <path d="M246 270 L298 270" stroke="#4CC5B7" stroke-width="1.2" fill="none" stroke-dasharray="4 3" marker-end="url(#arrA)"/>
 
     <!-- W, one pass -->
     <text x="300" y="60" font-size="11" fill="#97A59F">W (out × in) · act-order visits the columns from the largest H[j, j] to the smallest</text>

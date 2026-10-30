@@ -8,44 +8,46 @@
     <text x="24" y="26" fill="#97A59F">SmoothQuant (§5, <tspan font-family="JetBrains Mono, monospace" font-size="11">smoothquant.smooth_scales()</tspan>): the outlier channel j of X moves into column j of W, and the previous norm absorbs 1/s</text>
 
     <!-- the previous norm -->
-    <rect x="24" y="96" width="140" height="72" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    <text x="94" y="118" text-anchor="middle" font-weight="600">previous norm</text>
-    <text x="94" y="136" text-anchor="middle" font-size="11" fill="#97A59F">gain γ</text>
-    <text x="94" y="153" text-anchor="middle" font-size="11" fill="#7ADACF">folds in 1/s: γ / s</text>
-    <path d="M164 132 L188 132" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+    <rect x="24" y="96" width="130" height="72" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="89" y="118" text-anchor="middle" font-weight="600">previous norm</text>
+    <text x="89" y="136" text-anchor="middle" font-size="11" fill="#97A59F">gain γ</text>
+    <text x="89" y="153" text-anchor="middle" font-size="11" fill="#7ADACF">folds in 1/s: γ / s</text>
+    <path d="M154 132 L178 132" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
 
-    <!-- X: tokens × in, per-token scales -->
-    <text x="280" y="74" text-anchor="middle" font-size="11.5" fill="#97A59F">X (tokens × in), one INT8 scale per token</text>
-    <rect x="190" y="84" width="180" height="96" rx="2" fill="none" stroke="currentColor" stroke-width="1"/>
-    <path d="M205 84 V180 M220 84 V180 M235 84 V180 M250 84 V180 M265 84 V180 M280 84 V180 M295 84 V180 M310 84 V180 M325 84 V180 M340 84 V180 M355 84 V180 M190 100 H370 M190 116 H370 M190 132 H370 M190 148 H370 M190 164 H370" stroke="#97A59F" stroke-width="0.5" stroke-opacity="0.45" fill="none"/>
-    <rect x="265" y="84" width="15" height="96" fill="#3A2C25" stroke="#E39A62" stroke-width="1"/>
-    <text x="280" y="198" text-anchor="middle" font-size="11" fill="#7ADACF">channel j: ÷ s_j</text>
-    <text x="280" y="212" text-anchor="middle" font-size="11" fill="#97A59F">the outlier that set the step of every token</text>
+    <g transform="translate(-10,0)">
+      <!-- X: tokens × in, per-token scales -->
+      <text x="280" y="74" text-anchor="middle" font-size="11.5" fill="#97A59F">X (tokens × in), one INT8 scale per token</text>
+      <rect x="190" y="84" width="180" height="96" rx="2" fill="none" stroke="currentColor" stroke-width="1"/>
+      <path d="M205 84 V180 M220 84 V180 M235 84 V180 M250 84 V180 M265 84 V180 M280 84 V180 M295 84 V180 M310 84 V180 M325 84 V180 M340 84 V180 M355 84 V180 M190 100 H370 M190 116 H370 M190 132 H370 M190 148 H370 M190 164 H370" stroke="#97A59F" stroke-width="0.5" stroke-opacity="0.45" fill="none"/>
+      <rect x="265" y="84" width="15" height="96" fill="#3A2C25" stroke="#E39A62" stroke-width="1"/>
+      <text x="280" y="198" text-anchor="middle" font-size="11" fill="#7ADACF">channel j: ÷ s_j</text>
+      <text x="280" y="212" text-anchor="middle" font-size="11" fill="#97A59F">the outlier that set the step of every token</text>
 
-    <!-- the GEMM -->
-    <path d="M370 132 L392 132" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
-    <rect x="394" y="108" width="92" height="48" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
-    <text x="440" y="129" text-anchor="middle" font-weight="600">GEMM</text>
-    <text x="440" y="146" text-anchor="middle" font-size="11" fill="#7ADACF">INT8 W8A8</text>
-    <path d="M510 132 L488 132" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
-    <text x="440" y="174" text-anchor="middle" font-size="11" fill="#97A59F">(X / s)(W · s)ᵀ</text>
-    <text x="440" y="188" text-anchor="middle" font-size="11" fill="#97A59F">= X Wᵀ exactly</text>
+      <!-- the GEMM -->
+      <path d="M370 132 L392 132" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+      <rect x="394" y="108" width="92" height="48" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+      <text x="440" y="129" text-anchor="middle" font-weight="600">GEMM</text>
+      <text x="440" y="146" text-anchor="middle" font-size="11" fill="#7ADACF">INT8 W8A8</text>
+      <path d="M510 132 L488 132" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+      <text x="440" y="174" text-anchor="middle" font-size="11" fill="#97A59F">(X / s)(W · s)ᵀ</text>
+      <text x="440" y="188" text-anchor="middle" font-size="11" fill="#97A59F">= X Wᵀ exactly</text>
 
-    <!-- W: out × in, per-channel scales -->
-    <text x="600" y="74" text-anchor="middle" font-size="11.5" fill="#97A59F">W (out × in), one INT8 scale per row</text>
-    <rect x="510" y="84" width="180" height="96" rx="2" fill="none" stroke="currentColor" stroke-width="1"/>
-    <path d="M525 84 V180 M540 84 V180 M555 84 V180 M570 84 V180 M585 84 V180 M600 84 V180 M615 84 V180 M630 84 V180 M645 84 V180 M660 84 V180 M675 84 V180 M510 100 H690 M510 116 H690 M510 132 H690 M510 148 H690 M510 164 H690" stroke="#97A59F" stroke-width="0.5" stroke-opacity="0.45" fill="none"/>
-    <rect x="585" y="84" width="15" height="96" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
-    <text x="600" y="198" text-anchor="middle" font-size="11" fill="#7ADACF">column j: × s_j</text>
-    <text x="600" y="212" text-anchor="middle" font-size="11" fill="#97A59F">per-channel scales absorb the larger column</text>
+      <!-- W: out × in, per-channel scales -->
+      <text x="600" y="74" text-anchor="middle" font-size="11.5" fill="#97A59F">W (out × in), one INT8 scale per row</text>
+      <rect x="510" y="84" width="180" height="96" rx="2" fill="none" stroke="currentColor" stroke-width="1"/>
+      <path d="M525 84 V180 M540 84 V180 M555 84 V180 M570 84 V180 M585 84 V180 M600 84 V180 M615 84 V180 M630 84 V180 M645 84 V180 M660 84 V180 M675 84 V180 M510 100 H690 M510 116 H690 M510 132 H690 M510 148 H690 M510 164 H690" stroke="#97A59F" stroke-width="0.5" stroke-opacity="0.45" fill="none"/>
+      <rect x="585" y="84" width="15" height="96" fill="#16302A" stroke="#4CC5B7" stroke-width="1"/>
+      <text x="600" y="198" text-anchor="middle" font-size="11" fill="#7ADACF">column j: × s_j</text>
+      <text x="600" y="212" text-anchor="middle" font-size="11" fill="#97A59F">per-channel scales absorb the larger column</text>
+    </g>
 
     <!-- the measured gain -->
-    <rect x="704" y="84" width="172" height="104" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    <text x="790" y="106" text-anchor="middle" font-weight="600">tiny model, INT8 W8A8</text>
-    <text x="790" y="124" text-anchor="middle" font-size="11" fill="#97A59F">up-projection output error</text>
-    <text x="790" y="142" text-anchor="middle" font-size="11.5">1.52% → 0.57% at α = 0.5</text>
-    <text x="790" y="160" text-anchor="middle" font-size="11" fill="#97A59F">over the full model:</text>
-    <text x="790" y="175" text-anchor="middle" font-size="11" fill="#97A59F">KL falls 2.7×</text>
+    <rect x="690" y="84" width="190" height="104" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="785" y="106" text-anchor="middle" font-weight="600">tiny model, INT8 W8A8</text>
+    <text x="785" y="124" text-anchor="middle" font-size="11" fill="#97A59F">up-projection output error</text>
+    <text x="785" y="142" text-anchor="middle" font-size="11.5">1.52% → 0.57% at α = 0.5</text>
+    <text x="785" y="160" text-anchor="middle" font-size="11" fill="#97A59F">over the full model:</text>
+    <text x="785" y="175" text-anchor="middle" font-size="11" fill="#97A59F">KL falls 2.7×</text>
 
     <text x="24" y="240" font-family="JetBrains Mono, monospace" font-size="11.5">s_j = max|X_j|^α / max|W_j|^(1−α)</text>
     <text x="300" y="240" font-size="11.5" fill="#97A59F">α = 0.5 by default; 0.85 for Llama-3-8B and 0.8 for Mistral/Mixtral (verify)</text>
