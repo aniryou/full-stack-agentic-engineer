@@ -475,11 +475,31 @@ find . -maxdepth 5 -name '*.ipynb' ! -path '*/.ipynb_checkpoints/*' | wc -l
   in round 1, 475 words replaced, 314 parentheticals made sentences of their own, 594 other plain-language edits, 270
   fixes, 2 rejected; 916 warnings kept with a written reason (technical names: a fixed cost, an all-reduce, a verified
   reward, Little's law, GKE's time-sharing, Kueue's borrowing; quotations; the `(verify)` tag). Linter totals over the
-  eight layers (unique prose files, this commit): `word` 1,579 → 955, `paren-clause` 440 → 200, `passive` 342 → 300, `ing` 1,378 → 1,333, `semicolon` 64 → 61, errors 237 → 237 (every one a fragment a test pins or a quotation); with the generated notebooks counted, warnings 6,381 → 4,345. Not in this commit: the second pass over the body text
+  eight layers (unique prose files, this commit): `word` 1,579 → 955, `paren-clause` 440 → 200, `passive` 342 → 300, `ing` 1,378 → 1,333, `semicolon` 64 → 61, errors 164 → 164 (every one a fragment a test pins or a quotation); with the generated notebooks counted, errors 237 → 237 and warnings 6,381 → 4,345. Not in this commit: the second pass over the body text
   of the 27 primers and primer-like documents and over the long-running-durable topic's READMEs and notebooks, which
   ran against a baseline that already held the reshaped figures and lands in the next commit once its verifiers report.
   The figure check and its test see new files too (`git ls-files --others`), after the first run of the check missed
   the 19 SVGs the agents had just drawn. **Baseline unchanged: 385 notebooks.**
+
+- **2026-10-30 — accessible language and one-screen figures, part 2 (the primers' body text).** The second pass over the
+  27 primers and primer-like documents and the long-running-durable topic's READMEs, docs and notebooks, run as one
+  Workflow of 28 items against a baseline snapshot that already held the reshaped figures, so that the verifiers read
+  the figure edits as the original and not as this pass's. The run was cut off once by a container restart after its
+  first eight agents and resumed from the journal (the six finished apply stages replayed from cache, the two in
+  flight continued from their partial edits); 104 agents in all. 27 of 28 items passed; the two findings left on the
+  quantization primer (an "outliers" claim that had drifted from "tolerate outliers" to "a smaller error on the
+  outliers", and a decision-table cell where FP8 read as a companion of NVFP4 W4A4) were applied by hand. 698 hunks
+  read in round 1, 380 words replaced, 166 parenthetical clauses made sentences of their own, 408 other plain-language
+  edits, 141 fixes, 12 rejected (a verifier's suggestion that would have broken a pinned fragment or a 25-word limit);
+  round 1 raised 9 blocking, 31 major and 139 minor findings. Linter totals over the eight layers after both parts
+  (unique prose files): `word` 1,579 → 605, `paren-clause` 440 → 60, `passive` 342 → 288, `ing` 1,378 → 1,319,
+  `semicolon` 64 → 58, errors 164 → 161 (the rest are fragments tests pin and quotations); with the
+  generated notebooks counted, warnings 6,381 → 3,804. The words left are the kept technical names (a fixed cost, an
+  optimum, a verified reward, the Verify list, a quick start, a dated verify tag) and quotations. Validated on the exact
+  tree like part 1 (every lab's tests, the builders and the injector as no-ops, the Colab index, the link check, the
+  site generator, the strict site build, the figure check and the tooling tests) and merged through its own PR. Not
+  done, as before: docstrings and code comments, the root documents, and a check against the STE dictionary proper.
+  **Baseline unchanged: 385 notebooks.**
 
 ## Housekeeping
 - Deduped 2026-09-26: `07-.../long-running-durable/PRIMER.md` is the only copy of the durable-execution primer, and

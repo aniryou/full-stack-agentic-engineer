@@ -58,7 +58,7 @@ python3 scripts/local_demo.py                # fan-out -> crash -> reaper -> 3-d
 Read about the agent loop first ([`agent-core`](../agent-fundamentals/agent-core/README.md), module 07.1). This topic
 makes that loop work over long periods of time. Notebook 03 of the platform lab
 ([`gcp-agent-platform-lab`](../agent-fundamentals/gcp-agent-platform-lab/README.md)) is about state and checkpoints
-in one session. For anything that waits, it refers to this topic.
+in one session. For anything that waits, the notebook refers to this topic.
 
 Layer 06 ([`06-gateway`](../../06-gateway/README.md)) is the adjacent layer. It sets limits on the turns and on the
 authority of the agent. Module 07.3 of the curriculum ([`CURRICULUM.md`](../../CURRICULUM.md)) sets the path and the
@@ -76,7 +76,7 @@ drills.
   Workflows and Pub/Sub. These facts have the date September 2026 and the tag (verify). At its end, the primer gives a
   list of facts to examine again.
 - The prose of this topic is in ASD-STE100 (Simplified Technical English). This topic was the first to use the
-  style, as an experiment. The other layers followed. The style has short sentences, the active voice, the
-  imperative for instructions and one meaning for each word. The brief is
+  style, as an experiment. The other layers followed. The style has short sentences, the active voice and the
+  imperative for instructions, and each word means one thing. The brief is
   [STE100-STYLE.md](../../tools/orchestration/STE100-STYLE.md) and the linter is
   [ste_lint.py](../../tools/orchestration/ste_lint.py). The root documents keep their usual style.

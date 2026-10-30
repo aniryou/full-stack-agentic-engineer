@@ -58,7 +58,7 @@ flowchart LR
 
 *An embedding model maps each input to a stored vector, and the same model maps the query to a query vector (§2). Then nearest-neighbor search returns the k stored vectors nearest to the query vector. Exact k-NN compares the query with every vector, and an ANN index gives up some recall for speed (§4).*
 
-Nearest-neighbor search in hundreds or thousands of dimensions defeats every classic index. There is no total order to use, so B-trees fail. There is no exact key to hash, so hash indexes fail. There are no discrete tokens to invert, so inverted indexes fail. Only brute force stays: you compare the query with every vector. That costs $O(N \cdot d)$ per query, which is fine for 100k vectors, but not for 100 million at 1,000 queries per second.
+Nearest-neighbor search in hundreds or thousands of dimensions defeats every classic index. There is no total order to use, so B-trees fail. There is no exact key to hash, so hash indexes fail. There are no discrete tokens to invert, so inverted indexes fail. Only brute force stays: you compare the query with every vector. This scan costs $O(N \cdot d)$ per query, which is fine for 100k vectors, but not for 100 million at 1,000 queries per second.
 
 Vector databases exist to solve two problems at the same time:
 
@@ -76,7 +76,7 @@ Key properties:
 - **Dimensionality (d).** Common values are 384, 768, 1024, 1536, 3072 and 4096. A higher d usually carries more information. But it also costs linearly more memory and compute. Models trained with Matryoshka Representation Learning (§13) let you truncate the vector to the first 256 or 512 dimensions, with a small loss of quality.
 - **Dense and sparse.** Dense embeddings have a nonzero value in every dimension. Sparse vectors (BM25 term weights, SPLADE, the sparse head of BGE-M3) have tens of thousands of dimensions, and most of the values are zero. Inverted lists serve them, not ANN graphs. Modern systems store both kinds more and more often.
 - **Single vector and multi-vector.** Most systems store one vector per item. Late-interaction models (ColBERT for text, ColPali for document images) produce one vector per token or per image patch. That is dozens to hundreds of vectors per item. These models score with MaxSim. They give higher quality on many tasks, but they use much more storage.
-- **Model coupling.** You cannot compare vectors from different models, or from different versions of the same model. An embedding has a meaning only relative to the model that produced it. This has large operational consequences (§13).
+- **Model coupling.** You cannot compare vectors from different models, or from different versions of the same model. An embedding has a meaning only relative to the model that produced it. This dependence on the model has large operational consequences (§13).
 
 ### 3. Similarity and distance metrics
 
@@ -86,12 +86,12 @@ Key properties:
 | Dot (inner) product | $a \cdot b$ | The training of the model used the dot product. The magnitude carries a signal (for example, item popularity in recsys). This is "Maximum inner-product search" (MIPS). |
 | Euclidean (L2) | $\lVert a - b \rVert$ | The training of the model used L2. Some image and scientific embeddings use it. |
 | Manhattan (L1) | $\lVert a - b \rVert_1$ | Rare. Some sparse or robustness settings use it. |
-| Hamming | number of bits that differ | Binary-quantized vectors. |
+| Hamming | number of bits that are different | Binary-quantized vectors. |
 | Jaccard | $\operatorname{size}(A \cap B) \div \operatorname{size}(A \cup B)$ | Set-valued data (tags, shingles). |
 
 Two things to know well:
 
-- **If the vectors are L2-normalized (unit length), cosine, dot product and Euclidean give the same ranking.** The reason is that $\lVert a - b \rVert^2 = 2 - 2(a \cdot b)$ on the unit sphere. When you select cosine, most vector databases normalize the vectors at ingest. This turns cosine into a low-cost dot product.
+- **If the vectors are L2-normalized (unit length), cosine, dot product and Euclidean give the same ranking.** The reason is that $\lVert a - b \rVert^2 = 2 - 2(a \cdot b)$ on the unit sphere. When you select cosine, most vector databases normalize the vectors at ingest. The normalization turns cosine into a low-cost dot product.
 - **Use the metric that the training of the embedding model used.** If you mix metrics, the quality decreases silently, and you get no error.
 
 ### 4. The nearest-neighbor problem
@@ -115,7 +115,7 @@ The fundamental trade-off is a triangle. Its three corners are **recall**, **que
 
 **Tree-based (KD-tree, ball tree, random-projection forests).** These indexes partition the space recursively. Annoy (Spotify) builds many random-hyperplane trees and takes the union of their leaves. It is simple, memory-mappable, and immutable after the build. For high-dimensional data, graphs now mostly replace tree indexes.
 
-**Locality-sensitive hashing (LSH).** LSH hashes vectors so that similar vectors collide with high probability. It uses random hyperplanes for cosine and p-stable distributions for L2. It has elegant sublinear guarantees. But to get high recall in practice, it needs many tables and much memory. Today it is rarely the production choice, except for streaming and near-duplicate detection (SimHash, MinHash).
+**Locality-sensitive hashing (LSH).** LSH hashes vectors so that vectors near each other collide with high probability. It uses random hyperplanes for cosine and p-stable distributions for L2. It has elegant sublinear guarantees. But to get high recall in practice, it needs many tables and much memory. Today it is rarely the production choice, except for streaming and near-duplicate detection (SimHash, MinHash).
 
 **Inverted file (IVF) / clustering.** Run k-means to get `nlist` centroids, and assign each vector to the list of its nearest centroid. At query time, find the `nprobe` nearest centroids and scan only their lists. This is the main index of Faiss. The build is low-cost (one k-means pass), and the memory holds only the vectors plus the centroids. IVF also combines with compression (IVF-PQ).
 
@@ -127,7 +127,7 @@ IVF has three weaknesses. Recall depends on the quality of the clusters. Boundar
 
 **Disk-resident graphs (DiskANN/Vamana, SPANN).** DiskANN (Microsoft, 2019) builds a single-layer graph, and adds long-range edges on purpose. It keeps a product-quantized copy of every vector in RAM for navigation. It stores the graph and the full-precision vectors on an NVMe SSD. The result is billion-scale search on a single machine with tens of gigabytes of RAM, ~95% recall and single-digit-millisecond latency. Streaming/fresh variants handle inserts and deletes in place.
 
-Azure (Cosmos DB, Bing), pgvectorscale (StreamingDiskANN), Milvus, JVector (Cassandra/Astra) and others use or adapt the design. SPANN uses an approach similar to IVF: the centroids are in memory and the posting lists are on disk.
+Azure (Cosmos DB, Bing), pgvectorscale (StreamingDiskANN), Milvus, JVector (Cassandra/Astra) and others use or adapt the design. SPANN uses an approach like that of IVF: the centroids are in memory and the posting lists are on disk.
 
 **Quantization: compression, orthogonal to the choice of index.** Quantization decreases the bytes per vector. Thus more vectors fit in RAM and in cache, and the distance calculations become faster:
 
@@ -140,7 +140,7 @@ Azure (Cosmos DB, Bing), pgvectorscale (StreamingDiskANN), Milvus, JVector (Cass
 
 *On the left, k-means gives `nlist` centroids, and a query scans only the lists of its `nprobe` nearest centroids. On the right, product quantization divides a vector into `m` sub-vectors and stores one byte per sub-vector: a 1536-d float vector becomes 96 bytes. `IndexIVFPQ` in `vector_stores/minifaiss/pq.py` stores the PQ codes in the lists and scans each probed list with its own lookup table.*
 
-**GPU-native indexes.** NVIDIA cuVS supplies CAGRA, a graph index whose build and search run on the GPU. Its build is usually 10–50× faster than a CPU HNSW build, and you can export its graphs to the CPU HNSW format. Milvus, OpenSearch, Faiss, and Qdrant (build-time) integrate GPU indexing. GPUs are best for bulk index builds and for batch search at very high QPS. For latency-sensitive single queries with filters, CPU graphs still dominate.
+**GPU-native indexes.** NVIDIA cuVS supplies CAGRA, a graph index whose build and search run on the GPU. Its build is usually 10–50× faster than a CPU HNSW build, and you can export its graphs to the CPU HNSW format. Milvus, OpenSearch, Faiss, and Qdrant (build-time) integrate GPU indexing. GPUs are best for bulk index builds and for batch search at high QPS. For latency-sensitive single queries with filters, CPU graphs still dominate.
 
 **Hybrid structures.** Real engines combine these methods. Examples are IVF with an HNSW index over the centroids (Faiss `IVF_HNSW`), HNSW over SQ/PQ/BQ codes, and DiskANN with PQ in memory. Tiered layouts are another example: hot data in RAM, warm data on SSD, cold data in object storage.
 
@@ -163,7 +163,7 @@ Azure (Cosmos DB, Bing), pgvectorscale (StreamingDiskANN), Milvus, JVector (Cass
 
 **HNSW**
 
-- `M`: the maximum number of links per node per layer (usually 8–64, and 16 is a common default). A higher M gives better recall, more memory and a slower build. High-dimensional or hard datasets need 32–48.
+- `M`: the maximum number of links per node per layer, usually 8–64. A common default is 16. A higher M gives better recall, more memory and a slower build. High-dimensional or hard datasets need 32–48.
 - `efConstruction`: the beam width during the build (usually 100–500). A higher value gives better graph quality and a slower build. It is a one-time cost, so if you are not sure, select a high value.
 - `efSearch` (also named `ef` or `hnsw_ef`): the beam width at query time. It must be $\ge k$, and it is usually 50–500. **This is the runtime recall dial.** Adjust it for each query class. Many systems accept it per request.
 
@@ -177,7 +177,7 @@ Azure (Cosmos DB, Bing), pgvectorscale (StreamingDiskANN), Milvus, JVector (Cass
 
 **Universal**
 
-- `k`, and the filter. A highly selective filter changes the optimal strategy completely (§9).
+- `k`, and the filter. A highly selective filter changes the best strategy completely (§9).
 
 The correct way to adjust the knobs is empirical. Take a representative sample of real queries. Calculate the exact top-k as ground truth (flat search). Then sweep the knobs and plot recall against p99 latency. Never adjust the knobs on latency alone.
 
@@ -193,7 +193,7 @@ Ten million vectors, $d = 1536$, $M = 16$:
 
 - Raw float32: 10M × 6,144 B ≈ **61 GB**
 - Graph links: 10M × 128 B ≈ 1.3 GB
-- Total: roughly **63 GB of RAM** for the index alone, before payloads, replicas and headroom.
+- Total: approximately **63 GB of RAM** for the index alone, before payloads, replicas and headroom.
 
 The same collection with compression:
 
@@ -243,11 +243,11 @@ An update is a delete plus an insert. IVF lists tolerate churn, but they drift a
 
 **Segments and compaction (the LSM pattern).** Most modern engines (Milvus, Qdrant, Weaviate, LanceDB, and the Lucene-based systems) write new vectors into a small mutable "growing" segment. They often search this segment by brute force. Then they seal it into an immutable indexed segment, and they merge segments in the background.
 
-Queries fan out across segments and merge the top-k. This gives fast writes, and immutable index files that are easy to replicate and back up. The cost is the query fan-out and the background CPU.
+Queries fan out across segments and merge the top-k. The LSM pattern gives fast writes, and immutable index files that are easy to replicate and back up. The cost is the query fan-out and the background CPU.
 
 **Freshness and consistency.** The question "Is my just-written vector searchable?" has a range of answers. They go from immediately (Postgres/pgvector, single-node Qdrant) to eventually (Pinecone serverless, Milvus at its default level, any sharded system with asynchronous replication). Some engines expose tunable levels (Milvus: Strong, Bounded, Session, Eventual). RAG usually tolerates seconds of lag. It is possible that fraud detection or within-session agent memory does not.
 
-**Durability and transactions.** A write-ahead log plus snapshots is standard. Full ACID transactions over vectors and relational data together exist almost only inside general-purpose databases (Postgres/pgvector, Oracle, SQL Server, Cosmos DB, MongoDB). Purpose-built vector databases usually give per-operation atomicity and eventual cross-shard consistency. This is fine for most workloads, but know this limit before you rely on the database.
+**Durability and transactions.** A write-ahead log plus snapshots is standard. Full ACID transactions over vectors and relational data together exist almost only inside general-purpose databases (Postgres/pgvector, Oracle, SQL Server, Cosmos DB, MongoDB). Purpose-built vector databases usually give per-operation atomicity and eventual cross-shard consistency. These guarantees are fine for most workloads, but know this limit before you rely on the database.
 
 **Payload and metadata storage.** Vectors are pointers to things. The database must store the things (text chunks, document ids, tenant ids, timestamps, ACLs, JSON), index them for filters, and return them with the results. Payload indexing (keyword, numeric range, geo, full-text) is a major difference between products.
 
@@ -258,10 +258,10 @@ Queries fan out across segments and merge the top-k. This gives fast writes, and
 Almost every real query is "nearest neighbors *where* tenant = X *and* date > Y *and* category in (…)". There are three strategies:
 
 - **Post-filtering.** Run ANN for the top $k'$ ($k' > k$), then drop the results that fail the filter. This is simple. But with a selective filter (for example, 1% of rows match), you either return nothing or need a $k'$ in the hundreds of thousands. Implementations that do not handle this case fail silently and return short result lists.
-- **Pre-filtering.** Evaluate the filter first to get the set of permitted ids, then search only in that set. When the filter is selective, this is exact and simple: brute force over the subset that matches. But when you restrict an HNSW traversal to a sparse permitted set, graph connectivity breaks (the greedy walk hits dead ends), and recall collapses.
-- **In-traversal (single-stage) filtering.** Apply the predicate during the graph traversal, but continue to expand through nodes that do not match, to keep the connectivity. Serious engines do this now. Qdrant's "filterable HNSW" adds more links per payload value. Weaviate implements ACORN (predicate-agnostic expansion). Milvus, Vespa and Pinecone evaluate filters inline. Lucene-based engines intersect a bitset with the HNSW walk, and use exact search instead when the filter is highly selective.
+- **Pre-filtering.** Apply the filter first to get the set of permitted ids, then search only in that set. When the filter is selective, this is exact and simple: brute force over the subset that matches. But when you restrict an HNSW traversal to a sparse permitted set, graph connectivity breaks, and the greedy walk hits dead ends. Thus recall collapses.
+- **In-traversal (single-stage) filtering.** Apply the predicate during the graph traversal, but continue the traversal through nodes that do not match, to keep the connectivity. Serious engines do this now. Qdrant's "filterable HNSW" adds more links per payload value. Weaviate implements ACORN (predicate-agnostic expansion). Milvus, Vespa and Pinecone apply filters inline. Lucene-based engines intersect a bitset with the HNSW walk, and use exact search instead when the filter is highly selective.
 
-Good engines select a strategy for each query from the **estimated filter selectivity**. If the subset is small, they scan it with brute force. If it is large, they use filtered-graph search. If the filter aligns with a partition key, they use partition-scoped search. This has a design implication. **If a filter is always present and highly selective (tenant, user, document set), make it a partition or namespace, not a filter.**
+Good engines select a strategy for each query from the **estimated filter selectivity**. If the subset is small, they scan it with brute force. If it is large, they use filtered-graph search. If the filter aligns with a partition key, they use partition-scoped search. This selection has a design implication. **If a filter is always present and highly selective (tenant, user, document set), make it a partition or namespace, not a filter.**
 
 ### 10. Hybrid search, multi-vector, and reranking
 
@@ -269,7 +269,7 @@ Dense vectors are strong on semantics and weak on exact tokens: product codes, n
 
 **Hybrid search** is dense ANN, plus sparse/lexical retrieval, plus fusion.
 
-- Sparse side: classic BM25 over an inverted index, or *learned sparse* models (SPLADE, Elastic's ELSER, BGE-M3's sparse head). These models expand terms with learned weights. Thus they capture synonyms and stay friendly to exact matches.
+- Sparse side: classic BM25 over an inverted index, or *learned sparse* models (SPLADE, Elastic's ELSER, BGE-M3's sparse head). These models add related terms to the text, with learned weights. Thus they capture synonyms and stay friendly to exact matches.
 - Fusion: **Reciprocal Rank Fusion** ($\operatorname{score}(d) = \sum_{i} 1 / (k + \operatorname{rank}_{i}(d))$ with $k \approx 60$) is the robust default, because it ignores score scales that are not comparable. Weighted score fusion (normalize each list, then $\alpha \cdot \text{dense} + (1 - \alpha) \cdot \text{sparse}$) gives more control, but it needs calibration.
 - Native support: Elasticsearch/OpenSearch, Vespa, Weaviate, Qdrant, Milvus, Pinecone (sparse-dense), Azure AI Search, MongoDB Atlas. pgvector supports hybrid search through a join with `tsvector`.
 
@@ -282,9 +282,9 @@ Dense vectors are strong on semantics and weak on exact tokens: product codes, n
 **Multi-tenancy patterns**, in rough order of isolation:
 
 1. Shared collection + `tenant_id` filter. This is the simplest pattern. It depends on the quality of filtered search, and it has a noisy-neighbour risk.
-2. Partitions or namespaces within a collection (Pinecone namespaces, Milvus partition keys, Turbopuffer namespaces). This gives low-cost isolation. The scope of a query is one partition.
+2. Partitions or namespaces in a collection (Pinecone namespaces, Milvus partition keys, Turbopuffer namespaces). This gives low-cost isolation. The scope of a query is one partition.
 3. Collection or shard per tenant (Weaviate native multi-tenancy, Qdrant per-tenant shards). This gives strong isolation, and you can offload inactive tenants to cold storage. Be careful with thousands of small indexes.
-4. Cluster per tenant. Use it only for regulated or very large enterprise accounts.
+4. Cluster per tenant. Use it only for enterprise accounts that are regulated or very large.
 
 **Sharding.** The system distributes vectors across shards by id hash (or by partition key). A query goes to every shard, each shard returns its top-k, and the coordinator merges the results (scatter-gather). The latency is equal to that of the slowest shard, and more shards give more fan-out. Partition-aligned routing prevents the fan-out.
 
@@ -294,9 +294,9 @@ Dense vectors are strong on semantics and weak on exact tokens: product codes, n
 
 - *Memory-resident:* everything is in RAM (classic HNSW deployments). This is the fastest architecture and the one with the highest cost.
 - *SSD-resident:* DiskANN-style. RAM holds the compressed vectors and the graph metadata.
-- *Object-storage-native / serverless:* the vectors and indexes are in S3/GCS/Azure Blob as immutable files. Stateless query nodes fetch and cache what they need, and writes go through a log. A cold query has a higher latency (hundreds of milliseconds until the cache is warm). But the cost per million vectors decreases by an order of magnitude or more, and idle collections cost almost nothing. Pinecone serverless, Turbopuffer, LanceDB, Chroma Cloud, Milvus's tiered designs, and Amazon S3 Vectors use this pattern.
+- *Object-storage-native / serverless:* the vectors and indexes are in S3/GCS/Azure Blob as immutable files. Stateless query nodes fetch and cache what they need, and writes go through a log. A cold query has a higher latency. The latency is hundreds of milliseconds until the cache is warm. But the cost per million vectors decreases by an order of magnitude or more, and idle collections cost almost nothing. Pinecone serverless, Turbopuffer, LanceDB, Chroma Cloud, Milvus's tiered designs, and Amazon S3 Vectors use this pattern.
 
-  This pattern suits the long tail of many small tenants and bursty agent workloads. It is the incorrect fit for sub-10 ms p99 on hot data, unless you keep the cache warm.
+  This pattern is a good fit for the long tail of many small tenants and bursty agent workloads. It is the incorrect fit for sub-10 ms p99 on hot data, unless you keep the cache warm.
 
 ---
 
@@ -328,7 +328,7 @@ A typical p95 latency budget is: embedding 20–50 ms, then ANN 5–30 ms, then 
 
 ### 13. Embedding strategy
 
-**Model choice.** Start from the MTEB/BEIR leaderboards, but measure the models on your own data. For a specific domain, the gaps on a leaderboard are often within the noise. Consider language coverage, maximum input length, dimension, license, and the cost and latency of a self-hosted model against an API. Also consider if a reranker that matches the model exists. Fine-tuning an embedding model on even a few thousand in-domain (query, positive passage) pairs often gives better results than a change to a larger model.
+**Model choice.** Start from the MTEB/BEIR leaderboards, but measure the models on your own data. For a specific domain, the gaps on a leaderboard are often in the noise. Examine language coverage, maximum input length, dimension, license, and the cost and latency of a self-hosted model against an API. Also examine if a reranker that matches the model exists. Fine-tuning an embedding model on even a few thousand in-domain (query, positive passage) pairs often gives better results than a change to a larger model.
 
 **Asymmetric and symmetric.** Retrieval is asymmetric (short query, long passage). Many models expect different prefixes or instructions for the two sides (`query:` / `passage:`, or an instruction such as "Represent this sentence for searching relevant passages"). If you omit them, you lose several points of recall.
 
@@ -342,7 +342,7 @@ A typical p95 latency budget is: embedding 20–50 ms, then ANN 5–30 ms, then 
 
 A typical sweet spot is 200–500 tokens for question-and-answer tasks, and larger for summarization-style tasks. Store parent/child relations, so that you can match on a small chunk and return its larger parent.
 
-**Dimensions.** More dimensions are not automatically better. Matryoshka-trained models (OpenAI text-embedding-3, Gemini embeddings, Nomic, Jina, and many open models) permit truncation to 256–512 dimensions, at a cost of a few points. This is a 3–6× reduction in storage and compute. Combine it with int8 or binary quantization for another 4–32×.
+**Dimensions.** More dimensions are not automatically better. Matryoshka-trained models (OpenAI text-embedding-3, Gemini embeddings, Nomic, Jina, and many open models) permit truncation to 256–512 dimensions, at a cost of a few points. The truncation gives a 3–6× reduction in storage and compute. Combine it with int8 or binary quantization for another 4–32×.
 
 **Versioning and migration.** A change of the embedding model means that you must embed everything again, because you cannot mix vectors from two models. Store `embedding_model` and `embedding_version` on every record. Keep the raw text, so that a new embedding pass is a batch job and not a data-recovery exercise.
 
@@ -382,7 +382,7 @@ The market now has four stable shapes. The names in this section are representat
 - **Faiss** (Meta): the reference toolkit, with flat, IVF, PQ, HNSW and GPU indexes. It has research-grade breadth.
 - **hnswlib**: the canonical HNSW implementation. Many databases use it inside.
 - **USearch**: a compact, fast HNSW with quantization and many language bindings. It powers the vector indexes in ClickHouse and DuckDB.
-- **ScaNN** (Google): anisotropic quantization, with very strong results on a CPU. It powers the vector index of AlloyDB.
+- **ScaNN** (Google): anisotropic quantization, with strong results on a CPU. It powers the vector index of AlloyDB.
 - **DiskANN/Vamana** (Microsoft), **cuVS/CAGRA** (NVIDIA), **Voyager** (Spotify's successor to Annoy), **Annoy** (legacy).
 
 **B. Purpose-built vector databases.**
@@ -398,8 +398,8 @@ The market now has four stable shapes. The names in this section are representat
 
 **C. Vector search inside general-purpose databases and search engines.** For most teams, this is the default answer.
 
-- **PostgreSQL + pgvector**: HNSW and IVFFlat, half-precision and binary vector types, sparse vectors, and iterative index scans for filtered queries. **pgvectorscale** adds StreamingDiskANN and label-based filtering. It is available on AlloyDB (which also has a ScaNN index), Aurora, Neon, Supabase, Timescale, and every other managed Postgres.
-- **Elasticsearch / OpenSearch**: Lucene HNSW (OpenSearch also has Faiss and NMSLIB engines), and BM25 + learned sparse + dense hybrid. They also have BBQ and int8 quantization, and OpenSearch has GPU-accelerated index builds. This is the natural choice if you already operate them.
+- **PostgreSQL + pgvector**: HNSW and IVFFlat, half-precision and binary vector types, sparse vectors, and iterative index scans for filtered queries. **pgvectorscale** adds StreamingDiskANN and label-based filtering. It is available on AlloyDB, Aurora, Neon, Supabase, Timescale, and every other managed Postgres. AlloyDB also has a ScaNN index.
+- **Elasticsearch / OpenSearch**: Lucene HNSW, and BM25 + learned sparse + dense hybrid. Both systems have BBQ and int8 quantization. OpenSearch also has Faiss and NMSLIB engines and GPU-accelerated index builds. This is the natural choice if you already operate them.
 - Also:
   - **MongoDB Atlas Vector Search**
   - **Redis (Query Engine)**
@@ -417,7 +417,7 @@ The market now has four stable shapes. The names in this section are representat
 
 **D. Cloud-native managed search and vector services.**
 
-- This group contains **Azure AI Search** (HNSW, hybrid, semantic ranker, agentic retrieval) and **Google Vertex AI Vector Search** (ScaNN, very large scale). It also contains **Amazon OpenSearch Serverless** and **Amazon S3 Vectors** (vectors as an S3-native primitive, for low-cost cold and warm storage). Also, **Amazon Bedrock Knowledge Bases** gives managed RAG over the services before it in this list.
+- This group contains **Azure AI Search** (HNSW, hybrid, semantic ranker, agentic retrieval) and **Google Vertex AI Vector Search** (ScaNN, large scale). It also contains **Amazon OpenSearch Serverless** and **Amazon S3 Vectors** (vectors as an S3-native primitive, for low-cost cold and warm storage). Also, **Amazon Bedrock Knowledge Bases** gives managed RAG over the services before it in this list.
 
 The through-line of 2025–2026 is this: vectors moved from a database *category* to a *data type*. Standalone vendors now differentiate on scale, tenancy, and retrieval sophistication, not on the presence of vectors.
 
@@ -434,16 +434,16 @@ Ask these questions, in this order:
    - Laptop, edge, or prototype: Chroma, LanceDB, sqlite-vec, DuckDB, Faiss.
 4. **How complex is retrieval?** For heavy hybrid, complex ranking, or multi-vector, use Vespa, Elastic/OpenSearch, Weaviate, Qdrant, or Milvus.
 5. **What is the filtering profile?** For an always-present selective filter, use a partition-based design. For arbitrary rich filters, use engines with in-traversal filtering and payload indexes.
-6. **What is your posture for operations?** Consider managed against self-hosted, and data residency, VPC and compliance. Consider vendor risk: several vendors are venture-funded startups, so assess their longevity. Consider the exit cost. The export of vectors and payloads is easy. But the reproduction of filter and hybrid semantics in another system is not easy.
+6. **What is your posture for operations?** Think about managed against self-hosted, and about data residency, VPC and compliance. Think about vendor risk: several vendors are venture-funded startups, so examine their longevity. Think about the exit cost. The export of vectors and payloads is easy. But the reproduction of filter and hybrid semantics in another system is not easy.
 
 A useful heuristic for 2026: **treat vector search as a feature of your data platform first and as a separate database second.** The dedicated systems win when scale, tenancy, or retrieval complexity *is* the product.
 
 ### 17. Use-case patterns
 
-- **RAG and enterprise search**: chunk-level dense + sparse hybrid, ACL filtering through metadata, reranking, parent-document retrieval. Freshness within seconds is fine.
-- **Agent memory**: the system stores episodic (conversation turns), semantic (facts), and procedural (successful tool sequences) memories as vectors with rich metadata: time, user, task, importance. Queries are frequent and small-k, and they have heavy filters by user or session. Retention, decay, and deduplication are important. Per-user namespaces fit well, and freshness within a session must be immediate. Agents also send far more queries per task than a person, which puts stress on per-query latency and cost.
-- **Semantic caching**: cache LLM responses with the query embedding as the key. When a near-duplicate query arrives, return the cached answer (with an adjusted similarity threshold). This decreases cost and latency. Be careful with over-eager matches on questions that are subtly different.
-- **Recommendations / two-tower retrieval**: a user vector queries the item index for candidates (MIPS with dot product), and a heavier ranker comes after this retrieval step. This pattern has very high QPS, moderate recall requirements, and frequent new embeddings.
+- **RAG and enterprise search**: chunk-level dense + sparse hybrid, ACL filtering through metadata, reranking, parent-document retrieval. A freshness lag of some seconds is fine.
+- **Agent memory**: the system stores episodic (conversation turns), semantic (facts), and procedural (successful tool sequences) memories as vectors with rich metadata: time, user, task, importance. Queries are frequent and small-k, and they have heavy filters by user or session. Retention, decay, and deduplication are important. Per-user namespaces fit well, and freshness in a session must be immediate. Agents also send far more queries per task than a person. This query volume puts stress on per-query latency and cost.
+- **Semantic caching**: cache LLM responses with the query embedding as the key. When a near-duplicate query arrives, return the cached answer (with an adjusted similarity threshold). The cache decreases cost and latency. Be careful with over-eager matches on questions that are subtly different.
+- **Recommendations / two-tower retrieval**: a user vector queries the item index for candidates (MIPS with dot product), and a heavier ranker comes after this retrieval step. This pattern has high QPS, moderate recall requirements, and frequent new embeddings.
 - **Deduplication and near-duplicate detection**: high recall is necessary. This pattern often uses binary or MinHash codes plus rescoring. It is batch-oriented.
 - **Anomaly and fraud detection**: the distance to the nearest known-good or known-bad examples is a feature. This pattern needs low latency and streaming inserts.
 - **Multimodal search**: image, video, and audio retrieval with CLIP-family embeddings. Large blobs are in object storage.
@@ -459,7 +459,7 @@ A useful heuristic for 2026: **treat vector search as a feature of your data pla
 - **Index lifecycle.** Build the index offline where possible (GPU, or CPU builds with a high `efConstruction`), and swap it atomically. Schedule compaction and vacuum. Alert on the tombstone ratio and the segment count.
 - **Recall monitoring.** Sample queries daily, calculate the exact ground truth, and track recall@k over time. Recall decreases silently with deletes, distribution drift, and stale IVF centroids.
 - **Embedding drift and model upgrades.** Pin the model versions and keep the raw text. Do a test run of the migration to new embeddings before you need it.
-- **Security.** Use tenant isolation (partitions, not filters, where the isolation must be hard). Put row- or document-level ACLs in the metadata, and enforce them at query time. Use encryption at rest, private networks, and audit logs. Treat the embeddings themselves as sensitive: inversion attacks recover a large fraction of the source text from a vector.
+- **Security.** Use tenant isolation. Where the isolation must be hard, use partitions, not filters. Put row- or document-level ACLs in the metadata, and enforce them at query time. Use encryption at rest, private networks, and audit logs. Treat the embeddings themselves as sensitive: inversion attacks recover a large fraction of the source text from a vector.
 - **Cost levers**, in rough order of impact: dimensions, quantization, storage tier, replica count, reranker calls.
 - **Backups and disaster recovery.** Take snapshots of the immutable segments together with the payload store. Do a test of the restores, and include the index rebuild time in the test.
 
@@ -477,7 +477,7 @@ A useful heuristic for 2026: **treat vector search as a feature of your data pla
 10. You size RAM for float32 when int8 or binary with rescoring gives quality that you cannot distinguish from float32 quality.
 11. You assume that vector similarity equals relevance. Recency, authority, and ACLs still need explicit logic.
 12. You model tenants as a filter when partitions are correct for them (or the reverse, for thousands of small tenants).
-13. You run benchmarks on synthetic random vectors. These lack the manifold structure of real data, so the results do not transfer.
+13. You run benchmarks on synthetic random vectors. These vectors do not have the manifold structure of real data, so the results do not transfer.
 14. You ignore the cold-start latency in serverless and object-storage designs.
 15. You trust benchmarks that vendors run. Each major vendor publishes a suite that flatters its own architecture.
 
@@ -489,7 +489,7 @@ A useful heuristic for 2026: **treat vector search as a feature of your data pla
 - **GPU-accelerated index builds** remove the largest operational pain of HNSW.
 - **Better filtered search.** ACORN-style graphs, partition-aware planners, and cost-based selection between brute force and graph traversal now make the historical gap between vector and relational query planning smaller.
 - **Multi-vector and late interaction** move from research to product, especially for visual document retrieval.
-- **Agentic retrieval.** Agents send many small, iterative, filtered queries, not one large query. This puts pressure on per-query latency, freshness, per-user namespaces, and "memory" APIs on top of vector stores.
+- **Agentic retrieval.** Agents send many small, iterative, filtered queries, not one large query. This query pattern puts pressure on per-query latency, freshness, per-user namespaces, and "memory" APIs on top of vector stores.
 - **Retrieval survives long context.** Million-token windows change *how much* you retrieve, not *if* you retrieve. Cost, latency, freshness, and access control keep retrieval in the loop.
 - **Learned sparse + dense hybrid** is the default retrieval stack, with LLM-based rerankers where the latency budget permits.
 - **Edge and on-device vector search** (SQLite/DuckDB extensions, embedded engines) is for data that cannot leave the device or the premises.
