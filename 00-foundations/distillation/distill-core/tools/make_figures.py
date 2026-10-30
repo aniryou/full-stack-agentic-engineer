@@ -111,7 +111,7 @@ def spec_draft_speedup() -> dict:
         "y": {"label": "speedup (×)", "min": 0, "max": 4.5, "ticks": [0, 1, 2, 3, 4]},
         "series": series,
         "marks": marks,
-        "legend": "top-left",
+        "legend": "none",                            # one series: the title names k = 4
         "note": "computed by distillcore.draft.speedup and draft.draft_cost",
     }
 

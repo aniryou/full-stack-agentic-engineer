@@ -25,6 +25,13 @@ def test_chart_is_what_the_core_computes(name):
     mf.svgchart.check_figure(mf.FIG_DIR / name, mf.FIGURES[name])
 
 
+def test_every_chart_file_is_in_the_table():
+    """FIGURES is not empty, and it names exactly the chart files in ../figures/ (a computed chart keeps its spec in a
+    <desc>; the hand-drawn SVGs have none), so that no chart file goes unchecked."""
+    charts = {p.name for p in mf.FIG_DIR.glob("*.svg") if "<desc>" in p.read_text(encoding="utf-8")}
+    assert charts and charts == set(mf.FIGURES), f"chart files {sorted(charts)} != FIGURES {sorted(mf.FIGURES)}"
+
+
 def test_every_chart_is_embedded_in_the_primer():
     missing = [name for name in mf.FIGURES if f"figures/{name}" not in PRIMER]
     assert not missing, f"PRIMER.md does not embed: {missing}"
