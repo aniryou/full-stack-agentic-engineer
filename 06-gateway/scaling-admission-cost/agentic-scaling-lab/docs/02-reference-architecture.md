@@ -38,7 +38,7 @@ Run is the standard compute of Meridian. The language is Python 3.11.
 
 ## 2. System overview
 
-![The system overview: the edge, the three Cloud Run services, Pub/Sub, the two stores and the Gemini endpoint.](figures/system-overview.svg)
+![A turn passes the edge, the gateway, Pub/Sub and the orchestrator, which calls Gemini and the tools, and both services use Firestore and Memorystore.](figures/system-overview.svg)
 
 *The client reaches the gateway through the load balancer. The gateway publishes each turn to Pub/Sub, and Pub/Sub pushes it to the orchestrator. Dashed lines show the dead-letter path, the optional MCP server and the observability.*
 
@@ -96,9 +96,9 @@ Responsibilities:
 
 The state machine of a turn:
 
-![The states of a turn and the transitions between them.](figures/turn-states.svg)
+![A turn goes from queued to running and ends in completed or failed, or goes back to queued and, after 5 delivery attempts, to dead_letter.](figures/turn-states.svg)
 
-*The states of a turn. A RetryLater outcome sends the turn back to queued, and after 5 delivery attempts the turn goes to dead_letter.*
+*Start at queued and follow the turn down into the accent state. A final answer ends the turn in completed, and every other terminal outcome ends it in failed. A RetryLater outcome sends the turn back to queued, and after 5 delivery attempts the turn goes to dead_letter.*
 
 ### 3.3 Model gateway (the lab's `resilience.py`, one per model)
 
@@ -308,17 +308,17 @@ size it.
 
 ```mermaid
 flowchart LR
-  GW[gateway] --> Q[("RabbitMQ<br/>quorum queues")] --> OR["orchestrator<br/>model gateway"]
+  GW[gateway] --> Q[("RabbitMQ<br/>quorum<br/>queues")] --> OR["orchestrator with<br/>model gateway"]
   GW <--> RD[(Redis)]
-  OR <--> RD
-  OR <--> PG[(Postgres)]
+  RD <--> OR
+  PG[(Postgres)] <--> OR
   OR -->|hosted| API[api.mistral.ai]
   OR -->|self-hosted| IG["inference<br/>gateway"]
   IG --> V["vLLM<br/>replicas"]
   K[KEDA] -.->|scales| V
 ```
 
-*Everything above the model gateway keeps its shape, and Kubernetes equivalents replace the managed services. The model gateway sends a call to the hosted API or to the inference gateway in front of the vLLM replicas. KEDA changes the replica count.*
+*Everything above the model gateway keeps its shape. At the left of the orchestrator, RabbitMQ, Redis and Postgres replace the managed services. At the right, the model gateway sends a call to the hosted API or to the inference gateway in front of the vLLM replicas. KEDA changes the replica count.*
 
 The worked case is the anchor of the Mistral provider: a Singapore telco at 100,000 conversations a day.
 

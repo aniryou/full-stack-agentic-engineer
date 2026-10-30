@@ -163,7 +163,7 @@ def spec_fetch_or_recompute() -> dict:
     return {
         "kind": "line",
         "title": ("The time to get the KV of ten thousand tokens: a fetch against the tier bandwidth, "
-                  "and a recompute on an L4 and on an H100."),
+                  "and a recompute on an L4 and an H100."),
         "x": {"label": "tier bandwidth (GB/s)", "scale": "log", "min": 0.1, "max": 100},
         "y": {"label": "time for ten thousand tokens (ms)", "scale": "log", "min": 10, "max": 20000,
               "ticks": [10, 100, 1000, 10000]},

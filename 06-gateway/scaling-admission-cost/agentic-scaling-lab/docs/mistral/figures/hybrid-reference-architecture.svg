@@ -11,7 +11,7 @@
     <rect x="16" y="84" width="134" height="104" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
     <text x="83" y="106" text-anchor="middle" font-weight="600">Ingress /</text>
     <text x="83" y="122" text-anchor="middle" font-weight="600">API gateway</text>
-    <text x="83" y="142" text-anchor="middle" font-size="11.5" fill="#97A59F">TLS · WAF</text>
+    <text x="83" y="142" text-anchor="middle" font-size="11.5" fill="#97A59F">WAF</text>
     <text x="83" y="159" text-anchor="middle" font-size="11.5" fill="#97A59F">per-caller</text>
     <text x="83" y="175" text-anchor="middle" font-size="11.5" fill="#97A59F">rate limits</text>
     <!-- gateway -->
@@ -21,7 +21,7 @@
     <text x="83" y="270" text-anchor="middle" font-size="11.5">auth · admission</text>
     <text x="83" y="286" text-anchor="middle" font-size="11.5">enqueue</text>
     <text x="83" y="302" text-anchor="middle" font-size="11.5">SSE relay</text>
-    <text x="83" y="323" text-anchor="middle" font-size="11.5" fill="#97A59F">2..20 pods</text>
+    <text x="83" y="323" text-anchor="middle" font-size="11.5" fill="#97A59F">min 2 pods</text>
     <!-- RabbitMQ -->
     <ellipse cx="308" cy="214" rx="78" ry="8" fill="none" stroke="currentColor" stroke-width="1.2"/>
     <path d="M230 214 L230 334 A78 8 0 0 0 386 334 L386 214" fill="none" stroke="currentColor" stroke-width="1.2"/>
@@ -71,7 +71,7 @@
     <rect x="656" y="398" width="150" height="146" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
     <text x="731" y="420" text-anchor="middle" font-weight="600">Mistral API</text>
     <text x="731" y="437" text-anchor="middle" font-size="11.5" fill="#97A59F">EU-hosted</text>
-    <text x="731" y="455" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">api.mistral.ai</text>
+    <text x="731" y="455" text-anchor="middle" font-size="11.5">global endpoint</text>
     <text x="731" y="475" text-anchor="middle" font-size="11.5">Small 4 / Medium 3.5</text>
     <text x="731" y="492" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">service_tier auto</text>
     <text x="731" y="513" text-anchor="middle" font-size="11.5" fill="#97A59F">or a marketplace</text>
@@ -79,8 +79,8 @@
     <!-- OpenTelemetry -->
     <rect x="836" y="410" width="150" height="110" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
     <text x="911" y="432" text-anchor="middle" font-weight="600">OpenTelemetry</text>
-    <text x="911" y="450" text-anchor="middle" font-size="11.5" fill="#97A59F">Prometheus</text>
-    <text x="911" y="467" text-anchor="middle" font-size="11.5" fill="#97A59F">Grafana · Tempo</text>
+    <text x="911" y="450" text-anchor="middle" font-size="11.5" fill="#97A59F">one trace</text>
+    <text x="911" y="467" text-anchor="middle" font-size="11.5" fill="#97A59F">per turn</text>
     <text x="911" y="488" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">gen_ai.* spans</text>
     <text x="911" y="505" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">vllm:* metrics</text>
     <!-- Postgres -->

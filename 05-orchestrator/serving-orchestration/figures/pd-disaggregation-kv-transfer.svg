@@ -1,14 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="960" height="410" viewBox="0 0 960 410" role="img" aria-label="The EPP selects the decode pod first, and a prefill pod too at nonCachedTokens uncached tokens or more, and the sidecar of the decode pod controls the sequence: the prefill, then the KV transfer over NIXL from the prefill pool, then the decode steps, which no prefill chunk stalls." style="color: #E4EAE7">
-  <title>The EPP selects the decode pod first, and a prefill pod too at nonCachedTokens uncached tokens or more, and the sidecar of the decode pod controls the sequence: the prefill, then the KV transfer over NIXL from the prefill pool, then the decode steps, which no prefill chunk stalls.</title>
-  <rect x="0" y="0" width="960" height="410" rx="8" fill="#161E1C"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="410" viewBox="0 0 1000 410" role="img" aria-label="The EPP selects the pods, and the decode sidecar controls the order: the prefill, the KV transfer over NIXL, then the decode steps." style="color: #E4EAE7">
+  <title>The EPP selects the pods, and the decode sidecar controls the order: the prefill, the KV transfer over NIXL, then the decode steps.</title>
+  <rect x="0" y="0" width="1000" height="410" rx="8" fill="#161E1C"/>
   <defs>
     <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
   </defs>
   <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
     <!-- the EPP: steps 1 and 2 -->
-    <rect x="20" y="104" width="256" height="138" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    <text x="148" y="128" text-anchor="middle" font-weight="600">EPP (llm-d Router)</text>
-    <text x="148" y="148" text-anchor="middle" font-size="11.5" fill="#97A59F">disagg-profile-handler</text>
+    <rect x="20" y="104" width="264" height="138" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="152" y="128" text-anchor="middle" font-weight="600">EPP (llm-d Router)</text>
+    <text x="152" y="148" text-anchor="middle" font-size="11.5" fill="#97A59F">disagg-profile-handler</text>
     <circle cx="42" cy="164" r="8" fill="none" stroke="#97A59F" stroke-width="1"/>
     <text x="42" y="167.5" text-anchor="middle" font-size="10" fill="#97A59F">1</text>
     <text x="56" y="168" font-size="11.5" fill="#97A59F">selects the decode pod first</text>
@@ -18,49 +18,49 @@
     <text x="56" y="208" font-size="11" fill="#97A59F">uncached tokens ≥ nonCachedTokens,</text>
     <text x="56" y="224" font-size="11" fill="#97A59F">then a prefill pod too</text>
     <!-- the decode pool: step 5 -->
-    <rect x="336" y="50" width="276" height="300" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
-    <text x="474" y="72" text-anchor="middle" fill="#97A59F">decode pool: y decode instances</text>
-    <rect x="356" y="92" width="236" height="150" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
-    <text x="474" y="116" text-anchor="middle" font-weight="600">decode pod + sidecar</text>
-    <text x="474" y="136" text-anchor="middle" font-size="11.5" fill="#7ADACF">sidecar: prefill, then KV pull,</text>
-    <text x="474" y="152" text-anchor="middle" font-size="11.5" fill="#7ADACF">then decode</text>
-    <text x="474" y="172" text-anchor="middle" font-size="11.5" fill="#97A59F">engine: kv_consumer, memory-bound</text>
-    <text x="474" y="188" text-anchor="middle" font-size="11.5" fill="#97A59F">batch at the ITL SLO</text>
-    <circle cx="396" cy="204" r="8" fill="none" stroke="#97A59F" stroke-width="1"/>
-    <text x="396" y="207.5" text-anchor="middle" font-size="10" fill="#97A59F">5</text>
-    <text x="410" y="208" font-size="11.5" fill="#97A59F">decode steps, no prefill stall</text>
-    <text x="474" y="226" text-anchor="middle" font-size="11.5" fill="#97A59F">ITL p99 about 72 ms (simulated)</text>
+    <rect x="348" y="50" width="290" height="300" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="493" y="72" text-anchor="middle" fill="#97A59F">decode pool: y decode instances</text>
+    <rect x="360" y="92" width="266" height="150" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="493" y="116" text-anchor="middle" font-weight="600">decode pod + sidecar</text>
+    <text x="493" y="136" text-anchor="middle" font-size="11.5" fill="#7ADACF">sidecar: prefill, then KV pull,</text>
+    <text x="493" y="152" text-anchor="middle" font-size="11.5" fill="#7ADACF">then decode</text>
+    <text x="493" y="172" text-anchor="middle" font-size="11.5" fill="#97A59F">engine: kv_consumer, memory-bound</text>
+    <text x="493" y="188" text-anchor="middle" font-size="11.5" fill="#97A59F">batch at the ITL SLO</text>
+    <circle cx="409" cy="204" r="8" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <text x="409" y="207.5" text-anchor="middle" font-size="10" fill="#97A59F">5</text>
+    <text x="423" y="208" font-size="11.5" fill="#97A59F">decode steps, no prefill stall</text>
+    <text x="493" y="226" text-anchor="middle" font-size="11.5" fill="#97A59F">ITL p99 about 72 ms (simulated)</text>
     <!-- the prefill pool: step 3 -->
-    <rect x="688" y="50" width="252" height="150" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
-    <text x="814" y="72" text-anchor="middle" fill="#97A59F">prefill pool: x prefill instances</text>
-    <rect x="700" y="92" width="228" height="84" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    <text x="814" y="116" text-anchor="middle" font-weight="600">prefill pod</text>
-    <text x="814" y="136" text-anchor="middle" font-size="11" fill="#97A59F">engine: kv_producer, compute-bound</text>
-    <text x="814" y="154" text-anchor="middle" font-size="11" fill="#97A59F">3,781 tokens/s on the L4 model</text>
+    <rect x="708" y="50" width="272" height="150" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="844" y="72" text-anchor="middle" fill="#97A59F">prefill pool: x prefill instances</text>
+    <rect x="720" y="92" width="248" height="84" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="844" y="116" text-anchor="middle" font-weight="600">prefill pod</text>
+    <text x="844" y="136" text-anchor="middle" font-size="11" fill="#97A59F">engine: kv_producer, compute-bound</text>
+    <text x="844" y="154" text-anchor="middle" font-size="11" fill="#97A59F">3,781 tokens/s on the L4 model</text>
     <!-- the KV transfer, step 4: the cost -->
-    <rect x="688" y="232" width="252" height="140" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
-    <text x="814" y="256" text-anchor="middle" font-weight="600">KV transfer: NixlConnector (NIXL)</text>
-    <text x="814" y="276" text-anchor="middle" font-size="11" fill="#97A59F">KV bytes = prompt tokens ×</text>
-    <text x="814" y="292" text-anchor="middle" font-size="11" fill="#97A59F">KV bytes per token</text>
-    <text x="814" y="312" text-anchor="middle" font-size="11.5">4,096 tokens on an 8B model: 512 MiB</text>
-    <text x="814" y="328" text-anchor="middle" font-size="11">10.7 ms over 400 Gb/s RDMA,</text>
-    <text x="814" y="344" text-anchor="middle" font-size="11">43 ms over 100 GbE, 0.43 s over 10 GbE</text>
-    <text x="814" y="362" text-anchor="middle" font-size="11" fill="#97A59F">only the blocks the decode pod lacks</text>
+    <rect x="708" y="232" width="272" height="140" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="844" y="256" text-anchor="middle" font-weight="600">KV transfer: NixlConnector (NIXL)</text>
+    <text x="844" y="276" text-anchor="middle" font-size="11" fill="#97A59F">KV bytes = prompt tokens ×</text>
+    <text x="844" y="292" text-anchor="middle" font-size="11" fill="#97A59F">KV bytes per token</text>
+    <text x="844" y="312" text-anchor="middle" font-size="11.5">4,096 tokens on an 8B model: 512 MiB</text>
+    <text x="844" y="328" text-anchor="middle" font-size="11">10.7 ms over 400 Gb/s RDMA,</text>
+    <text x="844" y="344" text-anchor="middle" font-size="11">43 ms over 100 GbE, 0.43 s over 10 GbE</text>
+    <text x="844" y="362" text-anchor="middle" font-size="11" fill="#97A59F">only the blocks the decode pod lacks</text>
     <!-- edges -->
     <g stroke="#97A59F" stroke-width="1.2" fill="none">
-      <path d="M276 166 L354 166" marker-end="url(#arr)"/>
-      <path d="M592 134 L698 134" marker-end="url(#arr)"/>
-      <path d="M814 176 L814 230" marker-end="url(#arr)"/>
-      <path d="M688 300 L540 300 L540 244" marker-end="url(#arr)"/>
+      <path d="M284 166 L358 166" marker-end="url(#arr)"/>
+      <path d="M626 134 L718 134" marker-end="url(#arr)"/>
+      <path d="M844 176 L844 230" marker-end="url(#arr)"/>
+      <path d="M708 300 L560 300 L560 244" marker-end="url(#arr)"/>
     </g>
-    <text x="306" y="158" text-anchor="middle" font-size="11" fill="#97A59F">request</text>
-    <circle cx="628" cy="122" r="8" fill="none" stroke="#97A59F" stroke-width="1"/>
-    <text x="628" y="125.5" text-anchor="middle" font-size="10" fill="#97A59F">3</text>
-    <text x="642" y="126" font-size="11" fill="#97A59F">prefill</text>
-    <text x="824" y="218" font-size="11" fill="#97A59F">KV blocks</text>
-    <circle cx="402" cy="276" r="8" fill="none" stroke="#97A59F" stroke-width="1"/>
-    <text x="402" y="279.5" text-anchor="middle" font-size="10" fill="#97A59F">4</text>
-    <text x="416" y="280" font-size="11" fill="#97A59F">KV pull over the link</text>
-    <text x="480" y="398" text-anchor="middle" font-size="11" fill="#97A59F">four aggregated L4 replicas: ITL p50 64 ms, ITL p99 545 ms · with a prefill pool: ITL p99 about 72 ms (simulated, notebook 04)</text>
+    <text x="316" y="158" text-anchor="middle" font-size="11" fill="#97A59F">request</text>
+    <circle cx="654" cy="122" r="8" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <text x="654" y="125.5" text-anchor="middle" font-size="10" fill="#97A59F">3</text>
+    <text x="668" y="126" font-size="11" fill="#97A59F">prefill</text>
+    <text x="854" y="218" font-size="11" fill="#97A59F">KV blocks</text>
+    <circle cx="422" cy="276" r="8" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <text x="422" y="279.5" text-anchor="middle" font-size="10" fill="#97A59F">4</text>
+    <text x="436" y="280" font-size="11" fill="#97A59F">KV pull over the link</text>
+    <text x="500" y="398" text-anchor="middle" font-size="11" fill="#97A59F">four aggregated L4 replicas: ITL p50 64 ms, ITL p99 545 ms · with a prefill pool: ITL p99 about 72 ms (simulated, notebook 04)</text>
   </g>
 </svg>
