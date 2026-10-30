@@ -6,6 +6,10 @@
 # tokens of each request appear when the server runs with `--enable-prompt-tokens-details`. This is a
 # `vllm serve` flag in v0.30.0, and this statement agrees with the source code of vLLM v0.30.0.
 #
+# ![Two identical 20-token prompts with block size 4: request 2 hits the four blocks that request 1 named and computes the last block itself.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/04-inference-engine/serving-engine/figures/prefix-cache-hash-chain.svg)
+#
+# *Figure from the topic primer, §5 Prefix caching: the name of each full block is a hash that includes the name of its parent. Request 2 adopts four blocks of request 1 and computes the last block again. The figure uses blocks of 4 tokens, and vLLM uses 16.*
+#
 # ## The one-minute version
 #
 # vLLM gives each full KV block (16 tokens) a key: a hash of **its tokens and the hash of the block

@@ -6,6 +6,10 @@
 # `deploy/any-gpu/probe.sh`, but they do not come from real machines. **T1/T3**: run `probe.sh` in your own
 # GPU container, or `deploy/gke/run.sh smoke` on GKE. Then give the log to the same cells.
 #
+# ![The two compatibility gates on the example of section 1.2: gate 1 compares the CUDA that the host driver supports with the CUDA the app was built with, and gate 2 matches the SASS or PTX in the fatbin against the compute capability of the GPU.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/02-cuda-nccl-runtime/cuda-and-nccl/figures/two-gates-compatibility.svg)
+#
+# *Figure from the primer, §1.2 Gate 1: driver and runtime: the figure shows the two gates in order. Gate 1 compares the CUDA runtime with the host driver, and gate 2 matches the fatbin against the GPU. Read the orange boxes for the error codes of this notebook: 35, 209, 222 and 803.*
+#
 # ## The one-minute version
 #
 # * A containerised CUDA program gets its parts from two sources. **From the host**: the device nodes

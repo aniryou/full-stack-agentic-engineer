@@ -5,6 +5,10 @@
 # hardware are **SIMULATED** here (roofline model). `vllm-serving-lab` notebook `05_speculation_and_quantization_in_vllm`
 # measures the n-gram and EAGLE speculators of vLLM on a GPU (T1).
 #
+# ![The simulated speedup of a 1B draft for an 8B target on an H100 against the concurrent requests, at 200 and 2,000 tokens of context.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/04-inference-engine/serving-engine/figures/spec-speedup-vs-batch.svg)
+#
+# *Figure from the serving-engine primer, §7 Speculative decoding: these are the curves of worked example 4. At 200 tokens of context, speculation becomes a slow-down at 128 requests, the answer of exercise 5.4.*
+#
 # ## The one-minute version
 # Decode is memory-bound. A forward pass over $k + 1$ positions costs approximately the same as a pass over one
 # position, because the weight read dominates. Thus let a low-cost **proposer** guess $k$ tokens. Then let the target

@@ -2,6 +2,10 @@
 # # Exercises 02 · Contrastive training
 # Implement the InfoNCE machinery that you used in notebook 02. Then look at what
 # in-batch "hard negatives" really are. The solutions are in `../solutions/ex02.ipynb`.
+#
+# ![The InfoNCE batch as a similarity matrix: each row is a query, the diagonal holds its positive, the other cells of the batch are free in-batch negatives, extra columns hold mined hard negatives, one cell can be a false negative, and a small temperature tau sharpens the softmax over a row so that the loss concentrates on the hardest negatives.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/07-application-agent-framework/retrieval-rag/embeddings-lab/docs/figures/in-batch-negatives.svg)
+#
+# *Figure from the embeddings primer, §4 The contrastive objective: Task 1 calculates the loss over this matrix, with the positives on the diagonal. Task 3 finds the in-batch hard negative of each row, the plain cell with the highest score.*
 
 # %%
 import numpy as np

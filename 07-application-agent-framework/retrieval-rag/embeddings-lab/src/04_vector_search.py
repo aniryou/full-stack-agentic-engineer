@@ -4,6 +4,10 @@
 # speed and memory. It uses two moves: *scan less* (inverted file) and *store less*
 # (product quantization). We build both in NumPy. At the end, we look at the
 # filtered-search trap. *Primer §13.*
+#
+# ![An IVF-PQ index: k-means cells with nlist centroids, of which a query scans only the nprobe nearest, and product quantization, which stores one byte per sub-vector from a codebook of 256 centroids and scores codes with a lookup table.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/07-application-agent-framework/retrieval-rag/figures/ivf-pq-index.svg)
+#
+# *Figure from the vector-databases primer, §5 Index families: on the left, IVF scans only the lists of the `n_probe` nearest centroids. On the right, PQ stores one byte per sub-vector and gets its distances from a lookup table.*
 
 # %%
 import numpy as np, matplotlib.pyplot as plt

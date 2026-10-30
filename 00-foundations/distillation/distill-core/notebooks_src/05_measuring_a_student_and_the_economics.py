@@ -6,6 +6,10 @@
 # step is an ideal bound (`distillcore.cost`, the same arithmetic as `roofline.llm` and `roofline.cost`). Measured
 # throughput and a real agreement report are in `distill-lab` notebook `05_is_the_student_worth_it` (T1).
 #
+# ![Cumulative cost against output tokens: the teacher line from zero, the student line from the one-off bill with a lower slope, and the crossing at 230.6 million tokens.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/00-foundations/distillation/figures/break-even.svg)
+#
+# *Figure from the distillation primer, §9 The economics of a student: the student line starts at the one-off bill of \$192.21. Worked example 5 calculates this bill. The teacher line starts at zero, and the two lines cross at 230.6 million tokens.*
+#
 # ## The one-minute version
 # Measure a student in two ways.
 #

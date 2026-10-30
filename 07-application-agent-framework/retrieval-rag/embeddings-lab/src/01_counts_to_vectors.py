@@ -4,6 +4,10 @@
 # We build PPMI + SVD vectors. Then we write skip-gram with negative sampling (SGNS)
 # from scratch in NumPy. After that, we do a check of the result of
 # Levy and Goldberg (2014): SGNS implicitly factorizes $\mathrm{PMI} - \log k$. *Primer §1–2.*
+#
+# ![The corpus fills a co-occurrence matrix X of words by contexts, a low-rank factorization makes the word vectors w and the context vectors c, and LSA, PPMI with SVD, word2vec and GloVe differ only in the matrix and the fit.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/07-application-agent-framework/retrieval-rag/embeddings-lab/docs/figures/cooccurrence-factorization.svg)
+#
+# *Figure from the embeddings primer, §2 The classical lineage: the corpus fills a co-occurrence matrix, and a low-rank factorization gives the word vectors. This notebook builds two of the four methods below the matrix: PPMI + SVD, and word2vec (SGNS).*
 
 # %%
 import numpy as np, matplotlib.pyplot as plt

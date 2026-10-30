@@ -6,6 +6,10 @@
 # each experiment. Against a real server (`SERVELAB_URL`), the acceptance cells read the spec-decode counters
 # of vLLM itself.
 #
+# ![The simulated speedup of a 1B draft for an 8B target on an H100 against the concurrent requests, at 200 and 2,000 tokens of context.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/04-inference-engine/serving-engine/figures/spec-speedup-vs-batch.svg)
+#
+# *Figure from the topic primer, §7 Proposers and when speculation pays: at a 200-token context, the gain is gone at 128 requests (0.97×). At 2,000 tokens, the KV reads keep the gain. Exercise 5.3 does the same calculation with `spec_speedup`.*
+#
 # ## The one-minute version
 #
 # The two techniques attack the same fact: **memory bandwidth limits decode**. Each step reads all the
