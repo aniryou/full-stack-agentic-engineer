@@ -36,7 +36,7 @@ A GPU is an **integer** to Kubernetes.
   overcommits the GPUs. Labels tell *which* GPU. Taints keep other pods off GPU nodes.
 - The scheduler places **one pod at a time**: filter, score, bind. Its default score spreads pods by CPU and
   memory, and ignores GPUs. Thus small GPU pods cause **fragmentation** on nodes, until a large pod fits on no
-  node although half the GPUs are free. Bin-pack GPU pools instead.
+  node, even when half the GPUs are free. Bin-pack GPU pools instead.
 - Distributed jobs are **gangs**. A gang has no use unless every pod runs, and it is slow unless its pods are
   **near** each other (same NVLink domain, sub-block, block). If the scheduler places their pods one at a time,
   the cluster can go into a deadlock. Admit gangs whole (Kueue). Use topology-aware placement for them (Kueue
@@ -125,8 +125,8 @@ injects device nodes and driver libraries. The container half is layer 02
 
 Two consequences are important to say in a review:
 
-* **A GPU that fails does not evict anything.** A device can become Unhealthy (an XID error, a GPU that is no
-  longer on the bus). Then allocatable decreases from 8 to 7 (`Kubelet.node_status()`). Pods that run keep their
+* **A GPU that fails does not evict anything.** A device can become Unhealthy, for example because of an XID error
+  or because the GPU is no longer on the bus. Then allocatable decreases from 8 to 7 (`Kubelet.node_status()`). Pods that run keep their
   devices, and only new placements see the change. A node drain is an operational decision.
 * **The scheduler and the kubelet keep separate books.** The scheduler binds a pod with the last node status
   that it saw. The kubelet admits the pod against the devices that it actually has. If a device failed between
@@ -139,7 +139,7 @@ The resource name tells nothing about the model of the GPU. Placement by GPU typ
 
 | Source | Example labels |
 |---|---|
-| GKE | `cloud.google.com/gke-accelerator=nvidia-l4` (cluster-autoscaler also uses this label as the key for GPU nodes), `cloud.google.com/gke-nodepool`, Spot and MIG labels (verify names in GKE docs) |
+| GKE | `cloud.google.com/gke-accelerator=nvidia-l4`, `cloud.google.com/gke-nodepool`, Spot and MIG labels (verify names in GKE docs). Cluster-autoscaler also uses the `cloud.google.com/gke-accelerator` label as the key for GPU nodes. |
 | NVIDIA GPU Feature Discovery (in the GPU Operator) | `nvidia.com/gpu.product=NVIDIA-H100-80GB-HBM3`, `nvidia.com/gpu.memory` (MiB), `nvidia.com/gpu.count`, `nvidia.com/gpu.family`, `nvidia.com/cuda.driver-version.full`, `nvidia.com/mig.strategy`, `nvidia.com/gpu.replicas`, `nvidia.com/gpu.clique` (multi-node NVLink domain) |
 | Node Feature Discovery | PCI vendor labels, for example `feature.node.kubernetes.io/pci-10de.present=true`. 10de is the PCI vendor ID of NVIDIA. The exact form depends on the NFD config (verify). |
 | GCE topology | `cloud.google.com/gce-topology-block`, `-subblock`, `-host` (verify). See section 5. |
@@ -271,8 +271,8 @@ same for the next pod. It never examines two pods together, never looks ahead, a
 These three facts explain fragmentation (3.4), the limits of preemption (3.5) and gang deadlock (4.1).
 
 The table gives the default plugin set and score weights (upstream `getDefaultPlugins`, release-1.34). The
-scheduler adds DynamicResources when the DynamicResourceAllocation feature is on. That is the default since DRA
-became GA in 1.34. DynamicResources has no weight, because it implements no Score:
+scheduler adds DynamicResources when the DynamicResourceAllocation feature is on. The feature is on by default from 1.34, when DRA
+became GA. DynamicResources has no weight, because it implements no Score:
 
 | Plugin | Filter | Score weight | Relevance to GPUs |
 |---|---|---|---|
@@ -302,7 +302,7 @@ L4 node and one CPU node:
 Read the event one reason at a time. *Insufficient* is capacity (wait, preempt, scale up, defragment).
 *affinity/selector* and *untolerated taint* mean that the pod asked for a node shape that is not here. The CPU node
 reports the selector, not the GPU that it does not have, because the selector filter runs first. Lab notebook
-`03_why_is_my_pod_pending` makes this into a diagnosis tool.
+`03_why_is_my_pod_pending` makes this method into a diagnosis tool.
 
 ### 3.3 Score: spread or pack
 
@@ -345,8 +345,8 @@ On a managed control plane, you cannot edit the default scheduler. GKE's `optimi
 profile moves the scheduler toward a bin-pack strategy (verify). Or you run a second scheduler with this profile
 and select it with `schedulerName`.
 
-A packed layout has costs, and it is good to name them. Replicas of one service collect on few nodes (keep them
-apart with `topologySpreadConstraints`). Other default scorers (BalancedAllocation, default PodTopologySpread for
+A packed layout has costs, and it is good to name them. Replicas of one service collect on few nodes. Keep them
+apart with `topologySpreadConstraints`. Other default scorers (BalancedAllocation, default PodTopologySpread for
 Deployments) still pull toward a spread layout.
 
 ### 3.4 Fragmentation, measured
@@ -377,18 +377,18 @@ GPUs become stranded in two ways:
   calculate this term. The values are 16 and 100% on the left, and 0 and 0% on the right.
 * **CPU/memory-bundle stranding**: CPU or memory runs out first. These nodes have 96 cores and 768 GiB. 1-GPU
   pods that request 16 cores and 64 GiB fit min(8 GPUs / 1, 96 cores / 16, 768 GiB / 64 GiB) = **6** per node. The
-  scheduler binds six, and the seventh is Pending on `Insufficient cpu`. Thus 2 GPUs are stranded, although
+  scheduler binds six, and the seventh is Pending on `Insufficient cpu`. Thus 2 GPUs are stranded, but
   $8 \bmod 1 = 0$ (`scheduler.Scheduler`).
 
-  Keep a 1-GPU pod within ${1/N}$ of the allocatable CPU and memory of an $N$-GPU node, minus DaemonSets and
+  Keep a 1-GPU pod at or below ${1/N}$ of the allocatable CPU and memory of an $N$-GPU node, minus DaemonSets and
   sidecars. The lab's `k8sgpu.machines.stranded_gpus()` does this for real machine shapes, after GKE's
   reservations.
 
 ![On one 8-GPU node with 96 cores and 768 GiB, six 1-GPU pods of 16 cores and 64 GiB use all the CPU, the seventh pod is Pending on Insufficient cpu, and 2 GPUs are stranded.](figures/bundle-stranding.svg)
 
 *The figure shows stranded GPUs from the CPU of the bundle, not from the GPU count. Six 1-GPU pods of 16 cores and
-64 GiB use all 96 cores of the node. The seventh pod is Pending on `Insufficient cpu`, which leaves 2 stranded GPUs
-although $8 \bmod 1 = 0$.*
+64 GiB use all 96 cores of the node. The seventh pod is Pending on `Insufficient cpu`, which leaves 2 stranded GPUs,
+but $8 \bmod 1 = 0$.*
 
 Monitor the stranded GPUs for each pod shape that is important to you, next to utilisation. A cluster can be 50%
 utilised and 100% fragmented for its largest jobs. The shapes come from the size of the model: the number of GPUs
@@ -418,7 +418,7 @@ To select from the candidate nodes (`plugins.pick_preemption_node()`), it compar
 
 1. the fewest PodDisruptionBudget violations,
 2. the lowest priority of the highest-priority victim,
-3. the lowest sum of victim priorities (each priority has an offset of 2³¹, so fewer victims wins first),
+3. the lowest sum of victim priorities, each with an offset of 2³¹, so that fewer victims win first,
 4. the fewest victims,
 5. the latest start time of the highest-priority victims.
 
@@ -429,7 +429,7 @@ evaluation pod of 8 GPUs. A priority-1000 serving pod needs 4 GPUs. Node *a* cos
 *b* costs one priority-500 victim. Thus the scheduler evicts the newer batch pod on *a*.
 
 Preemption does **not** do these things: evict pods of equal or higher priority, consolidate free GPUs, or
-understand jobs. Preemption can make room for the first pod of an 8-pod job. But that room is of no use if the
+know about jobs. Preemption can make room for the first pod of an 8-pod job. But that room is of no use if the
 other seven pods cannot follow.
 
 ---
@@ -457,8 +457,8 @@ nothing (`gang.admit_gangs()`). Then 4 GPUs are idle instead of 12, and B starts
 
 | Mechanism | How | Notes |
 |---|---|---|
-| **Kueue** (job level) | The webhook of Kueue suspends queued Jobs at creation (`spec.suspend: true`). Plain pods get the scheduling gate `kueue.x-k8s.io/admission`. Kueue admits the whole Workload against quota. Then it unsuspends the Job and injects the node selectors of the flavor. | Quota is *logical*. It is possible that the pods of an admitted job still do not all fit on real nodes (fragmentation, pods that Kueue does not manage). `waitForPodsReady` evicts and requeues a job whose pods are not all Ready, with backoff. The setting is on by default since the v1beta2 Configuration: timeout 30 min, `recoveryTimeout` the same, `blockAdmission: false`. Only the alpha `DisableWaitForPodsReady` feature gate turns it off. `blockAdmission: true` admits one workload at a time. TAS (section 5) and ProvisioningRequest (section 7) do a check of physical capacity. |
-| **Coscheduling** plugin (kubernetes-sigs/scheduler-plugins) | A `PodGroup` with `minMember`. The **Permit** stage holds reserved pods until the number of reserved pods is `minMember`. If that does not occur, it rejects them after a timeout. | It runs inside a second scheduler profile. The PodGroup API is `scheduling.x-k8s.io/v1alpha1` (verify). |
+| **Kueue** (job level) | The webhook of Kueue suspends queued Jobs at creation (`spec.suspend: true`). Plain pods get the scheduling gate `kueue.x-k8s.io/admission`. Kueue admits the whole Workload against quota. Then it unsuspends the Job and injects the node selectors of the flavor. | Quota is *logical*. It is possible that the pods of an admitted job still do not all fit on real nodes. Fragmentation and pods that Kueue does not manage can cause this problem. `waitForPodsReady` evicts and requeues a job whose pods are not all Ready, with backoff. The setting is on by default from the v1beta2 Configuration: timeout 30 min, `recoveryTimeout` the same, `blockAdmission: false`. Only the alpha `DisableWaitForPodsReady` feature gate turns it off. `blockAdmission: true` admits one workload at a time. TAS (section 5) and ProvisioningRequest (section 7) do a check of physical capacity. |
+| **Coscheduling** plugin (kubernetes-sigs/scheduler-plugins) | A `PodGroup` with `minMember`. The **Permit** stage holds reserved pods until the number of reserved pods is `minMember`. If that does not occur, the Permit stage rejects them after a timeout. | It runs inside a second scheduler profile. The PodGroup API is `scheduling.x-k8s.io/v1alpha1` (verify). |
 | **Volcano** | its own batch scheduler with `PodGroup.minAvailable`, queues and fair share | a replacement scheduler, common in HPC-style clusters |
 | **Kubernetes native** (KEP-4671) | `Workload` and `PodGroup` APIs in `scheduling.k8s.io`. The scheduler places a pod group together. | It is alpha in 1.35 behind the `GenericWorkload` feature gate, beta in 1.37, and 1.38 is the target for stable. These releases come from the KEP metadata (verify the release you run). Kueue plans to integrate the native gang scheduling. |
 
@@ -479,7 +479,7 @@ stateDiagram-v2
 
 *Under Kueue, the webhook suspends a gang Job at creation, and Kueue reserves logical quota for the whole Workload.
 TAS or a ProvisioningRequest does the check of physical capacity, and then Kueue unsuspends the Job. If the pods are
-not all Ready within 30 min, `waitForPodsReady` evicts the job and requeues it with backoff.*
+not all Ready after 30 min, `waitForPodsReady` evicts the job and requeues it with backoff.*
 
 ### 4.3 JobSet and LeaderWorkerSet
 
@@ -487,7 +487,7 @@ A gang also needs a workload API that treats its pods as one thing:
 
 * **JobSet** (`jobset.x-k8s.io/v1alpha2`) is a group of Jobs for training and HPC. It has `replicatedJobs` (for
   example, one driver and $N$ workers) and a headless Service for stable hostnames. It has
-  `failurePolicy.maxRestarts` (a failed Job creates the whole set again, so resume from a checkpoint). It also has
+  `failurePolicy.maxRestarts`. Under this policy, a failed Job creates the whole set again. Thus, resume from a checkpoint. It also has
   `successPolicy`, `startupPolicy.startupPolicyOrder: InOrder`, and
   `alpha.jobset.sigs.k8s.io/exclusive-topology`, which gives each child Job a whole topology domain. Kueue admits a
   JobSet as one Workload.
@@ -528,7 +528,7 @@ align CPUs and devices by NUMA node.
 
 ### 5.2 Kueue Topology-Aware Scheduling
 
-Kueue TAS (beta, on by default since v0.14) models the tree with node labels. An admin creates a `Topology`
+Kueue TAS (beta, on by default from v0.14) models the tree with node labels. An admin creates a `Topology`
 (`kueue.x-k8s.io/v1beta2`) that lists the levels, the largest first. On GCE, the levels are the
 `cloud.google.com/gce-topology-block`, `-subblock` and `-host` labels, then `kubernetes.io/hostname`. A3/A4/A4X
 nodes carry these GCE labels, and G2/L4 nodes do not (verify, §10.3). The admin then points a ResourceFlavor at the
@@ -543,7 +543,7 @@ Topology with `spec.topologyName`. Workloads ask for a placement with pod-templa
 
 TAS calculates the free capacity per domain. It starts from the allocatable of Ready, schedulable nodes, and
 subtracts TAS workloads and all other pods. Then it assigns pods to domains before the job starts. Thus TAS is
-also a check of physical capacity, and plain quota is not. There are two algorithms (defaults since v0.15), both
+also a check of physical capacity, and plain quota is not. There are two algorithms (defaults from v0.15), both
 in `gpusched.gang`:
 
 * **BestFit** (required and preferred): from the domains that can hold the whole pod set, it takes the
@@ -556,7 +556,7 @@ in `gpusched.gang`:
   domains together. Thus the host split does not have to be the same as the sub-block split.
 * **LeastFreeCapacity** (unconstrained): one flat list of hosts, tightest first. It takes the tightest single host
   that holds the whole pod set. Only if no host does, it fills the smallest gaps first: 1 + 2 + 3 + 1 for the same
-  example (`gang.least_free_capacity()`). This keeps large domains whole for constrained jobs.
+  example (`gang.least_free_capacity()`). This order keeps large domains whole for constrained jobs.
 
 Worked placement (`gang.place_gang()`, notebook 03). The free space per sub-block, in 8-GPU pods, is b0-s0 = 1,
 b0-s1 = 3, b1-s0 = 2 and b1-s1 = 4. In b1-s0, one of the hosts has a single GPU busy, so that host counts zero.
@@ -577,10 +577,10 @@ holds 5, so the preferred constraint widens to block b1. The host pass then give
 
 Select the constraint for each workload:
 
-- **required** for a multi-host inference group whose shards exchange activations every token (a slow replica is
-  slow for its whole life),
-- **preferred** for long training jobs (a wait forever for a perfect block is worse than a block that is slightly
-  slower),
+- **required** for a multi-host inference group whose shards exchange activations every token, because a slow
+  replica is slow for its whole life.
+- **preferred** for long training jobs, because a wait forever for a perfect block is worse than a block that is
+  slightly slower.
 - **unconstrained** for embarrassingly parallel batch.
 
 When it can, TAS also replaces a failed node inside the assigned domain (hot swap). When it cannot, TAS evicts the
@@ -589,7 +589,7 @@ workload.
 ### 5.3 Compact placement and exclusive topology
 
 Two related tools work at other layers. **Compact placement** asks the cloud to create the VMs of a node pool
-physically near each other (on GKE, `placement_policy.type = "COMPACT"` on the node pool). This is topology at
+physically near each other (on GKE, `placement_policy.type = "COMPACT"` on the node pool). Compact placement is topology at
 creation time, not at scheduling time. **Exclusive topology** (JobSet and LWS annotations) gives each job or group
 a whole domain, so neighbours cannot share its links.
 
@@ -652,7 +652,7 @@ job **borrows** 8 of the idle GPUs of team A. Team A can now use 8, not 16.
 Team A submits a 16-GPU job. With the default `reclaimWithinCohort: Never`, nothing occurs. The job waits
 (`couldn't assign flavors to pod set main: insufficient unused quota for nvidia.com/gpu in flavor h100, 8 more needed`,
 from `Kueue.explain()`) until the job of B that borrows quota ends on its own. **Nominal quota is not a guarantee
-unless reclaim is on** (or a `lendingLimit` keeps part of it home). These are the policies:
+unless reclaim is on**, or unless a `lendingLimit` keeps part of it home. These are the policies:
 
 | Field | Values | Effect |
 |---|---|---|
@@ -660,7 +660,7 @@ unless reclaim is on** (or a `lendingLimit` keeps part of it home). These are th
 | `withinClusterQueue` | Never, LowerPriority, LowerOrNewerEqualPriority | preempt lower-priority (or equal-priority newer) workloads in the same queue |
 | `borrowWithinCohort` | policy Never / LowerPriority, `maxPriorityThreshold` | preempt while the preemptor itself borrows (classic preemption only) |
 
-Classic preemption (`quota.Kueue.preemption_targets()`) can occur when the preemptor fits within its nominal
+Classic preemption (`quota.Kueue.preemption_targets()`) can occur when the preemptor fits in its nominal
 quota, or when `borrowWithinCohort` is on. Kueue puts the candidates in this order: **other ClusterQueues first,
 then lowest priority, then most recently admitted**. It removes them greedily until the preemptor fits. It removes
 a candidate from another queue only while that queue still borrows. Then it decreases the set to the minimum, in
@@ -679,13 +679,13 @@ needed. With `Any`, it preempts the third job of B, the newest, and B is back at
 **Fair sharing** is the alternative algorithm. Each ClusterQueue gets a weighted share value of the borrowable
 resources. Admission selects the lowest share first, and preemption takes from the highest share first. Preemption
 obeys `preemptionStrategies` such as `[LessThanOrEqualToFinalShare, LessThanInitialShare]`. Admission Fair
-Sharing applies the idea to LocalQueues within a ClusterQueue.
+Sharing applies the idea to LocalQueues in a ClusterQueue.
 
 ### 6.4 Queueing strategy and flavors
 
 `StrictFIFO` admits in order (priority, then creation), and a head that does not fit blocks the queue.
-`BestEffortFIFO` (the default) lets later workloads go past a blocked workload. Take a 16-GPU queue that receives
-8, 16 and 8 GPU jobs. StrictFIFO admits only the first job. BestEffortFIFO admits both 8-GPU jobs. This gives
+`BestEffortFIFO` (the default) lets later workloads go past a blocked workload. Take a 16-GPU queue that gets
+8, 16 and 8 GPU jobs. StrictFIFO admits only the first job. BestEffortFIFO admits both 8-GPU jobs. This strategy gives
 better utilisation, but large jobs can wait indefinitely behind a stream of small jobs.
 
 Kueue tries the flavors in the listed order. By default, it takes a flavor that fits, even if it must borrow
@@ -744,7 +744,7 @@ pending pods ─► simulate them on each node pool's template node ─► bin-p
 * **Down again**: a node goes away after it stays unneeded for `--scale-down-unneeded-time` (10 min), and no
   scale-up occurred for `--scale-down-delay-after-add` (10 min). For GPU nodes, only GPU utilisation counts
   against `--scale-down-gpu-utilization-threshold` (0.5). The autoscaler stops its wait for nodes that do not
-  register within `--max-node-provision-time` (15 min).
+  register before the end of `--max-node-provision-time` (15 min).
 
 Scale from zero, simulated (`autoscaler.simulate()`, notebook 05, which models both 10-minute delays): a 1-hour job
 goes onto an empty 1-GPU pool. The nodes of the pool take 300 s to show allocatable GPUs. The job starts at 300 s
@@ -760,7 +760,7 @@ fails:
 | Type | You get | How it fails | Fits |
 |---|---|---|---|
 | On-demand | a VM now, if the zone has it | stockout: the scale-up gives an error and retries. Large parts are hard to get. | stateless serving, dev |
-| Spot | a cost that is 60–91% lower (GCP, verify) | the cloud can reclaim it at any time, with short notice | interruptible, retryable batch, and extra serving replicas |
+| Spot | a cost that is 60–91% lower (GCP, verify) | the cloud can reclaim it at any time, with a short warning | interruptible, retryable batch, and extra serving replicas |
 | Reservation | capacity that the cloud holds for you, billed if you use it or not | you pay for idle capacity | steady baseline load |
 | DWS flex-start (GCP) | a queued request that the cloud provisions **all at once**, for up to 7 days | waits until capacity exists | gangs with a flexible start: training, fine-tuning, large evals |
 | DWS calendar mode (GCP) | a future block with a specified duration (verify) | you must plan ahead | planned runs |
@@ -788,7 +788,7 @@ The size of the gang multiplies the hazard. Write checkpoints at the interval th
 ### 7.3 Queued provisioning, ComputeClass, Autopilot
 
 A gang has a problem that an ordinary scale-up cannot solve. Nodes arrive one at a time, and the cloud bills every
-node that arrives before the last node while that node waits. It is worse when the `max_nodes` of a pool is below
+node that arrives before the last node while that node waits. The problem is worse when the `max_nodes` of a pool is below
 the size of the gang. Then the pool scales up *part* of the gang, and those nodes stay idle forever. In the
 simulation, 3 nodes use 6 node-hours in 2 hours, and the job never starts. **Queued, all-or-nothing provisioning**
 holds the request until the cloud can create the whole gang:
@@ -807,7 +807,7 @@ probability per minute that the cloud grants it. In one run (seed 0), the gang c
 pool.
 
 The ordinary pool paid **31.3 node-hours (251 GPU-hours)** for nodes that waited for their peers. The queued pool
-paid **1.3** (only the boot, in every run). Also, over 200 seeds the ordinary pool averages **22.4 node-hours** and a
+paid **1.3**, and in every run it paid only for the boot. Also, over 200 seeds the ordinary pool averages **22.4 node-hours** and a
 1.95 h start. Queued provisioning does not create capacity. With it, you do not pay for the partial set.
 
 ```mermaid
@@ -833,7 +833,7 @@ An example is reservation, then Spot, then on-demand, then flex-start. GKE's nod
 pools that match, on demand. Pods select the class with a node selector (verify the field names against the CRD).
 The lab's `deploy/gke/` has an example.
 
-**Autopilot** removes node pools entirely. A pod requests `nvidia.com/gpu` and selects an accelerator type. Then
+**Autopilot** removes node pools completely. A pod requests `nvidia.com/gpu` and selects an accelerator type. Then
 GKE provisions and bills per pod (verify selectors and limits). Outside GCP, the same ideas are Karpenter node pools
 with capacity types (AWS, Azure), and capacity reservations and blocks for ML (verify provider specifics). On-prem,
 the same idea is a fleet of constant size where quota (section 6) is the only elasticity.
@@ -866,7 +866,7 @@ weights from a fast cache (4 GB/s). It takes **70 s**, most of it warm-up. These
 
 * **Node**: keep `min_nodes` above zero for latency-critical pools. Or run **balloon pods**. These are placeholder
   pods that request the GPU shape that you want to keep warm. Put them in a `PriorityClass` that is negative but
-  not below the `--expendable-pods-priority-cutoff` of the autoscaler. Its default is −10, and the FAQ uses −10.
+  not below the `--expendable-pods-priority-cutoff` of the autoscaler. The default of the cutoff is −10, and the FAQ uses −10.
   Pods with a priority below the cutoff do not trigger a scale-up and do not block a scale-down.
 
   Give the balloon pods `terminationGracePeriodSeconds: 0`. Real pods preempt them at once (section 3.5). Then the Pending balloon makes the autoscaler add a node for it.
@@ -911,7 +911,7 @@ This is the cluster view:
 
 The trap with time-slicing: a container that requests 2 "GPUs" can get two slices of the **same** physical GPU.
 The NVIDIA plugin takes replicas from the least-loaded GPUs. Thus, on a busy node, one lightly used GPU supplies
-both slices (`DevicePlugin(replicas=10)`, notebook 01, exercise 1.6). That is the default `distributed`
+both slices (`DevicePlugin(replicas=10)`, notebook 01, exercise 1.6). This behaviour comes from the default `distributed`
 allocation policy of the plugin.
 
 Its `--shared-devices-allocation-policy` flag (v0.20.0 and later, verify) also offers `packed`, which fills the
@@ -968,7 +968,7 @@ The kind cluster cannot run gVisor, but the GKE Sandbox node pool of that topic 
 ### 10.2 KWOK and fake-gpu-operator
 
 **KWOK** (Kubernetes WithOut Kubelet) creates hundreds of fake Nodes with any capacity and labels, and it simulates
-pod lifecycles. This is sufficient for tests of scheduling, Kueue and TAS behaviour at fleet scale on a laptop.
+pod lifecycles. This tool is sufficient for tests of scheduling, Kueue and TAS behaviour at fleet scale on a laptop.
 Run:ai's **fake-gpu-operator** goes one step further on CPU-only nodes. It gives a simulated device plugin, GPU
 Feature Discovery labels, MIG and Prometheus metrics. Thus dashboards and label-based placement behave as they do on
 GPUs.
@@ -984,7 +984,7 @@ GPUs.
 
 | Concept | T0: laptop / Colab CPU | T1–T2: rented GPU box | T3: GKE | Other clouds |
 |---|---|---|---|---|
-| device plugin, capacity/allocatable | `k8s-gpu-core` notebook 01 | a Lambda VM or any VM with GPUs + k3s/kubeadm + GPU Operator (RunPod/Vast are containers: no kubelet of your own) | GPU node pool, driver auto-install | EKS/AKS + GPU Operator or the provider's device plugin (verify) |
+| device plugin, capacity/allocatable | `k8s-gpu-core` notebook 01 | a Lambda VM or any VM with GPUs + k3s/kubeadm + GPU Operator. RunPod/Vast are containers, with no kubelet of your own. | GPU node pool, driver auto-install | EKS/AKS + GPU Operator or the provider's device plugin (verify) |
 | filter/score/preemption | notebook 02, kind | same | the managed scheduler (+ your own profile) | same |
 | gangs, JobSet/LWS, Kueue, TAS | notebooks 03–04, kind + Kueue v0.19.6 | same | Kueue on GKE. TAS reads the GCE topology labels. A3/A4/A4X pools (GPUDirect/RDMA network, compact placement) carry them, and the L4 pools that the lab uses do not. Thus the lab's GKE Kueue flavors are non-TAS (verify). | Kueue anywhere. Provider topology labels are different. |
 | autoscaling, Spot, queued provisioning | notebook 05 (simulated) | – | node pools, Spot, DWS flex-start, ComputeClass (lab notebook 04) | Karpenter, capacity reservations (verify) |
@@ -1003,7 +1003,7 @@ GKE manages it here, and the GPU Operator manages it elsewhere. Requests are who
 limits. GPU nodes have taints, and pods select a model with labels.
 
 "We run separate node pools per GPU shape. The default scheduler spreads pods by CPU and memory, and ignores GPUs.
-This leaves GPUs stranded. Thus GPU pools use a MostAllocated profile with a weight on the GPU. We monitor stranded
+This spread leaves GPUs stranded. Thus GPU pools use a MostAllocated profile with a weight on the GPU. We monitor stranded
 GPUs for our largest pod shape.
 
 "Every workload with more than one pod goes through Kueue, for example training JobSets and multi-host
@@ -1019,7 +1019,7 @@ and weights come from a cache."
 
 **Drill questions.**
 
-1. *An 8-GPU pod is Pending with `Insufficient nvidia.com/gpu` although the cluster is half idle. Why, and
+1. *An 8-GPU pod is Pending with `Insufficient nvidia.com/gpu`, but the cluster is half idle. Why, and
    what do you change?* Fragmentation: on each node, the free GPUs are in pieces smaller than 8. Pack GPU pools
    (MostAllocated with a GPU weight), separate pools by pod shape, or preempt/defragment. Measure stranded GPUs
    for the shape.
@@ -1030,8 +1030,8 @@ and weights come from a cache."
    team A lent its unused quota to the cohort, and `reclaimWithinCohort` is `Never`. Thus the borrowers keep the
    quota until they complete. Turn on reclaim, or set a `lendingLimit` to keep part of the quota home.
 4. *Required or preferred topology for a 2-node tensor-parallel serving group, and for a 32-node training
-   job?* For serving, use the required constraint at the smallest multi-node domain (a split replica is slow
-   for its whole life). For training, use the preferred constraint at block level (locality, but not at the
+   job?* For serving, use the required constraint at the smallest multi-node domain, because a split replica is slow
+   all its life. For training, use the preferred constraint at block level (locality, but not at the
    price of an indefinite wait).
 5. *Why not run a 16-node training job on an autoscaled Spot pool?* Any reclaim restarts the gang. Survival
    decreases as $e^{-N \cdot \lambda \cdot T}$ (14.7% for 16 nodes over 24 h at $\lambda$ = 0.005/node-h,

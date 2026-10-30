@@ -92,9 +92,9 @@ svg	04-inference-engine/quantization/figures/number-formats-bits.svg	-	0	-	900	5
 svg	04-inference-engine/quantization/figures/scale-granularity.svg	-	0	-	900	310	276	0.89	fits
 svg	04-inference-engine/quantization/figures/smoothquant-migration.svg	-	0	-	900	410	364	0.89	fits
 svg	04-inference-engine/quantization/figures/three-levers.svg	-	0	-	900	400	356	0.89	fits
-mermaid	04-inference-engine/quantization/PRIMER.md	1	780	0d5fbe147727469f5f88fc70c59dd400893a27bd	811	306	302	0.99	fits
-mermaid	04-inference-engine/quantization/PRIMER.md	2	792	16c8c10be719e5c23ed4765560c6edfc1d5e6c6b	1057	468	354	0.76	fits
-mermaid	04-inference-engine/quantization/PRIMER.md	3	876	25577572eb6f97821c0c232d567d6952f1ee34dd	1109	294	212	0.72	fits
+mermaid	04-inference-engine/quantization/PRIMER.md	1	779	0d5fbe147727469f5f88fc70c59dd400893a27bd	811	306	302	0.99	fits
+mermaid	04-inference-engine/quantization/PRIMER.md	2	791	16c8c10be719e5c23ed4765560c6edfc1d5e6c6b	1057	468	354	0.76	fits
+mermaid	04-inference-engine/quantization/PRIMER.md	3	875	25577572eb6f97821c0c232d567d6952f1ee34dd	1109	294	212	0.72	fits
 svg	04-inference-engine/serving-engine/figures/chunked-prefill-interference.svg	-	0	-	880	296	269	0.91	fits
 svg	04-inference-engine/serving-engine/figures/continuous-batching-steps.svg	-	0	-	768	240	240	1.00	fits
 svg	04-inference-engine/serving-engine/figures/engine-step-loop.svg	-	0	-	880	280	255	0.91	fits

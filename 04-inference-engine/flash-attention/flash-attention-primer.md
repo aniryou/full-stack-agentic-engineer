@@ -48,7 +48,7 @@ A GPU has a memory hierarchy. These are the approximate values for an H100:
 | SRAM (shared memory / L1) | ~256 KB per SM, ~33 MB total | ~30 TB/s | On-chip, software-managed |
 | HBM (global memory) | 80 GB | ~3.3 TB/s | Off-chip stacked DRAM ("GPU memory") |
 
-A larger level is slower, by approximately one order of magnitude per step. A CPU has the same structure with L1/L2/DRAM. But on a GPU, the programmer must control the on-chip level in the code. It is not a transparent cache.
+A larger level is slower, by approximately one order of magnitude per step. A CPU has the same structure with L1/L2/DRAM. But on a GPU, the programmer must control the on-chip level in the code. The on-chip level is not a transparent cache.
 
 Now look at the most important ratio. An H100 does approximately 990 TFLOP/s of bf16 matrix math. But it moves only approximately 3.3 TB/s from HBM. Divide the two numbers:
 
@@ -58,7 +58,7 @@ Now look at the most important ratio. An H100 does approximately 990 TFLOP/s of 
 
 **To keep the tensor cores busy, a kernel must do ~300 arithmetic operations for every byte that it reads from HBM.** Below that threshold, the chip does not get sufficient data. It stays idle while it waits for memory, and more FLOPs cost nothing. The name of this ratio is *arithmetic intensity*. Make a plot of the possible performance against this ratio, and you get the classic *roofline*. The roofline has a diagonal memory-bound region that goes up to a flat compute-bound ceiling.
 
-The ratio became worse in each generation, because compute increased faster than bandwidth. On an A100, it was ~200. On a B200, the tensor core throughput approximately doubled again, but the HBM bandwidth did not increase at the same rate. More and more, the bottleneck in ML kernels is not the math. It is the movement of data.
+The ratio became worse in each generation, because compute increased faster than bandwidth. On an A100, the ratio was ~200. On a B200, the tensor core throughput approximately doubled again, but the HBM bandwidth did not increase at the same rate. More and more, the bottleneck in ML kernels is not the math. It is the movement of data.
 
 ---
 
@@ -89,11 +89,11 @@ The solution is the standard solution for memory-bound problems: *fusion* and *t
 
 ![The naive schedule writes S and P to HBM and reads them back, while the fused kernel keeps one Q block and the S and P tiles in SRAM and writes no N × N matrix to HBM.](figures/primer-naive-vs-tiled.svg)
 
-*In the naive schedule of §3 (top row), three kernels write $S$ and $P$, 33.5 MB each, to HBM and read them back. For one head at $N$ = 4096, $d$ = 64 in fp16, the traffic is roughly 134 MB for 4.3 GFLOP, or 32 FLOPs per byte. In the fused kernel of §4 (bottom row), one $Q$ block stays in SRAM while the kernel loops over the $K$ and $V$ blocks. $S$ and $P$ exist only as tiles, and HBM holds no $N \times N$ matrix.*
+*In the naive schedule of §3 (top row), three kernels write $S$ and $P$, 33.5 MB each, to HBM and read them back. For one head at $N$ = 4096, $d$ = 64 in fp16, the traffic is approximately 134 MB for 4.3 GFLOP, or 32 FLOPs per byte. In the fused kernel of §4 (bottom row), one $Q$ block stays in SRAM while the kernel loops over the $K$ and $V$ blocks. $S$ and $P$ exist only as tiles, and HBM holds no $N \times N$ matrix.*
 
 In detail: divide $Q$ into row blocks of size $B_r \times d$, and divide $K$, $V$ into blocks of size $B_c \times d$. Select the sizes so that some of these blocks fit in the ~200 KB of shared memory of one SM. For each $Q$ block, loop over all $K$/$V$ blocks, and accumulate the results into an output block.
 
-This is easy for the matmuls, because a matmul divides into blocks naturally. **The obstacle is softmax.**
+Tiling is easy for the matmuls, because a matmul divides into blocks naturally. **The obstacle is softmax.**
 
 Softmax normalizes across a full row:
 
@@ -101,7 +101,7 @@ $$
 \operatorname{softmax}(s)_i = \frac{\exp(s_i)}{\sum_j \exp(s_j)}
 $$
 
-The denominator is a sum over the full row, that is, all $N$ entries. If you hold only a block of 128 columns, you cannot calculate it. It seems that you must do a full pass over the row before you can give any output for that row. That pass is exactly the thing that you tried to prevent.
+The denominator is a sum over the full row, that is, all $N$ entries. If you hold only a block of 128 columns, you cannot calculate the denominator. It seems that you must do a full pass over the row before you can give any output for that row. That pass is exactly the thing that you tried to prevent.
 
 There is also a numerical problem. The $\exp$ of a large score overflows fp16 immediately. Thus, every real implementation subtracts the row max first: $\exp(s_i - \max)$. The result is mathematically identical, and the step is numerically necessary. Now you also need the row *max* at the start, and that is a second global reduction.
 
@@ -205,7 +205,7 @@ The last point is important. Around 2020–2021, there was a wave of "efficient 
 - Parallelism over the sequence dimension, not only over batch × heads. This is important when the batch is small and $N$ is large.
 - As few non-matmul FLOPs as possible.
 
-The last change is less obvious than it seems. On an A100, tensor-core matmul runs at 312 TFLOP/s, but general FP32 arithmetic runs at 19.5. Thus, a non-matmul FLOP costs ~16× a matmul FLOP. When the kernel does the division that rescales the output at the end of the loop, not in each block, it gains real percentage points. Result: ~2× over FA1, ~70% of A100 peak (paper figures, verify).
+The last change is less clear than it seems. On an A100, tensor-core matmul runs at 312 TFLOP/s, but general FP32 arithmetic runs at 19.5. Thus, a non-matmul FLOP costs ~16× a matmul FLOP. When the kernel does the division that rescales the output at the end of the loop, not in each block, it gains real percentage points. Result: ~2× over FA1, ~70% of A100 peak (paper figures, verify).
 
 **FlashAttention-3** (2024): specific to Hopper. It uses asynchrony in three ways:
 
@@ -215,7 +215,7 @@ The last change is less obvious than it seems. On an A100, tensor-core matmul ru
 
 FlashAttention-3 also adds FP8 with incoherent processing (a Hadamard rotation that spreads outliers before quantization). It reached approximately 740 TFLOP/s at 75% utilization on H100 (paper figure, verify).
 
-**FlashAttention-4** (paper published March 2026): Blackwell. The authors call the main idea **asymmetric hardware scaling**. The tensor core throughput doubles, but other functional units scale more slowly or not at all. Examples are the shared memory bandwidth and the exponential units. Dense BF16 tensor core throughput went from approximately 1 PFLOPS to 2.25 PFLOPS (datasheet, verify). The hardware also added these items:
+**FlashAttention-4** (paper published March 2026): Blackwell. The authors call the main idea **asymmetric hardware scaling**. The tensor core throughput doubles, but other functional units scale more slowly or not at all. Examples are the shared memory bandwidth and the exponential units. The dense BF16 throughput of the tensor cores went from approximately 1 PFLOPS to 2.25 PFLOPS (datasheet, verify). The hardware also added these items:
 
 - New tensor core instructions (TCGEN05).
 - A new memory space with the name Tensor Memory, for tensor core intermediates.
@@ -254,8 +254,8 @@ It became clear that the online-softmax accumulator is a reusable primitive. Whe
 
 **Things that trip people up:**
 
-- It decreases *memory traffic*, not FLOPs. The arithmetic is still $O(N^2 d)$. If a person tells you that FlashAttention made attention linear, that person is incorrect.
-- Causal masking is worth roughly 2×, because the kernel can skip the fully-masked blocks above the diagonal. Make sure that the flag is set.
+- FlashAttention decreases *memory traffic*, not FLOPs. The arithmetic is still $O(N^2 d)$. If a person tells you that FlashAttention made attention linear, that person is incorrect.
+- Causal masking is worth roughly 2×, because the kernel can skip the fully-masked blocks above the diagonal. Make sure that you set the flag.
 - The fast paths need fp16/bf16 and a limited set of head dimensions. A silent fallback to a slower kernel is a frequent cause of "why didn't this help?"
 - You cannot examine the attention matrix after the run, because the full matrix never existed in memory. If you need attention maps for interpretability or visualization, you must recompute them separately, at the full quadratic cost.
 - At short sequence lengths, the gain is small, because attention is not your bottleneck there in any case.
@@ -278,9 +278,9 @@ The one general lesson to keep from this primer: **on modern accelerators, look 
 - Williams et al., *Roofline* (2009): the performance model under all of this.
 - The `Dao-AILab/flash-attention` repo: the CuTeDSL rewrite is much easier to read than the old C++ templates.
 
-Do this exercise on any machine. It needs no GPU. Write the online-softmax accumulator yourself in ~50 lines of numpy (or PyTorch). Compare it with a reference softmax. The work takes an afternoon, and after it the idea is no longer abstract. [`flash_attention_minimal.py`](flash_attention_minimal.py) is one answer to compare with yours.
+Do this exercise on any machine. It needs no GPU. Write the online-softmax accumulator yourself in ~50 lines of numpy (or PyTorch). Compare it with a reference softmax. The work takes an afternoon, and after that work the idea is no longer abstract. [`flash_attention_minimal.py`](flash_attention_minimal.py) is one answer to compare with yours.
 
-**Code and tests.** The module `kerncore.flash` of [`kernel-core`](../kernel-core/README.md) is the same tiled forward, with counters. It compares itself with `flash_attention_minimal.py`. It counts tiles and bytes and compares them with [`fa_calculators.py`](fa_calculators.py) (which it imports). It also shows why a forward key loop needs no `-inf` guard (deep dive §11.2). The tests are `kernel-core/tests/test_flash.py`, and `kernel-core/tests/test_primer_numbers.py` recomputes the worked numbers of this page.
+**Code and tests.** The module `kerncore.flash` of [`kernel-core`](../kernel-core/README.md) is the same tiled forward, with counters. It compares itself with `flash_attention_minimal.py`. It counts tiles and bytes and compares them with [`fa_calculators.py`](fa_calculators.py), which it imports. It also shows why a forward key loop needs no `-inf` guard (deep dive §11.2). The tests are `kernel-core/tests/test_flash.py`, and `kernel-core/tests/test_primer_numbers.py` recomputes the worked numbers of this page.
 
 ---
 
@@ -289,7 +289,7 @@ Do this exercise on any machine. It needs no GPU. Write the online-softmax accum
 This table lists the product and paper facts that this primer states. Every other number on the page comes from them. The
 [deep dive](flash-attention-deep-dive.md) derives most of them again and keeps its own verify list.
 
-| Item | Value used | Why it needs checking |
+| Item | Value used | Why it needs a check |
 |---|---|---|
 | H100 memory hierarchy (§2) | ~256 KB registers and ~256 KB shared memory/L1 per SM, ~33 MB SRAM total, 80 GB HBM at ~3.3 TB/s | Rounded datasheet figures. The SXM part is 3.35 TB/s, and 228 KB of it is usable shared memory. |
 | Peak bf16 matmul (§2) | H100 ~990 TFLOP/s, ridge ~300 FLOP/B, A100 ~200 FLOP/B (the 40 GB part) | Dense datasheet peaks. The A100 80 GB (2.0 TB/s) gives ~153. |
