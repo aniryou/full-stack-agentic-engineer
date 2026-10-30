@@ -5,6 +5,10 @@
 # machine, the lab's `05_how_a_container_sees_a_gpu` (T1) reads `/dev/nvidia*`, the injected
 # `libcuda` mount and the driver and runtime versions from inside a container.
 #
+# ![The two compatibility gates on the example of section 1.2: gate 1 compares the CUDA that the host driver supports with the CUDA the app was built with, and gate 2 matches the SASS or PTX in the fatbin against the compute capability of the GPU.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/02-cuda-nccl-runtime/cuda-and-nccl/figures/two-gates-compatibility.svg)
+#
+# *Figure from the primer, §1.2 "Gate 1: driver and runtime": gate 1 compares the CUDA runtime with the host driver. Gate 2 matches the fatbin against the GPU. The orange boxes give the failures and their error codes, and `compat.check()` examines the same two gates.*
+#
 # ## The one-minute version
 # Two **independent gates** decide if a CUDA program runs:
 #

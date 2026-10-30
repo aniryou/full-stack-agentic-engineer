@@ -5,6 +5,10 @@
 # HPA logic is the logic of the Kubernetes controller (`fleetsim/autoscale.py` mirrors
 # `pkg/controller/podautoscaler`).
 #
+# ![The simulated GPU utilisation and KV usage of one L4 replica against the offered chat load.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/05-orchestrator/serving-orchestration/figures/signals-vs-load.svg)
+#
+# *Figure from the primer, §4.2 Which signal: see two signals of one L4 replica. From 0.5 req/s, the "GPU util" stays at 1.00, but the KV usage increases with the load. The code cell after this introduction computes the same sweep.*
+#
 # ## The one-minute version
 # The Horizontal Pod Autoscaler is a proportional controller. It does these four things:
 #

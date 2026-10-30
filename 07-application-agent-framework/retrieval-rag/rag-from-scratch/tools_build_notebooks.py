@@ -64,6 +64,10 @@ the second part **generates** an answer that depends on that text. This repo
 teaches the retrieval half. You build that half from scratch, because almost all
 RAG failures occur in it.
 
+![An embedding is a learned map f from objects to vectors: under model A, car and automobile are near each other and two invoice numbers land at almost the same point, and model B places the same objects at rotated coordinates, so vectors from two models are not comparable.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/07-application-agent-framework/retrieval-rag/embeddings-lab/docs/figures/embedding-map.svg)
+
+*Figure from the embeddings primer, §1 What an embedding is: see car and automobile near each other, because near meanings give near vectors. Below, the code under "The one idea behind dense retrieval" computes the cosine for a related pair and an unrelated pair of texts.*
+
 **What you need**
 
 ```
@@ -165,6 +169,10 @@ This is the full pattern, one time:
 embed the corpus  ─┐
 embed the query  ──┤→ cosine similarity → top-k chunks → prompt → generate
 ```
+
+![The retrieval pipeline of §12: the ingest path parses, chunks, embeds and upserts the source content into the vector database, and the query path embeds the query, retrieves candidates from the database, fuses the lists, reranks the candidates and logs the outcomes.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/07-application-agent-framework/retrieval-rag/figures/retrieval-pipeline.svg)
+
+*Figure from the vector-databases primer, §12 The retrieval pipeline end to end: this notebook builds the embed, retrieve and assemble steps. Notebooks 02, 03 and 04 add the chunk, fuse and rerank steps.*
 
 We start with the simplest chunking possible: **one chunk per document**. We do
 this so that nothing takes your attention away from the loop. Notebook 02
@@ -686,6 +694,10 @@ priority to recall. Their job is to get the correct chunk somewhere in the top
 20–100. Then a **cross-encoder** reads each `(query, chunk)` pair *together*. It
 gives a relevance score that is far more accurate. The cross-encoder is too slow to run over the
 whole corpus, but it is perfect over a shortlist.
+
+![The retrieval pipeline of §12: the ingest path parses, chunks, embeds and upserts the source content into the vector database, and the query path embeds the query, retrieves candidates from the database, fuses the lists, reranks the candidates and logs the outcomes.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/07-application-agent-framework/retrieval-rag/figures/retrieval-pipeline.svg)
+
+*Figure from the vector-databases primer, §12 The retrieval pipeline end to end: retrieve gives the candidates, and rerank keeps the final k. In the query row, the warm rerank box has the largest latency budget, so the cross-encoder runs only on a shortlist.*
 
 ```
 retrieve top-N (cheap)  →  cross-encoder rerank  →  keep top-k (precise)

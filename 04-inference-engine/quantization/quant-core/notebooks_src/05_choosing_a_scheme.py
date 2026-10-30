@@ -7,6 +7,10 @@
 # dense datasheet values as of September 2026 `(verify)`. The lab's notebook 02 (T1) measures the same schemes on a
 # real GPU.
 #
+# ![The speedup over BF16 of the down_proj GEMM of Llama-3.1-8B on an L4, for W4A16 and FP8 W8A8, against the tokens per step.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/04-inference-engine/quantization/figures/gemm-speedup-vs-tokens.svg)
+#
+# *Figure from the topic primer, §1 Why quantize: the speedup of W4A16 decreases above 119 tokens per step and is gone from 462. FP8 W8A8 stays near 2×. Worked example 2 computes the same GEMM with `cost.gemm_time`.*
+#
 # ## The one-minute version
 # Select a scheme in three steps.
 #

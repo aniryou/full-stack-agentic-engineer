@@ -7,6 +7,12 @@
 # `vllm bench serve` results in the documented format (**illustrative**, generated from that simulation).
 # These results let you do a test of the parser, but they prove nothing about GPUs.
 #
+# ![What each GPU holds and what one MoE layer exchanges: on one GPU, under tensor parallelism, and under expert parallelism with data-parallel attention and all-to-all kernels.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/00-foundations/mixture-of-experts/figures/expert-layouts-on-gpus.svg)
+#
+# *Figure from the topic primer, §6.4 on TP against EP for experts: see what each GPU holds. Under tensor
+# parallelism, each GPU holds a slice of every expert, and under expert parallelism, each GPU holds whole experts.
+# The right panel shows the all-to-all kernels of DP attention at scale, and with DP = 1, vLLM runs no all-to-all.*
+#
 # ## The one-minute version
 #
 # * vLLM has three ways to put an MoE on two GPUs. `--tensor-parallel-size 2` divides **every** expert in

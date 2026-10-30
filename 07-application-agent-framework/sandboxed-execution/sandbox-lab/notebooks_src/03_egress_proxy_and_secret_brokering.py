@@ -5,6 +5,10 @@
 # Thus the whole pattern works on a laptop with no network. The same proxy runs as a container
 # (`deploy/docker/run-with-proxy.sh`) and from a ConfigMap on kind/GKE.
 #
+# ![The egress path: the sandboxed code goes through the network layer to the proxy check, then to a 403 or to the credential injection.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/07-application-agent-framework/sandboxed-execution/figures/egress-proxy-path.svg)
+#
+# *Figure from the sandboxed execution primer, §4 Network and secrets: see the one path out of the sandbox. The proxy compares the host with the allowlist, injects the credential and redacts it from the response.*
+#
 # ## The one-minute version
 #
 # A sandbox that needs *some* network gets exactly one address that it can reach: an egress proxy. The proxy

@@ -6,6 +6,10 @@
 # verdicts. These verdicts have the label *sample output in the documented format (illustrative)*. With
 # Docker (T0 + Docker), the notebook measures the same probes against a real container.
 #
+# ![The isolation ladder as five stacks: each rung adds a boundary between the untrusted code and the host kernel, and the start cost rises.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/07-application-agent-framework/sandboxed-execution/figures/isolation-ladder.svg)
+#
+# *Figure from the sandboxed execution primer, §2 The isolation ladder: see the boundary that each rung adds between the untrusted code and the host kernel. This notebook gives the verdicts of the attack probes on the process, container and gVisor rungs.*
+#
 # ## The one-minute version
 #
 # Model-generated code is untrusted input (PRIMER §1). The invariant is **no ambient authority**: no

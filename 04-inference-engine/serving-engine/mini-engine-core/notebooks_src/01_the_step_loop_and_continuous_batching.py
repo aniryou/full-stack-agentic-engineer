@@ -4,6 +4,10 @@
 # **Tier:** T0. It needs a CPU only and no network, and it runs in about ten seconds. The same ideas on a real GPU
 # with vLLM are in `vllm-serving-lab` (notebook `02_serve_and_measure`, T1).
 #
+# ![Four requests with output lengths 2, 9, 3 and 4 in two slots: static batching takes 13 steps and continuous batching takes 9.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/04-inference-engine/serving-engine/figures/continuous-batching-steps.svg)
+#
+# *Figure from the serving-engine primer, §2 Continuous batching: four requests with output lengths 2, 9, 3 and 4 share two slots. Compare the 13 steps of static batching with the 9 steps of continuous batching that worked example 4 counts.*
+#
 # ## The one-minute version
 # An inference engine is a loop. Each iteration of the loop is a **step**. In each step, the engine does these
 # things:

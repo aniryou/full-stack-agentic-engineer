@@ -11,6 +11,10 @@
 # For example, use a B200 or an RTX PRO 6000. Cloud Run offers the RTX PRO 6000 (verify). Everything
 # product-specific here is `(verify)`.
 #
+# ![The bit layouts of the single-value formats from FP16 to INT4 and of the block formats MXFP4 and NVFP4 with their shared scales.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/04-inference-engine/quantization/figures/number-formats-bits.svg)
+#
+# *Figure from the topic primer, §2 Number formats: compare the E2M1 element with the shared scales of the two block formats. MXFP4 has one E8M0 scale per 32 values, and NVFP4 has one E4M3 scale per 16 values and one FP32 scale per tensor.*
+#
 # ## The one-minute version
 #
 # Four bits hold 15 values. E2M1 is `{0, 0.5, 1, 1.5, 2, 3, 4, 6}` and their negatives. A format that

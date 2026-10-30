@@ -4,6 +4,10 @@
 # **Tier:** T0: a laptop, a Colab CPU or CI, free, about a minute. Real container and microVM isolation is in the
 # lab (`../sandbox-lab`, notebook 01 hardened containers). The concepts are all here.
 #
+# ![The isolation ladder as five stacks: each rung adds a boundary between the untrusted code and the host kernel, and the start cost rises.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/07-application-agent-framework/sandboxed-execution/figures/isolation-ladder.svg)
+#
+# *Figure from the sandboxed-execution primer, §2 The isolation ladder: rung 1 is the process sandbox that this notebook builds. See its warm box: the host kernel stays shared, and every syscall reaches it.*
+#
 # ## The one-minute version
 # In-process restrictions are not a boundary, because code that shares your interpreter can undo them. Thus the first
 # real boundary is a **separate process** that you start clean and bound from outside.

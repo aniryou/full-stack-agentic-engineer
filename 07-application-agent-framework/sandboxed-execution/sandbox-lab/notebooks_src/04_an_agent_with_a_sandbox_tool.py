@@ -4,6 +4,10 @@
 # **Tier:** T0. A scripted model, the process sandbox and the egress proxy all run in-process. Thus the
 # whole agent runs on a laptop with no network and no weights.
 #
+# ![The audit path: the agent and the network leave evidence in the audit trail, the histogram shows abuse, and the response is a policy change.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/07-application-agent-framework/sandboxed-execution/figures/audit-path.svg)
+#
+# *Figure from the sandboxed execution primer, §8 Observability, audit and abuse detection: see where the evidence comes from. The deny decisions, the results of the sandbox and the 403s of the egress proxy go into one audit trail. The last section of this notebook builds that stream.*
+#
 # ## The one-minute version
 #
 # This is the 07.1 agent loop: the model, then tool calls, then results, then the model again. It has the

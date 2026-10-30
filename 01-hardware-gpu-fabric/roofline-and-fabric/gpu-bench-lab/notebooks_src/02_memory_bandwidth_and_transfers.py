@@ -7,6 +7,10 @@
 # hierarchy and why tiling/fusion win", §5 "Fabrics quantitatively" (the α-β model), in
 # [`../../PRIMER.md`](../../PRIMER.md).
 #
+# ![Four elementwise ops as four kernels that each read from HBM and write back to it, and as one fused kernel that reads its inputs and writes the result one time.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/01-hardware-gpu-fabric/roofline-and-fabric/figures/fusion-unfused-vs-fused.svg)
+#
+# *Figure from the primer, §4.2 Fusion: count the arrows to and from HBM. Each unfused op reads its input and writes its result back, but the fused kernel reads its inputs one time and writes one result. Section 5 of this notebook measures the same change in DRAM bytes on the CPU.*
+#
 # **Predicted first in** [roofline-core notebook 02](../../roofline-core/notebooks/02_llm_inference_on_the_roofline.ipynb):
 # decode is a weight stream, and fusion removes passes (Ex 2.6). In this notebook, you measure the bandwidth that
 # those predictions divide by, and you explain the numbers that you get.

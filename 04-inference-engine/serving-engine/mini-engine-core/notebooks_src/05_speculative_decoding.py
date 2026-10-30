@@ -5,6 +5,10 @@
 # hardware are **SIMULATED** here (roofline model). `vllm-serving-lab` notebook `05_speculation_and_quantization_in_vllm`
 # measures the n-gram and EAGLE speculators of vLLM on a GPU (T1).
 #
+# ![One round of speculative decoding with four draft tokens: one target pass scores them, and the engine accepts them in order until the first rejection.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/04-inference-engine/serving-engine/figures/speculative-decoding-round.svg)
+#
+# *Figure from the serving-engine primer, §7 Speculative decoding: one target pass scores the $k$ draft tokens. The engine keeps each draft token with probability $\min(1, p/q)$ until the first rejection. Then it adds one token from the residual, or a bonus token if all $k$ survive.*
+#
 # ## The one-minute version
 # Decode is memory-bound. A forward pass over $k + 1$ positions costs approximately the same as a pass over one
 # position, because the weight read dominates. Thus let a low-cost **proposer** guess $k$ tokens. Then let the target

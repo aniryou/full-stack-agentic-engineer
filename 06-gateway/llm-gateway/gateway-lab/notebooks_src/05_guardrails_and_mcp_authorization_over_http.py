@@ -6,6 +6,10 @@
 # classifier call). DPoP proofs are ES256 when the environment has `cryptography`. Without `cryptography`, a
 # labelled HMAC stand-in signs them, and this stand-in is *not* RFC 9449-conformant.
 #
+# ![Bars on a time axis for one 300-token answer with no check, inline and parallel input checks, held-back windows of 200 and 50 tokens and a final check, with the time that each adds before the first token reaches the client.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/06-gateway/llm-gateway/figures/guardrail-placement-timeline.svg)
+#
+# *Figure from the LLM gateway primer, §7.2 Latency: see what each guardrail placement adds before the first token of a 300-token answer. This notebook measures the same placements on a 40-token answer.*
+#
 # ## The one-minute version
 #
 # **Guardrails** (PRIMER §7). The position of a check decides its cost and what it can stop. An input check adds

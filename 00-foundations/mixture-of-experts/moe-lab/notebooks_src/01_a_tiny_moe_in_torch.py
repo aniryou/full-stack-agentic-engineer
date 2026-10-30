@@ -5,6 +5,11 @@
 # cells read curves that this code recorded on a CPU (`fixtures/tinymoe_curves.json`, labelled). Every
 # exercise is numpy and runs with or without torch.
 #
+# ![The feedback loop of router collapse and where each balance method acts: the auxiliary loss at the scores, the selection bias and expert choice at the top-k, the capacity factor at the training step.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/00-foundations/mixture-of-experts/figures/collapse-loop-and-balance.svg)
+#
+# *Figure from the topic primer, §3.1 "Router collapse": follow the teal return path, where the early winner gets
+# more tokens. The dashed arrows show where the auxiliary loss and the selection bias act on the loop.*
+#
 # ## The one-minute version
 #
 # * An **MoE layer** replaces one MLP with $E$ expert MLPs and a **router**. A linear layer gives a score to

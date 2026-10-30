@@ -4,6 +4,10 @@
 # This notebook is a worked design review. A regional bank wants a customer-service agent
 # across its legacy systems. The earlier notebooks built each part separately. This notebook puts all of the parts together into **one system**.
 #
+# ![The user reaches the agent on Agent Runtime through the front-end, and the agent reaches MCP servers, peer agents and APIs through Agent Gateway.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/06-gateway/identity-security/agentic-identity-gcp-lab/docs/reference-architecture.svg)
+#
+# *Figure from the identity primer, §10 GCP mapping and the reference architecture: follow the spine of this notebook. Sections 2 to 5 build these parts: the systems of record, the MCP server behind the gateway, the identity and the runtime.*
+#
 # The notebook goes layer by layer along the spine, in this order: *channels, agent runtime, tools and gateway, systems of record*.
 # Evaluation, observability and governance are the bands that cut across every layer. Each section is one thing that you draw
 # in the review. Each section uses the library, so that you can do a check of every claim in the review.

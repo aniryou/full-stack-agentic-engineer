@@ -6,6 +6,10 @@
 # must be asymmetric, and the standard library cannot make an asymmetric key. The same flows over HTTP, with real DPoP keys
 # if your environment has `cryptography`, are `gateway-lab` notebook `05_guardrails_and_mcp_authorization_over_http`.
 #
+# ![Bars on a time axis for one 300-token answer with no check, inline and parallel input checks, held-back windows of 200 and 50 tokens and a final check, with the time that each adds before the first token reaches the client.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/06-gateway/llm-gateway/figures/guardrail-placement-timeline.svg)
+#
+# *Figure from the LLM gateway primer, §7.2 Latency: see what each guardrail placement adds before the first token. A held-back window adds a window of generation and its check to TTFT.*
+#
 # ## The one-minute version
 # The gateway is the place where credentials concentrate. Thus it is the place where you control them strictly. Apps
 # hold **virtual keys**. A virtual key has these properties: hashed, scoped, budgeted, revocable. The **tenant comes from the verified

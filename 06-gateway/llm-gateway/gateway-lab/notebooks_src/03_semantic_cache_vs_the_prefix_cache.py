@@ -6,6 +6,10 @@
 # block. The TTFT that this prefix cache saves is **simulated** from a prefill time per token. T1: the same prompts
 # against a real vLLM started with `--enable-prompt-tokens-details`. Its `cached_tokens` are measured values.
 #
+# ![Hits and false hits of the semantic cache against the threshold, without and with the entity guard, on the bundled sample.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/06-gateway/llm-gateway/figures/semantic-cache-threshold-sweep.svg)
+#
+# *Figure from the LLM gateway primer, §3.3 Semantic caching, measured: see the hits and false hits against the threshold, without and with the entity guard. This notebook does the same sweep on a different sample, so compare the method, not the thresholds.*
+#
 # ## The one-minute version
 #
 # Four caches can be on the path of a request (PRIMER §3):

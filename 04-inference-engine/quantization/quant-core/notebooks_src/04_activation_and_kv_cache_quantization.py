@@ -5,6 +5,10 @@
 # cache in vLLM (`--kv-cache-dtype fp8`). The size calculation here is the same arithmetic. Where the notebook prints
 # times, it labels them SIMULATED.
 #
+# ![KV bytes per token for Llama-3.1-8B at 16, 8, 5 and 3 bits per element, and 2,000-token sessions on an L4 with FP8 weights.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/04-inference-engine/quantization/figures/kv-cache-bytes-and-sessions.svg)
+#
+# *Figure from the topic primer, §6 KV-cache quantization: fewer KV bits per element give more 2,000-token sessions on an L4 with FP8 weights. Exercise 4.4 gets the same 43, 87, 140 and 234 sessions.*
+#
 # ## The one-minute version
 # When you quantize the **activations**, a GEMM can run on INT8 or FP8 tensor cores. Both operands become 8-bit
 # codes. The products accumulate in a wide register (INT32 or FP32). The kernel applies the two scales once per

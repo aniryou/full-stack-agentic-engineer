@@ -6,6 +6,10 @@
 # identities on them. The same trainer on a real transformer (and TRL's `GKDTrainer`) is in `distill-lab` notebooks
 # `01_kd_on_a_tiny_transformer` and `02_teacher_data_and_a_real_student`.
 #
+# ![A one-bump student fitted to a two-bump teacher: forward KL spreads across both modes, reverse KL selects one mode.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/00-foundations/distillation/figures/forward-reverse-kl.svg)
+#
+# *Figure from the distillation primer, §2 The choice of divergence: worked example 1 fits a one-bump student to this two-bump teacher. Under forward KL (left), the student puts 0.454 of its mass where the teacher gives less than 1%. Under reverse KL (right), the student leaves 0.51 of the teacher's mass uncovered.*
+#
 # ## The one-minute version
 # When the student cannot copy the teacher, the divergence decides which errors the student makes.
 #

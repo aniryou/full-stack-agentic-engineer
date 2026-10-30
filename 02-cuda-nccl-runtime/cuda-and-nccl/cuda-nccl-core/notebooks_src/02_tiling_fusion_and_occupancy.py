@@ -4,6 +4,10 @@
 # **Tier:** T0 (CPU, simulated, numpy only). The lab's `02_memory_bound_kernels_on_a_real_gpu` (T1)
 # has real timings of the same kernels.
 #
+# ![Time of 384 dependent kernels against the kernel length, with an eager launch of 5 µs per kernel or one CUDA Graph launch of 10 µs: 1,922 µs against 778 µs for 2 µs kernels, and no gain for 20 µs kernels.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/02-cuda-nccl-runtime/cuda-and-nccl/figures/step-time-vs-kernel-length.svg)
+#
+# *Figure from the primer, §4.2 "When the CPU is the bottleneck": the chart shows the time of 384 kernels against the kernel length. One line is eager launches, and the other line is one CUDA Graph. The cell under "Launch overhead and CUDA Graphs" computes three points of each line: at 2 us, 1,922 us against 778 us.*
+#
 # ## The one-minute version
 # The time of a memory-bound kernel is *(bytes it moves) / (memory bandwidth)*, plus its launch.
 # There are four levers:

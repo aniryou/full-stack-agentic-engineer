@@ -6,6 +6,10 @@
 # sweeps start a real `vllm serve` again for each config (a minute or two each). The code is the same,
 # and the numbers are measurements.
 #
+# ![The simulated worst step of 64 decodes and one prefill chunk on an H100 against the token budget, with the 25 ms ITL target.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/04-inference-engine/serving-engine/figures/token-budget-worst-step.svg)
+#
+# *Figure from the topic primer, §3 Chunked prefill and prefill/decode interference: each point is the worst step of 64 decodes and one full prefill chunk. A larger budget gives a longer step, and thus a longer token gap for each decode. Exercise 3.2 computes this step with `stall_s`.*
+#
 # ## The one-minute version
 #
 # A decode step reads all the weights one time for the whole batch. Thus, batching costs almost nothing until

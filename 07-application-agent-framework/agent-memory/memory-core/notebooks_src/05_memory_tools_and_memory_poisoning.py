@@ -5,6 +5,10 @@
 # seconds. The same agent over HTTP is in `memory-lab` notebook `02_a_memory_service_and_an_agent`. There, a memory
 # service takes its scope from a verified token, and a real small model makes tool calls at T1.
 #
+# ![The memory mechanism: a turn feeds the write path into one partition of the store, retrieval packs records into the prompt of the next turn, and consolidation, forgetting and deletion run on the store.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/07-application-agent-framework/agent-memory/figures/memory-mechanism.svg)
+#
+# *Figure from the topic primer, The one-minute version: follow a turn through the write policy into one partition of the store. Then follow the records back into the prompt. The prompt holds a pinned profile, and `recall` gets the rest.*
+#
 # ## The one-minute version
 # Memory gets to the model in one of two ways:
 #

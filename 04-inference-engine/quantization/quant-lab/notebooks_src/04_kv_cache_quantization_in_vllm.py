@@ -8,6 +8,10 @@
 # reads the capacity and backend back from the startup log of vLLM and from `/metrics`. It also measures decode at two context lengths. Without them, it
 # parses a bundled log: **sample output in the documented format (illustrative)**.
 #
+# ![KV bytes per token for an 8B model at 16, 8, 5 and 3 bits per element, and 2,000-token sessions on an L4 with FP8 weights.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/04-inference-engine/quantization/figures/kv-cache-bytes-and-sessions.svg)
+#
+# *Figure from the topic primer, §6 KV-cache quantization: fewer KV bits per element give more 2,000-token sessions on an L4 with FP8 weights. This notebook computes only the 16-bit and 8-bit bars. The primer uses round memory inputs, so its counts are lower than the vLLM rows here.*
+#
 # ## The one-minute version
 #
 # The KV cache costs $2 \times \mathrm{layers} \times \mathrm{kv\_heads} \times \mathrm{head\_dim} \times \mathrm{bytes}$ per token. vLLM turns

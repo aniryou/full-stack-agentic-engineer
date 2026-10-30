@@ -7,6 +7,10 @@
 # **T1:** when `MEMLAB_EMBED_URL` points at a real embedder (vLLM `--runner pooling`, `deploy/any-gpu/`), the
 # last section uses it to measure the paraphrase subset.
 #
+# ![Recall for consolidated facts and raw episodes, and the accuracy of raw episodes, against the per-turn token budget over the 30 users of the harness.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/07-application-agent-framework/agent-memory/figures/recall-vs-budget.svg)
+#
+# *Figure from the PRIMER, §4: recall of consolidated facts reaches its knee at 90 tokens, where the whole profile fits. This notebook computes the same curve for raw episodes with its own harness, so its numbers are different.*
+#
 # ## The one-minute version
 #
 # **Measure** memory as the long-term memory benchmarks do (PRIMER §4 "Measuring memory: planted facts

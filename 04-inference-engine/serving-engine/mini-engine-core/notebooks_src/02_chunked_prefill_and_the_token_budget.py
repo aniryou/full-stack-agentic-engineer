@@ -5,6 +5,10 @@
 # notebook is a **SIMULATED** value: a roofline model (`minengine.perf`) gives the time of each step of the real scheduler.
 # Measure the real curve with vLLM in `vllm-serving-lab` (notebook `03_knobs_and_tradeoffs`, T1).
 #
+# ![The simulated step time on an H100 against the tokens in the step, with the two roofline terms.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/04-inference-engine/serving-engine/figures/step-time-vs-tokens.svg)
+#
+# *Figure from the serving-engine primer, §3 Chunked prefill and prefill/decode interference: below the knee, the weight read and the overhead set the step time. Above the knee, each token adds FLOPs. Worked example 2 prints these step times.*
+#
 # ## The one-minute version
 # The cost of a step depends on the number of tokens in it. Up to a **knee** of a few hundred tokens, a step is
 # **memory-bound**. It takes the same time as the weight read, so more tokens are almost free. After the knee, the step is

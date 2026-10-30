@@ -5,6 +5,10 @@
 # of the provider and every stream. The same limits over HTTP, and a ledger reconciled against the `usage` and the
 # `/metrics` of a real vLLM (T1), are `gateway-lab` notebook `04_streaming_limits_metering_and_chargeback`.
 #
+# ![Tokens served and the peak window, as a share of the limit, against the output reservation of the token limiter.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/06-gateway/llm-gateway/figures/token-reservation-sweep.svg)
+#
+# *Figure from the LLM gateway primer, §4.3 The experiment: see the tokens served and the peak window against the output reservation. At 1,024 and 2,048 tokens, the peak window goes above the limit.*
+#
 # ## The one-minute version
 # When the gateway admits a request, the cost of the request is unknown. Most of the cost is output that the model has
 # not generated yet. Also, the output length is heavy-tailed. Thus a limit that charges **per request** admits the

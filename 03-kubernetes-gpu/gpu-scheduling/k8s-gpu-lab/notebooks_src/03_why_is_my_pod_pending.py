@@ -5,6 +5,10 @@
 # (pods, events, nodes, Kueue Workloads), labelled *illustrative*. If the kind cluster from notebook 02 is
 # up, the last section creates the s6 "zoo" and diagnoses the real pods.
 #
+# ![The control loop of the layer: a Job goes through Kueue's LocalQueue, ClusterQueue quota and whole-gang admission to kube-scheduler, which places one pod at a time on the integer that the kubelet advertises from the device plugin's healthy devices, and a Pending pod asks the cluster autoscaler for a new node.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/03-kubernetes-gpu/gpu-scheduling/figures/control-loop.svg)
+#
+# *Figure from the one-minute version of the topic primer. The Kueue, kube-scheduler, cluster autoscaler and kubelet boxes are the four gates of the table below. Read them in that order.*
+#
 # ## The one-minute version
 # A GPU pod goes through up to four gates. Each gate leaves a different trace:
 #

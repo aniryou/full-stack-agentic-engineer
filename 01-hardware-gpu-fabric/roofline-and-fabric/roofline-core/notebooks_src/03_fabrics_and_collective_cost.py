@@ -5,6 +5,10 @@
 # bandwidth on real links, use `gpu-bench-lab` notebook `03_multi_gpu_topology_and_p2p` (T2). It is free on a
 # Kaggle 2×T4 box over PCIe. Also use the `cuda-nccl-lab` of layer 02 (nccl-tests, busbw).
 #
+# ![All-reduce time over 8 GPUs against the message size on log axes: a ring and recursive doubling over NVLink 4, and a ring through 400 Gb/s NICs.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/01-hardware-gpu-fabric/roofline-and-fabric/figures/allreduce-time-vs-message-size.svg)
+#
+# *Figure from `../PRIMER.md`, §5.2 (The α-β model and the ring all-reduce): find the two "terms meet" points. The decode message is to the left of them, and the prefill message is to the right.*
+#
 # ## The one-minute version
 # A transfer of $n$ bytes costs $t = \alpha + n/\beta$: a constant latency plus a bandwidth term. A ring all-reduce
 # over $p$ ranks costs

@@ -8,6 +8,10 @@
 # "measured on this machine, emulated backend". These latencies are good for a comparison of routing
 # policies, but they are not a GPU benchmark.
 #
+# ![A replica that holds the first three block hashes prefills only the last block, and a replica with other prefixes prefills all four blocks again.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/05-orchestrator/serving-orchestration/figures/replica-prefix-cache-hit-miss.svg)
+#
+# *Figure from the topic primer, §1.1 Replicas are stateful caches: each block hash depends on the hash before it. Replica A holds h1 to h3 and prefills block 4 only, but replica B prefills all four blocks again.*
+#
 # ## The one-minute version
 #
 # An LLM replica is a stateful cache with a queue in front of it. A request whose prompt prefix is

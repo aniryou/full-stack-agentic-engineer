@@ -8,6 +8,10 @@
 # only those. The prefill column stays a roofline model, and the dollars stay a price table, each with a label
 # that says so.
 #
+# ![The prompt at turn 8 in the four layouts, to scale, with the cached prefix and the uncached part the engine prefills again: 56 tokens with no memory or a pinned profile, 1,560 with memory before the history, 600 with memory at the tail.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/07-application-agent-framework/agent-memory/figures/prompt-layouts-turn-8.svg)
+#
+# *Figure from the PRIMER, §5 "Where memory sits in the prompt": the warm part of each bracket is the uncached part at turn 8. This notebook finds the same break in the prefix for each layout, with a different session shape.*
+#
 # ## The one-minute version
 #
 # A prompt can share a run of full 16-token blocks with an earlier prompt, **from token 0**. An inference

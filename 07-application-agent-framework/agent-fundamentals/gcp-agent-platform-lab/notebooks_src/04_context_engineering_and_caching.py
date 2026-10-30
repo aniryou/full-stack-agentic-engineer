@@ -7,6 +7,10 @@
 # - *in which order*,
 # - *how much of it is byte-identical across calls*.
 #
+# ![The prompt at turn 8 in the four layouts, to scale, with the cached prefix and the uncached part the engine prefills again: 56 tokens with no memory or a pinned profile, 1,560 with memory before the history, 600 with memory at the tail.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/07-application-agent-framework/agent-memory/figures/prompt-layouts-turn-8.svg)
+#
+# *Figure from the agent-memory primer (`07-application-agent-framework/agent-memory/PRIMER.md`), §5 Where memory sits in the prompt: the teal bracket is the cached prefix. It stops at the first part of the prompt that changes. Memory before the history changes at each turn, thus the whole history misses. This notebook keeps the user facts as the same bytes at each turn, as in the pinned row.*
+#
 # The lab's `ContextBuilder` makes those decisions explicit. It has a cache-friendly layout, tool-result truncation,
 # compaction of old turns and a hard token cap. This notebook measures each of them.
 #

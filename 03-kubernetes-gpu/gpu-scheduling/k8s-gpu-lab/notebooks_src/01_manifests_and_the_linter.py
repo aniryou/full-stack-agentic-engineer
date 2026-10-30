@@ -4,6 +4,10 @@
 # **Tier:** T0. It runs on a laptop or Colab CPU, with no cluster, at $0. Everything here is builders, a linter
 # and arithmetic. Notebook 02 applies the same objects to a kind cluster.
 #
+# ![On one 8-GPU node with 96 cores and 768 GiB, six 1-GPU pods of 16 cores and 64 GiB use all the CPU, the seventh pod is Pending on Insufficient cpu, and 2 GPUs are stranded.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/03-kubernetes-gpu/gpu-scheduling/figures/bundle-stranding.svg)
+#
+# *Figure from the topic primer, §3.4 Fragmentation, measured: six 1-GPU pods use all 96 cores of the node, so 2 GPUs stay stranded. Exercise 1.3 finds the same 2 GPUs on a `g2-standard-48` at 16 vCPUs.*
+#
 # ## The one-minute version
 # A GPU pod is ordinary Kubernetes plus a few fields. The design depends on each of these fields:
 #

@@ -6,6 +6,10 @@
 # roofline model. For real quantized checkpoints (AWQ/GPTQ INT4, FP8) that vLLM serves, see `vllm-serving-lab`
 # notebook `05_speculation_and_quantization_in_vllm` (T1).
 #
+# ![One step of a quantized model and its three levers: the weight bytes, the FLOPs of the GEMM and the KV bytes.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/04-inference-engine/quantization/figures/three-levers.svg)
+#
+# *Figure from the quantization primer, The one-minute version: find where each lever acts. The weight bytes set the decode speed, the FLOPs of the GEMM set the prefill speed, and the KV bytes set the sessions that fit.*
+#
 # ## The one-minute version
 # Quantization stores a number in fewer bits, plus a **scale** that tells what the bits mean:
 # $w \approx \text{code} \times \text{scale}$. The design choice is the **granularity**: how many weights share one

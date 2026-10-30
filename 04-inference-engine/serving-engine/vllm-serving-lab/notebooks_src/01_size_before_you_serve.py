@@ -4,6 +4,10 @@
 # **Tier:** T0. This notebook does only arithmetic from `config.json` and a GPU datasheet, and it runs on any computer. Optional T1:
 # start a real `vllm serve` (see `deploy/any-gpu/`) and compare its startup log with your prediction.
 #
+# ![The 24 GB of an L4 for Llama-3.1-8B in bf16: the weights, a flat 1 GB, and a 4.54 GB KV cache of 2,164 blocks.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/04-inference-engine/serving-engine/figures/kv-pool-sizing.svg)
+#
+# *Figure from the topic primer, §4 KV cache management revisited: the weights and the overhead come first, and the rest becomes KV blocks. The figure uses the round inputs of the core (0.9, a flat 1 GB, 2,164 blocks). This notebook also uses the vLLM defaults and gets 2,363 blocks.*
+#
 # ## The one-minute version
 #
 # A GPU that runs vLLM holds four things:

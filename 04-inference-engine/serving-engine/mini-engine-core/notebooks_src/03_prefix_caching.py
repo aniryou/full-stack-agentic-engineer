@@ -5,6 +5,10 @@
 # `04_prefix_caching_for_agents` (T1) measures the same effect on a real vLLM server. It also reads the
 # `vllm:prefix_cache_queries` / `vllm:prefix_cache_hits` counters of that server.
 #
+# ![Two identical 20-token prompts with block size 4: request 2 hits the four blocks that request 1 named and computes the last block itself.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/04-inference-engine/serving-engine/figures/prefix-cache-hash-chain.svg)
+#
+# *Figure from the serving-engine primer, §5 Prefix caching: request 2 goes along the chain of block names of request 1 and adopts four blocks. It computes the last block again, because it needs logits for the last token.*
+#
 # ## The one-minute version
 # Two requests whose prompts start with the same tokens compute the same K/V for that prefix. Thus the engine
 # computes that K/V one time. The engine gives each **full** KV block a name: `hash(parent block's name, the block's tokens, extra keys)`.

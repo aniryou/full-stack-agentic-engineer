@@ -6,6 +6,10 @@
 # **simulated**. T1: with vLLM as the first target (`GWLAB_VLLM_URL`), stop vLLM during the run and watch the chain move
 # to the fallback.
 #
+# ![Failed requests of a fallback chain against its number of targets, with no common-mode failure, with a gateway at 99.95 %, and with a 0.1 % common-mode failure.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/06-gateway/llm-gateway/figures/chain-availability-common-mode.svg)
+#
+# *Figure from the LLM gateway primer, §2.5 Chain availability, latency and cost: see the failed requests of a chain on a log scale. Each fallback divides the independent failures, but a common-mode failure stays as a floor. Exercise 2.2 uses the same chain formula.*
+#
 # ## The one-minute version
 #
 # A client gives an alias. The gateway tries an ordered chain of targets (PRIMER §2). Three rules make sure that a chain

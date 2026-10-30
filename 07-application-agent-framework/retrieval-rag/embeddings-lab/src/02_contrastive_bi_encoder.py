@@ -4,6 +4,10 @@
 # into "an embedding model". We train a linear encoder on Contriever-style crop
 # pairs, with manual gradients. Two halves of the same paragraph are a positive pair.
 # Then we look at what **alignment and uniformity** do. *Primer §4.*
+#
+# ![The InfoNCE batch as a similarity matrix: each row is a query, the diagonal holds its positive, the other cells of the batch are free in-batch negatives, extra columns hold mined hard negatives, one cell can be a false negative, and a small temperature tau sharpens the softmax over a row so that the loss concentrates on the hardest negatives.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/07-application-agent-framework/retrieval-rag/embeddings-lab/docs/figures/in-batch-negatives.svg)
+#
+# *Figure from the embeddings primer, §4 The contrastive objective: each row is a query, and the diagonal holds its positive. The plain cells are the in-batch negatives, and the temperature sets the sharpness of the softmax over a row.*
 
 # %%
 import numpy as np, matplotlib.pyplot as plt

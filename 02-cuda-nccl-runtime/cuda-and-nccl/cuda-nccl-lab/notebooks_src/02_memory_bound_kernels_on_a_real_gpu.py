@@ -5,6 +5,10 @@
 # installed. If there is no GPU, or if Numba cannot use the GPU (no numba-cuda, a driver/toolkit
 # mismatch), the notebook takes its **T0 path**. `gpurt.kernels` finds the cause and tells you why.
 #
+# ![Time of 384 dependent kernels against the kernel length, with an eager launch of 5 µs per kernel or one CUDA Graph launch of 10 µs: 1,922 µs against 778 µs for 2 µs kernels, and no gain for 20 µs kernels.](https://raw.githubusercontent.com/aniryou/full-stack-agentic-engineer/main/02-cuda-nccl-runtime/cuda-and-nccl/figures/step-time-vs-kernel-length.svg)
+#
+# *Figure from the primer, §4.2 When the CPU is the bottleneck: compare the two lines at 2 µs kernels. A CUDA Graph takes 778 µs, against 1,922 µs in eager mode. At 20 µs, the graph gives no gain, as in Exercise 2.5.*
+#
 # On the T0 path, the same kernels run at small sizes in the simulator (correctness only). The notebook labels each
 # printed number *model prediction*. It calculates these numbers from byte counts and stated assumptions,
 # and never shows them as a measurement.
