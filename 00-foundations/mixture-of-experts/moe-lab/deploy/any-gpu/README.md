@@ -114,6 +114,6 @@ in fp16 uses about 6.5 GiB per GPU, and no offload is necessary.
 
 ## Cost and cleanup
 
-Colab and Kaggle are free in their weekly GPU quotas (there is no guarantee). Rented machines bill until you
+Colab and Kaggle are free until you use all of their weekly GPU quotas (there is no guarantee). Rented machines bill until you
 **terminate** them, not when vLLM stops. Stop the server with `Ctrl-C`. Then terminate the pod or instance.
 `bench_layouts.sh` stops each server itself. When you finish, delete `./results`.

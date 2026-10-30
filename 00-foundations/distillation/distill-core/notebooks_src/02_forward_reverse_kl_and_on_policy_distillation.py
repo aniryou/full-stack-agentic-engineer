@@ -18,8 +18,8 @@
 # - The problem of sequence-level distillation is **exposure bias**. The student learns on the teacher's prefixes and decodes on its own prefixes.
 #   Thus one error puts the student where no training example was.
 # - **On-policy distillation** (GKD) samples from the student and asks the teacher about each token that the student
-#   made. Thus the student trains exactly where you will use it. As RL, it is REINFORCE with a dense reward
-#   $r_t = \log \pi_T - \log \pi_S$ per token. This is `rlcore.pg.reinforce_grad` with the teacher as the reference.
+#   made. Thus the student trains exactly where you will use it. As RL, on-policy distillation is REINFORCE with a dense
+#   reward $r_t = \log \pi_T - \log \pi_S$ per token. This is `rlcore.pg.reinforce_grad` with the teacher as the reference.
 #
 # Primer: `../../PRIMER.md` §2–§4.
 
@@ -230,8 +230,8 @@ for label, kw in (("on-policy distillation, 32B teacher", {}), ("GRPO", dict(tea
 # %% [markdown]
 # ## Exercise 2.1 — the reverse-KL fit
 # Write `reverse_kl(q, p)` $= \sum q \log(q/p)$ over the entries with $q$ > 0. Then return the $(\mu, s)$ of the
-# one-bump student (`D.bump(mu, s, 11)`) that makes it as small as possible over the grids `mus` and `ss`. If there is a tie, select the
-# smaller $\mu$.
+# one-bump student (`D.bump(mu, s, 11)`) with the smallest reverse KL over the grids `mus` and `ss`. If there is a tie,
+# select the smaller $\mu$.
 
 # %% exercise
 mus, ss = np.round(np.linspace(0, 10, 201), 3), np.round(np.arange(0.3, 12.01, 0.1), 2)

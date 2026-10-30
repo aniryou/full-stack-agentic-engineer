@@ -161,10 +161,10 @@ fixed = K.fixed_cost(100_000, 1, 2000, T_PER_M, K.SHAPES["qwen2.5-1.5b"].params(
 #
 # With self-hosted data, break-even comes at approximately the volume that the teacher wrote for the student (2 × 10⁸ tokens
 # here). This is true at any cost of the teacher. API-bought data takes ten times longer. Also, the break-even omits the
-# work of the engineers, the evals and the continuous cost to keep a second model.
+# work of the engineers, the evals and the continuous cost to keep a second model current.
 #
 # ## Worked example 6 — the cascade
-# Do not replace the teacher. Route by difficulty. Each request has 500 output tokens at the costs of worked
+# Route by difficulty instead of a replacement of the teacher. Each request has 500 output tokens at the costs of worked
 # example 4. The accuracies are illustrative:
 #
 # - Easy requests (70%): student 0.95, teacher 0.97.
@@ -272,7 +272,7 @@ print(f"✅ {days:.1f} days at 20M tokens/day — before the cost of evals, of a
 # ## Exercise 5.5 — choose the gate
 # Use a student-first cascade with the costs and accuracies of worked example 6. Each gate in `gates` is a pair: the
 # catch rate on hard requests and the false-alarm rate on easy requests. Set `best_gate` to the gate with the lowest
-# cost per correct answer. Select only from the gates whose total accuracy is at least 0.90.
+# cost per correct answer. Select only from the gates whose accuracy over all requests is at least 0.90.
 
 # %% exercise
 gates = [(0.6, 0.05), (0.8, 0.1), (0.9, 0.2), (0.95, 0.4), (1.0, 1.0)]

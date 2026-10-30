@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="940" height="446" viewBox="0 0 940 446" role="img" aria-label="The enforcement points on Kubernetes: the Job or the warm pool creates the Pod, admission examines it, and the NetworkPolicy leaves only the proxy open." style="color: #E4EAE7">
+  <title>The enforcement points on Kubernetes: the Job or the warm pool creates the Pod, admission examines it, and the NetworkPolicy leaves only the proxy open.</title>
+  <rect x="0" y="0" width="940" height="446" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <!-- row A: the policy, the Job, the rejected outcome -->
+    <rect x="20" y="28" width="184" height="90" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="112" y="62" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11.5" font-weight="600">SandboxPolicy</text>
+    <text x="112" y="79" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11.5" font-weight="600">.render_k8s()</text>
+    <text x="112" y="99" text-anchor="middle" font-size="11.5" fill="#7ADACF">one policy object</text>
+
+    <rect x="250" y="28" width="184" height="90" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="342" y="51" text-anchor="middle" font-weight="600">Job</text>
+    <text x="342" y="69" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">backoffLimit: 0</text>
+    <text x="342" y="85" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">restartPolicy: Never</text>
+    <text x="342" y="103" text-anchor="middle" font-size="11" fill="#97A59F">deadline 120 + 5 s</text>
+
+    <rect x="480" y="28" width="184" height="90" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="572" y="68" text-anchor="middle">a pod without the</text>
+    <text x="572" y="86" text-anchor="middle">controls never runs</text>
+
+    <!-- row B: the warm pool, the Pod, admission, the node -->
+    <rect x="20" y="168" width="184" height="114" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="112" y="200" text-anchor="middle" font-weight="600">warm pool</text>
+    <text x="112" y="220" text-anchor="middle" font-size="11" fill="#97A59F">sandbox pods kept ready</text>
+    <text x="112" y="237" text-anchor="middle" font-size="11" fill="#97A59F">kubectl exec, sub-second</text>
+    <text x="112" y="254" text-anchor="middle" font-size="11" fill="#97A59F">delete after one use</text>
+
+    <rect x="250" y="168" width="184" height="114" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="342" y="191" text-anchor="middle" font-weight="600">Pod</text>
+    <text x="342" y="210" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">runtimeClassName gvisor</text>
+    <text x="342" y="227" text-anchor="middle" font-size="11" fill="#97A59F">restricted securityContext</text>
+    <text x="342" y="244" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">dnsPolicy: None</text>
+    <text x="342" y="261" text-anchor="middle" font-size="11" fill="#97A59F">no service-account token</text>
+
+    <rect x="480" y="168" width="184" height="114" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="572" y="196" text-anchor="middle" font-weight="600">API server admission</text>
+    <text x="572" y="216" text-anchor="middle" font-size="11" fill="#97A59F">Pod Security restricted</text>
+    <text x="572" y="233" text-anchor="middle" font-size="11" fill="#97A59F">ResourceQuota, LimitRange</text>
+    <text x="572" y="250" text-anchor="middle" font-size="11" fill="#97A59F">ValidatingAdmissionPolicy</text>
+
+    <rect x="734" y="168" width="184" height="114" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="826" y="196" text-anchor="middle" font-weight="600">the sandbox node</text>
+    <text x="826" y="216" text-anchor="middle" font-size="11" fill="#97A59F">kubelet, podPidsLimit</text>
+    <text x="826" y="233" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">RuntimeClass gvisor</text>
+    <text x="826" y="250" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">handler runsc</text>
+    <text x="826" y="267" text-anchor="middle" font-size="11" fill="#97A59F">GKE makes its own</text>
+
+    <!-- row C: the egress side and the run container -->
+    <rect x="250" y="332" width="184" height="90" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="342" y="360" text-anchor="middle" font-weight="600">NetworkPolicy</text>
+    <text x="342" y="379" text-anchor="middle" font-size="11" fill="#97A59F">default-deny egress</text>
+    <text x="342" y="396" text-anchor="middle" font-size="11" fill="#97A59F">the proxy only, no DNS</text>
+
+    <rect x="480" y="332" width="184" height="90" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="572" y="370" text-anchor="middle" font-weight="600">egress-proxy Service</text>
+    <text x="572" y="389" text-anchor="middle" font-size="11" fill="#97A59F">pinned ClusterIP</text>
+
+    <rect x="734" y="332" width="184" height="90" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="826" y="356" text-anchor="middle" font-weight="600">the run container</text>
+    <text x="826" y="374" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">python3 -I -c code</text>
+    <text x="826" y="391" text-anchor="middle" font-size="11" fill="#97A59F">under timeout</text>
+    <text x="826" y="408" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">runAsUser 65534</text>
+
+    <!-- edges -->
+    <g stroke="#97A59F" stroke-width="1.2" fill="none">
+      <path d="M204 73 L248 73" marker-end="url(#arr)"/>
+      <path d="M342 118 L342 166" marker-end="url(#arr)"/>
+      <path d="M204 225 L248 225" marker-end="url(#arr)"/>
+      <path d="M434 225 L478 225" marker-end="url(#arr)"/>
+      <path d="M572 168 L572 120" marker-end="url(#arr)"/>
+      <path d="M664 225 L732 225" marker-end="url(#arr)"/>
+      <path d="M826 282 L826 330" marker-end="url(#arr)"/>
+      <path d="M342 282 L342 330" marker-end="url(#arr)" stroke-dasharray="4 3"/>
+      <path d="M434 377 L478 377" marker-end="url(#arr)"/>
+    </g>
+    <g font-size="11" fill="#97A59F">
+      <text x="350" y="147">creates the Pod</text>
+      <text x="580" y="147">rejected</text>
+      <text x="698" y="216" text-anchor="middle">admitted</text>
+      <text x="350" y="311">its egress</text>
+    </g>
+  </g>
+</svg>

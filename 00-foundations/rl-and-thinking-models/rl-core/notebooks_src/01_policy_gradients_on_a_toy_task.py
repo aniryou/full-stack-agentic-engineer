@@ -189,8 +189,8 @@ for cost in (0.0, 0.02):
 # %% [markdown]
 # With no cost, the thinking length grows toward the cap. This is the toy version of the growth in response
 # length that DeepSeek-R1-Zero reported (primer §5). With a per-token cost, the length grows only while a token of
-# thought buys more accuracy than it costs. Lengths move slowly in this table-of-softmaxes policy. Each position
-# learns only after the policy reaches it. The direction is the lesson.
+# thought buys more accuracy than it costs. Lengths move slowly in this table-of-softmaxes policy,
+# because each position learns only after the policy reaches it. The direction is the lesson.
 #
 # ## Exercise 1.1 — the softmax gradient
 # For one state with logits `theta_row`, return $\partial \log \pi(a)/\partial \theta$ as a vector:

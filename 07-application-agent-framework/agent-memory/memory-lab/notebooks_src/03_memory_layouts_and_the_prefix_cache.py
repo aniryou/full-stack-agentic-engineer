@@ -275,10 +275,12 @@ print(f"✅ [SIMULATED] unsalted: tenant B's first request hit {unsalted[1]} tok
 # %% [markdown]
 # ## T1: measure it on vLLM
 #
-# Start vLLM with prefix-caching counters per request. Then point this notebook at that server, and run the
-# notebook again from the top. The **hit rates** in the cells before become measurements. The `predicted` column becomes empty,
-# because the tokenizer is that of the model. The prefill column stays the roofline model. Pass `gpu=` and
-# `llm=` for the card and the model that you serve.
+# Start vLLM with prefix-caching counters per request. Then point this notebook at that server. Run the
+# notebook again from the top.
+#
+# The **hit rates** in the cells before become measurements. The `predicted` column becomes empty, because the
+# tokenizer is that of the model. The prefill column stays the roofline model. Pass `gpu=` and `llm=` for the
+# card and the model that you serve.
 #
 # The dollars stay list prices, and the summary gives a label to each column. To measure time, send a
 # streaming request and measure the time to its first token. Keep the salt per run, so that one run does not

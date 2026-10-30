@@ -53,7 +53,7 @@ print("n=16, c=4, k=4: pass@4", round(ttc.pass_at_k(16, 4, 4), 6), " pass^4", ro
 # where pass@k is of most interest. Estimate pass@k from $n \ge k$ samples with the product form that HumanEval's
 # code uses.
 #
-# Also note the pair in the last line. A model that solves a task 1 time in 4 has pass@4 = 0.73, but
+# Also, look at the pair in the last line. A model that solves a task 1 time in 4 has pass@4 = 0.73, but
 # pass^4 = 0.0005. For an agent that must succeed every time a user asks, the measure is pass^k (τ-bench). More
 # samples at test time do nothing for it.
 #
@@ -284,7 +284,7 @@ print(f"✅ {waste:.0%} of a fixed 4K-token think happens after the answer is fo
 # majority vote works when mistakes are scattered. It makes the result worse when there is a common
 # misconception.
 #
-# "Returns decrease each time the budget doubles. A constant budget wastes tokens on questions that
+# "Returns decrease each time the budget doubles. A fixed budget wastes tokens on questions that
 # the model solves early. Thus we set effort per request class, not globally. We report pass@1 and, for agent
 # flows, pass^k. pass^k is reliability across repeated requests, which more samples do not improve. We estimate
 # pass@k with the unbiased estimator from $n \ge k$ samples, with confidence intervals."

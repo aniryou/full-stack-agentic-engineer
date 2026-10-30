@@ -3,9 +3,9 @@
 #
 # **Tier:** T1: a real MoE on one GPU. A free Colab/Kaggle T4 runs OLMoE-1B-7B in fp16 through transformers,
 # or granite-3.0 MoE. Any GPU that runs `vllm serve --enable-return-routed-experts` is also an option. T0:
-# bundled traces in the documented format of vLLM, which `tools/make_fixtures.py` generated (**illustrative**,
-# not a capture from OLMoE). T0 also uses real traces from the small MoE of notebook 01 when the
-# environment has torch. The notebook selects the best source that it can find and labels it.
+# bundled traces that `tools/make_fixtures.py` generated in the documented format of vLLM (**illustrative**, not
+# a capture from OLMoE). T0 also uses real traces from the small MoE of notebook 01 when the environment has
+# torch. The notebook selects the best source that it can find and labels it.
 #
 # ## The one-minute version
 #
@@ -15,8 +15,8 @@
 #   `--enable-return-routed-experts`. It returns a base64 `.npy` of shape `(tokens − 1, layers, k)` with every
 #   response.
 # * **Utilisation is uneven**: in each layer, a few experts take a multiple of their fair share. The EPLB of
-#   vLLM measures the balance as *balancedness* = mean load / max load. In a small sample, part of what you see is
-#   noise. Compare the measured balancedness with what uniform routing shows at the same sample size.
+#   vLLM measures this unevenness as *balancedness* = mean load / max load. In a small sample, part of what you
+#   see is noise. Compare the measured balancedness with what uniform routing shows at the same sample size.
 # * **The hot set moves with the traffic**: code, math, prose and other languages make different experts
 #   active. This effect is larger in some layers than in others.
 # * Under expert parallelism, each GPU owns a contiguous block of experts. Thus hot experts that share a GPU
@@ -127,8 +127,8 @@ print(f"... {ts.n_experts - 10} more experts share the remaining {1 - np.sort(U[
 # %% [markdown]
 # ## Exercise 2.3 — is that skew real, or a small sample?
 #
-# The EPLB of vLLM logs **balancedness** = mean tokens per expert / max tokens per expert (1.0 is perfect). In
-# a finite sample, even a perfectly uniform router shows a balancedness below 1. Write `balancedness(counts)`
+# The EPLB of vLLM logs **balancedness** = mean tokens per expert / max tokens per expert (1.0 at perfect
+# balance). In a finite sample, even a perfectly uniform router shows a balancedness below 1. Write `balancedness(counts)`
 # (for each row). Then write `uniform_baseline(tokens, n_experts, k, trials, seed)`. It returns the mean
 # balancedness of `trials` samples of `tokens` tokens with uniform routing ($k$ *distinct* experts per token).
 # If the balancedness of a layer is well below the baseline, the layer has a real skew.
@@ -231,9 +231,9 @@ print("✅ the same routing costs more as EP grows: fewer experts per GPU averag
 # %% [markdown]
 # EPLB (`--enable-eplb`, and at large scale optionally `--eplb-config '{"num_redundant_experts": 32}'`) places
 # the experts again every `step_interval` steps. It uses the load that it measured over `window_size` steps.
-# The v0.30.0 defaults of `step_interval` and `window_size` are 3000 and 1000.
-# It can also keep extra copies of hot experts. Each copy costs HBM
-# on its rank (PRIMER §6.3: ~2.4 GiB per redundant expert per rank for DeepSeek-V3 in FP8).
+# In v0.30.0, the default of `step_interval` is 3000 and the default of `window_size` is 1000. It can also
+# keep extra copies of hot experts. Each copy costs HBM on its rank (PRIMER §6.3: ~2.4 GiB per redundant
+# expert per rank for DeepSeek-V3 in FP8).
 #
 # ## Worked example: the adapters behind `RouterRecorder`
 #

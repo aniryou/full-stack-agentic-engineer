@@ -35,7 +35,7 @@ The answers are in [`solutions/`](solutions/). The concepts are in the topic's [
 | # | Notebook | Tier | You will be able to explain | Primer | Time |
 |---|---|---|---|---|---|
 | 01 | [`grpo_on_a_tiny_transformer`](notebooks/01_grpo_on_a_tiny_transformer.ipynb) | T0 with torch (T1 faster) | Why a scratchpad adds serial computation. An outcome verifier. The reward-and-length curves of a real GRPO run on a small model, and if the run learned. The GRPO loss in torch (clip, β·k3, the `grpo` / `dr_grpo` / `dapo` aggregations), and training with it. Why `clip_frac` is 0 at `num_iterations=1`, and why the clip has an effect at 2. Why the logged k3 KL has spikes. | [§2 Policy gradients over token sequences](../PRIMER.md#2-policy-gradients-over-token-sequences), [§4 RL with verifiable rewards and GRPO](../PRIMER.md#4-rl-with-verifiable-rewards-and-grpo), [§5 Thinking models](../PRIMER.md#5-thinking-models) | ~2 h |
-| 02 | [`a_thinking_model_on_one_gpu`](notebooks/02_a_thinking_model_on_one_gpu.ipynb) | T1 (T0: bundled samples + fake server) | How Qwen3 fits on a T4. An 8K trace is 0.94 GB of KV. `reasoning` against `reasoning_content`. How to parse R1-style output. When the answer starts in a stream. The three switches (`enable_thinking`, `thinking_token_budget`, `reasoning_effort`). The `max_tokens` trap. How to select a budget from an accuracy curve. | [§5 Thinking models](../PRIMER.md#5-thinking-models), [§7 What thinking does to serving](../PRIMER.md#7-what-thinking-does-to-serving) | ~2 h |
+| 02 | [`a_thinking_model_on_one_gpu`](notebooks/02_a_thinking_model_on_one_gpu.ipynb) | T1 (T0: bundled samples + fake server) | How Qwen3 fits on a T4, with 0.94 GB of KV for an 8K trace. `reasoning` against `reasoning_content`. How to parse R1-style output. When the answer starts in a stream. The three switches (`enable_thinking`, `thinking_token_budget`, `reasoning_effort`). The `max_tokens` trap. How to select a budget from an accuracy curve. | [§5 Thinking models](../PRIMER.md#5-thinking-models), [§7 What thinking does to serving](../PRIMER.md#7-what-thinking-does-to-serving) | ~2 h |
 | 03 | [`test_time_compute_for_real`](notebooks/03_test_time_compute_for_real.ipynb) | T1 (T0: bundled simulated records) | pass@k from recorded samples, and how much the plug-in shortcut makes it too low. pass^k against the independence shortcut. Majority vote, and when it makes the result worse. Best-of-n with a verifier against a noisy reward model. The cost per correct answer. The most accurate option for a token budget. | [§6 Test-time compute](../PRIMER.md#6-test-time-compute) | ~1.5 h |
 | 04 | [`serving_thinking_models`](notebooks/04_serving_thinking_models.ipynb) | T0 fake server + emulator / T1 real vLLM | Heavy-tailed output lengths. KV × time from measured lengths, and how much of it the tail holds. The capacity primer's numbers with 10× outputs (≈18× the GPUs for KV). The batch that the KV pool permits, and the ITL that it gives. Budgets against `max_model_len`. Why the prefix cache stops at the last assistant header. Routing by effort. | [§7 What thinking does to serving](../PRIMER.md#7-what-thinking-does-to-serving) | ~2.5 h |
 | 05 | [`rl_rollouts_with_an_engine`](notebooks/05_rl_rollouts_with_an_engine.ipynb) | T1 (T0: the small model's rollouts) | The rollout as an inference workload. Advantages and dynamic sampling. The train–inference log-prob mismatch, and TRL's `sequence_mask` correction. How to select a generation cap under DAPO's overlong penalty. Straggler idle time in a synchronous rollout batch. Weight-sync bytes. | [§4 RL with verifiable rewards and GRPO](../PRIMER.md#4-rl-with-verifiable-rewards-and-grpo), [§8 The RL training stack in brief](../PRIMER.md#8-the-rl-training-stack-in-brief) | ~2 h |
@@ -77,7 +77,7 @@ simulated. `THINKLAB_NO_TORCH=1` shows the recorded-run path, also on a machine 
 | `tinyrl/` | ~540 | The scratchpad task and its verifier (pure Python). A small decoder-only transformer with the same structure as `00-foundations/transformers/lessons/03_tiny_gpt.py`. An SFT warm-up, then GRPO with TRL's names and defaults, a pluggable loss and `grpo_from` for experiments from one SFT model. Rollouts from a bf16 "engine" copy. An fp32 "trainer" copy scores the rollouts again. A recorded run for machines without torch. |
 | `thinking/` | ~680 | An OpenAI-compatible client that reads `reasoning` *and* `reasoning_content`, and measures the time when the answer starts. Request bodies for the thinking switch, budgets and effort. Budget strategies (truncate, native, Qwen's two-call recipe). pass@k, pass^k, majority vote, best-of-n, cost per correct answer. A generated eval set of verifiable problems. Recorded simulated outcomes. |
 | `parsers.py` | ~180 | vLLM's `deepseek_r1` and `qwen3` semantics, gpt-oss Harmony channels, a streaming splitter that holds back split tags, and answer extraction. |
-| `templates.py` | ~110 | How Qwen3 renders the history, and the cached-prefix arithmetic that comes from it. The template drops the reasoning before the last user message. |
+| `templates.py` | ~110 | How Qwen3 renders the history: the template drops the reasoning before the last user message. The cached-prefix arithmetic that comes from that rule. |
 | `fakemodel.py` | ~160 | The simulated thinking model: log-normal thinking lengths by difficulty, accuracy that increases with thinking, and distractor answers. |
 | `engine.py` | ~270 | The emulator of request latencies and step times: FCFS continuous batching, KV blocks, recompute preemption and a roofline step time. Qwen3 profiles whose numbers reproduce `servelab.sizing`. |
 | `fakeserver.py` | ~460 | The fake vLLM over HTTP: chat completions (streaming, `n`, `continue_final_message`), the reasoning switches and budgets, `usage.completion_tokens_details.reasoning_tokens`, cached tokens, and `/metrics` with vLLM's names. |
@@ -119,8 +119,8 @@ make check                                              # all of the above + tes
 
 ## Caveats
 
-- **Measured, simulated, illustrative.** The curves of the small transformer come from a measurement on your machine.
-  The recorded fallback tells where its curves came from. The model and the latencies of the fake server come from a simulation. The
+- **Measured, simulated, illustrative.** The curves of the small transformer come from a measurement on your machine,
+  or from a recorded fallback that tells its source. The model and the latencies of the fake server come from a simulation. The
   server knows the eval answers, and it gives the correct answer with a probability that increases with its thinking.
   Its latencies come from a roofline step model of Qwen3-0.6B on a T4. The bundled JSON, SSE and raw-text files are
   sample output in the documented format (illustrative). Each table tells which kind it shows.
@@ -146,7 +146,7 @@ On 2026-09-26, a comparison with the source confirmed these facts:
 
 These items still need a check on real hardware:
 
-* Qwen3 in fp16 on a T4: the outputs are sane, with no NaNs. The training of Qwen3 used bf16.
+* Qwen3 in fp16 on a T4: the outputs are sane, with no NaNs. This check is necessary because the training of Qwen3 used bf16.
 * The memory fit of the T1 GRPO step on a 15 GB T4 (vLLM at 0.3 + an fp32 0.5B trainer with SGD).
 * If `thinking_token_budget` counts correctly for templates that open `<think>` in the prompt (R1 distills, Qwen3
   Thinking-2507).

@@ -47,11 +47,12 @@ SAMPLES = resources.files("thinklab.data").joinpath("samples")
 # %% [markdown]
 # ## Worked example: size it before you serve it
 #
-# Weights = parameters × 2 bytes (fp16 on a T4). A T4 has no bf16. KV per token = 2 (K and
-# V) × layers × KV heads × head_dim × 2 bytes. The parameter counts and the T4 block predictions in
-# the next cell are the `servelab.sizing` numbers of the 04 lab for these configs. When that lab is
-# present, `tests/test_reuse.py` reproduces them from it. Always read `head_dim` from
-# `config.json`: for Qwen3-0.6B it is 128, not hidden / heads = 64.
+# Weights = parameters × 2 bytes (fp16 on a T4). The T4 uses fp16 because a T4 has no bf16. KV per
+# token = 2 (K and V) × layers × KV heads × head_dim × 2 bytes.
+#
+# The parameter counts and the T4 block predictions in the next cell are the `servelab.sizing`
+# numbers of the 04 lab for these configs. When that lab is present, `tests/test_reuse.py`
+# reproduces them from it. Always read `head_dim` from `config.json`. For Qwen3-0.6B, `head_dim` is 128, not hidden / heads = 64.
 
 # %%
 QWEN3 = {   # layers, KV heads, head_dim (config.json); params from servelab.sizing.param_count
@@ -263,17 +264,17 @@ for name, fn in (("max_tokens=64 (trap)", lambda: B.truncate(client, hard.messag
 # %% [markdown]
 # The trap uses 64 tokens and returns no answer. The two budgets end the thinking and get an answer
 # from the thinking that the model did up to that point. The Qwen3 report says that an answer from
-# truncated thinking "emerges naturally" and does not come from training. Thus the accuracy of that answer is a
-# curve that you measure (Exercise 2.5). The two-call recipe costs a second round trip, and it
-# prefills the thinking again. The native budget needs `--reasoning-parser` on the server, and
+# truncated thinking "emerges naturally" and does not come from training. Thus the accuracy of
+# these answers is a curve that you measure (Exercise 2.5). The two-call recipe costs a second
+# round trip, and it prefills the thinking again. The native budget needs `--reasoning-parser` on the server, and
 # optionally `--reasoning-config` for the phrase that it forces before `</think>`.
 #
 # ## Exercise 2.5 — choose a budget from a sweep
 #
 # `rows` is a sweep of accuracy against budget (`budget=None` means unlimited thinking). Write
-# `pick_budget(rows, tolerance)`. It must return the *smallest* budget whose accuracy is not more than
-# `tolerance` (absolute) from the unlimited row. Then report the output tokens per correct answer for
-# that budget and for unlimited thinking. Against a real T4, the sweep sends 180 requests, and some
+# `pick_budget(rows, tolerance)`. It must return the *smallest* budget whose accuracy is at most
+# `tolerance` (absolute) below the accuracy of the unlimited row. Then report the output tokens
+# per correct answer for that budget and for unlimited thinking. Against a real T4, the sweep sends 180 requests, and some
 # of them are thousands of tokens long. Expect several minutes for the sweep.
 
 # %% exercise
@@ -345,7 +346,7 @@ target.stop()
 # effort other than `"none"` to `enable_thinking=True`. Only templates that use the effort (gpt-oss:
 # low/medium/high in its system prompt) change the behaviour. Use a budget to limit the length.
 #
-# **Drill 3.** *We set `max_tokens=512` to cap cost and accuracy collapsed. What occurred?* The
+# **Drill 3.** *We set `max_tokens=512` to cap cost and accuracy collapsed. What happened?* The
 # requests that needed more than 512 tokens of thinking ended inside `<think>` with no answer
 # (`finish_reason: "length"`, `content: null`). Use `thinking_token_budget`, which forces the model
 # to answer. Then measure the curve of accuracy against budget, and select the value from it.

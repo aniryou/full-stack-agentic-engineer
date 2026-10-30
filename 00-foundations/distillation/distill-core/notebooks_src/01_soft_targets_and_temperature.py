@@ -54,7 +54,7 @@ print(f"KL(p ‖ q) at T = 1: {L.kl(L.softmax(Z), L.softmax(V))[0]:.5f} nats")
 # When $T$ increases, $\mathrm{KL}(p_T \,\|\, q_T)$ decreases approximately as $1/T^2$. Its gradient $(q_T - p_T)/T$
 # also decreases approximately as $1/T^2$. Thus, without a correction, the hard-label term is much larger than a soft
 # term at $T$ = 4, and the soft term has almost no effect. A multiplication by $T^2$ puts the scale back. The limit is
-# a match of the centred logits,
+# logit matching,
 #
 # $$
 # \frac{1}{2N}\,\lVert (v - \bar{v}) - (z - \bar{z}) \rVert^2.
@@ -276,7 +276,7 @@ print("✅ keep the most active units, slice W1, b1 and W2 — a narrower model 
 # "The loss is
 # $\alpha\,T^2\,\mathrm{KL}(p_T \,\|\, q_T) + (1 - \alpha)\,\mathrm{CE}$. The gradient of the soft term on the student's
 # logits is $T\,(q_T - p_T)$. The $T^2$ keeps the scale of the gradient as $T$ increases. At the limit of high $T$,
-# the soft term is a match of the centred logits.
+# the soft term is logit matching.
 #
 # "$T$ and $\alpha$ are settings to sweep, not constants. TRL applies no $T^2$ (its GKD trainer calculates the
 # divergence at $T$ = 1). Width is capacity. If the student is smaller than the size that can hold what the teacher

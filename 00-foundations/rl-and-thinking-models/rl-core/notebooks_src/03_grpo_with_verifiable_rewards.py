@@ -86,8 +86,8 @@ for p_old in (0.01, 0.5, 0.9):
 # clip drives the entropy down. The solution of DAPO is **clip-higher** ($\varepsilon_{\text{low}}$ 0.2,
 # $\varepsilon_{\text{high}}$ 0.28).
 #
-# Note the TRL default `num_iterations=1`. If you sample and update with the same weights, $\rho \equiv 1$ and the
-# clip is inert. The clip is important only with $\mu > 1$ or with stale (off-policy) rollouts.
+# The TRL default is `num_iterations=1`. If you sample and update with the same weights, $\rho \equiv 1$ and the
+# clip has no effect. The clip is important only with $\mu > 1$ or with stale (off-policy) rollouts.
 #
 # ## Worked example 3 — the KL estimator k3
 # GRPO puts the KL in the loss. It estimates the KL per token from samples of $\pi$:
@@ -127,8 +127,8 @@ for ec in (0.0, 0.05):                               # the other lever: pay for 
     print(f"REINFORCE, entropy bonus {ec}: P(correct) %.3f, %.1f effective correct answers" % diversity(p_ec))
 
 # %% [markdown]
-# The success rate goes to ~100% in a few dozen steps. After that, almost every group is all-correct, the
-# advantages are zero and the policy learns nothing more. Also, the policy has concentrated on a few of the 14
+# The success rate goes to ~100% in not more than a few dozen steps. After that, almost every group is
+# all-correct, the advantages are zero and the policy learns nothing more. Also, the policy has concentrated on a few of the 14
 # correct strings. RL sharpens: pass@1 goes up, and the diversity goes down. An entropy bonus buys the diversity
 # back at a small cost in accuracy.
 #

@@ -266,7 +266,7 @@ print("ops cancel        →", (await ops.call_tool("cancel_order", {"order_id":
 
 # %% [markdown]
 # **The gateway screens a poisoned result.** Order `ORD-1003` has an injection in a free-text field.
-# This injection is the classic indirect prompt injection (Notebook 11).
+# This case is the classic indirect prompt injection (Notebook 11).
 # Without the gateway, the text goes into the model's context as a tool result.
 # With the gateway, the gateway blocks the call, and the audit says why.
 #
@@ -512,4 +512,4 @@ print("✅", why_strip)
 # - It writes an audit record for each call.
 #
 # Behind the gateway, there is one server for each bounded context.
-# The sentence that has the most effect: *the prompt is not a security boundary; the gateway and the systems of record are.*
+# The sentence that has the most effect: *the prompt is not a security boundary, but the gateway and the systems of record are.*

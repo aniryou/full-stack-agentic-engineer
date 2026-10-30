@@ -23,7 +23,7 @@
 # - It asks questions in LongMemEval's and LoCoMo's task shapes: extraction, preference, multi-session, temporal,
 #   knowledge update, abstention, adversarial.
 #
-# It reports accuracy with a Wilson interval, recall in the budget, stale answers and abstention. It also reports a
+# It reports accuracy with a Wilson interval, recall within the budget, stale answers and abstention. It also reports a
 # paraphrase subset that a lexical embedder misses by design.
 #
 # Primer: §3 *Retrieval: similarity, recency and importance*, §4 *Measuring memory* (`../PRIMER.md`).
@@ -42,8 +42,8 @@ emb = HashingEmbedder()
 # %% [markdown]
 # ## Worked example 1 — the embedder is lexical, on purpose
 # memcore implements `ragkit`'s crc32 hashing embedder (07.4) again. Each `[a-z0-9]+` token adds 1 to bucket
-# `crc32(token) % 1024`. Then the embedder L2-normalises the vector. Thus a dot product is a cosine. Two texts have a
-# similarity above 0 if, and only if, they share tokens.
+# `crc32(token) % 1024`. Then the embedder L2-normalises the vector. Thus a dot product is a cosine. Two texts are
+# similar if, and only if, they share tokens.
 
 # %%
 q = emb.encode("user lives in lisbon")
@@ -77,7 +77,7 @@ for form in ("paper", "code"):
 #
 # That inversion is not important on this example, but it is important on a knowledge update. There, the stale fact
 # is exactly the one that the term favours. The harness shows the effect after exercise 2.3. The paper's form comes
-# from the paper alone. arXiv is not available from here (verify). The code form comes from
+# from the paper alone (verify), because arXiv is not available from here. The code form comes from
 # `joonspk-research/generative_agents` (`retrieve.py`, read on 2026-09-26).
 #
 # ## Worked example 3 — pack into a budget, filter as of a date
@@ -99,11 +99,11 @@ past = retrieve(store, ALICE, "What was the user's home city?", now=6 * DAY, as_
 print("as of day 2:", [r.render() for r in past.records][:2])
 
 # %% [markdown]
-# A normal query does not see the superseded Lisbon fact, but an as-of query returns it. The as-of query is why an update closes a
-# fact and does not delete it. Hybrid search (BM25 + vectors + RRF) is the topic of 07.4 (`ragkit.reference`), and it
-# applies with no change. An ANN index such as `minifaiss`'s HNSW (M0 = 2M) gives a benefit only at tenant scale. The
-# reason is that one user has tens to thousands of records in memory, and a flat scan of one partition is exact and
-# fast.
+# A normal query does not see the superseded Lisbon fact, but an as-of query returns it. For this reason, an update
+# closes a fact and does not delete it. Hybrid search (BM25 + vectors + RRF) is the topic of 07.4
+# (`ragkit.reference`), and it applies with no change. An ANN index such as `minifaiss`'s HNSW (M0 = 2M) gives a
+# benefit only at tenant scale. The reason is that one user has tens to thousands of records in memory, and a flat
+# scan of one partition is exact and fast.
 #
 # ## Worked example 4 — a planted-facts scenario
 
@@ -316,8 +316,8 @@ print(f"✅ 360/390 correct is {wilson(360, 390)[0]:.1%}-{wilson(360, 390)[1]:.1
 
 # %% [markdown]
 # ## Exercise 2.6 — find the knee
-# Write `find_knee(rows, tol=0.02)`. It returns the smallest budget whose recall is at most `tol` below the best recall of
-# all budgets. Then select `my_budget` for the consolidated store of this harness. Give the reason in a comment.
+# Write `find_knee(rows, tol=0.02)`. It returns the smallest budget whose recall is at most `tol` below the best recall
+# of all budgets. Then select `my_budget` for the consolidated store of this harness. Give the reason in a comment.
 
 # %% exercise
 def find_knee(rows, tol=0.02):
@@ -342,24 +342,25 @@ print(f"✅ knee at {find_knee(rows)} tokens; you chose {my_budget}")
 # in the user's partition gets the generative-agents score: recency, importance and relevance, each min-max
 # normalised. We use the paper's form: recency decreases with the hours after the last use.
 #
-# "The form of the reference code ranks by access order, oldest first. In our harness, it served stale facts on 70% of knowledge updates over raw
-# episodes (27% when we removed the slot hints of the harness). Thus we do not copy it.
+# "The form of the reference code ranks by access order, oldest first. In our harness, it served stale facts on 70%
+# of knowledge updates over raw episodes. When we removed the slot hints of the harness, it served stale facts on 27%
+# of them. Thus we do not copy it.
 #
 # "We pack the ranked list into a token budget for each turn, greedily with skip. As-of queries can get to closed
 # facts.
 #
 # "We measure on a planted-facts harness in LongMemEval's and LoCoMo's task shapes. We use their shapes, not their
-# data. We report accuracy with a Wilson interval, recall in the budget, stale answers and abstention separately.
-# We report them separately because a memory that stores nothing still gets the abstention questions correct. The knee of recall against
-# budget sets the budget: 90 tokens here. A paraphrase subset tells us the gain that a real embedder must give over a
-# lexical embedder."
+# data. We report accuracy with a Wilson interval, recall within the budget, stale answers and abstention separately.
+# We report them separately because a memory that stores nothing still gets the abstention questions correct. The
+# knee of recall against budget sets the budget: 90 tokens here. A paraphrase subset tells us the gain that a real
+# embedder must give over a lexical embedder."
 #
 # **Drill questions**
 # 1. *Why add recency and importance to similarity?* Similarity finds the memory that is most on-topic. But the most
-#    useful memory is often more recent (a knowledge update) or more important (an allergy) than the nearest match.
+#    useful memory is often newer (a knowledge update) or more important (an allergy) than the nearest match.
 # 2. *Accuracy is 92% on 13 questions. Ship?* 12/13 is a 67–99% Wilson interval, and that is too wide. Run hundreds of
-#    questions (390 here: 89–95%). Remember that they are not independent (resample users, compare per question type).
-#    Read recall, stale answers and abstention separately.
+#    questions (390 here: 89–95%). Remember that they are not independent. Thus
+#    resample users, and compare per question type. Read recall, stale answers and abstention separately.
 # 3. *When do you need an ANN index for memory?* You need one when one partition is large. But the memory of one user
 #    is small. Thus a flat scan of the partition is exact. HNSW (M0 = 2M in minifaiss) gives a benefit at tenant or
 #    corpus scale.

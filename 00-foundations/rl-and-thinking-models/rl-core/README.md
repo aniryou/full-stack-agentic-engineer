@@ -31,8 +31,8 @@ versions are in [`solutions/`](solutions/). The notebooks and the primer take ap
 
 | Notebook | You will be able to… | Primer | Time | Tier |
 |---|---|---|---|---|
-| [`01_policy_gradients_on_a_toy_task`](notebooks/01_policy_gradients_on_a_toy_task.ipynb) | Derive the softmax log-probability gradient and REINFORCE. Show why a baseline is important. Without a baseline, a constant reward is only noise. Calculate the KL-regularised optimum in closed form. See RL exploit a verifier with a bug. True accuracy goes from 29.7% to 4.9% while the reward gets to 99.4%. See RL also make thinking longer when thinking has no cost. Predict the best thinking length. | §1, §2 | ~2 h | T0 |
-| [`02_preferences_reward_models_and_dpo`](notebooks/02_preferences_reward_models_and_dpo.ipynb) | Fit a Bradley–Terry reward model. Run RLHF (reward model + RL with a KL penalty) and DPO on the same pairs, and get both to the closed form. Read the DPO metrics of TRL (and why rewards/chosen decreases). Calculate GAE. See RL over-optimise a length-biased reward model, and select the KL budget. | §3 | ~2 h | T0 |
+| [`01_policy_gradients_on_a_toy_task`](notebooks/01_policy_gradients_on_a_toy_task.ipynb) | Derive the softmax log-probability gradient and REINFORCE. Show why a baseline is important. Without a baseline, a constant reward is only noise. Calculate the KL-regularised optimum in closed form. See RL exploit a verifier with a bug. True accuracy goes from 29.7% to 4.9% while the reward gets to 99.4%. See RL also make thinking longer when thinking has no cost. Predict the optimal thinking length. | §1, §2 | ~2 h | T0 |
+| [`02_preferences_reward_models_and_dpo`](notebooks/02_preferences_reward_models_and_dpo.ipynb) | Fit a Bradley–Terry reward model. Run RLHF (reward model + RL with a KL penalty) and DPO on the same pairs, and get both to the closed form. Read the DPO metrics of TRL. See why rewards/chosen decreases. Calculate GAE. See RL over-optimise a length-biased reward model, and select the KL budget. | §3 | ~2 h | T0 |
 | [`03_grpo_with_verifiable_rewards`](notebooks/03_grpo_with_verifiable_rewards.ipynb) | Calculate three things by hand: the group advantages of TRL, k3 and the clipped surrogate. See RL sharpen. The effective correct answers go from 13.9 to 2.4. Also see an entropy bonus get diversity back. Measure the length bias of the per-sequence average against the exact gradient. Compare the cost of the extra rollouts of dynamic sampling with what they give. Estimate how much of an RL step is generation. Write the `GRPOConfig` of DAPO and of R1. | §1, §4, §8 | ~2.5 h | T0 |
 | [`04_test_time_compute`](notebooks/04_test_time_compute.ipynb) | Estimate pass@k without bias, and use pass^k for reliability. Predict when majority vote helps and when it makes the result worse. Compare a verifier with a noisy reward model. Divide a token budget between samples and thinking. Tell when a smaller model with more samples is better. | §6 | ~1.5 h | T0 |
 | [`05_thinking_models_and_the_serving_workload`](notebooks/05_thinking_models_and_the_serving_workload.ipynb) | Show how rejection-sampling SFT and distillation copy thinking behaviour. Calculate the size of a heavy-tailed thinking workload with the formulas of the capacity primer plus HBM and ITL caps. Select `max_model_len`, and select a thinking budget instead of `max_tokens`. Predict prefix-cache hits when templates remove old thinking. Route effort by cost per correct answer. | §5, §7 | ~2 h | T0 |
@@ -67,13 +67,13 @@ Read the modules in this order. Each module starts with a docstring that gives t
 
 | File | Lines | What it teaches |
 |------|------:|-----------------|
-| [`rlcore/tasks.py`](rlcore/tasks.py) | ~165 | Two verifiable toy environments. `SeqTask` has balanced brackets, with a true verifier and a verifier with a bug, or any reward function. `ThinkTask` has think tokens until the answer, P(correct \| L) = 1 − e0·(1 − q)^L, truncation against budget forcing, exact length distributions and the best length. The design of the states makes the reward depend only on the final state. |
+| [`rlcore/tasks.py`](rlcore/tasks.py) | ~165 | Two verifiable toy environments. `SeqTask` has balanced brackets, with a true verifier and a verifier with a bug, or any reward function. `ThinkTask` has think tokens until the answer, P(correct \| L) = 1 − e0·(1 − q)^L, truncation against budget forcing, exact length distributions and the optimal length. The design of the states makes the reward depend only on the final state. |
 | [`rlcore/policy.py`](rlcore/policy.py) | ~85 | A policy as a table of softmaxes: seeded token-by-token sampling, per-token log-probabilities, the closed-form gradient `onehot − π`, explicit reference/old-policy copies, exact sequence probabilities. |
 | [`rlcore/pg.py`](rlcore/pg.py) | ~105 | REINFORCE. Baselines (none, mean, leave-one-out) and gradient variance. The KL penalty as reward shaping. An entropy bonus. SFT. Exact expectations and KL by enumeration. The KL-regularised optimum π_ref·exp(R/β)/Z. |
 | [`rlcore/pref.py`](rlcore/pref.py) | ~140 | The Bradley–Terry fit. The DPO loss, its gradient and the metric names of TRL. IPO, the implicit reward and GAE. A response catalogue and a length-biased annotator. |
 | [`rlcore/grpo.py`](rlcore/grpo.py) | ~180 | The group advantages of TRL (Bessel, +1e-4), k1 and k3, the clipped surrogate and its gradient mask, and the three loss normalisers. DAPO's soft overlong penalty, and `GRPOConfig` with the field names of TRL. A GRPO step with μ iterations, KL, masking and dynamic sampling (its gradient is in `surrogate_grad`). The averaged update that the code uses to measure the length bias. |
 | [`rlcore/ttc.py`](rlcore/ttc.py) | ~110 | The unbiased pass@k (the product form of HumanEval), pass^k, the biased plug-in and its exact expectation. Exact majority vote. Best-of-n with a noisy scorer. A question population with two kinds of difficulty. Budget allocation. |
-| [`rlcore/workload.py`](rlcore/workload.py) | ~225 | The formulas of the capacity primer, stated again (weights, KV per token and session, TTFT, request lifetime, sessions per GPU, decode and prefill throughput). A roofline decode step. Batches with HBM and ITL caps. `plan()` and `plan_steady()`. `plan()` puts every token at the TPOT of the SLO, as the capacity primer does. `plan_steady()` puts every token at the step that the fleet runs at. KV-token-steps, lognormal lengths, `max_tokens` against budget forcing, and prefix reuse across turns. API cost and cost per correct answer. The time split of one synchronous RL step. |
+| [`rlcore/workload.py`](rlcore/workload.py) | ~225 | The formulas of the capacity primer, stated again (weights, KV per token and session, TTFT, request lifetime, sessions per GPU, decode and prefill throughput). A roofline decode step. Batches with HBM and ITL caps. `plan()` and `plan_steady()`. `plan()` gives every token the TPOT of the SLO, as the capacity primer does. `plan_steady()` gives every token the step that the fleet runs at. KV-token-steps, lognormal lengths, `max_tokens` against budget forcing, and prefix reuse across turns. API cost and cost per correct answer. The time split of one synchronous RL step. |
 
 ## What the tests prove
 
@@ -86,7 +86,7 @@ all. The tests in this list carry the correctness claims:
   differences of the objective. This holds with the clipped surrogate plus β·k3, every `loss_type`, and the clip
   active (`test_tasks_policy.py`, `test_pg.py`, `test_pref.py`, `test_grpo.py`).
 - **The closed forms hold.** `kl_optimal` gets a higher E[R] − β·KL than other policies, and its KL equals
-  E[R]/β − log Z. DPO on 4,096 Bradley–Terry pairs gets to less than 0.02 nats from π*. Its implicit reward finds the
+  E[R]/β − log Z. DPO on 4,096 Bradley–Terry pairs ends less than 0.02 nats from π*. Its implicit reward finds the
   true gap of 3 with an error of less than 0.15 (`test_pg.py`, `test_pref.py`).
 - **The failure modes are real, not staged.** RL on the verifier with the bug decreases true accuracy to below 8%
   while the reward goes above 99%. With β = 0.3, true accuracy stays above 30%. RL makes thinking longer when
@@ -114,7 +114,7 @@ visits. This is why the thinking length increases slowly in the ThinkTask runs. 
 beyond its pairs is exact here, but a property of the network in practice.
 
 The toy shows these effects: reward hacking, length growth, over-optimisation, the length bias and diversity
-collapse. The direction of each effect does not change across seeds (the tests examine this). But the magnitudes
+collapse. The direction of each effect does not change across seeds. The tests examine the direction. But the magnitudes
 are those of the toy. The entropy effect of clip-higher is a measurement by DAPO. This core does not reproduce it.
 
 `ttc.question_set()` is a model of benchmark difficulty, not a benchmark. Each latency, GPU count and dollar figure

@@ -153,7 +153,7 @@ for exc in (RetryableError("503", status=503), asyncio.TimeoutError(), ToolTrans
 # ### Exercise 3.1 — implement `classify_http`
 #
 # Return `True` for the statuses that are worth a retry: **408, 429, 502, 503, 504**. Each other 4xx is the
-# fault of the caller, and it is permanent. Treat 500 as permanent too. It is usually deterministic. A
+# fault of the caller, and it is permanent. Treat 500 as permanent too. It is usually deterministic, and a
 # retry of deterministic failures at scale is how a short problem becomes an outage.
 
 # %% exercise
@@ -213,7 +213,7 @@ print("metrics:", breaker.metrics)
 # The next cell contains `MiniBreaker`. The code that keeps its state is already there. Implement `allow()`:
 #
 # * **closed**: permit the call.
-# * **open**: if `recovery_timeout_s` has not passed since `opened_at`, refuse the call. If it has passed, move to **half_open**.
+# * **open**: if the time from `opened_at` is less than `recovery_timeout_s`, refuse the call. If not, move to **half_open**.
 # * **half_open**: permit exactly one probe at a time (`probe_in_flight`). Refuse a call while a probe runs.
 
 # %% exercise
@@ -281,8 +281,8 @@ print(f"served {len(served)} (2 at a time + 2 queued), shed {len(shed)} immediat
 # %% [markdown]
 # ## 6. Deadlines compose into a turn budget
 #
-# A timeout is a duration. A **deadline** is a point in time. If you promised the user an answer in 8 s,
-# each hop gets a *child* deadline. A child deadline can never end after the parent. Also, you keep time for
+# A timeout is a duration. A **deadline** is a point in time. If you promised the user an answer in not more
+# than 8 s, each hop gets a *child* deadline. A child deadline can never end after the parent. Also, you keep time for
 # the answer itself. If you do not, the turn uses all its time on tools and times out silently.
 
 # %%

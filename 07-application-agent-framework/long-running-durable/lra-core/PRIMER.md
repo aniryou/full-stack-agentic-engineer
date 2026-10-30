@@ -16,29 +16,29 @@ run cannot live in a process or in a conversation. It lives in a document, and a
 
 ```mermaid
 flowchart LR
-  T(["task:<br/>run, step, attempt"]) --> G{"I2 guard:<br/>the expected<br/>step, attempt?"}
-  G -- no --> S["stale: ack,<br/>do nothing more"]
+  T(["the queue delivers<br/>a task: run, step, attempt"]) --> G{"I2 guard:<br/>the expected<br/>(step, attempt)?"}
+  G -- no --> S["stale: ack the task,<br/>do nothing more"]
   G -- yes --> L{"a live lease<br/>by another<br/>worker?"}
   L -- yes --> B["busy: HTTP 503,<br/>the queue retries"]
-  L -- no --> ST["take the lease,<br/>run the step<br/>on a copy"]
+  L -- no --> ST["take the lease for<br/>lease_ttl seconds,<br/>run the step on a copy"]
 ```
 
 *This figure shows the first half of one call of `Engine.execute` in `core.py`, from the task of the queue to the step. The guard (I2) and the lease come before the step.*
 
 ```mermaid
 flowchart LR
-  ST["the step on a copy:<br/>ctx.effect records<br/>a result (I3)"]
-  ST -- next --> C["checkpoint:<br/>compare-and-set<br/>on version (I1)"]
-  ST -- exception --> R["attempt + 1,<br/>enqueue with backoff,<br/>FAILED at max_attempts"]
-  ST -- wait --> W["WAITING:<br/>enqueue nothing"]
+  ST["run the step on a copy:<br/>ctx.effect records a result<br/>before the checkpoint (I3)"]
+  ST -- next --> C["checkpoint: the state and<br/>the transition in one<br/>compare-and-set (I1)"]
+  ST -- exception --> R["attempt + 1, no lease,<br/>enqueue with backoff,<br/>FAILED after max_attempts"]
+  ST -- wait --> W["write WAITING,<br/>enqueue nothing:<br/>a webhook with the key<br/>resumes the run"]
   ST -- done --> D["SUCCEEDED"]
-  C --> E["enqueue the next task,<br/>release the lease"]
+  C --> E["enqueue the next task,<br/>then release the lease"]
   C -. expired lease .-> RP
   R -. orphan .-> RP
-  RP[["the reaper, a cron:<br/>enqueue the<br/>current step again"]]
+  RP[["the reaper, a cron:<br/>enqueue the current step,<br/>the task name rejects<br/>a duplicate"]]
 ```
 
-*This figure shows the second half of the call, from the step to the next task. The effect record (I3) and the checkpoint (I1) come before the enqueue. The dotted edges go to the reaper from two crash windows: an expired lease and an orphan.*
+*This figure shows the second half of the call, from the step to the next task. The effect record (I3) comes before the checkpoint (I1), and the checkpoint comes before the enqueue. A crash during the step or before the enqueue leaves an expired lease, and a crash after the save of a retry leaves an orphan.*
 
 This is one step, from end to end:
 

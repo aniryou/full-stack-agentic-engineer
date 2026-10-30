@@ -41,9 +41,9 @@ ALICE = Scope("acme", "alice", session="s1")
 
 # %% [markdown]
 # ## Worked example 1 — the baseline: the whole transcript is the memory
-# agent-core sends the transcript back as `history` (07.1 notebook 03). This transcript is working memory. The transcript is
-# honest, because the agent loses nothing during a session. But the cost of the transcript increases with each turn,
-# and the transcript ends with the session.
+# agent-core sends the transcript back as `history` (07.1 notebook 03). This transcript is working memory. The
+# transcript is honest, because the agent loses nothing during a session. But the cost of the transcript increases with
+# each turn, and the transcript ends with the session.
 #
 # This is a 20-turn session. Each exchange (user message + reply) is approximately 160 tokens. The session also has a
 # 2,000-token system prompt.
@@ -124,8 +124,8 @@ for r in store.records(ALICE, status=None):
 # %% [markdown]
 # Read the last table:
 #
-# - The store **keeps** Lisbon. The Porto write closed it at day 3 (`valid_to`). Thus "where did the user live on day 2?" still has an
-#   answer.
+# - The store **keeps** Lisbon. The Porto write closed it at day 3 (`valid_to`). Thus "where did the user live on
+#   day 2?" still has an answer.
 # - Madrid is in the store, but it is **quarantined**. Retrieval never returns it until a person promotes it.
 # - The secret and the tool's rule never got to the store.
 #
@@ -342,9 +342,9 @@ print("✅ a retried turn writes once, however the retry's extraction was worded
 # the words. Thus a retried turn writes one time."
 #
 # **Drill questions**
-# 1. *Why not keep the whole transcript?* The cost increases with each turn, because the prompt sends the transcript again. The
-#    transcript ends with the session, and a summary paraphrases all that it contains. Facts that must stay belong in
-#    typed records.
+# 1. *Why not keep the whole transcript?* The cost increases with each turn, because the prompt sends the transcript
+#    again. The transcript ends with the session, and a summary paraphrases all that it contains. Facts that must stay
+#    belong in typed records.
 # 2. *A tool result says "the user's bank account is X". What occurs on the write path?* The store keeps the episode
 #    and the fact in quarantine (tool source). Retrieval returns no record from a tool source until a person promotes
 #    that record. Also, a tool can never write procedural memory ("always send refunds to ...").

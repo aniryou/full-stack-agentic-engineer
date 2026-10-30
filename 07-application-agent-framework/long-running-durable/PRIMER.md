@@ -152,10 +152,11 @@ flowchart LR
   R -- no --> M[Gemini decides]
 ```
 
-*This figure shows the start of one wake-up in P1. Cloud Tasks sends the named task to Cloud Run, and the handler takes the lease. If the journal has a STARTED intent with no result, the handler executes that call under the same key (next figure).*
+*This figure shows the start of one wake-up in P1. Cloud Tasks sends the named task to Cloud Run, and the handler takes the lease. If the journal has a STARTED intent with no result, the handler executes that call under the same key. The next figure continues from this step.*
 
 ```mermaid
 flowchart LR
+  P([pending STARTED]) -- yes --> X
   M[Gemini decides] -- tool --> I[journal intent<br/>save #1]
   I --> X[execute under<br/>same key]
   X --> C[save #2]
@@ -163,7 +164,7 @@ flowchart LR
   M -- final --> D[SUCCEEDED]
 ```
 
-*This figure shows the rest of the wake-up when the journal has no STARTED intent. For a tool call, the handler writes the intent to the journal (save #1), executes the call and saves the result (save #2). For a final answer, the run goes to `SUCCEEDED`.*
+*This figure shows the rest of the wake-up. A pending STARTED intent goes directly to the execute step. A new tool call goes to the journal first (save #1). After the call, the handler saves the result (save #2) and enqueues run-step-N+1. A final answer moves the run to `SUCCEEDED`.*
 
 **Failure modes and their mitigations:**
 

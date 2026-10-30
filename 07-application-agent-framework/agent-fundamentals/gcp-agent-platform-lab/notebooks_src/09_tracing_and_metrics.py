@@ -101,7 +101,7 @@ for s in conv2.by_kind("model"):
 # %% [markdown]
 # ## 2. Cost per conversation
 #
-# `TraceSummary` changes a trace into the numbers that the operator monitors. The price table puts a separate
+# `TraceSummary` makes a summary of a trace: the numbers that the operator monitors. The price table puts a separate
 # price on uncached input, on cached input and on output. The default table is **illustrative**. **Make sure
 # that it agrees with the official pricing page.**
 
@@ -128,8 +128,8 @@ for label, usage, model in (("flash, nothing cached", turn, "gemini-3-flash"), (
 print("\nbreakdown of 'flash, 75% cached':", {k: round(v, 6) for k, v in DEFAULT_PRICES.breakdown(cached_turn, 'gemini-3-flash').items()})
 
 # %% [markdown]
-# Real traces show the same thing. The identical conversation on a pro-tier model (same prompts, same cache
-# warm-up) costs more than on flash by a factor, before any scale. The factor is the ratio of the price
+# Real traces show the same thing. The identical conversation (same prompts, same cache warm-up) costs more
+# on a pro-tier model than on flash, by a factor, before any scale. The factor is the ratio of the price
 # rows. The weight of each row is the share of the tokens that went to it.
 
 # %%

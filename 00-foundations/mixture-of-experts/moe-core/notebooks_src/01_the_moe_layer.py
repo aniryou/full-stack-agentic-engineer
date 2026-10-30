@@ -250,16 +250,14 @@ print(f"✅ same FLOPs, same parameters; {combos_coarse} expert sets vs {combos_
 #
 # "The routers are different: softmax or sigmoid, renormalised or not, and the selection-only bias of DeepSeek. The
 # 'active' numbers are also different: gpt-oss counts only the LM head, and DeepSeek counts both embedding tables.
-# Kernels sort the
-# tokens by expert and do one grouped GEMM. Thus an expert that no token selected costs no FLOPs. But it still costs
-# HBM, and at inference that is the whole story of the next notebooks."
+# Kernels sort the tokens by expert and do one grouped GEMM. Thus an expert that no token selected costs no FLOPs. But
+# it still costs HBM, and at inference that is the whole story of the next notebooks."
 #
 # **Drill questions**
 # 1. *Why is Mixtral 46.7B and not 8 × 7B = 56B?* The model replicates only the MLPs. All experts share the attention,
 #    the norms and the embedding tables.
 # 2. *Two routers select the same experts. Why can their outputs be different?* The combine weights are different. A
-#    router renormalises them or does not. By default, Qwen3 does not renormalise them. DeepSeek uses sigmoid × 2.5.
-#    Llama 4 applies them to the
-#    input.
+#    router renormalises them or does not. The default setting of Qwen3 does not renormalise them. DeepSeek uses
+#    sigmoid × 2.5. Llama 4 applies them to the input.
 # 3. *What does a shared expert give you?* Common knowledge lives in one MLP that is always on, so the routed experts
 #    can specialise. It also adds a constant quantity of active parameters that every token pays for.

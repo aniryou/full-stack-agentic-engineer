@@ -118,8 +118,8 @@ for kind in ("lexical", "semantic", "multihop"):
     md("""
 ## The one idea behind dense retrieval
 
-An **embedding model** maps text to a vector, so that *texts with almost the same meanings
-get vectors that are near each other*. Thus "retrieval" is only two steps: embed
+An **embedding model** maps text to a vector, so that *the nearer the meanings of two texts are,
+the nearer their vectors are*. Thus "retrieval" is only two steps: embed
 the query, then find the nearest document vectors. The next cell shows this
 directly.
 """),
@@ -753,7 +753,7 @@ print("reranked top-3:", [c.chunk_id for c in top])
 
 Compare the rank of the truly-relevant chunk before and after reranking. The
 cross-encoder usually moves the exact-answer chunk up. First-stage cosine search
-put that chunk below its neighbours with almost the same topic.
+put that chunk below its neighbours on a related topic.
 """),
     code("""
 def dense_order(query, n=10):
@@ -785,18 +785,18 @@ You cannot improve what you do not measure. A statement such as "the demo looked
 good" is not a measurement. With the labelled `qrels`, we can give each retriever
 a score with two standard metrics:
 
-* **Hit@k**: is *any* gold document in the top $k$? (Did we get something useful?)
-* **Recall@k**: are *all* the gold documents in the top $k$? (Did we get everything
-  that the answer needs?) On a one-gold question, the two metrics agree. On a
+* **Hit@k**: is *any* gold document in the top $k$? Did we get something useful?
+* **Recall@k**: are *all* the gold documents in the top $k$? Did we get everything
+  that the answer needs? On a one-gold question, the two metrics agree. On a
   two-gold (multihop) question, hit@k can show 1.0 while the results do not have
   half of the answer.
-* **MRR**: 1/rank of the first gold hit. (How high was its rank?)
+* **MRR**: 1/rank of the first gold hit. How high was the rank of that hit?
 """),
     SETUP,
     md("""
 ### Exercise 1 — the metrics
 
-Write both metrics over **document-level** ranked lists. The gold labels are per
+Write both metrics over **document-level** ranked lists, because the gold labels are per
 document. `recall_at_k(..., require_all=False)` is hit@k. With
 `require_all=True`, it is recall@k. These are pure functions. The asserts compare
 the results against the exact maths.
@@ -1138,7 +1138,7 @@ Where to go next:
 - Fine-tune the retriever/reranker on query logs.
 - Add a router that sends simple questions down the low-cost single-shot path.
 - Do an eval of whole *trajectories*, not only of final answers. Did the loop
-  find both docs? In how many steps?
+  find both docs? How many steps did the loop use?
 
 Part III and Part IV of the primer describe the rest.
 """),

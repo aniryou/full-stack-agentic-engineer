@@ -49,7 +49,7 @@ print("teacher's length distribution, L = 12..27:", " ".join(f"{x:.2f}" for x in
 
 # %% [markdown]
 # ## Worked example 2 — distil it: SFT on its traces
-# Sample 1,000 traces. Each trace gives a length, and it tells if the answer was correct. Then fit the student by maximum likelihood. For a
+# Sample 1,000 traces. Each trace has a length and a result: correct or incorrect. Then fit the student by maximum likelihood. For a
 # stopping-rule table, the maximum-likelihood fit has a closed form. It is the fraction of the traces that stopped at
 # each length, among the traces that got to that length.
 
@@ -108,7 +108,8 @@ print(f"distilled from 1,000 traces:        accuracy {student.expected(task)['ac
 # capability ceiling that the toy does not have.
 #
 # ## Worked example 6 — what does not transfer
-# The answer is knowledge. Give the student a smaller $q$. The student solves the problem half as often per thinking token. It
+# The answer is knowledge. Give the student a smaller $q$. With this $q$, the student solves the problem half as often per
+# thinking token. It
 # copies the teacher's length exactly, and that length is incorrect for it.
 
 # %%

@@ -104,12 +104,11 @@ for b in ("none", "aux", "bias"):
 # approximately a quarter. Also, the task loss is three to five times lower.
 #
 # Look at the placements. The bias run gives each cluster its own expert, almost cleanly. The aux run also balances.
-# But its gradient demands equal counts, and the clusters are not equal (124, 117, 135, 136 tokens). Thus it
+# But its gradient pushes the counts to be equal, and the clusters are not equal (124, 117, 135, 136 tokens). Thus it
 # divides two clusters across experts. This is the quality cost of a balance that comes through the loss.
 #
 # This experiment is a toy, so the numbers depend on the seed, but the direction does not. The pattern holds across ten
-# task
-# seeds:
+# task seeds:
 
 # %%
 print(f"{'seed':>4s} | {'none: experts used, loss':>26s} | {'aux':>18s} | {'bias':>18s}")

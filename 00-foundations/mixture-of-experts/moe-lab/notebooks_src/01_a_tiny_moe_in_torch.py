@@ -403,7 +403,7 @@ else:
 # measure it. We do not guess it."
 #
 # **Drill 1.** *Your aux loss reads 2.0. Is the router in collapse now?* It depends on the normalisation. The
-# transformers `load_balancing_loss_func` is $k$ at perfect balance (2.0 for top-2 is ideal), and the loss of
+# transformers `load_balancing_loss_func` is $k$ at perfect balance (2.0 for top-2), and the loss of
 # Megatron and of MegaBlocks is 1. Look at the max/mean load and the dead experts, not at the raw loss.
 #
 # **Drill 2.** *Why does the DeepSeek-V3 bias not make the outputs worse in the way that the aux loss can?* The

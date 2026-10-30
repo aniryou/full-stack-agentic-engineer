@@ -270,7 +270,7 @@ print("clock:", iso(CLOCK()), "| acc-1 read model as of:", iso(CORE.accounts["ac
 # signed-in customer by default. The subject comes from the verified identity in `ToolContext`. Thus it is not necessary for the
 # model to guess an account id, and the model cannot select the account of another person.
 #
-# `block_card` is irreversible. Thus the loop will pause for confirmation. It needs the `cards:write` scope, and it is idempotent by
+# `block_card` is irreversible. Thus the loop will pause for confirmation. `block_card` needs the `cards:write` scope, and it is idempotent by
 # key. `create_case` builds its payload from the session log through `escalation_summary` (Exercise 5.2). Thus code assembles
 # the hand-off, and the model never dictates it.
 
@@ -642,9 +642,11 @@ print("   fresh:", render_balance(fresh))
 # ### Specialists, router, harness
 #
 # The renderers in the next cell are the "voice" of the specialists. The rules are how the specialists plan, and the rules are
-# simple on purpose. The router's own planner offers the specialists as tools, with the same schema that a router that delegates
-# sees. But the router uses the choice only to **hand the session over**. The planner matches the intents about cards first.
-# When a turn has more than one intent (not in v1), the intent that is important for safety wins.
+# simple on purpose.
+#
+# The router's own planner offers the specialists as tools, with the same schema that a router that delegates sees. But the
+# router uses the choice only to **hand the session over**. The planner matches the intents about cards first. When a turn has
+# more than one intent, the intent that is important for safety wins. Turns with more than one intent are not in v1.
 
 # %%
 def render_transactions(page: dict) -> str:
@@ -1046,7 +1048,7 @@ print("✅ cards stratum:", cards_only_run.render().splitlines()[1].strip())
 # %% [markdown]
 # Run the whole set two times. Then apply the gate to it, with three conditions:
 #
-# * **absolute** on the cards stratum, thus one miss in any run fails the release,
+# * **absolute** on the cards stratum: one miss in any run fails the release,
 # * aggregate pass rate ≥ 0.9,
 # * no forbidden tool, ever.
 #
@@ -1140,7 +1142,7 @@ assert any(n["tool"] == "list_transactions" and "injection:tool_call_instruction
 # %% [markdown]
 # ## 7. Observability and cost
 #
-# Every conversation in §5 left a trace. `TraceSummary` changes each trace into the numbers that an operator monitors: steps, tool
+# Every conversation in §5 left a trace. `TraceSummary` keeps only the numbers of each trace that an operator monitors: steps, tool
 # calls, tokens (with the cached share), dollars, wall time. The price table is illustrative. Make sure that it is correct before
 # you quote it.
 
@@ -1232,7 +1234,7 @@ print(f"\nlab conversations averaged {metrics['tokens_per_task']:,.0f} tokens; t
 # sample of production answers against the §5 policy.
 #
 # Card blocks join the canary only after the cards stratum stays perfect for two weeks in shadow. *GA* comes per intent, with a
-# **kill switch per intent**. The router's rule table is configuration. A global kill switch turns the front door back into
+# **kill switch per intent**, because the router's rule table is configuration. A global kill switch turns the front door back into
 # the old FAQ.
 #
 # **What breaks first, and what this notebook built against it.**

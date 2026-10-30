@@ -79,7 +79,7 @@ state) and gradient checkpointing. Thus both fit a 15 GB T4 (verify).
 
 The step reports the rollout seconds against the training seconds, and the mean reward. It also reports the share of
 zero-variance groups and the gap between the log-probs of vLLM and the log-probs of the trainer. The step does not
-push the new weights back into vLLM. TRL's colocate mode pushes the weights at each step.
+push the new weights back into vLLM. TRL's colocate mode pushes the new weights into vLLM at each step.
 
 For a full TRL run, start from `thinklab.rollout.trl_grpo_config("T4")`. It sets these values (TRL 1.14.0 names):
 

@@ -23,8 +23,8 @@
 # engines rebalance and replicate hot experts (the EPLB of vLLM).
 #
 # Large MoE deployments use EP together with **data-parallel attention** (wide-EP). The attention and its KV are per
-# rank, and the experts are spread thin. This layout frees HBM for KV, and it collects the tokens of every rank at
-# each expert.
+# rank, and each rank holds only a few of the experts. This layout frees HBM for KV, and it collects the tokens of
+# every rank at each expert.
 #
 # After this notebook, you can calculate the cost of the all-to-alls on NVLink, PCIe and InfiniBand. You can also find
 # the slowest rank and select an EP degree.
@@ -63,10 +63,9 @@ for tok in (8, 64, 4096):
 # %% [markdown]
 # Decode moves a small quantity of data per layer, so decode is latency-bound: $\alpha$ is the largest term. Prefill
 # moves a large quantity, so prefill is bandwidth-bound. For DeepSeek at 4,096 tokens per GPU, one dispatch is
-# 231 MiB. That dispatch takes ~0.5 ms
-# on NVLink and ~4 ms over one 400 Gb/s NIC per GPU. That is why DeepEP supplies two kernel families: low-latency
-# (decode, CUDA-graph friendly) and high-throughput (prefill). The high-throughput kernels forward the data over NVLink
-# and then over RDMA.
+# 231 MiB. That dispatch takes ~0.5 ms on NVLink and ~4 ms over one 400 Gb/s NIC per GPU. That is why DeepEP supplies
+# two kernel families: low-latency (decode, CUDA-graph friendly) and high-throughput (prefill). The high-throughput
+# kernels forward the data over NVLink and then over RDMA.
 #
 # The formula explains the published EP8 low-latency figures of DeepEP. The dispatch is 128
 # tokens × 8 × (7,168 + 7,168/128 × 4) B = 7,569,408 B in 77 µs = 98.3 GB/s (reported 98).
@@ -320,12 +319,12 @@ print(f"✅ same roofline ({two_nodes['roofline'] * 1e3:.1f} ms), all-to-alls {o
 #
 # "Then the step waits for the busiest GPU. In prefill, this is the GPU that computes the rows of the hot experts. In
 # memory-bound decode, it is the GPU whose link carries the traffic of the hot experts. Placement moves the hot spot.
-# An EPLB-style rebalance with a few redundant experts removes most of it, for a few GiB per GPU.
+# An EPLB-style rebalance with a few redundant experts removes most of it, for approximately two GiB per GPU.
 #
 # "We use EP together with data-parallel attention (wide-EP). Each rank holds a replica of the attention weights, but
-# the KV is per rank and the experts are spread thin. Thus each GPU has space for a large batch, and every expert sees
-# the tokens of all ranks. When we can, we keep EP inside the NVLink domain. Across nodes, we put the all-to-all in the
-# budget, or we overlap it."
+# the KV is per rank and each rank holds only a few of the experts. Thus each GPU has space for a large batch, and
+# every expert sees the tokens of all ranks. When we can, we keep EP inside the NVLink domain. Across nodes, we put
+# the all-to-all in the budget, or we overlap it."
 #
 # **Drill questions**
 # 1. *TP or EP for Mixtral on 8 GPUs at decode?* EP with DP attention and all-to-all kernels. EP does two small

@@ -377,7 +377,7 @@ print("✅ boundary statement:", BOUNDARY_STATEMENT[:110] + "…")
 # 1. **Name the class**: indirect prompt injection. The model cannot reliably tell data from instructions.
 #    Thus the design must not depend on that ability.
 # 2. **Data, labelled**: untrusted content goes into the context as provenance-tagged data blocks with
-#    escaped delimiters, under a permanent instruction. Labelled data decreases the hit rate, but it is not the control.
+#    escaped delimiters, under a permanent instruction. These blocks and the instruction decrease the hit rate, but they are not the control.
 # 3. **The controls**: per-agent tool allowlists (a triage agent *cannot* refund) and argument and result
 #    screening. They also include identity scopes on the *user's* token that goes downstream, and
 #    confirmation for irreversible actions. All of them are in the tool layer and the loop, and all of them make audit events.

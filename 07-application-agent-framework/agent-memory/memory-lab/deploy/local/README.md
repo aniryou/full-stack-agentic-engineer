@@ -34,7 +34,7 @@ The service, the SQLite store and Postgres are real. The model server is the fak
 hits obey the block rules of vLLM, and its TTFTs come from a roofline model. When you quote these numbers, say
 "simulated". For measurements, run a real vLLM ([`../any-gpu/`](../any-gpu/)). Then point `MEMLAB_LLM_URL` at it.
 
-The passwords and the token key in `compose.yaml` are local-only defaults. `compose.yaml` binds the ports to 127.0.0.1.
+The passwords and the token key in `compose.yaml` are local-only defaults, because `compose.yaml` binds the ports to 127.0.0.1.
 For anything shared, set your own `MEMLAB_TOKEN_KEY` and `MEMLAB_PG_PASSWORD` in your shell.
 
 ## Cost

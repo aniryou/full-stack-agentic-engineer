@@ -225,8 +225,8 @@ for i, b in enumerate(BATCHES):
 # 4. It returns `(sorted_token_ids, expert_ids per block, num_tokens_post_padded)`.
 #
 # Then the Triton kernel runs one `BLOCK_SIZE_M`-row tile per block against the expert of that block. Write
-# `align(topk_ids, block_size, num_experts)` with the same semantics. Experts with no tokens get no blocks.
-# The check replays the example in the vLLM docstring.
+# `align(topk_ids, block_size, num_experts)` with the same semantics. In these semantics, experts with no tokens
+# get no blocks. The check replays the example in the vLLM docstring.
 
 # %% exercise
 def align(topk_ids, block_size, num_experts):
@@ -389,5 +389,5 @@ else:
 # distinct experts. Under EP, it hurts, because the GPU that holds the hot experts is the slowest.
 #
 # **Drill 3.** *Is the padding in the fused MoE kernel wasted money at batch 1?* It wastes FLOPs, not time.
-# The step is memory-bound. Thus the idle tensor cores cost nothing. The padding is important near the compute-bound
-# regime, where a tuned `BLOCK_SIZE_M` for each batch size recovers the wasted FLOPs.
+# The step is memory-bound. Thus the idle tensor cores cost nothing. The wasted FLOPs are important near the
+# compute-bound regime, where a tuned `BLOCK_SIZE_M` for each batch size recovers them.

@@ -22,7 +22,7 @@
 # * Decode messages are small (32 tokens × 2,048 × 2 B = 128 KiB). Thus on PCIe they are **latency-bound**:
 #   the count of collectives per layer is more important than their bytes.
 # * Under EP, the step ends when the **slowest GPU** finishes. In memory-bound decode, a GPU waits for the
-#   bytes of its *touched* experts. In compute-bound steps (prefill, large batches), it waits for the
+#   bytes of its *touched* experts. In compute-bound steps (prefill, the largest batches), it waits for the
 #   *tokens* that its experts got. That is where hot experts hurt, and they hurt more as EP increases. The
 #   design of TP keeps it balanced, but TP multiplies half-size expert GEMMs.
 #
@@ -204,8 +204,8 @@ for b in (8, 32, 128):
 # The share of a layer on a GPU depends on its experts in two ways:
 #
 # * The **bytes** of its experts that the tokens touch. A memory-bound decode step waits for these bytes.
-# * The **tokens** that the router sends to them. A compute-bound step (prefill, or a large decode batch)
-#   waits for the FLOPs of these tokens.
+# * The **tokens** that the router sends to them. A compute-bound step (prefill, or one of the largest
+#   decode batches) waits for the FLOPs of these tokens.
 #
 # Every layer ends in a collective. Thus the GPUs meet one time per layer, and the step pays for the busiest
 # GPU *of each layer*. For routing `ids [tokens, layers, k]` and linear placement (GPU $r$ holds experts
@@ -325,8 +325,8 @@ print("✅ parsed; with a real run this table is the measurement that decides be
 #
 # As an alternative, let the next cell do it (`MOELAB_START_VLLM=1` on a machine with two GPUs). It saves each
 # result next to the notebook and parses it with your `parse`. With DP=2, vLLM keeps the two ranks in lockstep.
-# An idle rank runs dummy forward passes. DeepEP-style backends need SM90. Thus the default
-# `allgather_reducescatter` is what runs here.
+# To keep this lockstep, an idle rank runs dummy forward passes. DeepEP-style backends need SM90. Thus the
+# default `allgather_reducescatter` is what runs here.
 
 # %%
 if env.gpu_count() >= 2 and env.may_start_vllm():

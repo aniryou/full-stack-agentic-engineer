@@ -131,9 +131,9 @@ for lam in (0.0, 0.5, 1.0):
     print(f"λ = {lam}: advantages {pref.gae(r_tok, v_tok, gamma=1.0, lam=lam).round(3).tolist()}")
 
 # %% [markdown]
-# $\lambda$ = 0 trusts the value model. Then the advantage is the one-step TD error: low variance, biased if $V$ is
-# incorrect. $\lambda$ = 1 trusts the sampled return. Then the advantage is Monte Carlo minus $V$: unbiased, noisy. PPO
-# then uses the same clipped ratio that GRPO uses (notebook 03).
+# $\lambda$ = 0 trusts the value model. With this value, the advantage is the one-step TD error: low variance,
+# biased if $V$ is incorrect. $\lambda$ = 1 trusts the sampled return. With this value, the advantage is Monte Carlo
+# minus $V$: unbiased, noisy. PPO then uses the same clipped ratio that GRPO uses (notebook 03).
 #
 # ## Worked example 5 — an annotator who likes long answers
 # There are 40 answers to one prompt. Each answer has five versions, padded with 0–800 filler tokens. Filler
@@ -170,7 +170,7 @@ print(f"optimising true quality instead (β = 0.1): quality {pig @ cat['quality'
 # - Cap the KL budget (stop early).
 # - Control for length when you collect or fit preferences.
 # - Prefer verifiable rewards where they exist (notebook 03).
-# - Measure the true objective.
+# - Measure the policy against the true objective.
 #
 # ## Exercise 2.1 — the Bradley–Terry gradient
 # For weights `w` and feature differences `d = x_chosen − x_rejected` (one row per pair), return the gradient of
@@ -261,7 +261,7 @@ print("✅ GAE: λ interpolates between the value model's one-step view and the 
 # %% [markdown]
 # ## Exercise 2.5 — choose the KL budget
 # From the length-biased experiment, select the `best_beta` in `betas` that gives the largest **true** quality.
-# Report the KL that it spends (`kl_budget`). This is the point for an early stop that a gold eval can give you.
+# Report the KL that it spends (`kl_budget`). This is the early stop that a gold eval can give you.
 
 # %% exercise
 betas = [10, 5, 3, 2, 1.5, 1, 0.7, 0.5, 0.3, 0.1]

@@ -33,10 +33,10 @@ for k, v in sb.isolation_report().items():
 
 # %% [markdown]
 # ## Worked example 1 — a clean environment, and why `HOME` is not a boundary
-# The child cannot see the environment of the parent. We put a token in *our* environment, and it comes back
-# absent. `HOME` points at the workspace, so `~/.ssh` is empty. But this redirection is a convenience, not isolation: the real
-# home is one `pwd` lookup away. Only a **different UID** turns "you can find it" into "you cannot open it". Compare
-# the per-execution UID with `drop_to_uid=None` (what a non-root laptop gets).
+# The child cannot see the environment of the parent. We put a token in *our* environment, and it comes back absent.
+# `HOME` points at the workspace, so `~/.ssh` is empty. But this redirection is a convenience, not isolation: the real
+# home is one `pwd` lookup away. Only a **different UID** turns "you can find it" into "you cannot open it". Compare the
+# per-execution UID with `drop_to_uid=None` (what a non-root laptop gets).
 
 # %%
 import os

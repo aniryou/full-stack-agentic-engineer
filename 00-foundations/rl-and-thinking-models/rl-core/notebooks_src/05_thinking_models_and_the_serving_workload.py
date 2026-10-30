@@ -102,7 +102,7 @@ print(f"Qwen3-0.6B: {kv:.0f} kB of KV per token ({kv * 1000:,.0f} B); an 8K-toke
 # does not include: HBM and the ITL SLO limit the batch per GPU.
 #
 # Like the primer, `w.plan` gives every output token the TPOT of the SLO. But `w.plan_steady`
-# sets the lifetime of a request with the step at which the fleet actually runs. With this model,
+# calculates the lifetime of a request from the step at which the fleet actually runs. With this model,
 # $N = \text{rps} \cdot (\text{TTFT} + \text{out} \cdot \operatorname{step}(b))/b$ GPUs hold a steady batch $b$ per
 # GPU (`w.gpus_for_batch`).
 
@@ -167,7 +167,7 @@ for cap in (2048, 4096, 8192, 16384):
 # %% [markdown]
 # The tokens are the same, but the outcome is different. At 4K, one request in six gets no answer at all under
 # `max_tokens`. Set `max_tokens` (and `max_model_len`) to a large value. Use a thinking budget to limit the cost.
-# Note the thing that does **not** work for this on Qwen3. A `reasoning_effort` other than "none" only switches
+# On Qwen3, one setting does **not** limit the cost. A `reasoning_effort` other than "none" only switches
 # thinking on (primer §5, verify).
 #
 # ## Worked example 6 — prefix caching when the template drops old thinking
@@ -307,7 +307,7 @@ print(f"✅ turn 2: {prompt2:,} tokens, {hit2:,} cached, {prefill2} prefilled �
 # ## Exercise 5.5 — route by effort
 # Use `acc`, `share`, `no_think` and `thinking` from worked example 7. Set `best_policy` to the routing with the
 # lowest cost per correct answer. The routing is a dictionary `{"easy": ..., "hard": ...}` with the values "on" or
-# "off". The total accuracy must be at least 0.90.
+# "off". The accuracy over all requests must be at least 0.90.
 
 # %% exercise
 ### BEGIN SOLUTION

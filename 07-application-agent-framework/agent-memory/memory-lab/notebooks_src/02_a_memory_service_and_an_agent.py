@@ -74,7 +74,7 @@ print(audit.timeline())
 # ## Exercise 2.1 — scope from claims, never from the body
 #
 # Write `resolve_scope(claims, body)`. Return `(tenant, user)` from the verified claims (`tenant`, `sub`). If
-# the body has any of `tenant`, `user`, `user_id`, `sub` or `agent`, raise `PermissionError`. Do not ignore the body
+# the body has any of `tenant`, `user`, `user_id`, `sub` or `agent`, raise `PermissionError`. Do not ignore that field
 # silently. A request that tries this is a signal, and that signal is worth an error and a log line.
 
 # %% exercise
@@ -336,6 +336,7 @@ shutil.rmtree(WORK, ignore_errors=True)       # the databases and the audit log 
 # `memory.review` promotes one. The sentence of the model is not a policy decision.
 #
 # **Drill 3.** *Can the agent just label everything `source="user"`?* The service trusts the workload for
-# `source`. Thus the label is only as good as the loop that sets it. The gateway can compare the label with
-# the trace of the turn, which shows if a tool result came before the write. Thus the audit event carries
-# provenance.
+# `source`. Thus the label is only as good as the loop that sets it.
+#
+# The gateway can compare the label with the trace of the turn. The trace shows if a tool result came before
+# the write. For this reason, the audit event carries provenance.

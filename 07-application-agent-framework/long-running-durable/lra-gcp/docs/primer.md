@@ -211,7 +211,7 @@ flowchart LR
     C1 --> N
     C2 --> N
     C3 --> N
-    N["parent counter<br/>completed + 1"] --> D{"completed =<br/>expected?"}
+    N["fan_in counter<br/>completed"] --> D{"completed =<br/>expected?"}
     D -->|yes| T["parent goes<br/>to then"]
 ```
 
@@ -443,14 +443,14 @@ sequenceDiagram
     participant E as Engine
     participant S as in-memory<br/>store and queue
     T->>E: execute_task(StepTask)
-    E->>S: effect record (I3)
-    Note over E,S: crash at after_step_before_commit<br/>no checkpoint, the lease stays<br/>the queue keeps the task
+    E->>S: ctx.effect: effect record (I3)
+    Note over E,S: crash at after_step_before_commit:<br/>no checkpoint, no next task<br/>the lease and the task stay
     T->>K: advance past the lease TTL
     T->>E: reap()
-    E->>S: enqueue the same attempt<br/>(a duplicate)
-    T->>E: the same task again
+    E->>S: expired lease: enqueue the same<br/>attempt, rejected as a duplicate
+    T->>E: deliver the same task:<br/>the step runs again
     E->>S: effect exists: skip (I3)
-    E->>S: checkpoint (I1), next task
+    E->>S: checkpoint (I1), then next task
     Note over T: assert one re-drive,<br/>no repeated effect
 ```
 

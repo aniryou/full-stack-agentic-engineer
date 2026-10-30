@@ -130,14 +130,14 @@ Second, a single **residual stream** goes through the full network. Each block r
 
 **Normalization** (LayerNorm, or now more frequently RMSNorm) scales the vector of each token to unit scale before each sub-layer. It keeps activations in a numerically comfortable range. It also makes training much less sensitive to the learning rate.
 
-The original paper normalized *after* the residual addition ("post-norm"). Almost all designs after GPT-2 normalize *before* the sub-layer ("pre-norm"). Pre-norm trains stably at large scale without a delicate warmup. This is one of the few architectural changes after 2017 that everyone adopted.
+The original paper normalized *after* the residual addition ("post-norm"). Almost all designs from GPT-2 on normalize *before* the sub-layer ("pre-norm"). Pre-norm trains stably at large scale without a delicate warmup. This is one of the few architectural changes after 2017 that everyone adopted.
 
 ### 3.4 The mental model
 
 A Transformer block does exactly two things:
 
 1. **Attention moves information between positions.** It is the only place where tokens interact. It reads from the residual streams of other tokens and writes into the stream of this token.
-2. **The MLP processes information within a position.** It changes the contents of the stream of this token. It does not look at any other stream.
+2. **The MLP processes information in one position.** It changes the contents of the stream of this token. It does not look at any other stream.
 
 If you put $L$ blocks in a stack, each token gets $L$ rounds of "gather context, then think about it." That is the architecture. The rest of this document tells how sequences go in and out. It also tells what occurs when you train and run the model.
 
@@ -167,7 +167,7 @@ Nothing in Sections 2 or 3 depends on the token order. Attention is a weighted a
 
 Thus, the design must inject the position. There are three generations of solutions:
 
-- **Sinusoidal encodings** (original paper): this method adds a fixed vector of sines and cosines at different frequencies to the embedding of each token. The vector is unique for each position, and almost the same for positions that are near.
+- **Sinusoidal encodings** (original paper): this method adds a fixed vector of sines and cosines at different frequencies to the embedding of each token. The vector is unique for each position, and it is like the vectors of positions that are near.
 - **Learned absolute positions** (GPT-2, BERT): an embedding table with the position as its index. This method is simple and effective, but it has no definition after the training length.
 - **Rotary position embeddings, RoPE** (Su et al., 2021, and used by Llama and most current open models): this method adds nothing to the embedding. It rotates each query and key vector through an angle proportional to its position. The method sets the angles so that $q \cdot k$ depends only on the *relative* distance between the two tokens. What attention uses is "how far apart", not "where in absolute terms". When the method encodes the relative distance directly, it extrapolates better to longer contexts (with some frequency-scaling tricks).
 
@@ -214,7 +214,7 @@ Three quantities set what a pretrained model can do:
 - **$D$**, the training tokens.
 - **$C$**, the compute. **$C \approx 6 \cdot N \cdot D$** FLOPs is a good approximation of it: 2 per parameter per token for the forward pass, and 4 for the backward pass.
 
-Scaling laws (Kaplan et al., 2020, and Hoffmann et al., "Chinchilla", 2022) showed two things. First, the loss decreases as a smooth power law in each quantity. Second, for a fixed compute budget, one balance is the best. This balance is approximately 20 tokens per parameter, if the training cost is the only thing that is important to you.
+Scaling laws (Kaplan et al., 2020, and Hoffmann et al., "Chinchilla", 2022) showed two things. First, the loss decreases as a smooth power law in each quantity. Second, for a fixed compute budget, there is a best balance. This balance is approximately 20 tokens per parameter, if the training cost is the only thing that is important to you.
 
 In practice, the training of models now goes far past that point (Llama-3 8B on ~15 trillion tokens, almost 2,000 per parameter). The reason is that a smaller model with longer training costs less to *serve*. Also, over the life of a model, the cost to serve it is the largest cost.
 
@@ -367,7 +367,7 @@ The architecture does not contain this circuit, but training finds it. Much of w
 
 **Tokens are the unit of everything.** Cost, context, latency and a complete class of failure modes all have tokens as their unit. Learn to think in tokens.
 
-**The architecture is rarely the interesting variable.** In most applied work, data, post-training, prompts, retrieval and the decoding strategy have the largest effect on the outcomes. Knowledge of the architecture is important because it tells you what is *possible* and what things *cost*, not because you will change it.
+**The architecture is rarely the important variable.** In most applied work, data, post-training, prompts, retrieval and the decoding strategy have the largest effect on the outcomes. Knowledge of the architecture is important because it tells you what is *possible* and what things *cost*, not because you will change it.
 
 ## 11. A working implementation
 

@@ -20,7 +20,8 @@
 # claim*. Thus a check of them is a review aid, not enforcement. The NetworkPolicy is the enforcement.
 #
 # Side effects mean at-least-once delivery. Thus an **idempotency key** lets a redelivered step return the stored
-# result. The step does not run two times. The key uses the recipe of the scaling primer: turn, step, call index, args hash.
+# result. The step does not run two times. The key uses the recipe of the scaling primer: turn, step, call index, args
+# hash.
 #
 # Primer: `../PRIMER.md` §3 (the execution contract), §5 (sandboxes on Kubernetes). This notebook uses two things
 # again: the idempotency recipe of the scaling primer

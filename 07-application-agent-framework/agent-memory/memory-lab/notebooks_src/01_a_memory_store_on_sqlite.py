@@ -304,9 +304,10 @@ print("removed", WORK)
 # the deletion policy."
 #
 # **Drill 1.** *Why not HNSW for memory?* The partition of a user holds hundreds to thousands of records. An
-# exact scan takes milliseconds and never misses a record. HNSW is worth its cost at tenant scale. Also,
-# pgvector filters *after* the index scan (about 4 rows with ef_search 40 at 10% selectivity), thus filtered
-# ANN needs partitions or `hnsw.iterative_scan`.
+# exact scan takes milliseconds and never misses a record. HNSW is worth its cost at tenant scale.
+#
+# Also, pgvector filters *after* the index scan, thus filtered ANN needs partitions or `hnsw.iterative_scan`.
+# With ef_search 40 at 10% selectivity, the filtered scan gives about 4 rows.
 #
 # **Drill 2.** *A test shows that search no longer returns the deleted memory. Are we compliant?* No,
 # retrieval is one surface. The text stays in the FTS index segments and in the WAL until a merge/secure-delete

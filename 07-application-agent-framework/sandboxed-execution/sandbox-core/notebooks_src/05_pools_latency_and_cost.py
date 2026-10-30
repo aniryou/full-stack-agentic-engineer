@@ -18,9 +18,9 @@
 #
 # In a **replace-after-use** warm pool, each sandbox runs one execution, and then the pool destroys it. A replacement
 # starts in the background and becomes warm. Thus every execution holds a slot for its run *and* for the cold start of
-# its replacement. **Little's law** gives the *mean* occupancy λ·(t_exec + t_cold). This mean is the offered load: a floor,
-# not a size, because with exactly that many slots the queue never clears. **Erlang C** on that load turns a target
-# "fraction that waits for a warm sandbox" into a slot count.
+# its replacement. **Little's law** gives the *mean* occupancy λ·(t_exec + t_cold). This mean is the offered load: a
+# floor, not a size, because with exactly that many slots the queue never clears. **Erlang C** on that load turns a
+# target "fraction that waits for a warm sandbox" into a slot count.
 #
 # The arrival rate ties to the scaling primer: 27.1 tool calls/s at peak. If a fifth of them are `run_code`,
 # λ ≈ 5.4/s.
@@ -76,8 +76,8 @@ for name, cold, src in levels:
 # %% [markdown]
 # ## Worked example 2 — Little's law gives the mean, not the pool (FACTS §12)
 # Let $\lambda = 5$ executions/s, with a run of 2 s each and a cold start of 3 s. On average, 10 sandboxes are busy
-# and 15 are replacements in warm-up. That gives **25 slots occupied on average**. This mean is the offered load $a$ in
-# Erlangs. But a pool of exactly 25 slots has nothing spare for the moments when many arrivals come at the same time.
+# and 15 are replacements in warm-up. The sum is **25 slots occupied on average**. This mean is the offered load $a$
+# in Erlangs. But a pool of exactly 25 slots has nothing spare for the moments when many arrivals come at the same time.
 
 # %%
 lam, t_exec, t_cold = 5, 2, 3
@@ -106,8 +106,8 @@ print("reuse pool (a = 10): slots for P(wait) <= 0.2:",
 # ## Worked example 4 — the simulator checks it (SIMULATED)
 # This is a discrete-event run of a pool of constant size, in three modes:
 #
-# - **replace_after_use** at 25 slots is unstable. At 31, it mostly serves warm. That is slightly better than
-#   Erlang C, because a constant cold start varies less than the exponential that the formula assumes.
+# - **replace_after_use** at 25 slots is unstable. At 31, it mostly serves warm. This result is slightly better
+#   than Erlang C, because a constant cold start varies less than the exponential that the formula assumes.
 # - **cold_on_demand** has no pool, and every request starts its own sandbox from cold. It pays the 3 s cold start
 #   on every request, whatever the slot count.
 # - **reuse** at 12 sits near M/M/c.
@@ -199,8 +199,8 @@ print("✅ Erlang C matches, including at a = 162.6 Erlangs where a**c / c! woul
 
 # %% [markdown]
 # ## Exercise 5.3 — choose an isolation level for a latency budget
-# A tool must return in a **2-second** p95 and start from cold each time (no warm pool). From the levels
-# table, set `viable` to the set of level names whose cold start alone fits inside 1 s. That leaves ~1 s for the
+# A tool must return in not more than a **2-second** p95 and start from cold each time (no warm pool). From the
+# levels table, set `viable` to the set of level names whose cold start alone fits inside 1 s. That leaves ~1 s for the
 # code. The point: on a busy GKE cluster, pod-per-execution cold starts go over the budget. You need a warm pool or
 # a lighter boundary.
 

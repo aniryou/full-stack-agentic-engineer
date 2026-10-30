@@ -37,7 +37,7 @@ with a check that prints ✅, and it ends with "In a design review". The finishe
 
 | Path | You will be able to… | Primer | Time | Tier |
 |---|---|---|---|---|
-| [`memory-core`](memory-core/) `01_records_and_the_write_path` | Name the kinds of memory and their lifetimes. Write a typed record. Gate writes by source, confidence and screening. Merge (ADD / UPDATE / NOOP) and keep superseded facts. Make a retried turn write one time only. | §1, §2 | 1 h | T0 |
+| [`memory-core`](memory-core/) `01_records_and_the_write_path` | Name the kinds of memory and their lifetimes. Write a typed record. Control writes by source, confidence and screening. Merge (ADD / UPDATE / NOOP) and keep superseded facts. Make a retried turn write one time only. | §1, §2 | 1 h | T0 |
 | `02_retrieval_and_the_planted_facts_harness` | Score by similarity, recency and importance in both generative-agents forms. Pack a token budget. Build a planted-facts benchmark in the task shapes of LongMemEval and LoCoMo. Read accuracy with a Wilson interval, recall, stale answers and abstention. Find the knee. | §3, §4 | 1.5 h | T0 |
 | `03_the_context_budget_and_the_prefix_cache` | Predict the prefix-cache hits of three memory layouts from the block rules of vLLM. Change lost hits into TTFT (simulated) and dollars per turn. Calculate the price of extraction. Salt the cache for each tenant. | §5 | 1 h | T0 |
 | `04_consolidation_forgetting_and_deletion` | Consolidate episodes into facts with precedence and supersession as a durable job (run id, lease, checkpoints, a crash and a resume). Forget by decay, TTL and caps. Make sure that a deletion reaches every copy. | §7 | 1.5 h | T0 |
@@ -69,8 +69,8 @@ print([r.value for r in retrieve(store, alice, "What is the user's home city?", 
 ## How it fits
 
 Read the [agent-core loop and tool contracts](../agent-fundamentals/agent-core/) (07.1) first. This topic replaces
-the baseline of agent-core, "memory is the transcript". This topic reuses the material in the list that follows, and cites it section by
-section:
+the baseline of agent-core, "memory is the transcript". This topic reuses the material in the list that follows, and
+cites it section by section:
 
 - The [agent platform lab](../agent-fundamentals/gcp-agent-platform-lab/) (07.2: sessions, context layout, evals,
   injection defences).
@@ -106,7 +106,7 @@ path, see [`CURRICULUM.md`](../../CURRICULUM.md).
     PRIMER §4 and §6 quantify each advantage. The comparison that decides a design uses a real model (T1).
 
 - **The benchmarks are shapes, not data.** The harness copies the task types of LongMemEval and LoCoMo. It bundles
-  nothing and downloads nothing. The LoCoMo data is CC BY-NC 4.0.
+  nothing and downloads nothing. That includes the LoCoMo data, whose licence is CC BY-NC 4.0.
 
 - **Deletion on disk is the job of the lab.** The core shows every surface that a deletion must reach. The lab proves
   the deletion on a real SQLite file. On that file, FTS5 and WAL keep deleted text until you make them release it.

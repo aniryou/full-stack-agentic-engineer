@@ -9,7 +9,7 @@ T4 second.
 ## Start here
 
 1. Run `python3 -m pip install -e ".[dev]" && python3 -m distillab tinylm`. With torch, this takes about 90
-   seconds. The CPU build of torch is sufficient. It trains a 101K-parameter teacher and four 26K-parameter students on
+   seconds. The CPU build of torch is sufficient. The command trains a 101K-parameter teacher and four 26K-parameter students on
    the same budget. Then it prints a table of what each one learned. Without torch, it prints a recorded run.
 2. Open [`notebooks/01_kd_on_a_tiny_transformer.ipynb`](notebooks/01_kd_on_a_tiny_transformer.ipynb). It explains
    the same run. You write Hinton's loss and the divergence of GKD yourself. The notebook also shows what a verifier

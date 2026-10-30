@@ -10,9 +10,9 @@
 # **egress proxy** inside the trust boundary. The proxy compares the host with an **allowlist**. For the hosts on the
 # allowlist, it **injects the credential** on the way out.
 #
-# The secret lives only in the proxy. This is the same "gateway path" that the identity primer describes, one layer
-# down. On that path, the agent never sees the raw credential. This design is also the header-injection pattern that managed services like
-# E2B use on the host side.
+# The secret lives only in the proxy. This proxy design is the same "gateway path" that the identity primer
+# describes, one layer down. On that path, the agent never sees the raw credential. The design is also the
+# header-injection pattern that managed services like E2B use on the host side.
 #
 # To keep the secret there, the proxy must also do these things:
 #
@@ -150,7 +150,7 @@ print("dnsPolicy:", pod["dnsPolicy"], "| hostAliases:", pod["hostAliases"])
 # same model can declare nothing and open a socket.
 #
 # The process sandbox has no network control, so that socket **leaks**, and the audit log records an ordinary `allow`.
-# That is the full case for the network layer.
+# This leak is the full case for the network layer.
 
 # %%
 from sandboxcore import SCENARIO_OUTCOMES, LoopbackTrap, SandboxAgent, injection_scenarios
