@@ -27,7 +27,7 @@ Do Parts A–D first. All of the answers are in Part E at the end. Thus, do not 
 
 Give each answer in one or two sentences. You do not need arithmetic.
 
-**A1.** A CPU and a GPU must both wait ~500 cycles for a DRAM access. Describe how each one uses that wait. Then say on which hardware each one thus spends its transistor budget.
+**A1.** A CPU and a GPU must both wait ~500 cycles for a DRAM access. Describe how each one uses that wait. Then say, from this, on which hardware each one spends its transistor budget.
 
 **A2.** What is a warp? Why is the warp the unit that is really important, and not the thread?
 
@@ -225,7 +225,7 @@ The GPU *accepts* the wait and hides it. It keeps thousands of other threads res
 
 **A6.** BF16 keeps the 8-bit exponent of FP32 and gives up mantissa bits. FP16 does the opposite. Training is much more sensitive to dynamic range than to precision (gradients underflow). Thus, training in BF16 is stable without loss scaling.
 
-**A7.** TMA is a dedicated DMA engine. One thread issues a descriptor, and the hardware moves a full multidimensional tile. The hardware also generates the addresses and handles the boundaries. TMA removes the index arithmetic and the register pressure that, before TMA, were the largest part of the inner loop. The warp is then free to do only one thing: issue Tensor Core work.
+**A7.** TMA is a dedicated DMA engine. One thread issues a descriptor, and the hardware moves the multidimensional tile as one unit. The hardware also generates the addresses and handles the boundaries. TMA removes the index arithmetic and the register pressure that, before TMA, were the largest part of the inner loop. The warp is then free to do only one thing: issue Tensor Core work.
 
 **A8.** Scale-up makes the NVLink domain larger. In that domain, each GPU can use the memory of the other GPUs as almost local (1.8 TB/s). Scale-out adds nodes over links (InfiniBand or Ethernet) that are approximately an order of magnitude slower. Tensor parallelism needs an all-reduce *inside every layer*, so it needs scale-up. If you put it across a scale-out boundary, communication becomes the largest cost.
 
@@ -362,7 +362,7 @@ Also, over A100, H100 gained approximately 3× the FLOPS but only ~1.7× the ban
 
 "Percent of peak" tells you almost nothing here, because peak is a dense-matmul number. Compare the kernel with achieved bandwidth and with a CPU baseline instead.
 
-**C6.** Consumer cards have had no NVLink since the 40-series. Thus, your shards communicate over PCIe. Tensor parallelism needs an all-reduce inside every layer, and B8 shows the cost of that on PCIe. The alternatives are:
+**C6.** Consumer cards of the 40-series and later have no NVLink. Thus, your shards communicate over PCIe. Tensor parallelism needs an all-reduce inside every layer, and B8 shows the cost of that on PCIe. The alternatives are:
 
 - (i) Do not shard the model at all, because it fits. Run one GPU per model. Use the other three for concurrent replicas.
 - (ii) If you later need a model that does not fit, use pipeline parallelism. It is point-to-point and needs much less communication. Or quantise the model until it fits again.
@@ -389,7 +389,7 @@ These things *do* help you:
 - TMA and async pipelines, which help any tiled kernel.
 - The improved tools, because Triton and cuTile decrease the cost to write the custom kernels that irregular workloads need anyway.
 
-The progress helps the GNN half even less, because the GNN half is gather/scatter-bound and, because of its structure, cannot use Tensor Cores (C5).
+The progress helps the GNN half even less, because the GNN half is gather/scatter-bound and its structure does not let it use Tensor Cores (C5).
 
 AMD's split is the direct result. From MI400, AMD ships MI450X for AI, with the FP32/FP64 logic removed. It also ships MI430X for HPC, with FP4/FP8/BF16 removed. Each chip gets back the die area of the logic that AMD removed.
 

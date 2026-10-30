@@ -63,13 +63,13 @@ deploy/gpu-vm/down.sh                          # uninstall k3s - then STOP THE V
 ## What to look at
 
 * **Capacity comes from the plugin, not a patch.** Run `kubectl get node -o yaml`. The `nvidia.com/gpu` value
-  in `capacity`/`allocatable` is equal to the number of GPUs that `nvidia-smi` lists. With time-slicing, it is
+  in `capacity`/`allocatable` is equal to the number of GPUs that `nvidia-smi` lists. With time-slicing, the value is
   `GPUs x replicas` (`k8sgpu.gpuvm.time_sliced_allocatable`). The README of the plugin gives this example:
   8 GPUs x 10 = 80.
 * **Labels come from GFD.** GFD writes `nvidia.com/gpu.product`, `.memory` (MiB), `.count`, `.replicas` and
   `nvidia.com/cuda.driver-version.*`. These labels are the vocabulary that a mixed fleet uses to select nodes.
   GKE uses `cloud.google.com/gke-accelerator` for the same purpose.
-* **Time-slicing is sharing without isolation.** On a 1-GPU VM, all four pods print the same GPU UUID, and
+* **Time-slicing shares a GPU without isolation.** On a 1-GPU VM, all four pods print the same GPU UUID, and
   nothing limits the memory of one pod. With several GPUs, the plugin gives replicas from the least-loaded GPUs first,
   so pods spread over the GPUs before two pods share a GPU. Thus, on an idle multi-GPU node, a container that
   requests `nvidia.com/gpu: 2` gets two different GPUs. But when the node is busy, the container can get two

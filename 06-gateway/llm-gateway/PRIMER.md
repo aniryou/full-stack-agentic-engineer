@@ -48,21 +48,23 @@ pool, the 05 router selects the replica and the engine batches the requests, not
 
 ```mermaid
 flowchart TB
-    APPS(["apps, agents and tenants, each with a virtual key"]) -- "an alias, over one API: chat completions and SSE" --> GW
+    APPS(["apps, agents and tenants"]) -- "an alias, over one API" --> GW
     subgraph GW["the gateway"]
-        direction TB
-        IF["if the request runs:<br/>key, budget, token limits, guardrail"] --> WHICH["which target serves it:<br/>the alias resolves to a fallback chain"]
+        direction LR
+        IF["if the request runs"] --> WHICH["which target serves it"]
     end
-    GW -- "provider keys,<br/>injected on the way out" --> HOSTED["hosted providers:<br/>OpenAI, Anthropic, Gemini"]
+    GW -- "provider keys,<br/>injected" --> HOSTED["hosted providers:<br/>OpenAI, Anthropic,<br/>Gemini"]
     GW -- "one target,<br/>one breaker" --> POOL
     subgraph POOL["a self-hosted pool"]
         direction TB
-        RTR["the 05 router selects the replica"] --> ENG["the 04 engine batches the requests"]
+        RTR["the 05 router<br/>selects the replica"] --> ENG["the 04 engine<br/>batches requests"]
     end
     GW -. "reads and writes" .-> STATE
     subgraph STATE["state outside the process"]
         direction TB
-        STORE[("shared store:<br/>limits and caches")] ~~~ SECRETS[("secret manager:<br/>provider keys")] ~~~ LEDGER[("ledger rows<br/>and spans")]
+        STORE[("shared store:<br/>limits, caches")]
+        SECRETS[("secret manager:<br/>provider keys")]
+        LEDGER[("ledger rows<br/>and spans")]
     end
 ```
 
@@ -174,14 +176,14 @@ metering correctly:
 
 ```mermaid
 flowchart TB
-    UP["upstream stream: OpenAI<br/>or vLLM chunks, Anthropic<br/>events, Gemini parts"] --> N["providers.normalize_stream():<br/>canonical chunks"]
-    N --> ACC["api.StreamAccumulator:<br/>content concatenated,<br/>tool-call deltas by index,<br/>usage and finish reason"]
-    ACC -- "each chunk,<br/>as it arrives" --> CL["client stream:<br/>chunks, then [DONE]"]
-    ACC -- "the usage chunk,<br/>choices: []" --> ASK{"did the client<br/>ask for usage?"}
+    UP["upstream stream"] --> N["providers.normalize_stream()"]
+    N --> ACC["api.StreamAccumulator"]
+    ACC -- "each chunk" --> CL["client stream:<br/>chunks, then [DONE]"]
+    ACC -- "the usage chunk" --> ASK{"client asked<br/>for usage?"}
     ASK -- "yes" --> CL
-    ASK -- "no" --> STRIP["stripped, kept for<br/>the ledger (§5)"]
-    ACC -- "an error chunk<br/>inside a 200" --> FB{"before the<br/>first byte?"}
-    FB -- "yes" --> FT["fall through to the<br/>next target (§2)"]
+    ASK -- "no" --> STRIP["stripped, kept<br/>for the ledger"]
+    ACC -- "an error chunk in a 200" --> FB{"before the<br/>first byte?"}
+    FB -- "yes" --> FT["fall through to<br/>the next target"]
     FB -- "no" --> EC["error chunk, then<br/>[DONE], to the client"]
 ```
 
@@ -271,23 +273,27 @@ chat-eu   → [google/gemini-3.5-flash (europe-west4), self/lab/llm (europe-west
 ### 2.2 Filters and policies
 
 ```mermaid
-flowchart TB
-    AL(["an alias (chat or chat-eu)<br/>and the tenant's tier"]) --> CH["the chain: ordered (provider, model, region) targets"]
-    CH --> F["filters: tools and reasoning needs, prompt + output<br/>within the context window, the tenant's residency"]
-    F --> P["a policy orders the targets that passed:<br/>ordered, cheapest, ewma_ttft or canary"]
-    P --> NEXT{"a target left?"}
-    NEXT -- "none" --> NONE["every target failed: 503"]
-    NEXT -- "the next one" --> B{"its breaker<br/>open?"}
-    B -- "yes: skip it, no wait" --> NEXT
-    B -- "no, or one probe<br/>after the cooldown" --> CALL["call the provider"]
-    CALL -- "200 and the first byte" --> OK["relay the stream (§1.4):<br/>no fallback after<br/>the first byte"]
-    CALL -- "429, 5xx, 529, 408,<br/>a timeout, 400<br/>context_length_exceeded" --> NEXT
-    CALL -- "400, 401, 403, 404,<br/>a content-policy refusal" --> STOP["an error to the client:<br/>no fall-through"]
+flowchart LR
+    AL(["an alias and<br/>the tenant's tier"]) --> CH["the chain: ordered<br/>(provider, model,<br/>region) targets"]
+    CH --> F["filters: needs,<br/>context window,<br/>residency"]
+    F --> P["a policy orders<br/>the targets<br/>that passed"]
 ```
 
-*The filters of §2.2 keep the targets that can serve the request, and a policy orders them. The breaker of §2.4
-skips a target that is down, with no wait. After a call, only a failure that falls through (§2.3) moves the walk to
-the next target, and only before the first byte.*
+*The filters of §2.2 keep the targets that can serve the request, and a policy orders them.*
+
+```mermaid
+flowchart LR
+    NEXT{"a target<br/>left?"} -- "none" --> NONE["every target<br/>failed: 503"]
+    NEXT -- "the next one" --> B{"its breaker<br/>open?"}
+    B -- "yes: skip it" --> NEXT
+    B -- "no, or<br/>one probe" --> CALL["call the<br/>provider"]
+    CALL -- "200, first byte" --> OK["relay the<br/>stream"]
+    CALL -- "a failure that<br/>falls through" --> NEXT
+    CALL -- "a failure that must<br/>not fall through" --> STOP["an error to<br/>the client"]
+```
+
+*The walk takes the targets in that order. The breaker of §2.4 skips a target that is down, with no wait. After a
+call, only a failure that falls through (§2.3) moves the walk to the next target, and only before the first byte.*
 
 `Router.candidates()` first **filters** the targets. The filters compare these items:
 
@@ -481,21 +487,7 @@ entities must match (`cache.entities()`). The [embeddings primer
 §17](../../07-application-agent-framework/retrieval-rag/vector-databases-primer.md) warn about exactly these false
 positives.
 
-```mermaid
-flowchart TB
-    REQ(["a request on a route<br/>that declares<br/>metadata.cache_class"]) --> GATE{"class on the allowlist,<br/>and no tools?"}
-    GATE -- "yes: exact cache" --> EX["SHA-256 of the tenant<br/>and every field that<br/>changes the answer"]
-    EX -- "the same key" --> HITX["serve the stored answer"]
-    EX -- "no such key" --> MODEL["call the model"]
-    GATE -- "no" --> NOSTORE["call the model,<br/>store nothing"]
-    GATE -- "yes: semantic cache" --> EMB["embed the query, find<br/>the nearest cached query<br/>in the tenant's namespace"]
-    EMB --> TAU{"similarity at<br/>or above τ?"}
-    TAU -- "no" --> MODEL
-    TAU -- "yes" --> ENT{"entities equal?<br/>numbers, dates, codes"}
-    ENT -- "no" --> MODEL
-    ENT -- "yes" --> HITS["serve the answer of<br/>the nearest cached query"]
-    MODEL -- "finish_reason: stop" --> STORE["store the answer with a TTL<br/>in the tenant's namespace"]
-```
+![The class gate sends a request to no cache, the exact cache or the semantic cache, and a miss calls the model.](figures/response-cache-lookup.svg)
 
 *The route declares the class, and the key or the namespace holds the tenant. A semantic hit must also pass the
 entity guard before the gateway serves it. The gateway stores only complete answers, with a TTL (§3.2, §3.4).*
@@ -598,19 +590,30 @@ sequenceDiagram
         G-->>C: 429, Retry-After
     else admitted
         G->>P: forward with the output cap, include_usage
-        loop each chunk
-            P-->>G: chunk
-            G->>L: debit(): reserved to used
-            G-->>C: chunk
-        end
-        P-->>G: the usage chunk, then [DONE]
-        G->>L: debit the rest of the usage, then<br/>finish() releases the unused reservation
-        G-->>C: the usage chunk if asked,<br/>then [DONE]
     end
 ```
 
-*A token limit makes three moves on one streamed request. The limiter holds a reservation at admission, moves
-tokens from reserved to used as chunks arrive, and releases the rest at the end (`ratelimit.ReserveLimiter`).*
+*A token limit makes three moves on one streamed request. At admission, the limiter holds a reservation, or the
+gateway refuses the request with a 429 (`ratelimit.ReserveLimiter`).*
+
+```mermaid
+sequenceDiagram
+    participant C as client
+    participant G as gateway
+    participant L as ReserveLimiter
+    participant P as provider
+    loop each chunk
+        P-->>G: chunk
+        G->>L: debit(): reserved to used
+        G-->>C: chunk
+    end
+    P-->>G: the usage chunk, then [DONE]
+    G->>L: debit the rest of the usage, then<br/>finish() releases the unused reservation
+    G-->>C: the usage chunk if asked,<br/>then [DONE]
+```
+
+*Then the limiter moves tokens from reserved to used as chunks arrive. At the end, it debits the rest of the usage
+and releases the unused reservation.*
 
 Suppose that every reservation is a true upper bound: the gateway enforces the output cap that it reserved, and that
 cap is the hard cap. Then $\text{used} + \text{reserved}$ never goes above the limit. When the model processes tokens,
@@ -704,15 +707,15 @@ prompt / completion / cached / reasoning tokens, the cost, an `estimated` flag a
 has the TTFT, the duration and the trace id.
 
 ```mermaid
-flowchart TB
-    U["the provider's usage: prompt, completion,<br/>cached and reasoning tokens"] --> PR["metering.price_call()<br/>with the prices of providers.CATALOGUE"]
-    EST["a cut stream: an estimate from the<br/>relayed deltas, marked estimated"] --> PR
-    PR --> ROW["one LedgerRow per request: tenant, key id,<br/>model, tokens, cost, status, trace id"]
-    ROW --> LED[("Ledger: every row,<br/>billing-grade")]
-    LED --> CB["chargeback: hosted spend summed per tenant,<br/>a pool's bill divided by tokens or GPU-seconds"]
-    LED --> REC["Ledger.reconcile() against the provider's<br/>usage export, 1 % tolerance, daily"]
-    ROW -. "the same trace id" .-> TR["otel.Tracer: one SERVER span per request,<br/>one CLIENT span per target tried"]
-    TR --> SP[("OTLP/JSON spans: a sample<br/>of evidence, not the bill")]
+flowchart LR
+    U["the provider's<br/>usage"] --> PR["metering.<br/>price_call()"]
+    EST["a cut stream:<br/>an estimate"] --> PR
+    PR --> ROW["one LedgerRow<br/>per request"]
+    ROW --> LED[("Ledger:<br/>billing-grade")]
+    LED --> CB["chargeback<br/>per tenant"]
+    LED --> REC["Ledger.<br/>reconcile()"]
+    ROW -. "the same<br/>trace id" .-> TR["otel.Tracer"]
+    TR --> SP[("OTLP/JSON<br/>spans")]
 ```
 
 *The gateway puts a price on the provider's usage and writes one ledger row per request. A cut stream gets a
@@ -1076,12 +1079,22 @@ sequenceDiagram
     participant A as agent
     participant G as gateway (MCPClient)
     participant S as MCP server
-    participant AS as authorization server
     A->>G: call close_ticket for a<br/>principal, no token
     G->>S: POST the tool: the stored<br/>token, a DPoP proof
     S-->>G: 401 use_dpop_nonce,<br/>DPoP-Nonce
     G->>S: the same call, the proof<br/>carries the nonce
     S-->>G: 403 insufficient_scope,<br/>scope="…"
+```
+
+*The gateway makes one tool call for a principal. The MCP server demands its DPoP nonce, then refuses the scope
+(§8.4, §8.5).*
+
+```mermaid
+sequenceDiagram
+    participant A as agent
+    participant G as gateway (MCPClient)
+    participant S as MCP server
+    participant AS as authorization server
     G->>AS: authorize again: PKCE S256, resource,<br/>scope = the held scopes plus the demanded one
     AS-->>G: code and iss
     G->>AS: token: code, verifier, resource, DPoP proof
@@ -1092,9 +1105,8 @@ sequenceDiagram
     G-->>A: result, and never a token
 ```
 
-*The gateway makes one tool call for a principal, with a DPoP nonce and a step-up. The MCP server demands its
-nonce, then refuses the scope, so the gateway authorizes the principal again with the union of the scopes. The
-agent never holds a token (§8.1, §8.3 to §8.5).*
+*The gateway authorizes the principal again with the union of the scopes, stores the new token and calls the tool
+again. The agent never holds a token (§8.1, §8.3).*
 
 ### 8.5 DPoP nonces
 

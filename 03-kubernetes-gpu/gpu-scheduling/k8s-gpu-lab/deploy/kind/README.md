@@ -52,13 +52,13 @@ kubectl patch node gpu-lab-worker2 --subresource=status --type=json \
 `nvidia.com/gpu` is an *extended resource*. For the scheduler, it is only an integer per node. The kubelet keeps
 capacity that it did not set, and it calculates allocatable again from that capacity. At admission, the kubelet
 asks the device manager only about resources that a device plugin registered. Thus pods that request the fake
-GPUs start normally, but with no `/dev/nvidia*` (each lab pod prints that).
+GPUs start normally, but with no `/dev/nvidia*`. Each lab pod prints that it has no `/dev/nvidia*`.
 
 These parts are real on this cluster: filtering and scoring, taints and tolerations, Kueue admission, quota,
 cohorts, preemption, TAS placement, JobSet/LWS gang lifecycles, events. These parts are not real: devices,
 drivers, NVLink, anything CUDA. For device-level behaviour, see layer 02. For DRA with simulated devices, see the
 upstream [dra-example-driver](https://github.com/kubernetes-sigs/dra-example-driver). Its kind demo uses the same
-`resource.k8s.io/v1` API that the lab's `manifests.resource_claim_template()` emits.
+`resource.k8s.io/v1` API that the lab's `manifests.resource_claim_template()` returns.
 
 ## The cluster and the queues
 
@@ -106,6 +106,6 @@ namespaces. The queues stay.
 * **`failed calling webhook ... kueue`** immediately after the install: the webhook becomes ready later than its
   Deployment. `up.sh` retries. You can also wait 30 s and apply again.
 * **Image pulls fail / rate-limited**: run `docker pull busybox:1.38.0 && kind load docker-image busybox:1.38.0 --name gpu-lab`.
-* **A scenario differs from the prediction**: wait a minute. Then run `python3 -m k8sgpu kind observe <s>`.
-  TAS requeues freed capacity in ~10 s batches. If the result still differs, the printed Workload condition
+* **A scenario is different from the prediction**: wait a minute. Then run `python3 -m k8sgpu kind observe <s>`.
+  TAS requeues freed capacity in ~10 s batches. If the result is still different, the printed Workload condition
   tells why. In that case, you found something that the predictor does not model.

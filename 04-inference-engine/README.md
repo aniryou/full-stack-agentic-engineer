@@ -1,6 +1,6 @@
 # 04 · Inference engine
 
-Understand what one engine instance does between "a request arrived" and "tokens are streaming out". After this
+Find out what one engine instance does between "a request arrived" and "tokens are streaming out". After this
 layer, you can do these things:
 
 - Calculate the size of a model's KV cache before you pay for a GPU.
@@ -35,8 +35,8 @@ approximate and include the exercises.
 | [`flash-attention/`](flash-attention/flash-attention-primer.md) | explain tiling and online softmax from zero ([primer](flash-attention/flash-attention-primer.md)), and give the reasons for the selection of a kernel or a backend ([deep dive](flash-attention/flash-attention-deep-dive.md)). These reasons come from exact byte counts, the FA2/FA3/FA4 changes, decode kernels, paged KV and a Triton forward pass. `fa_calculators.py` calculates every number (49 tests). The topic has two notebooks: [practice](flash-attention/notebooks/flash_attention_practice.ipynb) (five exercises) and the [deep-dive companion](flash-attention/notebooks/flash_attention_deep_dive.ipynb). | ~1.5 h primer + practice, ~4 h deep dive (rough) | T0 (T1 to measure kernel times) |
 | [`kernel-core/`](kernel-core/README.md) | show in code that a KV cache changes the cost but not the output. You can also show that block tables with refcounts and copy-on-write do not change attention, and that tiled online-softmax attention is exact. You can calculate every number of the three kernel primers again. The package is `kerncore`. It uses numpy, it has kv, paged and flash parts, and it imports fa_calculators.py. It has 51 tests. | ~2 h with the kv-cache notebooks | T0 |
 | [`serving-engine/`](serving-engine/README.md) | explain and simulate the engine itself. The subjects are the step loop, continuous batching, chunked prefill, KV management, prefix caching, sampling and structured output, speculative decoding, quantization, parallelism, LoRA and measurement. Then you can calculate the size of a real vLLM deployment, measure it and adjust it. The topic has a [PRIMER](serving-engine/PRIMER.md), [`mini-engine-core`](serving-engine/mini-engine-core/) (a numpy "nano-vLLM", 6 notebooks) and [`vllm-serving-lab`](serving-engine/vllm-serving-lab/). The lab has size calculations, a load generator, `/metrics`, a fake vLLM for T0, Cloud Run and GKE deploys, and 6 notebooks. | ~11 h primer + core, ~12 h lab | T0 to T1 (T2, T3 optional) |
-| [`quantization/`](quantization/README.md) | tell what INT4, FP8, NVFP4 or an FP8 KV cache gives a given model on a given GPU: decode speed, prefill speed or concurrency. You can also tell what each of them runs as on that GPU generation. You can make 4 bits accurate with GPTQ, AWQ or SmoothQuant. Then you can produce, serve and evaluate a real quantized checkpoint. The topic has a [PRIMER](quantization/PRIMER.md) (the deep dive behind serving-engine §8), [`quant-core`](quantization/quant-core/) and [`quant-lab`](quantization/quant-lab/). The core has numpy formats, GPTQ, AWQ, SmoothQuant, KV quantization and a per-GPU cost model. The core has 5 notebooks. The lab has llm-compressor checkpoints, FP16 against INT4 against FP8 in vLLM, lm-eval with error bars, FP8 KV and the NVFP4/MXFP4 layouts. It also has a bundled small model and a fake server for T0. The lab has 5 notebooks. | ~10 h primer + core, ~9 h lab | T0 to T1 (T3 optional) |
-| [`vllm-internals/`](vllm-internals/README.md) | read the source of vLLM along the path of a request. The path goes through the process split, the token-budget scheduler, and block-hash prefix caching with its eviction order. It also goes through the calculation of the KV pool size, the model runner, the backends and the flags. The topic has a [deep primer](vllm-internals/vllm-internals-primer.md), a [source map](vllm-internals/source-map.md) with a plan to read the source, and a [notebook](vllm-internals/notebooks/01_block_hashes_and_eviction.ipynb). The notebook makes a new implementation of the parts that vLLM does in a different way. | four sessions of ~2 h (about 8.5 h) + the notebook | T0 (T1 to observe it) |
+| [`quantization/`](quantization/README.md) | tell what INT4, FP8, NVFP4 or an FP8 KV cache gives a given model on a given GPU: decode speed, prefill speed or concurrency. You can also tell what each of them runs as on that GPU generation. You can make 4 bits accurate with GPTQ, AWQ or SmoothQuant. Then you can produce, serve and test a real quantized checkpoint. The topic has a [PRIMER](quantization/PRIMER.md) (the deep dive behind serving-engine §8), [`quant-core`](quantization/quant-core/) and [`quant-lab`](quantization/quant-lab/). The core has numpy formats, GPTQ, AWQ, SmoothQuant, KV quantization and a per-GPU cost model. The core has 5 notebooks. The lab has llm-compressor checkpoints, FP16 against INT4 against FP8 in vLLM, lm-eval with error bars, FP8 KV and the NVFP4/MXFP4 layouts. It also has a bundled small model and a fake server for T0. The lab has 5 notebooks. | ~10 h primer + core, ~9 h lab | T0 to T1 (T3 optional) |
+| [`vllm-internals/`](vllm-internals/README.md) | read the source of vLLM along the path of a request. The path goes through the process split, the token-budget scheduler, and block-hash prefix caching with its eviction order. It also goes through the calculation of the KV pool size, the model runner, the backends and the flags. The topic has a [deep primer](vllm-internals/vllm-internals-primer.md), a [source map](vllm-internals/source-map.md) with a plan to read the source, and a [notebook](vllm-internals/notebooks/01_block_hashes_and_eviction.ipynb). The notebook makes a new implementation of the parts that vLLM does in a different way. | four sessions of ~2 h (about 8.5 h) + the notebook | T0 (T1 to see it) |
 
 ## Start here
 
@@ -84,8 +84,8 @@ and TPOT). These two are sufficient for the kernel topics and for serving-engine
 
 The [curriculum's spiral](../CURRICULUM.md#31-why-this-order) visits this layer two times on purpose. The first visit
 is immediately after 00, for the concepts. The second visit is after layers 01 and 02, with a GPU. At that time, you
-need layer 01's [`roofline-and-fabric`](../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md) (why a decode step
-is a memory read). You need it for serving-engine §9–12, the measurements, quantization and the two deep dives.
+need layer 01's [`roofline-and-fabric`](../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md). This primer explains
+why a decode step is a memory read. You need it for serving-engine §9–12, the measurements, quantization and the two deep dives.
 
 Layer 02's [`cuda-and-nccl`](../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md) is between layer 01 and this layer. It
 covers CUDA Graphs and the all-reduces that tensor parallelism runs on. Layer 03's
@@ -106,7 +106,7 @@ replicas by prefix-cache affinity and load. It autoscales them and separates pre
 
 - Every latency that the mini engine, `quantcore.cost` and the labs' fake servers print is a **simulated** value from
   a roofline model. The numbers of the labs become measurements only against a real `vllm serve` (T1 and up). FP8
-  math needs an Ada or newer GPU (a free T4 runs INT4 and INT8 only). NVFP4 needs a rented Blackwell GPU.
+  math needs an Ada or newer GPU. A free T4 runs only INT4 and INT8. NVFP4 needs a rented Blackwell GPU.
 - The vLLM facts are those of v0.30.0 and of `main` at `5840d95` (September 2026). A fact that changes over time has
   the `(verify)` tag. Each primer ends with a dated verify list.
 

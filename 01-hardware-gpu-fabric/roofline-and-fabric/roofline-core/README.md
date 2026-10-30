@@ -18,9 +18,9 @@ The core has seven small standard-library modules and four fill-in notebooks. Th
 - failure rates,
 - the cost of a token.
 
-**Tier T0** (laptop, Colab CPU or CI). It needs no GPU and no network, and it is free. This is the *minimal* core of
-the topic. [`../PRIMER.md`](../PRIMER.md) explains the concepts. Each computed number that the primer quotes comes
-from this core, and `tests/test_primer_numbers.py` pins it. The *detailed* lab,
+**Tier T0** (laptop, Colab CPU or CI). It needs no GPU and no network, and it is free. This core is the *minimal*
+core of the topic. [`../PRIMER.md`](../PRIMER.md) explains the concepts. Each computed number that the primer quotes
+comes from this core, and `tests/test_primer_numbers.py` pins it. The *detailed* lab,
 [`../gpu-bench-lab/`](../gpu-bench-lab/), measures the same quantities on the hardware that you have.
 
 ## Start here

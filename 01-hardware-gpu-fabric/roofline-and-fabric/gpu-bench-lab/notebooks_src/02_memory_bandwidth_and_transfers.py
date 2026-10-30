@@ -7,8 +7,8 @@
 # hierarchy and why tiling/fusion win", §5 "Fabrics quantitatively" (the α-β model), in
 # [`../../PRIMER.md`](../../PRIMER.md).
 #
-# **Predicted first in** [roofline-core notebook 02](../../roofline-core/notebooks/02_llm_inference_on_the_roofline.ipynb)
-# (decode is a weight stream, and fusion removes passes, Ex 2.6). In this notebook, you measure the bandwidth that
+# **Predicted first in** [roofline-core notebook 02](../../roofline-core/notebooks/02_llm_inference_on_the_roofline.ipynb):
+# decode is a weight stream, and fusion removes passes (Ex 2.6). In this notebook, you measure the bandwidth that
 # those predictions divide by, and you explain the numbers that you get.
 #
 # ## The one-minute version
@@ -100,7 +100,7 @@ print("✅ STREAM counts 24 B per fp64 triad element; numpy's two-pass triad rea
 # %% [markdown]
 # ## 2 · STREAM on this machine
 #
-# The cell measures one thread first, then every usable core (on a GPU, one kernel already uses every SM). The
+# The cell measures one thread first, then every usable core. On a GPU, one kernel already uses every SM. The
 # **moved** columns divide the bytes that the code actually moved by the time. **STREAM convention** divides STREAM's
 # count by the time. The two are different only for numpy's two-pass triad.
 #
@@ -122,8 +122,8 @@ print(f"slanted roof (fastest single-pass kernel): {si(membw.peak(one + full).by
 #
 # A memory system is a pipeline: **bandwidth = bytes in flight ÷ latency**. DRAM latency is ~100 ns whatever you do.
 # Thus the only way to get more bandwidth is to have more requests in flight. One CPU core can track only ~10–20
-# cache-line misses at a time (plus what its prefetchers add). This limits a single thread to well below the memory
-# channels.
+# cache-line misses at a time, plus what its prefetchers add. This limit on misses in flight keeps a single thread
+# well below the memory channels.
 #
 # More threads put more misses in flight, until the channels saturate. A GPU takes this idea to its limit.
 
@@ -255,7 +255,7 @@ print(f"measured speedup {unfused.seconds() / fused.seconds():.2f}× (bound {spe
 # %% [markdown]
 # The measured speedup is less than $k$ because the fused version also has costs. Each block pays the per-call
 # overhead of numpy $k$ times. Also, its $k$ passes still stream the block through L1/L2, which is a faster memory,
-# but a memory. A compiled fused kernel keeps the intermediate in *registers* and pays neither cost. This is why it
+# but a memory. A compiled fused kernel keeps the intermediate in *registers* and pays neither cost. Thus it
 # gets much nearer to the bound. The next section measures both costs, and then gives a number for the gap.
 #
 # ## 6 · The cache ladder
@@ -363,17 +363,17 @@ for key, series in transfer.series(copies).items():
 # %% [markdown]
 # Read three things here.
 #
-# **Your fit against the library's.** Plain least squares minimises the absolute error. Thus the largest copies, thousands
+# **Your fit against the library's.** Plain least squares makes the absolute error as small as possible. Thus the largest copies, thousands
 # of times longer than the smallest, decide everything, and $\alpha$ comes out as noise (sometimes negative). The
 # library gives each point a weight of $1/t$. Thus the small sizes that set $\alpha$ count as much as the large sizes
 # that set $\beta$.
 #
-# **$\beta$ against STREAM copy.** A transfer counts each delivered byte one time. STREAM's copy counts the read and the
+# **$\beta$ against STREAM copy.** A transfer counts each byte one time, when it arrives. STREAM's copy counts the read and the
 # write. Thus a memcpy $\beta$ of 5 GB/s is the same memory traffic as a STREAM copy of 10 GB/s. Compare the
 # "STREAM-convention equivalent" with the one-thread copy row of section 2, not $\beta$ itself.
 #
-# **Model against measurement.** Each copy reads bytes that are not in cache (the op cycles through a pool 4× the last-level
-# cache), as a real transfer does. The α-β model assumes **one** bottleneck, and a CPU copy has several regimes. For example,
+# **Model against measurement.** Like a real transfer, each copy reads bytes that are not in cache: the op cycles
+# through a pool 4× the last-level cache. The α-β model assumes **one** bottleneck, and a CPU copy has several regimes. For example,
 # the `memcpy` of glibc changes to non-temporal stores when a copy is a large fraction of the last-level cache. This skips the
 # write-allocate read of section 4, so large copies can run *faster* than the fit. Over PCIe, the link is the
 # bottleneck at every size above a few KB, and the fit is much tighter.
@@ -453,7 +453,7 @@ else:
 # **Drills**
 #
 # 1. *Our 4 KB host-to-device copies of token IDs run at a few hundred MB/s on a 32 GB/s link. Bug?* No, they are
-#    $\alpha$-bound: with a wait for each copy, a latency of ~10 µs (illustrative) limits a 4 KB copy to
+#    $\alpha$-bound. If you wait for each copy, a latency of ~10 µs (illustrative) limits a 4 KB copy to
 #    ≤ 0.4 GB/s. Also, $n_{1/2}$ is hundreds of KB. Batch the copies. Keep the buffer pinned. Issue the copies
 #    asynchronously. Then consecutive copies overlap their fixed costs, and only the issue cost stays.
 # 2. *Why does the fusion of bias + GELU + residual make a memory-bound layer faster?* Each unfused op reads the activation

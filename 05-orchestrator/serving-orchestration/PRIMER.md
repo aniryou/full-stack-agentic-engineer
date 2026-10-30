@@ -277,7 +277,7 @@ flowchart LR
         SC["kv-cache-utilization-<br/>scorer × 2"] --> K1
     end
     E --> F2
-    subgraph B["optimized baseline:<br/>sticky until saturated"]
+    subgraph B["optimized baseline"]
         direction LR
         F2["prefix-cache-<br/>affinity-filter"] --> S2["token-load-<br/>scorer"] --> K2["max-score-<br/>picker"]
     end
@@ -461,7 +461,7 @@ The first two rows absorb a burst in milliseconds. Autoscaling (§4) restores th
 
 ```mermaid
 flowchart LR
-    M["metrics<br/>every 15 s"] --> R["ratio, band,<br/>largest of<br/>metrics"]
+    M["metrics<br/>every<br/>15 s"] --> R["ratio, band,<br/>largest of<br/>metrics"]
     R --> S["stabilization<br/>window"]
     S --> P["policies,<br/>then clamp"]
     P --> N["replica<br/>count"]

@@ -5,7 +5,7 @@
 # prices, stockout rates and preemption rates are **inputs that you select** (the defaults are
 # illustrative), and every output is simulated. Lab notebook `04_gke_pools_dws_and_computeclasses`
 # (T3) does the real thing: GKE node pools from zero, Spot, DWS flex-start queued provisioning and
-# ComputeClass fallbacks. Offline, that notebook plans and inspects. Current prices and
+# ComputeClass fallbacks. Offline, that notebook plans and examines. Current prices and
 # obtainability are in `COMPUTE.md` at the repo root.
 #
 # ## The one-minute version
@@ -19,7 +19,7 @@
 #
 # GPUs add two problems that CPUs rarely have. First, **capacity does not always exist** (stockouts
 # and Spot reclaims). Second, **gangs need every node at once**: a job that needs 16 nodes and
-# receives 11 pays for 11 idle nodes. Queued, all-or-nothing provisioning (Kueue
+# gets 11 pays for 11 idle nodes. Queued, all-or-nothing provisioning (Kueue
 # ProvisioningRequest, GKE DWS flex-start) is the solution to the second problem. You manage the
 # first problem when you select the capacity type for each workload (on-demand, Spot, reservation,
 # flex-start).
@@ -92,7 +92,7 @@ print("✅ pod shapes that do not divide the node waste GPUs before anything is 
 # (illustrative) from creation to *allocatable GPUs*.
 #
 # The autoscaler removes a node after the node stays unneeded for 600 s (the autoscaler default
-# for `--scale-down-unneeded-time`). It also does not remove a node within 600 s of the last scale-up
+# for `--scale-down-unneeded-time`). It also does not remove a node less than 600 s after the last scale-up
 # (`--scale-down-delay-after-add`). `simulate()` models both. Here, the only scale-up is at
 # $t = 0$. Thus the unneeded time is the limit that controls the removal. `simulate()` does not
 # model the utilisation threshold or several pools.
@@ -108,8 +108,8 @@ print(f"billed {run['node_h']:.2f} node-h, busy {run['busy_node_h']:.2f} node-h,
 # ## Exercise 5.2 — predict the bill
 #
 # The pool is the same, but the job runs for **2 hours** and the node boots in **420 s**. Predict
-# when the job starts. Predict when the autoscaler removes the idle node (here, the autoscaler
-# does a check every 30 s). Also predict the billed node-hours.
+# when the job starts. Predict when the autoscaler removes the idle node. Here, the autoscaler
+# does a check every 30 s. Also predict the billed node-hours.
 
 # %% exercise
 # predicted_start_s = ...     seconds
@@ -197,9 +197,8 @@ print(f"✅ a 16-node gang on Spot takes {slowdown_16:.2f}x its work time withou
 # node that the job still needs, the probability that the provider grants the node is 3% per
 # minute (a stockout model, simulated). An **ordinary** pool creates each node immediately when the
 # provider grants it. The pool also bills the node while the node waits for the other nodes. A
-# **queued** pool (Kueue ProvisioningRequest,
-# or DWS flex-start with queued provisioning on GKE) holds the request until it can create all 16
-# nodes together.
+# **queued** pool holds the request until it can create all 16 nodes together. Kueue
+# ProvisioningRequest, or DWS flex-start with queued provisioning on GKE, gives a queued pool.
 
 # %%
 kw = dict(gpus_per_node=8, boot_s=300, stockout=0.97)
@@ -299,7 +298,7 @@ print("✅", capacity)
 # On GKE, a **custom ComputeClass** encodes such a preference list for one workload class. An
 # example order is reservation, then Spot, then on-demand, then flex-start. Node auto-provisioning
 # then creates pools that match the list. The field names are in the `deploy/gke/` manifests of
-# the lab. Make sure that they agree with the current CRD.
+# the lab. Make sure that the field names agree with the current CRD.
 #
 # ## From Pending to serving
 #
@@ -347,7 +346,7 @@ for name, s in (("cold node, plain pull + download", cold), ("warm node, streame
 #    also bill idle nodes. Use queued provisioning (flex-start) or reservations. Also write
 #    checkpoints.
 # 2. *A replica needs 9 minutes from Pending to Ready. Where do you look first?* Divide the time
-#    by stage: node provisioning and driver, image pull, weight download, warm-up. Then repair the
+#    by stage: node creation and driver, image pull, weight download, warm-up. Then repair the
 #    largest stage.
 # 3. *What does all-or-nothing provisioning not repair?* It does not create capacity. The gang
 #    still waits for the provider. It only stops two things: the payment for the partial set, and

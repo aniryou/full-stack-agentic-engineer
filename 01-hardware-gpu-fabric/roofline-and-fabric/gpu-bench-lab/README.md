@@ -31,10 +31,10 @@ before it.
 
 | Tier | Where | What runs | Cost |
 |---|---|---|---|
-| **T0** | laptop, Colab CPU, CI | The numpy backend measures GEMM by size and dtype, STREAM with 1…N threads, fusion, the cache ladder and a cache-cold `memcpy` α-β fit. It also loads safetensors cold and warm. The lab parses bundled `nvidia-smi` sample output. | $0 |
+| **T0** | laptop, Colab CPU, CI | The numpy backend measures GEMM by size and dtype, STREAM with 1…N threads, fusion, the cache ladder and an α-β fit of a cache-cold `memcpy`. It also loads safetensors cold and warm. The lab parses bundled `nvidia-smi` sample output. | $0 |
 | **T1** | one GPU: Colab/Kaggle T4, an L4, any rented GPU | The torch backend measures fp32/TF32/fp16/bf16 (+FP8 on sm_89+) GEMMs, STREAM on HBM/GDDR and the GPU cache ladder. It does sweeps of copies between host and device, pinned against pageable. It also measures streaming from disk to pinned memory to the GPU. | free to ~$0.7/hr |
 | **T2** | ≥ 2 GPUs: Kaggle 2×T4 (free, PCIe), an NVLink pod, GCP `a2-highgpu-2g` | The P2P bandwidth matrix (uni- and bidirectional) and the α-β of the link. The lab compares the measured values with the values that it predicts from the topology. | ~$0–25 per session |
-| **T3** | GCP via Terraform ([`deploy/gcp/`](deploy/gcp/)) | The full suite runs on a new Spot L4 VM. The VM uploads a JSON + Markdown report to a bucket. Auto-stop is on. | ~$0.1–0.3/hr on Spot (verify) |
+| **T3** | GCP through Terraform ([`deploy/gcp/`](deploy/gcp/)) | The full suite runs on a new Spot L4 VM. The VM uploads a JSON + Markdown report to a bucket. Auto-stop is on. | ~$0.1–0.3/hr on Spot (verify) |
 
 The notebooks find the hardware that they have. If there is no GPU, the T0 path runs, and the cell prints what to
 run on real hardware. For prices and where to get GPUs, see [`COMPUTE.md`](../../../COMPUTE.md).
@@ -57,7 +57,7 @@ repository, changes into this directory and installs the lab.
 
 ## What a number from this lab means
 
-| Label | Meaning | Where |
+| Label | What it means | Where |
 |---|---|---|
 | *measured* | This run made the number on this machine. Every table that the suite and the notebooks print has measured numbers. | `Measurement` records, reports |
 | *model* / *theoretical* | The lab calculates the number from a formula. The formulas give P2P from topology, the PCIe line rate and cold-start budgets. The label of a P2P number (`direct`, `staged` or `upper-bound`) shows what the prediction assumes about peer access. | `p2p.predict`, `specs.pcie_gbs`, `loading.load_time` |
@@ -71,7 +71,7 @@ The byte counts obey one convention for each kind of operation, and tests pin ea
   roofline.
 * **STREAM** kernels count each named array one time, with no write-allocate read. If an implementation makes more
   passes than STREAM assumes (numpy's triad needs two), the report shows both *moved* and *STREAM convention* rates.
-* **Transfers** (between host and device, P2P, from disk to RAM) count the delivered bytes one time.
+* **Transfers** (between host and device, P2P, from disk to RAM) count each byte that they transfer one time.
 
 Each measurement of time reports the **best** value (what the machine can do) and the **median** value (what you
 usually see). The lab calculates both values from several samples, after a warm-up. The lab measures the time of GPU
@@ -184,10 +184,10 @@ driver behaviour. The "Verify list" at the end of this page has these items.
   `torch.cuda.can_device_access_peer`. `torch._scaled_mm` is private, and its signature changed between releases.
   The check of its call was against `native_functions.yaml` on main (2026-09). PyPI's PyTorch is a CUDA 13 build from
   2.11 on, and it needs an R580+ driver. `cu126` builds run on R525+, but they have no Blackwell kernels.
-* GCP: Deep Learning VM image family names, `install-nvidia-driver` metadata, disk types for each machine series and
-  L4/A100 Spot availability for each zone. See [`deploy/gcp/README.md`](deploy/gcp/README.md).
-* The Docker base image tag `pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime` (it exists on Docker Hub, 2026-09) and
-  its driver requirement. Blackwell GPUs need the `cuda13.0` variant (R580+ driver).
+* GCP: the names of the Deep Learning VM image families, `install-nvidia-driver` metadata, disk types for each machine
+  series and L4/A100 Spot availability for each zone. See [`deploy/gcp/README.md`](deploy/gcp/README.md).
+* The tag `pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime` of the Docker base image, and the driver requirement of
+  that image. The tag exists on Docker Hub (2026-09). Blackwell GPUs need the `cuda13.0` variant (R580+ driver).
 * Behaviour that only a GPU can confirm:
     * The time measurement with CUDA events.
     * The overlap of the bidirectional P2P streams.

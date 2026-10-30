@@ -197,7 +197,7 @@ for m in hpa["spec"]["metrics"]:
 # ## Exercise 5.3 — how late is the first extra replica?
 #
 # A burst starts at $t$ = 0 and pushes `vllm:num_requests_waiting` far above the target. Predict the
-# **worst-case** time until a new vLLM pod receives traffic. The table gives the chain of steps in
+# **worst-case** time until a new vLLM pod gets traffic. The table gives the chain of steps in
 # sequence, and the source of each number:
 #
 # | step | worst case | source |
@@ -208,7 +208,7 @@ for m in hpa["spec"]["metrics"]:
 # | GKE provisions a new L4 Spot node, and the node joins | `NODE_S` | assumption (verify). It is possible that you cannot get Spot at all. |
 # | the node pulls the vLLM image | `PULL_S` | assumption (verify). Image streaming makes the pull shorter. |
 # | weights download + load, until `/health` answers | `LOAD_S` | assumption (verify) |
-# | the readiness probe notices | one full probe period | `vllm.yaml` |
+# | the readiness probe sees the answer | one full probe period | `vllm.yaml` |
 #
 # The scale-up policy (1 pod per 60 s) does not delay the *first* pod. Write `worst_case_s()`. It
 # reads the two intervals from the files and returns seconds.
@@ -283,8 +283,8 @@ print(f"✅ installed, busy or idle: ≈ ${lab_cost(1, 1):.2f}/h with its one L4
 # never gets to 0 while the workloads exist. To bring the pool to 0 with the workloads in place, you
 # need scale-to-zero: KEDA or the alpha `HPAScaleToZero`.
 #
-# **After `uninstall.sh`**: the pool drains to 0, and at most `lab_cost(1, 0)` ≈ \$0.16/h stays. This
-# is the system node and disks (~\$0.13/h plus disks). It also includes the forwarding rule of the
+# **After `uninstall.sh`**: the pool drains to 0, and at most `lab_cost(1, 0)` ≈ \$0.16/h stays. This cost
+# is for the system node and disks (~\$0.13/h plus disks). It also includes the forwarding rule of the
 # load balancer, but only while a Gateway still exists. `uninstall.sh` deletes the Gateway.
 # `lab_cost` counts the rule anyway, as an upper limit.
 #
@@ -339,8 +339,8 @@ else:
 # "Managed Prometheus scrapes vLLM. The custom-metrics adapter gives `vllm:num_requests_waiting` and
 # `vllm:num_requests_running` to the HPA. The queue is for bursts. The occupied batch slots are there
 # so that the HPA does not remove capacity when the queue drains. The HPA adds at most one replica a
-# minute. The first extra replica still arrives minutes after a burst, because a Spot node, the image
-# and the weights come first.
+# minute. Because a Spot node, the image and the weights come first, the first extra replica still
+# arrives minutes after a burst.
 #
 # "With one replica always up, an idle hour costs about $0.44 (one L4 Spot node plus the constant parts).
 # Only an uninstall of the workloads brings the GPU pool to zero, and only `terraform destroy` stops

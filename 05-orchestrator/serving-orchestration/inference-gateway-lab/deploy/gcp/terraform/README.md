@@ -1,7 +1,7 @@
 # deploy/gcp/terraform — a cheap GKE cluster for the Inference Gateway (T3)
 
 **What it does.** It makes a zonal GKE Standard cluster with a system node and an L4 Spot pool that scales from zero.
-The cluster is then ready for [`../../gke`](../../gke/README.md), which installs the Inference Gateway.
+Then the cluster is ready for [`../../gke`](../../gke/README.md), which installs the Inference Gateway.
 
 **Cost and cleanup, in short.** The cost is ~$0.16/h with the GPU pool at 0, and ~$0.28/h more for each L4 Spot node
 (assumed us-central1 prices, verify). For the cleanup, run `PROJECT_ID=<id> ../../gke/uninstall.sh`, then
@@ -30,7 +30,7 @@ GKE ≥ 1.34.0-gke.1626000 (verify which channels carry it when you apply).
 load balancer when the Gateway exists (~$0.025/h) and the disks. The total is approximately $0.16/h. Each L4 Spot node
 adds ~$0.28/h (on-demand ~$0.70/h).
 
-The pool is at 0 only while no vLLM pod exists. When `../../gke` is installed,
+The pool is at 0 only while no vLLM pod exists. After you install `../../gke`,
 `minReplicas: 1` keeps one L4 node up, also when the node has no work (~$0.44/h). The free tier covers the cluster
 management fee for one zonal cluster (verify). The platform can preempt Spot VMs at any time.
 

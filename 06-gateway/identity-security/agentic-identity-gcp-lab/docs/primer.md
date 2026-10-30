@@ -91,17 +91,14 @@ Two habits make a threat model credible when you draw it on a whiteboard:
 
 ```mermaid
 flowchart TB
-    U(["User"]) -- "ASI09: a confident,<br/>incorrect summary<br/>wins an approval" --> FE["Front-end"]
-    FE -- "identity and consent" --> AG["Agent runtime<br/>ASI03: a shared account,<br/>a replayed user token<br/>ASI10: an agent outside<br/>policy, an orphaned<br/>deployment"]
-    AG --> M["Model endpoint<br/>ASI01: injected<br/>instructions change<br/>the objective"]
-    AG --> T["MCP servers and tools<br/>ASI02: malicious<br/>arguments<br/>ASI04: a malicious<br/>server, a poisoned<br/>tool description"]
-    AG --> P["Peer agents<br/>ASI07: no auth between<br/>agents, a forwarded<br/>token<br/>ASI08: a chain of calls"]
-    AG --> MEM[("Memory and session store<br/>ASI06: injected content<br/>stays and comes back")]
-    AG --> NET["The open internet<br/>ASI01: a web page,<br/>an email, and the way<br/>out for exfiltration"]
-    AG --> SB[["Code execution<br/>ASI05: the model's<br/>code runs with the<br/>agent's credentials"]]
-    M ~~~ MEM
-    T ~~~ NET
-    P ~~~ SB
+    U(["User"]) -- "ASI09" --> FE["Front-end"]
+    FE -- "identity and consent" --> AG["Agent runtime<br/>ASI03, ASI10"]
+    AG --> M["Model endpoint<br/>ASI01"]
+    AG --> T["MCP servers<br/>and tools<br/>ASI02, ASI04"]
+    AG --> P["Peer agents<br/>ASI07, ASI08"]
+    AG --> MEM[("Memory and<br/>session store<br/>ASI06")]
+    AG --> NET["The open<br/>internet<br/>ASI01"]
+    AG --> SB[["Code<br/>execution<br/>ASI05"]]
 ```
 
 *The arrows are the flows that cross a trust boundary, with the OWASP risks of §2 that appear on them. Each flow gets an identity, a policy and a log. ASI03 and ASI10 are risks of the agent itself.*
@@ -129,6 +126,18 @@ Every action of the agent is under one of two authorities. Make this explicit in
 
 - **Own authority**: the agent uses *its* identity and *its* IAM grants. Example: the agent writes traces to Cloud Logging or reads a shared knowledge base. It can also call a 2-legged-OAuth SaaS API with credentials that the organization gave *the agent*. Audit logs show only the identity of the agent.
 - **Delegated authority (on behalf of a user)**: the agent acts with credentials that *the user consented to*, typically 3-legged OAuth. Example: the agent reads the user's calendar, creates a ticket as the user, or sends a query to BigQuery with the user's own dataset permissions. Audit logs must show **both** the agent and the user. Google's Agent Identity does exactly this when it acts through Auth Manager.
+
+```mermaid
+flowchart LR
+    AG(["Agent"]) -- "own authority" --> OWN["its identity and<br/>its IAM grants"]
+    AG -- "on behalf of a user" --> DEL["a credential that<br/>the user consented to"]
+    OWN --> KB["a shared<br/>knowledge base"]
+    DEL --> TK["this user's tickets"]
+    KB -.-> L1[("audit log:<br/>the agent")]
+    TK -.-> L2[("audit log: the agent<br/>and the user")]
+```
+
+*Each action of the agent is under one of two authorities. Under its own authority, the agent uses its identity and its IAM grants, and the audit log shows only the agent. On behalf of a user, the agent uses a credential that the user consented to, and the audit log shows both.*
 
 You cannot use one authority in place of the other. A common design error is to give broad permissions to the agent's own identity ("it needs to read everyone's tickets"). The correct design uses delegation: the agent reads *this user's* tickets with *this user's* token. Delegation keeps the agent's own blast radius small. It also makes authorization decisions the problem of the resource, which already knows how to authorize users.
 
@@ -197,21 +206,7 @@ Design authorization as layers. Each layer fails closed, independently of the ot
 
 As the agent developer, you control the runtime layer most. The resource and network layers are the layers that still hold if your code is incorrect.
 
-```mermaid
-flowchart TB
-    MA["the model call:<br/>Model Armor floor settings<br/>screen the prompt before<br/>it, the response after it"] -- "a tool call" --> EV
-    EV["before_tool_callback<br/>(SecurityPlugin) calls<br/>PolicyEngine.evaluate():<br/>agent, user, authority<br/>mode, tool, arguments,<br/>scopes, counters"] --> D{"decision"}
-    D -- "deny: the callback returns<br/>a result and the runtime<br/>skips the tool" --> DENY["DENY: an unknown tool,<br/>an agent not on the<br/>allowlist, the wrong<br/>authority, a missing scope,<br/>an argument outside its<br/>constraint, a blocked<br/>host, a budget"]
-    D -- "DESTRUCTIVE or<br/>EXTERNAL, outside the<br/>pre-approved envelope" --> CONF["CONFIRM:<br/>adk_request_confirmation<br/>shows the tool and<br/>the exact arguments"]
-    CONF -- "ToolConfirmation(confirmed=True),<br/>logged with the approver" --> ALLOW
-    D -- "READ by default,<br/>WRITE on the allowlist,<br/>or inside the envelope" --> ALLOW["ALLOW"]
-    ALLOW --> BR["the broker (Auth Manager<br/>or the STS): a credential<br/>for this tool only, with<br/>the audience, a minimal<br/>scope, a short TTL and,<br/>when delegated, the user<br/>as subject"]
-    BR --> NR
-    subgraph NR ["the network and resource layers"]
-        direction LR
-        GW["Agent Gateway and<br/>VPC-SC: IAP per<br/>SPIFFE ID, conditions<br/>on mcp.toolName and<br/>mcp.tool.isReadOnly"] --> RS["the resource server<br/>validates the audience,<br/>the scope, the expiry and<br/>the binding. IAM on the<br/>resource decides last."]
-    end
-```
+![One tool call goes through Model Armor, the decision of SecurityPlugin, the broker, Agent Gateway and VPC-SC, and the resource server.](figures/tool-call-enforcement-points.svg)
 
 *One tool call goes through the four policy enforcement points of §4.1. Model Armor screens the model call. The runtime layer decides on the tool call: `PolicyEngine.evaluate()` denies by default, asks for a confirmation, or permits. Then the broker narrows the credential to the call, the gateway and the perimeter check the destination, and IAM on the resource decides last.*
 
@@ -283,19 +278,7 @@ Everything that enters the context window from outside the developer's own instr
 - **Sanitize tool output.** Remove control characters and known instruction patterns from untrusted sources. Never let the model interpret a tool result as a new system instruction.
 - **Validate arguments structurally.** Use tool input schemas with tight types and enums. Refuse free-form URLs/SQL where a constrained form is sufficient. Enforce an **egress allowlist** for any tool that takes a URL, because SSRF and exfiltration are the same bug in an agent.
 
-```mermaid
-flowchart TB
-    UP(["the user's prompt"]) --> SP["screen_prompt():<br/>Model Armor or an<br/>equivalent, for injection,<br/>jailbreak, sensitive data,<br/>malicious URIs"]
-    SP -- "only a prompt that<br/>is not blocked" --> MODEL["the model: instructions<br/>and data in one<br/>context window"]
-    MODEL --> SR["screen_response(): data<br/>leakage, malicious URIs"]
-    SR --> OUT(["the answer to the user"])
-    MODEL -- "a tool call" --> ARGS["tool input schemas with<br/>tight types and enums,<br/>EgressPolicy.check(url)<br/>for any tool that<br/>takes a URL"]
-    ARGS --> TOOL["the tool"]
-    TOOL -- "returns" --> EXT["untrusted content: web<br/>pages, documents,<br/>tickets, emails, messages<br/>from other agents"]
-    EXT -- "a tool result" --> SAN["sanitize_tool_output()<br/>removes control<br/>characters and<br/>instruction patterns"]
-    SAN --> WRAP["wrap_untrusted(): a<br/>Provenance tag with the<br/>source and the trust level,<br/>kept in the audit record"]
-    WRAP -- "data, never instructions" --> MODEL
-```
+![The user's prompt and each tool result go through a check before the model reads them, and the answer goes through screen_response().](figures/untrusted-content-checks.svg)
 
 *Untrusted text enters through the user's prompt and through each tool result, and each path has a check. Model Armor screens the prompt on the way in and the response on the way out. The plugin sanitizes each tool result and tags it with its provenance before the model reads it. Schemas and the egress allowlist constrain the arguments of each tool call.*
 

@@ -38,7 +38,7 @@ for sessions, ctx in ((50, 8_000), (200, 30_000), (1_000, 30_000)):
 print(table(rows, title="KV working set of concurrent agent sessions, 8B model (arithmetic)"))
 
 # %% [markdown]
-# Two hundred coding-agent sessions at 30k tokens of context need ~800 GB of KV. That is the KV pool of fifteen
+# Two hundred coding-agent sessions at 30k tokens of context need ~800 GB of KV. This quantity is the KV pool of fifteen
 # H100s, before any of the sessions has generated a token. At any instant, most of those sessions are idle, because
 # they wait for a tool. Thus the question is not "can HBM hold it" (no). The question is "where do the idle ones
 # stay, and what does it cost to bring one back?"
@@ -186,8 +186,8 @@ print(table([{c: r.get(c, 0.0) for c in cols} for r in rows], cols,
 # * `"random + DRAM"`: the same tiers, random routing.
 # * `"random + shared"`: HBM plus the shared 1 TB store, random routing.
 #
-# Which case recomputes the largest share of resumed prompt tokens? Does the shared tier get within 2 percentage
-# points of the recomputed-token share of sticky routing?
+# Which case recomputes the largest share of resumed prompt tokens? Is the recomputed-token share of the shared tier
+# at most 2 percentage points away from the share of sticky routing?
 
 # %% exercise
 most_recompute = None
@@ -210,15 +210,15 @@ assert shared_matches_sticky == (abs(got["random + shared"] - got["sticky + DRAM
 print("✅", {k: round(v, 3) for k, v in got.items()})
 
 # %% [markdown]
-# A DRAM tier of moderate size with sticky routing serves nearly all resumed turns. Each turn costs a few tens of
-# milliseconds instead of a full re-prefill. Random routing wastes most of that tier, because each replica holds only
+# A DRAM tier of moderate size with sticky routing serves almost all resumed turns. Each turn costs a few tens of
+# milliseconds instead of a full re-prefill. Random routing wastes most of the DRAM tier, because each replica holds only
 # the sessions that it served by chance. But if the tier is a **shared** tier, the router is free to balance the load
 # again.
 #
 # ## Exercise 5.4 — size the DRAM tier
 # The floor is the value that sticky routing gets with unlimited DRAM. Write
 # `smallest_dram(candidates, recompute_share, tolerance)`. Return the smallest candidate size whose recomputed-token
-# share is within `tolerance` of the floor. `recompute_share(gb)` runs the simulation for one size.
+# share is at most `tolerance` above the floor. `recompute_share(gb)` runs the simulation for one size.
 
 # %% exercise
 def smallest_dram(candidates, recompute_share, tolerance=0.01):
@@ -243,7 +243,7 @@ print(f"✅ {pick} GB of DRAM per replica reaches the floor for this workload �
 # sessions are idle during tool calls. Thus their KV is the most reusable, and it is also the first KV that the
 # replica evicts. The working set is many times what HBM can spare.
 #
-# "First, I will add a CPU-memory offload tier on every replica. It is faster than recompute on any GPU, because PCIe
+# "First, I will add a CPU-memory offload tier on every replica. This tier is faster than recompute on any GPU, because PCIe
 # moves KV faster than prefill creates it. I will also keep the routing session-sticky, with a load gate.
 #
 # "If we must balance the load again freely, or continue after the loss of a replica, a shared KV store helps.

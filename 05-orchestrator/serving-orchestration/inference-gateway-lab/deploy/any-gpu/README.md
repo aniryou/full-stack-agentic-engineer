@@ -52,7 +52,7 @@ os.environ["IGW_BACKENDS"] = "r0=http://127.0.0.1:8001,r1=http://127.0.0.1:8002"
 The T1 section of notebook 04 prints the same commands with the absolute paths of this machine.
 
 `serve.sh` returns when the two replicas answer `/health`. The first start downloads ~1 GB of weights.
-Colab ends a session after a time with no activity, and the free GPU hours have a limit (not guaranteed).
+Colab ends a session after a time with no activity. The free GPU hours also have a limit (not guaranteed).
 
 ## A rented box (RunPod, Vast.ai, Lambda, a GCP VM)
 

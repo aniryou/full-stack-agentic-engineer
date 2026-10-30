@@ -9,7 +9,7 @@
 # slowest bandwidth on the path, plus provisioning, image pull and engine init. Parallel and
 # streamed loads attack the first term. Warm pools and caches attack the other terms.
 #
-# **Reliability**: failure rates add. Thus a 16K-GPU job has an interruption every few hours, although each GPU runs
+# **Reliability**: failure rates add. Thus a 16K-GPU job has an interruption every few hours, but each GPU runs
 # for years. Training answers with checkpoints every $\sqrt{2 \cdot \text{checkpoint time} \cdot \mathrm{MTBF}}$. Inference
 # answers with spare replicas. Larger replicas are larger failure domains.
 #
@@ -19,8 +19,8 @@
 # \text{\$/M tokens} = \frac{\text{\$/GPU-hr}}{\text{tokens/s} \times 3600 \times \text{utilisation}} \times 10^6
 # $$
 #
-# Every lever in this layer (batching, quantization, the correct GPU, a GPU that stays busy) appears in
-# that one line. Primer: `../PRIMER.md` §6–8.
+# Every lever in this layer appears in that one line: batching, quantization, the correct GPU and a GPU that
+# stays busy. Primer: `../PRIMER.md` §6–8.
 
 # %%
 import math
@@ -94,7 +94,7 @@ for delta in (60, 10):
 # %% [markdown]
 # ## Inference: replicas are failure domains
 # A TP=8 replica is down when any of its 8 GPUs is down. Thus its MTBF is $M/8$. If you need 8 replicas up,
-# how many do you deploy? (The calculation assumes an MTTR of 48 h: detect, drain, swap or repair the node.)
+# how many do you deploy? (The calculation assumes an MTTR of 48 h: find the fault, then drain, swap or repair the node.)
 
 # %%
 a8 = reliability.replica_availability(M, 8, 48)
@@ -150,7 +150,7 @@ print(f"✅ streamed ≈ bytes / slower hop: 8B at 2 GB/s fetch -> {streamed_loa
 
 # %% [markdown]
 # ## Exercise 4.2 — a cold-start budget
-# Autoscaling wants a new Llama-3.1-70B replica (bf16, 8 GPUs) to serve within 120 s on a warm
+# Autoscaling wants a new Llama-3.1-70B replica (bf16, 8 GPUs) to serve in 120 s or less on a warm
 # node pool. Image pull is 20 s and engine init is 60 s (assumed). Write `required_fetch_gbs(n_bytes, budget_s, other_s)`.
 # You stream the weights, thus the fetch is the bottleneck. Also write `streams_needed(required_gbs, per_stream_gbs, cap_gbs)`.
 # If even unlimited streams hit the cap first, return `None`.

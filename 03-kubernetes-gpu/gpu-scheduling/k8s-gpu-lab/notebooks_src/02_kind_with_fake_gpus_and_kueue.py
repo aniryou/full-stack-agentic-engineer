@@ -8,9 +8,9 @@
 # ## The one-minute version
 # Kubernetes schedules a GPU job in **two decisions in series**:
 #
-# 1. **Kueue** decides *if* the job can start. It looks at the quota in its ClusterQueue and at what the
+# 1. **Kueue** decides *if* the job can start. It looks at the quota in the job's ClusterQueue and at what the
 #    queue can borrow from the cohort. It also looks at preemption by priority or by reclaim. With Topology-Aware Scheduling,
-#    Kueue also decides *which topology domain* its pods go to. A queued Job is **suspended** (no pods) until
+#    Kueue also decides *which topology domain* the pods of the job go to. A queued Job is **suspended** (no pods) until
 #    Kueue admits it.
 # 2. The **kube-scheduler** binds each pod to a node. It looks at taints, selectors and free
 #    `nvidia.com/gpu`.
@@ -104,7 +104,7 @@ scenario("s1")
 #
 # ## Exercise 2.2 — admit, borrow or wait?
 # Write `admission(usage, request, nominal, borrowing_limit, cohort_unused)`. It returns
-# `"fits"` (within nominal), `"borrows"` (it fits only if the queue borrows) or `"waits"`.
+# `"fits"` (in the nominal quota), `"borrows"` (it fits only if the queue borrows) or `"waits"`.
 # `cohort_unused` is the unused nominal quota across the whole cohort. This includes the quota of
 # this queue.
 
@@ -137,7 +137,7 @@ print("✅ the admission arithmetic Kueue applies before it looks at nodes")
 #   but no subblock has 4 free GPUs.
 #
 # For required and preferred levels, TAS uses **BestFit**. Among the domains at that level that can hold
-# the whole gang, TAS takes the domain with the *least* room. This keeps large domains whole for large
+# the whole gang, TAS takes the domain with the *least* room. This rule keeps large domains whole for large
 # gangs. If two domains are equal, the lowest label value wins.
 
 # %%
@@ -158,7 +158,7 @@ scenario("s2")
 # is Pending.
 #
 # The safety net of Kueue is **`waitForPodsReady`**. If not all the pods of an admitted workload are Ready
-# within `timeout`, Kueue evicts the workload. This releases the GPUs. Then Kueue requeues the workload with
+# before the `timeout` ends, Kueue evicts the workload. The eviction releases the GPUs. Then Kueue requeues the workload with
 # exponential backoff.
 #
 # In Kueue v0.19, `waitForPodsReady` is **on by default**. The v1beta2 Configuration sets these defaults:
@@ -199,7 +199,7 @@ print("✅ BestFit: the tightest domain that still holds the whole gang")
 # One replica is a leader pod and a worker pod, with 4 GPUs each (a model sharded across two hosts). The two
 # templates have the same `podset-group-name`, thus Kueue places them together in one subblock. A scale-up
 # to 2 replicas creates a *second group*: another 8 GPUs. The queue of team-b has no quota left and can
-# borrow only 4, thus the whole group waits. Its pods exist, but they have the `kueue.x-k8s.io/admission` scheduling
+# borrow only 4, thus the whole group waits. The pods of the group exist, but they have the `kueue.x-k8s.io/admission` scheduling
 # gate.
 
 # %%
@@ -252,7 +252,7 @@ scenario("s4")
 
 # %% [markdown]
 # ## Exercise 2.5 — borrow or preempt?
-# Change one fact in s4: team-b is **idle** (do not run its two fill jobs). team-a is at its nominal 8
+# Change one fact in s4: team-b is **idle**. Do not run the two fill jobs of team-b. team-a is at its nominal 8
 # with two low-priority jobs. Then `a-high` (4 GPUs) arrives. Does Kueue preempt a low job, or does it let
 # `a-high` borrow? Set `answer` to `"preempt"` or `"borrow"`.
 #
@@ -309,20 +309,20 @@ print(kindsim.describe(kindsim.predict("k1")))
 #
 # * Give each team a ClusterQueue with a nominal quota in a shared cohort. Then a team can borrow idle GPUs,
 #   and the owner reclaims them when it needs them (`reclaimWithinCohort`).
-# * Use priorities only *within* a team.
+# * Use priorities only *inside* a team.
 # * Submit multi-pod jobs as JobSets/LWS through Kueue, so that Kueue admits them whole.
 # * Turn on Topology-Aware Scheduling with the placement labels of the cloud. Then a gang goes into one host
 #   or subblock (BestFit keeps large domains free).
 # * Keep the job of the kube-scheduler simple. The ResourceFlavor adds the tolerations and selectors.
 #
-# **Drill 1.** *A queued Job shows no pods at all. Is it broken?* No. Kueue keeps it suspended until it
-# admits the Job. Read the `QuotaReserved` condition of the Workload.
+# **Drill 1.** *A queued Job shows no pods at all. Is it broken?* No. Kueue keeps the Job suspended until
+# Kueue admits it. Read the `QuotaReserved` condition of the Workload.
 #
 # **Drill 2.** *Why does a 4-pod subblock gang wait while the cluster has 6 free GPUs?* The cause is
 # the required topology. No single subblock has 4 free GPUs, and TAS does not divide the gang.
 #
 # **Drill 3.** *Kueue preempted a job of team-a, but nobody in team-a had a higher priority.* The job ran on
-# borrowed quota. The lender reclaimed it (`InCohortReclamation`).
+# borrowed quota. The lender reclaimed the quota (`InCohortReclamation`).
 #
 # **Drill 4.** *Kueue admitted an 8-node gang on a Spot pool. Three pods run, and five are still Pending
 # after 20 minutes because of a stockout. What occurs next, and what can prevent this state?*
@@ -330,4 +330,5 @@ print(kindsim.describe(kindsim.predict("k1")))
 # The flavor is plain quota, thus admission never examined capacity. `waitForPodsReady` (on by default,
 # 30 min) evicts the gang, frees the GPUs of the three nodes and requeues the gang with backoff. An
 # admission that examines capacity prevents the half-started state. This admission can be a
-# ProvisioningRequest check (DWS flex-start: every node or none) or, on a fleet with a constant size, TAS.
+# ProvisioningRequest check or, on a fleet with a constant size, TAS. The ProvisioningRequest check uses DWS
+# flex-start, which gives every node or none.

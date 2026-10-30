@@ -25,9 +25,10 @@
 # * **KV-cache usage** and **running requests** are proportional, but they have a cap (100 %, `max_num_seqs`). The
 #   controller multiplies the average of the pods that report by their number. Thus a capped metric grows the fleet
 #   at most $\text{cap}/\text{target}$-fold per round. The fleet climbs out of a large step one cold start at a time.
-# * **In-flight requests** (running + waiting, and also the requests that the gateway holds) are proportional and
-#   have no cap. The queue-based KEDA path of llm-d scales on this signal. But this signal counts *requests*. A
-#   target from a chat load test is incorrect for RAG, because a RAG request carries five times the prefill. The
+# * **In-flight requests** are proportional and have no cap. This count is the number of running + waiting requests,
+#   and also of the requests that the gateway holds. The queue-based KEDA path of llm-d scales on this signal. But
+#   this signal counts *requests*.
+#   A target from a chat load test is incorrect for RAG, because a RAG request carries five times the prefill. The
 #   token-aware path of llm-d counts *work*: seconds of prefill backlog (in-flight uncached tokens ÷ prefill rate),
 #   together with KV occupancy for decode.
 #
@@ -111,7 +112,7 @@ print("✅ stabilized_down works — scale-down follows the max of the last 5 mi
 # %% [markdown]
 # ## Exercise 3.3 — how fast can it scale up?
 # The default scale-up behaviour permits **the larger of +100 % and +4 pods** per 15 s period (`selectPolicy: Max`),
-# with no stabilization window. Start from 3 replicas with a desired count of 40 (and max 50). Predict the replica
+# with no stabilization window. Start from 3 replicas with a `desired` count of 40 (and max 50). Predict the replica
 # count after each of the first four 15-second syncs.
 
 # %% exercise
@@ -225,7 +226,7 @@ print("\n".join(lines))
 # * **GPU utilisation** at a 0.7 target scales to the maximum and never comes down. The utilisation stays above the
 #   target even at 8 replicas. At 0.95, it never scales at all. Neither is a policy. Both are accidents.
 # * **Waiting per pod** scales up strongly, and then it sees an empty queue. It scales down after the 5-minute
-#   window and goes into the cliff again. This is the sawtooth in the middle of the peak.
+#   window and goes into the cliff again. This cycle is the sawtooth in the middle of the peak.
 # * **KV usage** is proportional, but it has a cap of 1.0. Each round multiplies the *ready* pods by at most
 #   $1/\text{target}$. The pods that the HPA asked for count only when they are ready and report values. Thus the
 #   fleet climbs one cold start at a time.
@@ -295,8 +296,8 @@ print(table(mixed_rows, title=f"simulated: in-flight target {inflight_target} pe
 # %% [markdown]
 # On the mix, the same target scales too late and by too small a quantity. A RAG request counts as one request, but
 # it brings five times the prefill. Thus the fleet looks lightly loaded while the prefill queue grows. A new target
-# from the new mix repairs this, until the mix changes again. **Request counts are a safe signal only when requests
-# are alike.**
+# from the new mix repairs this problem, until the mix changes again. **Request counts are a safe signal only when
+# requests are alike.**
 #
 # The token-aware path of llm-d measures work in its own units instead. The first signal is the prefill backlog in
 # seconds (EPP in-flight uncached tokens ÷ `peakPrefillThroughput`), compared with a share of the TTFT SLO. The
@@ -308,7 +309,7 @@ print(table(mixed_rows, title=f"simulated: in-flight target {inflight_target} pe
 # Write `make_autoscaler()`. It returns a new `Autoscaler` (min 1, max 8, any metric or metrics from
 # `Autoscaler.METRICS`). It must meet both budgets, with no new adjustment between the two mixes:
 #
-# - On the chat step: SLO attainment **>= 0.94 within 1.3 GPU-hours**.
+# - On the chat step: SLO attainment **>= 0.94 with at most 1.3 GPU-hours**.
 # - On the chat + RAG step: attainment **>= 0.90**.
 #
 # Every target must come from the load test, not from trial and error. For a signal that the sweep measured, use its
@@ -349,12 +350,12 @@ print("✅ one configuration, two traffic mixes: scale on work (prefill seconds,
 # An internal tool gets 6 bursts a day. Each burst is 20 minutes long at 1 req/s, and nothing comes between the
 # bursts. With `minReplicas: 1`, you pay for one L4 node all day. This node is a `g2-standard-4` VM, and its price
 # includes the GPU. With `minReplicas: 0` (KEDA, or the `HPAScaleToZero` gate of the HPA), the pod goes 5 minutes
-# after a burst (the stabilization window). That saves nothing while the node stays.
+# after a burst (the stabilization window). The removal of the pod saves nothing while the node stays.
 #
 # You save the money only when the cluster autoscaler removes the empty GPU node. It does this after 10 minutes with
 # no need for the node (`--scale-down-unneeded-time`, layer 03 §7.1). Thus the next burst waits for a new node and
-# also for the pod. That is ~300 s to allocatable GPUs (the assumption of layer 03), plus the 102 s cold start. The
-# worked example "the cold start decides the tail" calculates that 102 s.
+# also for the pod. This wait is ~300 s until the GPUs are allocatable (the assumption of layer 03), plus the 102 s
+# cold start. The worked example "the cold start decides the tail" calculates that 102 s.
 #
 # Write `scale_to_zero(bursts, burst_min, rps, cold_start_s, usd_per_hour, idle_min=15)`. It returns
 # `(usd_saved_per_day, requests_delayed_per_day, mean_added_wait_s)`. You pay for the node from the first request of
@@ -378,11 +379,13 @@ print(f"✅ saves ${usd:.2f}/day per L4 node; {delayed:,.0f} requests/day wait f
       f"start — {wait:.0f} s on average, up to {with_node.total:.0f} s, plus the backlog drain")
 
 # %% [markdown]
-# For an internal tool with batch-like traffic, that is a good trade. For a chat that customers use, it is not a
-# good trade. Keep one replica warm (or use a sleep/wake mechanism that keeps the weights resident), and scale *from
-# one*. If you scale only the pod to zero and the GPU node stays, you save nothing, unless something else uses that
-# GPU. A platform that bills per second and owns the node pool (Cloud Run with GPUs) removes the node term from your
-# bill. But it does not remove the model load from the first request.
+# For an internal tool with batch-like traffic, scale-to-zero is a good trade. For a chat that customers use, it is
+# not a good trade. Keep one replica warm, or use a sleep/wake mechanism that keeps the weights resident. In both
+# cases, scale *from one*.
+#
+# If you scale only the pod to zero and the GPU node stays, you save nothing, unless something else uses that GPU. A
+# platform that bills per second and owns the node pool (Cloud Run with GPUs) removes the node term from your bill.
+# But it does not remove the model load from the first request.
 #
 # ## In a design review
 # **Two-minute version.** "I scale the model servers with an HPA, through KEDA, so that it can go to zero where that
@@ -413,4 +416,5 @@ print(f"✅ saves ${usd:.2f}/day per L4 node; {delayed:,.0f} requests/day wait f
 # 5. *What does `minReplicas: 0` cost?* The first requests of every burst wait for the full cold start. After
 #    the cluster autoscaler removes the idle GPU node, the cold start also includes a new node. Then the full cold
 #    start is ~400 s here.
-#    `minReplicas: 0` also needs an Object or External metric, because zero pods give no pod metric. This is why KEDA is the usual route.
+#    `minReplicas: 0` also needs an Object or External metric, because zero pods give no pod metric. Thus KEDA is the
+#    usual route.

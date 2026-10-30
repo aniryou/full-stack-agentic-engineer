@@ -150,7 +150,7 @@ print("✅ integers only, requests == limits: no fractional GPUs and no overcomm
 # %% [markdown]
 # **Why no fractions?** The scheduler and the kubelet only count. Thus, to share a GPU between several
 # pods, the device plugin must *advertise it as several units* (time-slicing, MPS). Another possibility
-# is to *divide it into real partitions* (MIG, where each partition is its own device). See primer §9,
+# is to *divide it into real partitions* (MIG). With MIG, each partition is its own device. See primer §9,
 # and layer 02 for the mechanics.
 #
 # Dynamic Resource Allocation (DRA, GA in Kubernetes 1.34) replaces the counter with a structured claim.
@@ -268,7 +268,7 @@ print("✅", status, "- running pods keep their GPUs; new work sees one fewer")
 # ## Exercise 1.5 — keep a container's GPUs on one NVLink island
 #
 # In a node, not all GPU pairs are equal. GPUs on the same NVLink island (or at least on the same NUMA
-# node) exchange data much faster. This is why the device-plugin API has `GetPreferredAllocation`. Write
+# node) exchange data much faster. Thus the device-plugin API has `GetPreferredAllocation`. Write
 # the plugin side. The inputs are the free device IDs, a map `island_of[id]`, and a size. Return `size`
 # IDs from the **tightest** island that can hold them all.
 #
@@ -408,16 +408,16 @@ for policy in ("distributed", "packed", "spread"):
 #
 # **Drill questions.**
 #
-# 1. *A pod asks for `nvidia.com/gpu: 0.5`. What happens?* The API server rejects it, because extended
+# 1. *A pod asks for `nvidia.com/gpu: 0.5`. What occurs?* The API server rejects it, because extended
 #    resources must be integers. To share a GPU, advertise replicas (time-slicing/MPS) or MIG devices.
 # 2. *`kubectl describe node` shows capacity 8, allocatable 7. What does that mean?* The plugin reports
 #    one device Unhealthy (for example, after an XID). The pods that use it continue to run. New pods
 #    see 7.
-# 3. *On GKE, why do CPU-only pods never land on our GPU nodes, although nobody wrote tolerations?* GPU
+# 3. *On GKE, nobody wrote tolerations, but CPU-only pods never land on our GPU nodes. Why?* GPU
 #    nodes have a `nvidia.com/gpu` NoSchedule taint. Only pods that *request* the resource get the
 #    toleration that matches, from the ExtendedResourceToleration admission plugin. That plugin is off
 #    by default upstream. Thus, on a self-built cluster, turn it on or write the toleration.
 # 4. *A team asks for two time-sliced GPUs to "get twice the compute". What do they get?* They get two
 #    replicas that can be slices of the same physical GPU, with no guaranteed share of it. Set
-#    `failRequestsGreaterThanOne` (or use GKE time-sharing, which permits one), so that the request
-#    fails with a visible error.
+#    `failRequestsGreaterThanOne`, so that the request fails with a visible error. GKE time-sharing
+#    permits one `nvidia.com/gpu` per container, and thus gives the same result.

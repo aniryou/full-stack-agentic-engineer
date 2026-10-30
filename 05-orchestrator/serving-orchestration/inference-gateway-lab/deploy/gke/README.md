@@ -12,7 +12,7 @@ then run `terraform destroy` in `../gcp/terraform`. The details are at the end.
 
 | Step | Object(s) | File |
 |---|---|---|
-| 2 | The InferencePool CRD (only if GKE does not already manage it), and the InferenceObjective CRD | upstream release URLs |
+| 2 | The InferencePool CRD and the InferenceObjective CRD. The script applies the InferencePool CRD only if GKE does not already manage it | upstream release URLs |
 | 3 | A vLLM `Deployment` on an L4 Spot node (`Qwen/Qwen2.5-1.5B-Instruct`, verify), and a `PodMonitoring` for its `/metrics` | `vllm.yaml`, `podmonitoring-vllm.yaml` |
 | 4 | The llm-d EPP (Helm `llm-d-router-gateway`, `provider.name=gke`). It also makes the `InferencePool` `vllm-qwen`, the `InferenceObjective`s, the `HealthCheckPolicy`/`GCPBackendPolicy` of GKE and a PodMonitoring for the EPP metrics | `epp-values.yaml` (what it renders: `rendered/`) |
 | 5 | A `Gateway` (`gke-l7-regional-external-managed`), and an `HTTPRoute` to the InferencePool | `gateway.yaml` |

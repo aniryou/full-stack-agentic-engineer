@@ -67,7 +67,7 @@ flowchart TB
   CORE -->|"ZMQ, msgpack"| O["API server process<br/>detokenize, send the<br/>streaming response"]
 ```
 
-*The two kinds of processes and one step of the loop. The API server renders, tokenizes and builds an `EngineCoreRequest`. In EngineCore, `Scheduler.schedule()` gives out the token budget, the executor runs one forward pass, the sampler selects the tokens and `Scheduler.update_from_output()` appends them. The two sides communicate over ZMQ with msgpack (§1.3, §2).*
+*The two kinds of processes and one step of the loop. The API server renders, tokenizes and builds an `EngineCoreRequest`. In EngineCore, `Scheduler.schedule()` gives out the token budget, the executor runs one forward pass, the sampler selects the tokens and `Scheduler.update_from_output()` appends them. The two sides communicate over ZMQ with msgpack (§1.3, §2). The request goes into `waiting` in the scheduler, and the tokens go back to the API server after `Scheduler.update_from_output()`.*
 
 After this primer, you will be able to do these tasks:
 
@@ -220,15 +220,15 @@ sequenceDiagram
     C->>A: POST /v1/chat/completions (stream=true)
     Note over A: render_chat, tokenize,<br/>EngineCoreRequest
     A->>E: ADD over ZMQ (msgpack)
-    Note over E: input thread: Request,<br/>block hashes.<br/>add_request: waiting
-    loop output_handler task
+    Note over E: input thread: Request,<br/>block hashes.<br/>Scheduler.add_request: waiting
+    loop output_handler task, at the same time as the busy loop
         Note over A: process_outputs:<br/>detokenize, stop strings
         A-->>C: data: {json}
     end
     A-->>C: data: [DONE]
 ```
 
-*The same path in time, on the side of the API server. The API server tokenizes the request and sends the `EngineCoreRequest` to EngineCore over ZMQ. Then its output handler task detokenizes each `EngineCoreOutputs` and sends the SSE deltas (§2.2, row 12).*
+*The path of one request in time. The API server tokenizes the request and sends the `EngineCoreRequest` to EngineCore over ZMQ, and the input thread puts it in `waiting`. Then the output handler task of the API server detokenizes each `EngineCoreOutputs` and sends the SSE deltas (§2.2, row 12).*
 
 ```mermaid
 sequenceDiagram
@@ -1596,13 +1596,13 @@ sequenceDiagram
     participant S as decode scheduler
     participant W as decode worker<br/>(NixlConnector)
     R->>P: the request, do_remote_decode, max_tokens = 1 (verify)
-    Note over P: delay_free_blocks = True,<br/>blocks under a lease
+    Note over P: request_finished:<br/>delay_free_blocks = True,<br/>blocks under a lease
     P-->>R: kv_transfer_params
     R->>S: the request with those params
     Note over S: get_num_new_matched_tokens,<br/>WAITING_FOR_REMOTE_KVS
     S->>W: kv_connector_metadata
     W->>P: start_load_kv: RDMA read through NIXL
-    Note over S,W: finished_recving:<br/>_update_waiting_for_remote_kv
+    Note over S,W: finished_recving:<br/>_update_waiting_for_remote_kv,<br/>decode starts
     W-->>P: notification
     Note over P: frees the blocks,<br/>or the lease frees them
 ```
@@ -1778,16 +1778,16 @@ EngineCore in asyncio without multiprocessing is not currently supported", `make
 with logs and profiles, and debug the engine with this script.
 
 ```mermaid
-flowchart LR
+flowchart TB
   subgraph ONE["one process: debug_one_process.py"]
     L["LLMEngine"] --> C["InprocClient"]
     C --> E["EngineCore"]
     E --> X["UniProcExecutor"]
     X --> W["worker"]
   end
-  M(["VLLM_ENABLE_V1_<br/>MULTIPROCESSING=0"]) -.-> C
-  T(["TP=1"]) -.-> X
-  G(["enforce_eager=True"]) -.-> W
+  M["VLLM_ENABLE_V1_MULTIPROCESSING=0"] -.-> C
+  T["TP=1"] -.-> X
+  G["enforce_eager=True"] -.-> W
 ```
 
 *With `VLLM_ENABLE_V1_MULTIPROCESSING=0`, `make_client` returns an `InprocClient`, and EngineCore runs in the process of the script. With TP=1, `UniProcExecutor` keeps the worker in the same process. With `enforce_eager=True`, the model code has no `torch.compile` and no CUDA graphs, and you can step through it.*
