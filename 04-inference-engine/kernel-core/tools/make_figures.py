@@ -64,7 +64,7 @@ L3, L2 = kv.MODELS["llama-3-8b"], kv.MODELS["llama-2-13b"]
 H100_HBM = 80 * GB                    # "an 80 GB H100"
 H100_TFLOPS, H100_TB_S = 1000, 3.35   # "approximately 1,000 TFLOP/s in fp16", "about 3.35 TB/s from HBM"
 FP16, FP8 = kv.DTYPE_BYTES["fp16"], kv.DTYPE_BYTES["fp8"]
-NOTE = "computed by kerncore.kv.{} (kernel-core)"
+NOTE = "computed by kerncore.kv.{}"
 
 
 def _k(tokens: int) -> str:
@@ -84,7 +84,7 @@ def _cache(shape, seq_len: int, batch: int = 1, bytes_per: int = FP16) -> int:
 # §4: the cache against the tokens it holds, for the two shapes, next to the weights
 # ---------------------------------------------------------------------------------------------------------------
 def spec_kv_bytes_vs_tokens() -> dict:
-    tokens = [2 ** i for i in range(10, 19)]                       # 1K .. 256K tokens in the cache
+    tokens = [2 ** i for i in range(11, 19)]                       # 2K .. 256K tokens in the cache
     gqa = [_cache(L3, t) / GiB for t in tokens]
     mha = [_cache(L2, t) / GiB for t in tokens]
     w = kv.weight_bytes(L3, FP16)
@@ -93,12 +93,11 @@ def spec_kv_bytes_vs_tokens() -> dict:
     users_32 = _cache(L3, 8192, batch=32)
     return {
         "kind": "line",
-        "title": (f"The KV cache grows in proportion to the tokens it holds: {L3.name} keeps "
-                  f"{kv.fmt_bytes(_per_token(L3))} per token and {L2.name} {kv.fmt_bytes(_per_token(L2))}, and at "
-                  f"128K tokens the cache of {L3.name} passes its fixed weights."),
+        "title": (f"The fp16 KV cache grows with the tokens that it holds: {kv.fmt_bytes(_per_token(L3))} per token "
+                  f"for {L3.name}, {kv.fmt_bytes(_per_token(L2))} for {L2.name}."),
         "width": 900,
-        "height": 400,
-        "x": {"label": "tokens in the cache: seq_len × batch (log scale)", "scale": "log",
+        "height": 440,
+        "x": {"label": "tokens in the cache: seq_len × batch", "scale": "log",
               "ticks": tokens, "tick_labels": [_k(t) for t in tokens]},
         "y": {"label": "KV cache in fp16 (GiB, log scale)", "scale": "log",
               "ticks": [0.25, 1, 4, 16, 64, 256], "tick_labels": ["0.25", "1", "4", "16", "64", "256"],
@@ -114,9 +113,9 @@ def spec_kv_bytes_vs_tokens() -> dict:
              "style": "warm", "anchor": "start"},
             {"kind": "point", "x": 8192, "y": one_8k / GiB, "style": "accent", "anchor": "start", "dy": 17,
              "label": f"1 user, {_k(8192)}: {one_8k / GiB:.0f} GiB ({one_8k / GB:.2f} GB)"},
-            {"kind": "point", "x": 131_072, "y": one_128k / GiB, "style": "accent", "anchor": "start", "dy": 19,
+            {"kind": "point", "x": 131_072, "y": one_128k / GiB, "style": "accent", "anchor": "end", "dy": -9,
              "label": f"1 user, {_k(131_072)}: {one_128k / GiB:.0f} GiB ({one_128k / GB:.1f} GB)"},
-            {"kind": "point", "x": 8192 * 32, "y": users_32 / GiB, "style": "accent", "anchor": "end", "dy": -10,
+            {"kind": "point", "x": 8192 * 32, "y": users_32 / GiB, "style": "accent", "anchor": "end", "dy": -9,
              "label": f"32 users, {_k(8192)} each: {users_32 / GiB:.0f} GiB ({users_32 / GB:.1f} GB)"},
         ],
         "legend": "top-left",
@@ -146,12 +145,12 @@ def spec_decode_intensity() -> dict:
             labels.append(str(g))
     return {
         "kind": "line",
-        "title": (f"Decode attention does 2g/b FLOP per cached byte: {kv.decode_intensity(mha_g, FP16):.0f} for full "
-                  f"MHA in fp16 and {kv.decode_intensity(gqa_g, FP16):.0f} for {L3.name}, about two orders of "
-                  f"magnitude under the ~{round(ridge, -2):.0f} that the H100 needs."),
+        "title": (f"Decode attention does 2g/b FLOP per byte: {kv.decode_intensity(mha_g, FP16):.0f} for full MHA "
+                  f"and {kv.decode_intensity(gqa_g, FP16):.0f} for {L3.name} in fp16, against the "
+                  f"~{round(ridge, -2):.0f} that the H100 needs."),
         "width": 880,
         "height": 380,
-        "x": {"label": f"query heads that share one KV head, g ({heads} query heads in all)", "scale": "log",
+        "x": {"label": "query heads that share one KV head, g", "scale": "log",
               "ticks": groups, "tick_labels": labels},
         "y": {"label": "FLOP per byte (log scale)", "scale": "log", "ticks": [1, 10, 100, 1000],
               "min": 0.5, "max": 1000},
@@ -163,14 +162,14 @@ def spec_decode_intensity() -> dict:
         ],
         "marks": [
             {"kind": "hline", "y": ridge, "style": "warm", "anchor": "start",
-             "label": f"H100: ~{round(ridge, -2):.0f} FLOP per byte loaded, to keep the arithmetic units busy"},
+             "label": f"the H100 needs ~{round(ridge, -2):.0f} FLOP per byte loaded"},
             {"kind": "point", "x": mha_g, "y": kv.decode_intensity(mha_g, FP16), "style": "accent",
              "anchor": "start", "dy": 17, "label": f"full MHA, fp16: about {kv.decode_intensity(mha_g, FP16):.0f} FLOP per byte"},
             {"kind": "point", "x": gqa_g, "y": kv.decode_intensity(gqa_g, FP16), "style": "accent",
              "anchor": "start", "dy": 17, "label": f"g = {gqa_g} ({L3.name}): {kv.decode_intensity(gqa_g, FP16):.0f} FLOP/B"},
         ],
         "legend": "bottom-right",
-        "note": NOTE.format("decode_intensity and kv.ridge"),
+        "note": NOTE.format("decode_intensity and ridge"),
     }
 
 
@@ -186,12 +185,11 @@ def spec_sessions_per_gpu() -> dict:
     s8 = kv.sessions_per_gpu(H100_HBM, w, 8192, _per_token(L3, FP8))
     return {
         "kind": "line",
-        "title": (f"The sessions that fit on one {H100_HBM / GB:.0f} GB H100 next to the weights of {L3.name} "
-                  f"decrease in inverse proportion to the context length: {s16} of {_k(8192)} tokens with an fp16 "
-                  f"cache, {s8} with an fp8 cache."),
+        "title": (f"On an {H100_HBM / GB:.0f} GB H100 with {L3.name}, fewer sessions fit as the context grows: "
+                  f"{s16} of {_k(8192)} tokens in fp16, {s8} in fp8."),
         "width": 880,
         "height": 380,
-        "x": {"label": "context length of each session (tokens, log scale)", "scale": "log",
+        "x": {"label": "context length of each session (tokens)", "scale": "log",
               "ticks": contexts, "tick_labels": [_k(c) for c in contexts]},
         "y": {"label": "sessions, an upper bound (log scale)", "scale": "log", "ticks": [1, 10, 100, 1000],
               "min": 1, "max": 1000},

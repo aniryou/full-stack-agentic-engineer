@@ -77,8 +77,7 @@ def spec_chain_availability() -> dict:
         ],
         "marks": [
             {"kind": "hline", "y": 100 * SHARED_COMMON_MODE,
-             "label": f"the common-mode floor: the chain stays at {_pct(a[SHARED_COMMON_MODE][2], 1)}",
-             "style": "warm"},
+             "label": f"common-mode floor: {_pct(a[SHARED_COMMON_MODE][2], 1)}", "style": "warm"},
             {"kind": "point", "x": 2, "y": failed(0.0)[1], "label": f"2 targets: {_pct(a[0.0][1], 3)}",
              "style": "accent"},
             {"kind": "point", "x": 3, "y": failed(0.0)[2], "label": f"3 targets: {_pct(a[0.0][2], 5)}",
@@ -128,11 +127,8 @@ def spec_cache_threshold_sweep() -> dict:
              "label": f"0.60: {pct(at(off, 0.6)['false_hit_rate'])} false hits", "style": "warm", "dy": -10},
             {"kind": "point", "x": 0.6, "y": 100 * at(on, 0.6)["false_hit_rate"],
              "label": f"with the guard: {pct(at(on, 0.6)['false_hit_rate'])}", "style": "warm", "dy": 18},
-            {"kind": "point", "x": 0.95, "y": 100 * at(off, 0.95)["hit_rate"],
-             "label": f"0.95: {pct(at(off, 0.95)['hit_rate'])} hits", "style": "accent", "anchor": "end", "dy": -10},
-            {"kind": "point", "x": 0.95, "y": 100 * at(off, 0.95)["false_hit_rate"],
-             "label": f"{pct(at(off, 0.95)['false_hit_rate'])} false hits", "style": "warm", "anchor": "middle",
-             "dy": -10},
+            {"kind": "point", "x": 0.9, "y": 100 * at(off, 0.9)["hit_rate"],
+             "label": f"0.90: {pct(at(off, 0.9)['hit_rate'])} hits", "style": "accent", "dy": -10},
         ],
         "legend": "top-right",
         "note": "computed by gwcore.cache.sweep_thresholds",
@@ -151,9 +147,9 @@ def spec_token_reservation_sweep() -> dict:
     served = [100 * r["utilisation"] for r in runs]
     peak = [100 * r["peak_ratio"] for r in runs]
 
-    def label(i: int) -> str:
+    def over(i: int) -> str:
         s = runs[i]["seconds_over_limit"]
-        return f"{RESERVATIONS[i]:,}: {_pct(runs[i]['utilisation'], 1)}, " + (f"{s} s over" if s else "none over")
+        return f"{s} seconds over" if s else "none over"
 
     return {
         "kind": "line",
@@ -168,9 +164,16 @@ def spec_token_reservation_sweep() -> dict:
         ],
         "marks": [
             {"kind": "hline", "y": 100, "label": f"the {kw['limit']:,} tokens-per-minute limit", "style": "muted"},
-            {"kind": "point", "x": RESERVATIONS[0], "y": served[0], "label": label(0), "style": "accent", "dy": 20},
-            {"kind": "point", "x": RESERVATIONS[1], "y": served[1], "label": label(1), "style": "accent", "dy": 20},
-            {"kind": "point", "x": RESERVATIONS[2], "y": served[2], "label": label(2), "style": "accent", "dy": 20},
+            # the §4.3 sweep: what each reservation serves, and the seconds its peak window spends over the limit
+            {"kind": "point", "x": RESERVATIONS[0], "y": served[0], "label": f"{_pct(runs[0]['utilisation'], 1)} served",
+             "style": "accent", "dy": 26},
+            {"kind": "point", "x": RESERVATIONS[1], "y": served[1], "label": f"{_pct(runs[1]['utilisation'], 1)} served",
+             "style": "accent", "anchor": "end", "dy": 20},
+            {"kind": "point", "x": RESERVATIONS[2], "y": served[2], "label": f"{_pct(runs[2]['utilisation'], 1)} served",
+             "style": "accent", "anchor": "end", "dy": 20},
+            {"kind": "point", "x": RESERVATIONS[0], "y": peak[0], "label": over(0), "style": "warm"},
+            {"kind": "point", "x": RESERVATIONS[1], "y": peak[1], "label": over(1), "style": "warm"},
+            {"kind": "point", "x": RESERVATIONS[2], "y": peak[2], "label": over(2), "style": "warm"},
         ],
         "legend": "bottom-left",
         "note": "computed by gwcore.ratelimit.simulate",

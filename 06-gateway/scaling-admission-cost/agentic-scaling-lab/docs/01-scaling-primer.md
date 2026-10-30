@@ -81,6 +81,10 @@ A turn with two tool calls has four segments on the critical path. They are the 
 
 Also, because turns are long, Little's law connects latency to concurrency. At 20 turns per second, a 6-second turn means 125 turns in flight, and a 12-second turn means 250. Each turn in flight holds memory, a session lock and an open client connection. Slowdowns *are* capacity problems.
 
+![Turns in flight against the arrival rate of turns, for a 6-second turn and a 12-second turn (Little's law).](figures/inflight-turns-littles-law.svg)
+
+*Turns in flight against the arrival rate of turns. At the same rate, a 12-second turn puts twice as many turns in flight as a 6-second turn. `scalelab.capacity.plan` computes the lines and the limit of the 10 M TPM baseline (§3.3), and `tests/test_figures.py` pins the chart.*
+
 ### 1.4 Cost scales with context, and context grows
 
 The bill is tokens, and input is the largest part of it. A support turn sends 4–6 k tokens of system prompt, tool schemas, customer context and history. It gets 300–400 tokens back. Without compaction, the input grows by several hundred tokens each turn. Thus the cost of the tenth turn is a multiple of the cost of the first turn.
@@ -248,6 +252,10 @@ The calculation for one 3.5 Flash call:
 
 The call costs $0.00345 + $0.0004 + $0.00315 ≈ $0.0070. Thirteen calls in a conversation come to ≈ $0.092. When you route a third of them to Flash-Lite at $0.00165, the cost goes down to $0.068. With self-hosted models, the same lever is a distilled student behind a cascade. The price of that student, with its break-even, is in [distillation §9](../../../../00-foundations/distillation/PRIMER.md#9-the-economics-of-a-student).
 
+![Cost per conversation against the share of model calls on 3.5 Flash-Lite, with no caching and with the prefix cached.](figures/cost-per-conversation-flash-lite-share.svg)
+
+*Cost per conversation against the share of model calls on 3.5 Flash-Lite. The cached prefix and a larger share on Flash-Lite each decrease the cost. `scalelab.capacity.plan` computes both lines, and `tests/test_figures.py` pins the chart.*
+
 Compared with a contact that a person handles, at several dollars, all three rows are low-cost. Compared with each other, the highest cost per conversation is 2× the lowest. At this volume, the difference is $220 k a month. Output tokens are the largest single line, but there are fourteen times fewer of them. The reason is that, on this model, the price of output is six times the price of input. Thus output caps and thinking levels are cost levers, not only latency levers.
 
 > **Verify.** The prices are for the global endpoint on 5 September 2026:
@@ -278,6 +286,10 @@ The anchor call has a burndown of 2,000 + 300 + 2,100 ≈ 4,400–4,700 tokens. 
 | 1 year | 2.74 | 1.13 | 75 % |
 
 Thus PT is not a discount unless you commit for a year *and* keep the units three-quarters busy. If you buy PT for the peak (207 GSUs), it is 33 % utilised on average and costs more than pay-as-you-go. The usual answer has two parts. Buy PT for the base (69 GSUs, $138 k a month on a 1-year term). Then let the peaks spill over to Priority or Standard PayGo.
+
+![The price per M burndown tokens on Provisioned Throughput against the utilisation of the GSUs, for each term, and the PayGo price.](figures/pt-break-even-utilisation.svg)
+
+*The price per M burndown tokens on PT against the utilisation of the GSUs, for each term. A term costs less than PayGo only above its break-even utilisation: 75 % for 1 year and 90 % for 3 months. `scalelab.capacity.plan` computes the curves, and `tests/test_figures.py` pins the chart.*
 
 PT buys an SLA and immunity from the contention of the shared pool, for the traffic that is most important. That is why the request headers let you say, per call, "dedicated only", "spill over to Priority" or "bypass PT".
 

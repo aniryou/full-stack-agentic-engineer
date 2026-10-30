@@ -74,6 +74,10 @@ Attention over a cache does about **1 FLOP per byte** in fp16 with full multi-he
 
 In both cases, the intensity is about two orders of magnitude too low (the [FlashAttention deep dive](../flash-attention/flash-attention-deep-dive.md) derives it). The GPU is a delivery truck in a traffic jam, not an engine without sufficient horsepower.
 
+![Decode attention does 2g/b FLOP per byte: 1 for full MHA and 4 for Llama 3 8B in fp16, against the ~300 that the H100 needs.](figures/decode-intensity.svg)
+
+*The chart shows the FLOP per byte of decode attention against g, the number of query heads that share one KV head. The marked points, 1 and 4, are about two orders of magnitude under the ~300 FLOP per byte that the H100 needs. `kerncore.kv.decode_intensity` and `kerncore.kv.ridge` calculate the values, and `kernel-core/tests/test_figures.py` pins the chart.*
+
 A useful approximation for decode speed:
 
 $$
@@ -118,6 +122,10 @@ per token = 2 × 40 × 40 × 128 × 2 = 819,200 bytes = 800 KiB
 ```
 
 Six times larger per token, for a model only 1.6× bigger. That gap is the effect of grouped-query attention, which §6 explains.
+
+![The fp16 KV cache grows with the tokens that it holds: 128 KiB per token for Llama 3 8B, 800 KiB for Llama 2 13B.](figures/kv-bytes-vs-tokens.svg)
+
+*The chart shows the fp16 KV cache against the tokens that it holds, `seq_len × batch`, for Llama 3 8B and Llama 2 13B. The marked points are the rows of the table, and the dashed line shows the weights of Llama 3 8B. `kerncore.kv.kv_cache_bytes` calculates the values, and `kernel-core/tests/test_figures.py` pins the chart.*
 
 **Second-order effect:** at 128K context, decode reads ~16 GB of weights *plus* ~17 GB of cache per token. That is two times the traffic, so you get roughly **half the tokens per second** of a short context. Long context costs you capacity *and* speed.
 
@@ -168,6 +176,10 @@ Three consequences to keep in mind:
 1. **Context length is a serving cost, not just a training capability.** A 1M-token context window is an architecture claim. The question "can you afford to *serve* that context window?" is a question about the KV cache.
 2. **Cache memory, not compute, caps the batch size.** Throughput per GPU is mostly the answer to "how many concurrent sequences fit in leftover HBM."
 3. **Decode speed is a bandwidth division problem.** If you want faster tokens, decrease the number of bytes that decode reads per token. Or buy more bandwidth.
+
+![On an 80 GB H100 with Llama 3 8B, fewer sessions fit as the context grows: 59 of 8K tokens in fp16, 119 in fp8.](figures/sessions-per-gpu.svg)
+
+*The chart shows the sessions that fit on an 80 GB H100 next to the weights of Llama 3 8B, against the context length. The count decreases by approximately half each time the context doubles, and the marked points are the 59 and 119 of §4. `kerncore.kv.sessions_per_gpu` calculates the counts, and `kernel-core/tests/test_figures.py` pins the chart.*
 
 ---
 

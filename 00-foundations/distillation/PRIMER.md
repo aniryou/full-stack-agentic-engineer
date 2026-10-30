@@ -194,9 +194,9 @@ $$
 that is, the mean-squared error on centred logits (Caruana's model compression): 0.23000 for the example
 (`losses.logit_mse()`).
 
-![The soft term of the five-token example against the temperature T: the KL fades as 1/T², and T²·KL stays almost constant and goes to the logit-matching limit.](figures/kl-against-temperature.svg)
+![The soft term of the five-token example against the temperature T: the KL decreases as 1/T², and T²·KL goes to its high-T limit.](figures/kl-against-temperature.svg)
 
-*The chart shows the soft term of the five-token example against the temperature $T$. The KL decreases approximately as $1/T^2$, but $T^2 \cdot \mathrm{KL}$ stays almost constant and goes to the logit-matching limit, 0.23000. `distillcore.losses.kd()` and `losses.logit_mse()` compute the two lines, and `tests/test_figures.py` pins the chart.*
+*The chart shows the soft term of the five-token example against the temperature $T$. The KL decreases approximately as $1/T^2$, but $T^2 \cdot \mathrm{KL}$ stays almost constant and goes to its high-T limit, 0.23000. `distillcore.losses.kd()` and `losses.logit_mse()` compute the two lines, and `tests/test_figures.py` pins the chart.*
 
 TRL applies no $T^2$ (verify). `GKDTrainer` calculates its divergence at T = 1, and its `temperature` sets only the
 sampling. `DistillationTrainer` divides both logits by its `temperature` (default 1.0) in the loss. The
@@ -710,7 +710,7 @@ Now take a real pair: Qwen3-0.6B as a draft for Qwen3-4B, with the same 151,936 
 by weight bytes, so k = 4 gives 1.45×, 1.74× and 2.11× at α = 0.6, 0.7 and 0.8. These numbers are a model, before
 per-step overheads. Measure $c$, as the serving primer says.
 
-![Speedup of a draft against its acceptance rate α, at c ≈ 0.148 (a 0.6B draft for a 4B target), for k = 2, 4 and 8 drafted tokens per target pass.](figures/draft-speedup.svg)
+![Speedup of a draft against its acceptance rate α at c ≈ 0.148, for k = 2, 4 and 8 drafted tokens.](figures/draft-speedup.svg)
 
 *The chart shows the speedup $E/(k \cdot c + 1)$ of this pair against $\alpha$, with the k = 4 values of the text as marks. At a low $\alpha$ the best depth is a small $k$, and at a high $\alpha$ it is a large $k$. `distillcore.draft.speedup()` computes the lines, and `tests/test_figures.py` pins the chart.*
 

@@ -101,6 +101,10 @@ BF16's 392 µs for one token. Between ~120 and ~460 tokens, the speedup of W4A16
 pays for BF16 math, but BF16 still pays for bytes. The speedup is 1.7× at 256 tokens, and nothing at 462 and
 beyond, for example at 2,048, where W4A16 and BF16 take the same time.
 
+![The speedup over BF16 of the down_proj GEMM of Llama-3.1-8B on an L4, for W4A16 and FP8 W8A8, against the tokens per step.](figures/gemm-speedup-vs-tokens.svg)
+
+*W4A16 starts at 3.9× the speed of BF16 and becomes compute-bound at 119 tokens per step. From 462 tokens, BF16 is compute-bound too, and W4A16 has no gain, but FP8 W8A8 stays near 2×. `cost.gemm_time()` computes the speedup of one down_proj GEMM on an L4, and `tests/test_figures.py` pins the chart.*
+
 Thus decode batches of a few hundred still get a gain from INT4, but long prefill chunks do not. Real kernels lose
 the gain sooner, because the dequantization is not free (§4).
 
@@ -242,6 +246,10 @@ Take 128×256 Gaussian weights with one scale per channel. Here (crest factor 3.
 INT8 and the grid measures 43.1; at INT4 it predicts 19.1 and the grid measures 18.4. The rule is valid from 4
 bits up. At 2–3 bits, where the noise is no longer busy, the rule predicts too high. In serving-engine §8, the measured
 slope is the same: 43.0 dB per channel at INT8 against 17.9 at INT4.
+
+![The SQNR of per-channel INT2 to INT8 on 128×256 Gaussian weights: the rule of about 6 dB per bit, and what the grid measures.](figures/sqnr-vs-bits.svg)
+
+*The SQNR increases by about 6 dB for each bit, as the rule says. From 4 bits up, the grid measures almost what the rule predicts, but at 2 and 3 bits the rule predicts too high. `formats.sqnr_rule_db()` computes the rule, `granularity.error()` measures the grid, and `tests/test_figures.py` pins the chart.*
 
 **Outliers dominate.** The last term is the crest factor, and each 10× of amax over rms costs 20 dB, which is more
 than three bits. A 4,096-value row of rms 0.02 has a crest factor of 3.9. Add one value of 0.8, and it becomes 33.9.
@@ -598,7 +606,7 @@ context. FP8 KV takes a decode step from 17.5 ms to 11.3 ms (`cost.step_cost()`,
 
 ![KV bytes per token for Llama-3.1-8B at 16, 8, 5 and 3 bits per element, and 2,000-token sessions on an L4 with FP8 weights.](figures/kv-cache-bytes-and-sessions.svg)
 
-*A smaller KV cache gives Llama-3.1-8B more sessions and faster long-context decode (§6). The bytes per token are 131,072 in BF16, 65,536 in FP8, 40,960 at 4 bits with groups of 32 and 24,576 at 2 bits. The 2,000-token sessions on an L4 with FP8 weights go from 43 to 87, 140 and 234 (`cost.sessions()`).*
+*Fewer KV bits per element give more 2,000-token sessions of Llama-3.1-8B on an L4 with FP8 weights: 43, 87, 140 and 234. The label under each bar gives the bits per element and the bytes per token of that KV cache dtype. `cost.Model.kv_bytes_per_token()` and `cost.sessions()` compute the values, and `tests/test_figures.py` pins the chart.*
 
 **FP8 KV and its scale.** vLLM's `--kv-cache-dtype` accepts `fp8` (= `fp8_e4m3`) and `fp8_e5m2`, plus
 per-token-head dynamic types (`int4_per_token_head`, `int8_per_token_head`, `fp8_per_token_head`) and NVFP4 on
@@ -708,6 +716,10 @@ The stderr is the error bar of one score. A drop is the difference of two scores
 standard error is $\sqrt{\mathrm{se}_{\text{ref}}^2 + \mathrm{se}_{\text{quant}}^2}$, $\sqrt{2}$ larger
 (`eval.diff_stderr()`). A drop smaller than about two times this standard error is noise. 250 items cannot see a drop smaller than
 ~7.6 points. To resolve 1 point at 77%, the eval takes 14,169 items per model.
+
+![The smallest accuracy drop that an unpaired comparison of two models can tell from noise, against the number of eval items per model.](figures/visible-drop-vs-eval-items.svg)
+
+*The smallest drop that an unpaired comparison can see is two standard errors of the difference. It is ~7.6 points at 250 items, and 1 point at 77% needs 14,169 items per model. `eval.diff_stderr()` computes the line at 76.8%, and `tests/test_figures.py` pins the chart.*
 
 The quantized and reference models answer the **same** items. Thus use a paired comparison. Only the items that
 flipped carry information. McNemar's test on them is

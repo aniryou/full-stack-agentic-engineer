@@ -68,8 +68,8 @@ def spec_kl_against_temperature() -> dict:
     k1, k4, s4 = L.kd(V, Z, 1.0, scale=False)[0], L.kd(V, Z, 4.0, scale=False)[0], L.kd(V, Z, 4.0)[0]
     return {
         "kind": "line",
-        "title": "The soft term of the five-token example against the temperature T: the KL fades as 1/T², and T²·KL "
-                 "stays almost constant and goes to the logit-matching limit.",
+        "title": "The soft term of the five-token example against the temperature T: the KL decreases as 1/T², and "
+                 "T²·KL goes to its high-T limit.",
         "x": {"label": "temperature T (log scale)", "scale": "log", "ticks": [1, 2, 4, 10, 100, 1000]},
         "y": {"label": "nats", "min": 0, "max": 0.3},
         "series": [
@@ -104,8 +104,7 @@ def spec_draft_speedup() -> dict:
                   "anchor": "start"})
     return {
         "kind": "line",
-        "title": f"Speedup of a draft against its acceptance rate α, at c ≈ {c:.3f} (a 0.6B draft for a 4B target), "
-                 "for k = 2, 4 and 8 drafted tokens per target pass.",
+        "title": f"Speedup of a draft against its acceptance rate α at c ≈ {c:.3f}, for k = 2, 4 and 8 drafted tokens.",
         "x": {"label": "acceptance rate α", "min": 0.4, "max": 1.0, "ticks": [0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]},
         "y": {"label": "speedup (×)", "min": 0, "max": 4.5, "ticks": [0, 1, 2, 3, 4]},
         "series": series,

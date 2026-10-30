@@ -4,40 +4,40 @@
   <rect x="0" y="0" width="880" height="360" rx="8" fill="#161E1C"/>
   <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12" fill="currentColor">
     <g stroke="#27322E" stroke-width="1">
-      <line x1="66.0" y1="306.0" x2="858.0" y2="306.0"/>
-      <line x1="66.0" y1="212.5" x2="858.0" y2="212.5"/>
-      <line x1="66.0" y1="118.9" x2="858.0" y2="118.9"/>
-      <line x1="66.0" y1="25.4" x2="858.0" y2="25.4"/>
+      <line x1="66.0" y1="290.0" x2="858.0" y2="290.0"/>
+      <line x1="66.0" y1="201.7" x2="858.0" y2="201.7"/>
+      <line x1="66.0" y1="113.5" x2="858.0" y2="113.5"/>
+      <line x1="66.0" y1="25.2" x2="858.0" y2="25.2"/>
     </g>
     <g stroke="#55635E" stroke-width="1.2">
-      <line x1="66.0" y1="306.0" x2="858.0" y2="306.0"/>
-      <line x1="66.0" y1="306.0" x2="66.0" y2="22.0"/>
+      <line x1="66.0" y1="290.0" x2="858.0" y2="290.0"/>
+      <line x1="66.0" y1="290.0" x2="66.0" y2="22.0"/>
     </g>
     <g font-size="11" fill="#97A59F">
-      <text x="58.0" y="309.5" text-anchor="end">0</text>
-      <text x="58.0" y="216.0" text-anchor="end">0.05</text>
-      <text x="58.0" y="122.4" text-anchor="end">0.10</text>
-      <text x="58.0" y="28.9" text-anchor="end">0.15</text>
-      <text x="66.0" y="322.0" text-anchor="middle">0</text>
-      <text x="224.4" y="322.0" text-anchor="middle">20</text>
-      <text x="382.8" y="322.0" text-anchor="middle">40</text>
-      <text x="541.2" y="322.0" text-anchor="middle">60</text>
-      <text x="699.6" y="322.0" text-anchor="middle">80</text>
-      <text x="858.0" y="322.0" text-anchor="middle">100</text>
+      <text x="58.0" y="293.5" text-anchor="end">0</text>
+      <text x="58.0" y="205.2" text-anchor="end">0.05</text>
+      <text x="58.0" y="117.0" text-anchor="end">0.10</text>
+      <text x="58.0" y="28.7" text-anchor="end">0.15</text>
+      <text x="66.0" y="306.0" text-anchor="middle">0</text>
+      <text x="224.4" y="306.0" text-anchor="middle">20</text>
+      <text x="382.8" y="306.0" text-anchor="middle">40</text>
+      <text x="541.2" y="306.0" text-anchor="middle">60</text>
+      <text x="699.6" y="306.0" text-anchor="middle">80</text>
+      <text x="858.0" y="306.0" text-anchor="middle">100</text>
     </g>
-    <text x="462.0" y="348.0" text-anchor="middle" fill="#97A59F">share of model calls on 3.5 Flash-Lite (%)</text>
-    <text x="16" y="164.0" text-anchor="middle" fill="#97A59F" transform="rotate(-90 16 164.0)">cost per conversation ($)</text>
-    <clipPath id="plot"><rect x="65.0" y="16.0" width="794.0" height="291.0"/></clipPath>
+    <text x="462.0" y="332.0" text-anchor="middle" fill="#97A59F">share of model calls on 3.5 Flash-Lite (%)</text>
+    <text x="16" y="156.0" text-anchor="middle" fill="#97A59F" transform="rotate(-90 16 156.0)">cost per conversation ($)</text>
+    <clipPath id="plot"><rect x="65.0" y="16.0" width="794.0" height="275.0"/></clipPath>
     <g clip-path="url(#plot)">
-      <path d="M66.0 43.0 L105.6 53.3 L145.2 63.5 L184.8 73.7 L224.4 83.9 L264.0 94.1 L303.6 104.3 L343.2 114.5 L382.8 124.8 L422.4 135.0 L462.0 145.2 L501.6 155.4 L541.2 165.6 L580.8 175.8 L620.4 186.1 L660.0 196.3 L699.6 206.5 L739.2 216.7 L778.8 226.9 L818.4 237.1 L858.0 247.4" fill="none" stroke="#97A59F" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="6 4"/>
-      <path d="M66.0 133.0 L105.6 139.7 L145.2 146.3 L184.8 152.9 L224.4 159.5 L264.0 166.1 L303.6 172.7 L343.2 179.4 L382.8 186.0 L422.4 192.6 L462.0 199.2 L501.6 205.8 L541.2 212.4 L580.8 219.0 L620.4 225.7 L660.0 232.3 L699.6 238.9 L739.2 245.5 L778.8 252.1 L818.4 258.7 L858.0 265.4" fill="none" stroke="#4CC5B7" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="M66.0 41.9 L105.6 51.5 L145.2 61.1 L184.8 70.8 L224.4 80.4 L264.0 90.1 L303.6 99.7 L343.2 109.3 L382.8 119.0 L422.4 128.6 L462.0 138.3 L501.6 147.9 L541.2 157.5 L580.8 167.2 L620.4 176.8 L660.0 186.5 L699.6 196.1 L739.2 205.7 L778.8 215.4 L818.4 225.0 L858.0 234.7" fill="none" stroke="#97A59F" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="6 4"/>
+      <path d="M66.0 126.8 L105.6 133.0 L145.2 139.3 L184.8 145.5 L224.4 151.8 L264.0 158.0 L303.6 164.2 L343.2 170.5 L382.8 176.7 L422.4 183.0 L462.0 189.2 L501.6 195.5 L541.2 201.7 L580.8 207.9 L620.4 214.2 L660.0 220.4 L699.6 226.7 L739.2 232.9 L778.8 239.2 L818.4 245.4 L858.0 251.6" fill="none" stroke="#4CC5B7" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
     </g>
-    <circle cx="66.0" cy="43.0" r="4.5" fill="#E4EAE7" stroke="#161E1C" stroke-width="1.5"/>
-    <text x="75.0" y="33.0" text-anchor="start" font-size="11" fill="#E4EAE7">all 3.5 Flash: $0.141</text>
-    <circle cx="66.0" cy="133.0" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
-    <text x="75.0" y="123.0" text-anchor="start" font-size="11" fill="#4CC5B7">prefix cached: $0.092</text>
-    <circle cx="343.2" cy="179.4" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
-    <text x="352.2" y="169.4" text-anchor="start" font-size="11" fill="#4CC5B7">35 % on Flash-Lite: $0.068</text>
+    <circle cx="66.0" cy="41.9" r="4.5" fill="#E4EAE7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="75.0" y="31.9" text-anchor="start" font-size="11" fill="#E4EAE7">all 3.5 Flash: $0.141</text>
+    <circle cx="66.0" cy="126.8" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="75.0" y="116.8" text-anchor="start" font-size="11" fill="#4CC5B7">prefix cached: $0.092</text>
+    <circle cx="343.2" cy="170.5" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="352.2" y="160.5" text-anchor="start" font-size="11" fill="#4CC5B7">35 % on Flash-Lite: $0.068</text>
     <g font-size="11.5">
       <rect x="625.7" y="30.0" width="224.3" height="44.0" rx="5" fill="#161E1C" fill-opacity="0.9" stroke="#27322E"/>
       <line x1="635.7" y1="43.0" x2="653.7" y2="43.0" stroke="#97A59F" stroke-width="2" stroke-dasharray="6 4"/>

@@ -17,7 +17,7 @@ LAB = pathlib.Path(__file__).resolve().parents[1]
 if str(LAB) not in sys.path:
     sys.path.insert(0, str(LAB))
 
-from scalelab.capacity import PT_USD_PER_GSU_HOUR, Scenario, plan, pt_usd_per_million_burndown  # noqa: E402
+from scalelab.capacity import PT_USD_PER_GSU_HOUR, Scenario, plan  # noqa: E402
 
 FIG_DIR = LAB / "docs" / "figures"
 
@@ -135,27 +135,29 @@ def spec_pt_break_even() -> dict:
     series = []
     for term in PT_USD_PER_GSU_HOUR:
         name, style = TERMS[term]
-        full = pt_usd_per_million_burndown(base.model, term)    # the price per M burndown tokens at 100 % utilisation
+        full = p["usd_per_million_burndown"][term]      # the price per M burndown tokens at 100 % utilisation
         series.append({"name": name, "x": [_r(100 * u, 4) for u in util], "y": [_r(full / u) for u in util],
                        "style": style, "dash": term == "1w"})
     peak_util = p["gsus"]["average"] / p["gsus"]["peak"]          # PT bought for the peak, used at the average load
     return {
         "kind": "line",
-        "title": "The price of a used burndown token on Provisioned Throughput against the utilisation of the GSUs, for each term, against PayGo.",
-        "height": 400,
-        "x": {"label": "utilisation of the GSUs (%)", "min": 30, "max": 100},
+        "title": "The price per M burndown tokens on Provisioned Throughput against the utilisation of the GSUs, for each term, and the PayGo price.",
+        "height": 420,
+        "x": {"label": "utilisation of the GSUs (%)", "min": 30, "max": 100, "ticks": list(range(30, 101, 10))},
         "y": {"label": "$ per M burndown tokens", "min": 0, "max": 5},
         "series": series,
         "marks": [
-            {"kind": "hline", "y": _r(paygo), "label": "PayGo ($1.50/M burndown)", "style": "warm", "anchor": "start"},
+            {"kind": "hline", "y": _r(paygo), "style": "warm"},
+            {"kind": "text", "x": 35, "y": _r(paygo + 0.1), "text": "PayGo ($1.50/M burndown)", "style": "warm",
+             "anchor": "start"},
             {"kind": "vline", "x": _r(100 * peak_util, 4), "label": "PT for the peak: 33 % utilised", "style": "warm"},
             {"kind": "point", "x": _r(100 * p["breakeven_utilisation"]["1y"], 4), "y": _r(paygo),
-             "label": "1 year: 75 %", "style": "accent", "anchor": "end", "dy": 18},
+             "label": "1 year: 75 %", "style": "accent", "anchor": "end", "dy": 36},
             {"kind": "point", "x": _r(100 * p["breakeven_utilisation"]["3m"], 4), "y": _r(paygo),
-             "label": "3 months: 90 %", "style": "yellow", "anchor": "end", "dy": 18},
+             "label": "3 months: 90 %", "style": "yellow", "anchor": "end", "dy": 36},
         ],
         "legend": "top-right",
-        "note": "computed by scalelab.capacity.pt_usd_per_million_burndown and plan",
+        "note": "computed by scalelab.capacity.plan",
     }
 
 

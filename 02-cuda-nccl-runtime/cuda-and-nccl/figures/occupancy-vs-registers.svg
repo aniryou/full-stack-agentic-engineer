@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="360" viewBox="0 0 880 360" role="img" aria-label="Occupancy of one L4 SM against registers per thread for blocks of 256 threads: 4 blocks and 67% at 64 registers, and 33% when each block also uses 48 KB of shared memory." style="color: #E4EAE7">
+  <title>Occupancy of one L4 SM against registers per thread for blocks of 256 threads: 4 blocks and 67% at 64 registers, and 33% when each block also uses 48 KB of shared memory.</title>
+  <desc>{"kind":"line","legend":"top-right","marks":[{"anchor":"end","kind":"point","label":"64 registers: 4 blocks, 67%","style":"accent","x":64,"y":66.667},{"kind":"point","label":"80 registers: 24 warps","style":"accent","x":80,"y":50.0},{"anchor":"end","dy":18,"kind":"point","label":"64 registers and 48 KB: 33%","style":"warm","x":64,"y":33.333}],"note":"computed by gpusim.occupancy.occupancy (cuda-nccl-core), CC 8.9","series":[{"name":"no shared memory","step":true,"style":"accent","x":[16,41,49,65,81,129,255],"y":[100.0,83.333,66.667,50.0,33.333,16.667,16.667]},{"dash":true,"name":"48 KB shared memory per block","step":true,"style":"warm","x":[16,129,255],"y":[33.333,16.667,16.667]}],"title":"Occupancy of one L4 SM against registers per thread for blocks of 256 threads: 4 blocks and 67% at 64 registers, and 33% when each block also uses 48 KB of shared memory.","x":{"label":"registers per thread","max":255,"min":16,"ticks":[16,32,48,64,80,96,128,160,192,224,255]},"y":{"label":"occupancy (% of 48 warps)","max":100,"min":0,"tick_labels":["0%","17%","33%","50%","67%","83%","100%"],"ticks":[0.0,16.667,33.333,50.0,66.667,83.333,100.0]}}</desc>
+  <rect x="0" y="0" width="880" height="360" rx="8" fill="#161E1C"/>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12" fill="currentColor">
+    <g stroke="#27322E" stroke-width="1">
+      <line x1="66.0" y1="290.0" x2="858.0" y2="290.0"/>
+      <line x1="66.0" y1="245.3" x2="858.0" y2="245.3"/>
+      <line x1="66.0" y1="200.7" x2="858.0" y2="200.7"/>
+      <line x1="66.0" y1="156.0" x2="858.0" y2="156.0"/>
+      <line x1="66.0" y1="111.3" x2="858.0" y2="111.3"/>
+      <line x1="66.0" y1="66.7" x2="858.0" y2="66.7"/>
+      <line x1="66.0" y1="22.0" x2="858.0" y2="22.0"/>
+    </g>
+    <g stroke="#55635E" stroke-width="1.2">
+      <line x1="66.0" y1="290.0" x2="858.0" y2="290.0"/>
+      <line x1="66.0" y1="290.0" x2="66.0" y2="22.0"/>
+    </g>
+    <g font-size="11" fill="#97A59F">
+      <text x="58.0" y="293.5" text-anchor="end">0%</text>
+      <text x="58.0" y="248.8" text-anchor="end">17%</text>
+      <text x="58.0" y="204.2" text-anchor="end">33%</text>
+      <text x="58.0" y="159.5" text-anchor="end">50%</text>
+      <text x="58.0" y="114.8" text-anchor="end">67%</text>
+      <text x="58.0" y="70.2" text-anchor="end">83%</text>
+      <text x="58.0" y="25.5" text-anchor="end">100%</text>
+      <text x="66.0" y="306.0" text-anchor="middle">16</text>
+      <text x="119.0" y="306.0" text-anchor="middle">32</text>
+      <text x="172.0" y="306.0" text-anchor="middle">48</text>
+      <text x="225.1" y="306.0" text-anchor="middle">64</text>
+      <text x="278.1" y="306.0" text-anchor="middle">80</text>
+      <text x="331.1" y="306.0" text-anchor="middle">96</text>
+      <text x="437.1" y="306.0" text-anchor="middle">128</text>
+      <text x="543.2" y="306.0" text-anchor="middle">160</text>
+      <text x="649.2" y="306.0" text-anchor="middle">192</text>
+      <text x="755.3" y="306.0" text-anchor="middle">224</text>
+      <text x="858.0" y="306.0" text-anchor="middle">255</text>
+    </g>
+    <text x="462.0" y="332.0" text-anchor="middle" fill="#97A59F">registers per thread</text>
+    <text x="16" y="156.0" text-anchor="middle" fill="#97A59F" transform="rotate(-90 16 156.0)">occupancy (% of 48 warps)</text>
+    <clipPath id="plot"><rect x="65.0" y="16.0" width="794.0" height="275.0"/></clipPath>
+    <g clip-path="url(#plot)">
+      <path d="M66.0 22.0 L148.8 22.0 L148.8 66.7 L175.4 66.7 L175.4 111.3 L228.4 111.3 L228.4 156.0 L281.4 156.0 L281.4 200.7 L440.5 200.7 L440.5 245.3 L858.0 245.3 L858.0 245.3" fill="none" stroke="#4CC5B7" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="M66.0 200.7 L440.5 200.7 L440.5 245.3 L858.0 245.3 L858.0 245.3" fill="none" stroke="#E39A62" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="6 4"/>
+    </g>
+    <circle cx="225.1" cy="111.3" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="216.1" y="102.3" text-anchor="end" font-size="11" fill="#4CC5B7">64 registers: 4 blocks, 67%</text>
+    <circle cx="278.1" cy="156.0" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="287.1" y="147.0" text-anchor="start" font-size="11" fill="#4CC5B7">80 registers: 24 warps</text>
+    <circle cx="225.1" cy="200.7" r="4.5" fill="#E39A62" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="216.1" y="218.7" text-anchor="end" font-size="11" fill="#E39A62">64 registers and 48 KB: 33%</text>
+    <g font-size="11.5">
+      <rect x="619.2" y="30.0" width="230.8" height="44.0" rx="5" fill="#161E1C" fill-opacity="0.9" stroke="#27322E"/>
+      <line x1="629.2" y1="43.0" x2="647.2" y2="43.0" stroke="#4CC5B7" stroke-width="2"/>
+      <text x="653.2" y="47.0" fill="currentColor">no shared memory</text>
+      <line x1="629.2" y1="60.0" x2="647.2" y2="60.0" stroke="#E39A62" stroke-width="2" stroke-dasharray="6 4"/>
+      <text x="653.2" y="64.0" fill="currentColor">48 KB shared memory per block</text>
+    </g>
+    <text x="10" y="353.0" font-size="10.5" fill="#97A59F" font-family="JetBrains Mono, monospace">computed by gpusim.occupancy.occupancy (cuda-nccl-core), CC 8.9</text>
+  </g>
+</svg>

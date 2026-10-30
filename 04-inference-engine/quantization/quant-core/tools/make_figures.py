@@ -54,6 +54,7 @@ def spec_gemm_speedup() -> dict:
     speedup = lambda s: [round(t(m, "bf16") / t(m, s), 4) for m in tokens]
     w4 = speedup("w4a16")
     at = dict(zip(tokens, w4))
+    knee = cross["w4a16"]                                                         # where W4A16 turns compute-bound
     return {
         "kind": "line",
         "title": ("The speedup over BF16 of the down_proj GEMM of Llama-3.1-8B on an L4, for W4A16 and FP8 W8A8, "
@@ -65,12 +66,13 @@ def spec_gemm_speedup() -> dict:
             {"name": "FP8 W8A8", "x": tokens, "y": speedup("w8a8-fp8"), "style": "violet"},
         ],
         "marks": [
-            {"kind": "vline", "x": round(cross["w4a16"], 3), "label": f"W4A16 compute-bound: {cross['w4a16']:.0f}",
-             "style": "accent", "anchor": "end"},
             {"kind": "vline", "x": round(cross["bf16"], 3), "label": f"BF16 compute-bound: {cross['bf16']:.0f}",
              "style": "warm"},
             {"kind": "point", "x": 1, "y": at[1], "label": f"1 token: {at[1]:.1f}×", "style": "accent"},
-            {"kind": "point", "x": 256, "y": at[256], "label": f"256 tokens: {at[256]:.1f}×", "style": "accent"},
+            {"kind": "point", "x": round(knee, 3), "y": round(t(knee, "bf16") / t(knee, "w4a16"), 4),
+             "label": f"W4A16 compute-bound: {knee:.0f}", "style": "accent", "anchor": "end", "dy": 18},
+            {"kind": "point", "x": 256, "y": at[256], "label": f"256 tokens: {at[256]:.1f}×", "style": "accent",
+             "anchor": "end", "dy": 18},
         ],
         "legend": "bottom-left",
         "note": "computed by quantcore.cost.gemm_time",
@@ -89,7 +91,7 @@ def spec_sqnr_vs_bits() -> dict:
         "kind": "line",
         "title": ("The SQNR of per-channel INT2 to INT8 on 128×256 Gaussian weights: the rule of about 6 dB per bit, "
                   "and what the grid measures."),
-        "x": {"label": "bits per weight (INT b, one scale per channel)", "ticks": bits, "min": 2, "max": 8},
+        "x": {"label": "integer bits b (one scale per channel)", "ticks": bits, "min": 2, "max": 8},
         "y": {"label": "SQNR (dB)", "min": 0, "max": 48, "ticks": [0, 10, 20, 30, 40]},
         "series": [
             {"name": f"the rule, crest factor {crest:.2f}", "x": bits, "y": rule, "style": "plain", "dash": True},
@@ -97,7 +99,7 @@ def spec_sqnr_vs_bits() -> dict:
         ],
         "marks": [
             {"kind": "point", "x": 8, "y": g[8], "label": f"INT8: rule {r[8]:.1f} dB, grid {g[8]:.1f}",
-             "style": "accent", "anchor": "end", "dy": 18},
+             "style": "accent", "anchor": "end"},
             {"kind": "point", "x": 4, "y": g[4], "label": f"INT4: rule {r[4]:.1f}, grid {g[4]:.1f}",
              "style": "accent", "dy": 18},
         ],
@@ -122,7 +124,7 @@ def spec_kv_sessions() -> dict:
         "title": ("KV bytes per token for Llama-3.1-8B at 16, 8, 5 and 3 bits per element, and 2,000-token sessions "
                   "on an L4 with FP8 weights."),
         "categories": [name for name, _ in kinds],
-        "x": {"label": "KV cache dtype", "tick_labels": labels},
+        "x": {"tick_labels": labels},
         "y": {"label": "2,000-token sessions on an L4", "min": 0, "max": 260, "ticks": [0, 50, 100, 150, 200, 250]},
         "series": [{"name": "sessions, FP8 weights", "y": sessions, "style": "accent"}],
         "legend": "none",
@@ -133,7 +135,7 @@ def spec_kv_sessions() -> dict:
 def spec_visible_drop() -> dict:
     """§8: the smallest accuracy drop an unpaired comparison can tell from noise (2 x diff_stderr), against the items."""
     p = 0.768                                         # vLLM's FP8 GSM8K example: 250 items at 76.8%
-    items = sorted({int(round(10 ** (2 + i / 20))) for i in range(61)} | {250})
+    items = sorted({int(round(10 ** (2 + i / 20))) for i in range(53)} | {250, 40000})      # 100 to 40,000 items
     drop = [round(100 * 2 * E.diff_stderr(p, p, n), 4) for n in items]
     n77 = next(n for n in range(100, 100000) if 2 * E.diff_stderr(0.77, 0.77, n) <= 0.01)   # 1 point at 77%
     d250 = 100 * 2 * E.diff_stderr(p, p, 250)
@@ -141,7 +143,7 @@ def spec_visible_drop() -> dict:
         "kind": "line",
         "title": ("The smallest accuracy drop that an unpaired comparison of two models can tell from noise, against "
                   "the number of eval items per model."),
-        "x": {"label": "eval items per model", "scale": "log", "ticks": [100, 1000, 10000, 100000]},
+        "x": {"label": "eval items per model", "scale": "log", "ticks": [100, 1000, 10000], "max": 40000},
         "y": {"label": "smallest visible drop (points)", "scale": "log", "ticks": [0.5, 1, 2, 5, 10, 20],
               "min": 0.5, "max": 20},
         "series": [{"name": f"2 × the unpaired standard error, at {100 * p:.1f}%", "x": items, "y": drop,
@@ -150,7 +152,7 @@ def spec_visible_drop() -> dict:
             {"kind": "point", "x": 250, "y": round(d250, 4), "label": f"250 items: ~{d250:.1f} points",
              "style": "accent"},
             {"kind": "point", "x": n77, "y": round(100 * 2 * E.diff_stderr(0.77, 0.77, n77), 4),
-             "label": f"{n77:,} items per model: 1 point at 77%", "style": "warm"},
+             "label": f"{n77:,} items per model: 1 point at 77%", "style": "warm", "anchor": "end", "dy": 18},
         ],
         "legend": "top-right",
         "note": "computed by quantcore.eval.diff_stderr",

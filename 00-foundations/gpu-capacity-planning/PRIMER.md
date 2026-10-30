@@ -87,6 +87,10 @@ A 32K RAG prompt needs ≈ 1.5 PFLOP for the weights plus 0.35 for attention, a 
 ≈ 1.9 PFLOP. This takes ~1.9 s. The bank example in the next section does not include
 attention: at 1,500 tokens, attention is 1%.
 
+![TTFT on one H100 against the prompt length, for the 24B model in fp8 at 50% MFU, with and without the attention term.](figures/ttft-vs-prompt.svg)
+
+*The figure shows the TTFT on one H100 against the prompt length, in fp8 at 50% MFU. The gap between the two lines is the attention term, which is important only for long prompts. `capacity.ttft_s` computes the two lines, and `test_figures.py` pins the chart.*
+
 RAG and agents are prefill-dominated. Thus **prefix caching** (shared system prompts,
 repeated documents) is the largest single gain for them.
 
@@ -163,6 +167,10 @@ target is ≥25 tok/s/user (TPOT ≤ 40 ms).
 
 *The figure shows the memory of one H100 in the bank example. The weights take 48 GB in bf16 and 24 GB in fp8, and ~10% goes to the CUDA context and the activations. The spare holds the KV cache: ~89 sessions in bf16 and ~355 in fp8, against ~100 live sessions.*
 
+![Concurrent sessions on one H100 against the context length, for the 24B model in bf16 and in fp8, with the ~100 live sessions of the bank example.](figures/sessions-vs-context.svg)
+
+*The figure shows the concurrent sessions on one H100 against the context length of a session. The fp8 line is ~4× the bf16 line, and at the bank example only the fp8 line is above the ~100 live sessions. `capacity.max_concurrent_sessions` computes the lines, and `test_figures.py` pins the chart.*
+
 > The two paths of the size calculation are memory (~sessions/GPU) and throughput (tok/s/GPU). Expect
 > their results to be approximately the same. Show both in a design review. If the
 > difference between them is large, one of the inputs is incorrect.
@@ -216,6 +224,10 @@ the bytes that a step reads. `moecore` reproduces the 17.6 ms floor of this sect
 - good chat UX: **TTFT < 1 s, ≥ 20–30 tok/s/user**
 - **concurrency = RPS × duration**. Plan at 60–70% util, with N+1.
 - decode becomes compute-bound at **batch ≈ FLOPS ÷ bandwidth** (~300 on H100)
+
+![Decode throughput on one H100 against the batch size, for the 24B model at the context of the bank example: the total and the rate per user.](figures/decode-vs-batch.svg)
+
+*The figure shows decode on one H100 at the context of the bank example: the aggregate rate increases almost in proportion to the batch. The bf16 lines stop at the memory limit, and the fp8 lines stop at the compute roofline. `capacity.decode_aggregate` computes the lines, and `test_figures.py` pins the chart.*
 
 ## Decisions worth defending
 

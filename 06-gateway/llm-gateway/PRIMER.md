@@ -388,6 +388,12 @@ The common-mode term has the largest effect on the result. A third independent t
 99.99995 %, but the chain stays at 99.9 %. Put fallbacks in *different* failure domains. Give them a quota that is
 sufficient for the traffic that they will take.
 
+![Failed requests of a fallback chain against its number of targets, with no common-mode failure and with one of 0.05 % or 0.1 %.](figures/chain-availability-common-mode.svg)
+
+*The y axis is the share of failed requests, on a log scale. Each fallback at 99.0 % divides the independent failures
+by 100, but a common-mode failure stays as a floor. `routing.chain_availability()` in the core computes each point,
+and `tests/test_figures.py` pins the chart.*
+
 The expected latency and cost come from a walk along the chain (`routing.chain_cost(steps)`). Each step succeeds with
 probability $p$, and every later outcome pays the time of a failure. In a bad hour, the primary fails 5 % of
 requests. The chain is gemini-3.5-flash (TTFT 0.6 s), then gpt-5.4-mini (0.5 s), then claude-haiku-4-5 (0.7 s).
@@ -523,6 +529,12 @@ against 429 and GBP against EUR. But it cannot see a word-level difference ("Bus
 against "enable"). It also costs one correct hit, because it reads the shouted "HOW DO I CANCEL MY SUBSCRIPTION" as
 five codes. At $\tau$ = 0.95, only case and punctuation variants hit. A *normalised* exact key can do that work
 safely.
+
+![Hits and false hits of the semantic cache against the threshold, without and with the entity guard, on the bundled sample.](figures/semantic-cache-threshold-sweep.svg)
+
+*Each line is one column of the table above, for a threshold from 0.50 to 0.99. No threshold gives many hits without
+false hits. `cache.sweep_thresholds()` computes the lines on the bundled sample, and `tests/test_figures.py` pins the
+chart.*
 
 A real embedder increases the paraphrase scores (at T1, for example a small model on vLLM's pooling runner or
 all-MiniLM-L6-v2 on CPU, verify). But near misses that are different in one word stay near the cached query in any
@@ -677,6 +689,12 @@ But that result comes from a measurement, not a guarantee. Exercise 4.3 of [core
 04](gateway-core/notebooks/04_token_limits_metering_and_chargeback.ipynb) does a sweep of the reservation. 1,024
 serves 98.9 % of the limit but spends 56 seconds over it, 2,048 serves 89.3 % with 2 seconds over, and 4,096 is the
 smallest with none.
+
+![Tokens served and the peak window, as a share of the limit, against the output reservation of the token limiter.](figures/token-reservation-sweep.svg)
+
+*A smaller reservation serves more of the limit, but its peak window also increases. At 1,024 and 2,048 tokens, the
+peak window goes above the limit. `ratelimit.simulate()` computes each point on the §4.3 workload, and
+`tests/test_figures.py` pins the chart.*
 
 Find the size of the reservation by simulation on your own output distribution. Where a provider 429 is not
 acceptable, reserve the cap. Never charge a per-request constant.

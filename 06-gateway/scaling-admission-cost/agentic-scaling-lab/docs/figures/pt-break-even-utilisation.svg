@@ -1,49 +1,53 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="880" height="400" viewBox="0 0 880 400" role="img" aria-label="The price of a used burndown token on Provisioned Throughput against the utilisation of the GSUs, for each term, against PayGo." style="color: #E4EAE7">
-  <title>The price of a used burndown token on Provisioned Throughput against the utilisation of the GSUs, for each term, against PayGo.</title>
-  <desc>{"height":400,"kind":"line","legend":"top-right","marks":[{"anchor":"start","kind":"hline","label":"PayGo ($1.50/M burndown)","style":"warm","y":1.5},{"kind":"vline","label":"PT for the peak: 33 % utilised","style":"warm","x":33.3333},{"anchor":"end","dy":18,"kind":"point","label":"1 year: 75 %","style":"accent","x":75.1632,"y":1.5},{"anchor":"end","dy":18,"kind":"point","label":"3 months: 90 %","style":"yellow","x":90.1975,"y":1.5}],"note":"computed by scalelab.capacity.pt_usd_per_million_burndown and plan","series":[{"dash":true,"name":"1 week","style":"muted","x":[30.0,32.0,34.0,36.0,38.0,40.0,42.0,44.0,46.0,48.0,50.0,52.0,54.0,56.0,58.0,60.0,62.0,64.0,66.0,68.0,70.0,72.0,74.0,76.0,78.0,80.0,82.0,84.0,86.0,88.0,90.0,92.0,94.0,96.0,98.0,100.0],"y":[9.794239,9.182099,8.641975,8.161866,7.732294,7.345679,6.995885,6.67789,6.387547,6.121399,5.876543,5.650522,5.441244,5.246914,5.065986,4.897119,4.739148,4.591049,4.451927,4.320988,4.197531,4.080933,3.970637,3.866147,3.767015,3.67284,3.583258,3.497942,3.416595,3.338945,3.264746,3.193773,3.125821,3.0607,2.998236,2.938272]},{"dash":false,"name":"1 month","style":"violet","x":[30.0,32.0,34.0,36.0,38.0,40.0,42.0,44.0,46.0,48.0,50.0,52.0,54.0,56.0,58.0,60.0,62.0,64.0,66.0,68.0,70.0,72.0,74.0,76.0,78.0,80.0,82.0,84.0,86.0,88.0,90.0,92.0,94.0,96.0,98.0,100.0],"y":[5.073525,4.75643,4.47664,4.227938,4.005415,3.805144,3.623947,3.459222,3.308821,3.170953,3.044115,2.927034,2.818625,2.71796,2.624237,2.536763,2.454932,2.378215,2.306148,2.23832,2.174368,2.113969,2.056835,2.002707,1.951356,1.902572,1.856168,1.811973,1.769834,1.729611,1.691175,1.65441,1.61921,1.585477,1.55312,1.522058]},{"dash":false,"name":"3 months","style":"yellow","x":[30.0,32.0,34.0,36.0,38.0,40.0,42.0,44.0,46.0,48.0,50.0,52.0,54.0,56.0,58.0,60.0,62.0,64.0,66.0,68.0,70.0,72.0,74.0,76.0,78.0,80.0,82.0,84.0,86.0,88.0,90.0,92.0,94.0,96.0,98.0,100.0],"y":[4.509877,4.228009,3.979303,3.75823,3.560429,3.382407,3.22134,3.074916,2.941224,2.818673,2.705926,2.601852,2.505487,2.416005,2.332695,2.254938,2.182198,2.114005,2.049944,1.989651,1.932804,1.879115,1.828328,1.780214,1.734568,1.691204,1.649955,1.61067,1.573213,1.537458,1.503292,1.470612,1.439322,1.409336,1.380574,1.352963]},{"dash":false,"name":"1 year","style":"accent","x":[30.0,32.0,34.0,36.0,38.0,40.0,42.0,44.0,46.0,48.0,50.0,52.0,54.0,56.0,58.0,60.0,62.0,64.0,66.0,68.0,70.0,72.0,74.0,76.0,78.0,80.0,82.0,84.0,86.0,88.0,90.0,92.0,94.0,96.0,98.0,100.0],"y":[3.758162,3.523277,3.316025,3.131802,2.96697,2.818621,2.684401,2.562383,2.450975,2.348851,2.254897,2.16817,2.087868,2.013301,1.943877,1.879081,1.818465,1.761638,1.708255,1.658013,1.610641,1.565901,1.523579,1.483485,1.445447,1.409311,1.374937,1.342201,1.310987,1.281192,1.252721,1.225488,1.199413,1.174426,1.150458,1.127449]}],"title":"The price of a used burndown token on Provisioned Throughput against the utilisation of the GSUs, for each term, against PayGo.","x":{"label":"utilisation of the GSUs (%)","max":100,"min":30},"y":{"label":"$ per M burndown tokens","max":5,"min":0}}</desc>
-  <rect x="0" y="0" width="880" height="400" rx="8" fill="#161E1C"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="420" viewBox="0 0 880 420" role="img" aria-label="The price per M burndown tokens on Provisioned Throughput against the utilisation of the GSUs, for each term, and the PayGo price." style="color: #E4EAE7">
+  <title>The price per M burndown tokens on Provisioned Throughput against the utilisation of the GSUs, for each term, and the PayGo price.</title>
+  <desc>{"height":420,"kind":"line","legend":"top-right","marks":[{"kind":"hline","style":"warm","y":1.5},{"anchor":"start","kind":"text","style":"warm","text":"PayGo ($1.50/M burndown)","x":35,"y":1.6},{"kind":"vline","label":"PT for the peak: 33 % utilised","style":"warm","x":33.3333},{"anchor":"end","dy":36,"kind":"point","label":"1 year: 75 %","style":"accent","x":75.1632,"y":1.5},{"anchor":"end","dy":36,"kind":"point","label":"3 months: 90 %","style":"yellow","x":90.1975,"y":1.5}],"note":"computed by scalelab.capacity.plan","series":[{"dash":true,"name":"1 week","style":"muted","x":[30.0,32.0,34.0,36.0,38.0,40.0,42.0,44.0,46.0,48.0,50.0,52.0,54.0,56.0,58.0,60.0,62.0,64.0,66.0,68.0,70.0,72.0,74.0,76.0,78.0,80.0,82.0,84.0,86.0,88.0,90.0,92.0,94.0,96.0,98.0,100.0],"y":[9.794239,9.182099,8.641975,8.161866,7.732294,7.345679,6.995885,6.67789,6.387547,6.121399,5.876543,5.650522,5.441244,5.246914,5.065986,4.897119,4.739148,4.591049,4.451927,4.320988,4.197531,4.080933,3.970637,3.866147,3.767015,3.67284,3.583258,3.497942,3.416595,3.338945,3.264746,3.193773,3.125821,3.0607,2.998236,2.938272]},{"dash":false,"name":"1 month","style":"violet","x":[30.0,32.0,34.0,36.0,38.0,40.0,42.0,44.0,46.0,48.0,50.0,52.0,54.0,56.0,58.0,60.0,62.0,64.0,66.0,68.0,70.0,72.0,74.0,76.0,78.0,80.0,82.0,84.0,86.0,88.0,90.0,92.0,94.0,96.0,98.0,100.0],"y":[5.073525,4.75643,4.47664,4.227938,4.005415,3.805144,3.623947,3.459222,3.308821,3.170953,3.044115,2.927034,2.818625,2.71796,2.624237,2.536763,2.454932,2.378215,2.306148,2.23832,2.174368,2.113969,2.056835,2.002707,1.951356,1.902572,1.856168,1.811973,1.769834,1.729611,1.691175,1.65441,1.61921,1.585477,1.55312,1.522058]},{"dash":false,"name":"3 months","style":"yellow","x":[30.0,32.0,34.0,36.0,38.0,40.0,42.0,44.0,46.0,48.0,50.0,52.0,54.0,56.0,58.0,60.0,62.0,64.0,66.0,68.0,70.0,72.0,74.0,76.0,78.0,80.0,82.0,84.0,86.0,88.0,90.0,92.0,94.0,96.0,98.0,100.0],"y":[4.509877,4.228009,3.979303,3.75823,3.560429,3.382407,3.22134,3.074916,2.941224,2.818673,2.705926,2.601852,2.505487,2.416005,2.332695,2.254938,2.182198,2.114005,2.049944,1.989651,1.932804,1.879115,1.828328,1.780214,1.734568,1.691204,1.649955,1.61067,1.573213,1.537458,1.503292,1.470612,1.439322,1.409336,1.380574,1.352963]},{"dash":false,"name":"1 year","style":"accent","x":[30.0,32.0,34.0,36.0,38.0,40.0,42.0,44.0,46.0,48.0,50.0,52.0,54.0,56.0,58.0,60.0,62.0,64.0,66.0,68.0,70.0,72.0,74.0,76.0,78.0,80.0,82.0,84.0,86.0,88.0,90.0,92.0,94.0,96.0,98.0,100.0],"y":[3.758162,3.523277,3.316025,3.131802,2.96697,2.818621,2.684401,2.562383,2.450975,2.348851,2.254897,2.16817,2.087868,2.013301,1.943877,1.879081,1.818465,1.761638,1.708255,1.658013,1.610641,1.565901,1.523579,1.483485,1.445447,1.409311,1.374937,1.342201,1.310987,1.281192,1.252721,1.225488,1.199413,1.174426,1.150458,1.127449]}],"title":"The price per M burndown tokens on Provisioned Throughput against the utilisation of the GSUs, for each term, and the PayGo price.","x":{"label":"utilisation of the GSUs (%)","max":100,"min":30,"ticks":[30,40,50,60,70,80,90,100]},"y":{"label":"$ per M burndown tokens","max":5,"min":0}}</desc>
+  <rect x="0" y="0" width="880" height="420" rx="8" fill="#161E1C"/>
   <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12" fill="currentColor">
     <g stroke="#27322E" stroke-width="1">
-      <line x1="66.0" y1="346.0" x2="858.0" y2="346.0"/>
-      <line x1="66.0" y1="281.2" x2="858.0" y2="281.2"/>
-      <line x1="66.0" y1="216.4" x2="858.0" y2="216.4"/>
-      <line x1="66.0" y1="151.6" x2="858.0" y2="151.6"/>
-      <line x1="66.0" y1="86.8" x2="858.0" y2="86.8"/>
+      <line x1="66.0" y1="350.0" x2="858.0" y2="350.0"/>
+      <line x1="66.0" y1="284.4" x2="858.0" y2="284.4"/>
+      <line x1="66.0" y1="218.8" x2="858.0" y2="218.8"/>
+      <line x1="66.0" y1="153.2" x2="858.0" y2="153.2"/>
+      <line x1="66.0" y1="87.6" x2="858.0" y2="87.6"/>
       <line x1="66.0" y1="22.0" x2="858.0" y2="22.0"/>
     </g>
     <g stroke="#55635E" stroke-width="1.2">
-      <line x1="66.0" y1="346.0" x2="858.0" y2="346.0"/>
-      <line x1="66.0" y1="346.0" x2="66.0" y2="22.0"/>
+      <line x1="66.0" y1="350.0" x2="858.0" y2="350.0"/>
+      <line x1="66.0" y1="350.0" x2="66.0" y2="22.0"/>
     </g>
     <g font-size="11" fill="#97A59F">
-      <text x="58.0" y="349.5" text-anchor="end">0</text>
-      <text x="58.0" y="284.7" text-anchor="end">1</text>
-      <text x="58.0" y="219.9" text-anchor="end">2</text>
-      <text x="58.0" y="155.1" text-anchor="end">3</text>
-      <text x="58.0" y="90.3" text-anchor="end">4</text>
+      <text x="58.0" y="353.5" text-anchor="end">0</text>
+      <text x="58.0" y="287.9" text-anchor="end">1</text>
+      <text x="58.0" y="222.3" text-anchor="end">2</text>
+      <text x="58.0" y="156.7" text-anchor="end">3</text>
+      <text x="58.0" y="91.1" text-anchor="end">4</text>
       <text x="58.0" y="25.5" text-anchor="end">5</text>
-      <text x="179.1" y="362.0" text-anchor="middle">40</text>
-      <text x="405.4" y="362.0" text-anchor="middle">60</text>
-      <text x="631.7" y="362.0" text-anchor="middle">80</text>
-      <text x="858.0" y="362.0" text-anchor="middle">100</text>
+      <text x="66.0" y="366.0" text-anchor="middle">30</text>
+      <text x="179.1" y="366.0" text-anchor="middle">40</text>
+      <text x="292.3" y="366.0" text-anchor="middle">50</text>
+      <text x="405.4" y="366.0" text-anchor="middle">60</text>
+      <text x="518.6" y="366.0" text-anchor="middle">70</text>
+      <text x="631.7" y="366.0" text-anchor="middle">80</text>
+      <text x="744.9" y="366.0" text-anchor="middle">90</text>
+      <text x="858.0" y="366.0" text-anchor="middle">100</text>
     </g>
-    <text x="462.0" y="388.0" text-anchor="middle" fill="#97A59F">utilisation of the GSUs (%)</text>
-    <text x="16" y="184.0" text-anchor="middle" fill="#97A59F" transform="rotate(-90 16 184.0)">$ per M burndown tokens</text>
-    <clipPath id="plot"><rect x="65.0" y="16.0" width="794.0" height="331.0"/></clipPath>
+    <text x="462.0" y="392.0" text-anchor="middle" fill="#97A59F">utilisation of the GSUs (%)</text>
+    <text x="16" y="186.0" text-anchor="middle" fill="#97A59F" transform="rotate(-90 16 186.0)">$ per M burndown tokens</text>
+    <clipPath id="plot"><rect x="65.0" y="16.0" width="794.0" height="335.0"/></clipPath>
     <g clip-path="url(#plot)">
-      <path d="M66.0 -288.7 L88.6 -249.0 L111.3 -214.0 L133.9 -182.9 L156.5 -155.1 L179.1 -130.0 L201.8 -107.3 L224.4 -86.7 L247.0 -67.9 L269.7 -50.7 L292.3 -34.8 L314.9 -20.2 L337.5 -6.6 L360.2 6.0 L382.8 17.7 L405.4 28.7 L428.1 38.9 L450.7 48.5 L473.3 57.5 L495.9 66.0 L518.6 74.0 L541.2 81.6 L563.8 88.7 L586.5 95.5 L609.1 101.9 L631.7 108.0 L654.3 113.8 L677.0 119.3 L699.6 124.6 L722.2 129.6 L744.9 134.4 L767.5 139.0 L790.1 143.4 L812.7 147.7 L835.4 151.7 L858.0 155.6" fill="none" stroke="#97A59F" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="6 4"/>
-      <path d="M66.0 17.2 L88.6 37.8 L111.3 55.9 L133.9 72.0 L156.5 86.4 L179.1 99.4 L201.8 111.2 L224.4 121.8 L247.0 131.6 L269.7 140.5 L292.3 148.7 L314.9 156.3 L337.5 163.4 L360.2 169.9 L382.8 175.9 L405.4 181.6 L428.1 186.9 L450.7 191.9 L473.3 196.6 L495.9 201.0 L518.6 205.1 L541.2 209.0 L563.8 212.7 L586.5 216.2 L609.1 219.6 L631.7 222.7 L654.3 225.7 L677.0 228.6 L699.6 231.3 L722.2 233.9 L744.9 236.4 L767.5 238.8 L790.1 241.1 L812.7 243.3 L835.4 245.4 L858.0 247.4" fill="none" stroke="#B7A3F0" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-      <path d="M66.0 53.8 L88.6 72.0 L111.3 88.1 L133.9 102.5 L156.5 115.3 L179.1 126.8 L201.8 137.3 L224.4 146.7 L247.0 155.4 L269.7 163.3 L292.3 170.7 L314.9 177.4 L337.5 183.6 L360.2 189.4 L382.8 194.8 L405.4 199.9 L428.1 204.6 L450.7 209.0 L473.3 213.2 L495.9 217.1 L518.6 220.8 L541.2 224.2 L563.8 227.5 L586.5 230.6 L609.1 233.6 L631.7 236.4 L654.3 239.1 L677.0 241.6 L699.6 244.1 L722.2 246.4 L744.9 248.6 L767.5 250.7 L790.1 252.7 L812.7 254.7 L835.4 256.5 L858.0 258.3" fill="none" stroke="#E6C85C" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-      <path d="M66.0 102.5 L88.6 117.7 L111.3 131.1 L133.9 143.1 L156.5 153.7 L179.1 163.4 L201.8 172.1 L224.4 180.0 L247.0 187.2 L269.7 193.8 L292.3 199.9 L314.9 205.5 L337.5 210.7 L360.2 215.5 L382.8 220.0 L405.4 224.2 L428.1 228.2 L450.7 231.8 L473.3 235.3 L495.9 238.6 L518.6 241.6 L541.2 244.5 L563.8 247.3 L586.5 249.9 L609.1 252.3 L631.7 254.7 L654.3 256.9 L677.0 259.0 L699.6 261.0 L722.2 263.0 L744.9 264.8 L767.5 266.6 L790.1 268.3 L812.7 269.9 L835.4 271.5 L858.0 272.9" fill="none" stroke="#4CC5B7" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="M66.0 -292.5 L88.6 -252.3 L111.3 -216.9 L133.9 -185.4 L156.5 -157.2 L179.1 -131.9 L201.8 -108.9 L224.4 -88.1 L247.0 -69.0 L269.7 -51.6 L292.3 -35.5 L314.9 -20.7 L337.5 -6.9 L360.2 5.8 L382.8 17.7 L405.4 28.7 L428.1 39.1 L450.7 48.8 L473.3 58.0 L495.9 66.5 L518.6 74.6 L541.2 82.3 L563.8 89.5 L586.5 96.4 L609.1 102.9 L631.7 109.1 L654.3 114.9 L677.0 120.5 L699.6 125.9 L722.2 131.0 L744.9 135.8 L767.5 140.5 L790.1 144.9 L812.7 149.2 L835.4 153.3 L858.0 157.2" fill="none" stroke="#97A59F" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="6 4"/>
+      <path d="M66.0 17.2 L88.6 38.0 L111.3 56.3 L133.9 72.6 L156.5 87.2 L179.1 100.4 L201.8 112.3 L224.4 123.1 L247.0 132.9 L269.7 142.0 L292.3 150.3 L314.9 158.0 L337.5 165.1 L360.2 171.7 L382.8 177.9 L405.4 183.6 L428.1 189.0 L450.7 194.0 L473.3 198.7 L495.9 203.2 L518.6 207.4 L541.2 211.3 L563.8 215.1 L586.5 218.6 L609.1 222.0 L631.7 225.2 L654.3 228.2 L677.0 231.1 L699.6 233.9 L722.2 236.5 L744.9 239.1 L767.5 241.5 L790.1 243.8 L812.7 246.0 L835.4 248.1 L858.0 250.2" fill="none" stroke="#B7A3F0" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="M66.0 54.2 L88.6 72.6 L111.3 89.0 L133.9 103.5 L156.5 116.4 L179.1 128.1 L201.8 138.7 L224.4 148.3 L247.0 157.1 L269.7 165.1 L292.3 172.5 L314.9 179.3 L337.5 185.6 L360.2 191.5 L382.8 197.0 L405.4 202.1 L428.1 206.8 L450.7 211.3 L473.3 215.5 L495.9 219.5 L518.6 223.2 L541.2 226.7 L563.8 230.1 L586.5 233.2 L609.1 236.2 L631.7 239.1 L654.3 241.8 L677.0 244.3 L699.6 246.8 L722.2 249.1 L744.9 251.4 L767.5 253.5 L790.1 255.6 L812.7 257.5 L835.4 259.4 L858.0 261.2" fill="none" stroke="#E6C85C" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="M66.0 103.5 L88.6 118.9 L111.3 132.5 L133.9 144.6 L156.5 155.4 L179.1 165.1 L201.8 173.9 L224.4 181.9 L247.0 189.2 L269.7 195.9 L292.3 202.1 L314.9 207.8 L337.5 213.0 L360.2 217.9 L382.8 222.5 L405.4 226.7 L428.1 230.7 L450.7 234.4 L473.3 237.9 L495.9 241.2 L518.6 244.3 L541.2 247.3 L563.8 250.1 L586.5 252.7 L609.1 255.2 L631.7 257.5 L654.3 259.8 L677.0 262.0 L699.6 264.0 L722.2 266.0 L744.9 267.8 L767.5 269.6 L790.1 271.3 L812.7 273.0 L835.4 274.5 L858.0 276.0" fill="none" stroke="#4CC5B7" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
     </g>
-    <line x1="66.0" y1="248.8" x2="858.0" y2="248.8" stroke="#E39A62" stroke-width="1.2" stroke-dasharray="4 3"/>
-    <text x="72.0" y="243.8" text-anchor="start" font-size="11" fill="#E39A62">PayGo ($1.50/M burndown)</text>
-    <line x1="103.7" y1="22.0" x2="103.7" y2="346.0" stroke="#E39A62" stroke-width="1.2" stroke-dasharray="4 3"/>
+    <line x1="66.0" y1="251.6" x2="858.0" y2="251.6" stroke="#E39A62" stroke-width="1.2" stroke-dasharray="4 3"/>
+    <text x="122.6" y="245.0" text-anchor="start" font-size="11" fill="#E39A62">PayGo ($1.50/M burndown)</text>
+    <line x1="103.7" y1="22.0" x2="103.7" y2="350.0" stroke="#E39A62" stroke-width="1.2" stroke-dasharray="4 3"/>
     <text x="108.7" y="34.0" text-anchor="start" font-size="11" fill="#E39A62">PT for the peak: 33 % utilised</text>
-    <circle cx="577.0" cy="248.8" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
-    <text x="568.0" y="266.8" text-anchor="end" font-size="11" fill="#4CC5B7">1 year: 75 %</text>
-    <circle cx="747.1" cy="248.8" r="4.5" fill="#E6C85C" stroke="#161E1C" stroke-width="1.5"/>
-    <text x="738.1" y="266.8" text-anchor="end" font-size="11" fill="#E6C85C">3 months: 90 %</text>
+    <circle cx="577.0" cy="251.6" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="568.0" y="287.6" text-anchor="end" font-size="11" fill="#4CC5B7">1 year: 75 %</text>
+    <circle cx="747.1" cy="251.6" r="4.5" fill="#E6C85C" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="738.1" y="287.6" text-anchor="end" font-size="11" fill="#E6C85C">3 months: 90 %</text>
     <g font-size="11.5">
       <rect x="754.5" y="30.0" width="95.5" height="78.0" rx="5" fill="#161E1C" fill-opacity="0.9" stroke="#27322E"/>
       <line x1="764.5" y1="43.0" x2="782.5" y2="43.0" stroke="#97A59F" stroke-width="2" stroke-dasharray="6 4"/>
@@ -55,6 +59,6 @@
       <line x1="764.5" y1="94.0" x2="782.5" y2="94.0" stroke="#4CC5B7" stroke-width="2"/>
       <text x="788.5" y="98.0" fill="currentColor">1 year</text>
     </g>
-    <text x="10" y="393.0" font-size="10.5" fill="#97A59F" font-family="JetBrains Mono, monospace">computed by scalelab.capacity.pt_usd_per_million_burndown and plan</text>
+    <text x="10" y="413.0" font-size="10.5" fill="#97A59F" font-family="JetBrains Mono, monospace">computed by scalelab.capacity.plan</text>
   </g>
 </svg>
