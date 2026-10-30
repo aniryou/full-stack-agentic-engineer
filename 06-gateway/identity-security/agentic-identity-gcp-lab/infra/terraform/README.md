@@ -13,7 +13,7 @@ Each file has one row in the table in `docs/primer.md` §10.
 
 | File | Primer concept | What it creates |
 |---|---|---|
-| `apis.tf` | — | Service enablement (opt-in APIs only when the flag is on) |
+| `apis.tf` | — | Service enablement. Terraform turns on the opt-in APIs only when the flag is on. |
 | `identity.tf` | WIF, no SA keys (§3.4, §5) | Keyless CI deployer, GitHub WIF pool and provider, MCP fallback SA, image repo, staging bucket |
 | `reasoning_engine.tf` | Agent as first-class principal (§3.3) | `google_vertex_ai_reasoning_engine` with `identity_type = "AGENT_IDENTITY"` (path B only) |
 | `secrets.tf` | Secrets (§5) | One demo secret, write-only payload, accessor for the agent principal only |
@@ -30,8 +30,8 @@ Each file has one row in the table in `docs/primer.md` §10.
 
 ## Prerequisites
 
-* Terraform **>= 1.11** (write-only arguments keep the OAuth client secret and the demo
-  secret out of state), google provider >= 8.0.
+* Terraform **>= 1.11**, google provider >= 8.0. Terraform must be 1.11 or later for the write-only
+  arguments. These arguments keep the OAuth client secret and the demo secret out of state.
 * A project with billing, and `gcloud` authenticated as a user with Owner or with the equivalent
   set of admin roles. This set contains Service Usage Admin, IAM Admin, Cloud Run Admin, Vertex AI Admin
   and Secret Manager Admin. It also contains Model Armor Admin, Logging/BigQuery Admin and Agent
@@ -98,8 +98,8 @@ The idle cost is small, because the Cloud Run service scales to zero and the eng
 are the main variable. To switch them off, set `enable_data_access_audit_logs = false`. The gateway
 and a min-instance engine are the two things that cost money while they are idle.
 
-`terraform destroy` removes everything that it created (buckets and datasets are `force_destroy` /
-`delete_contents_on_destroy`). You must remove two things by hand:
+`terraform destroy` removes everything that it created. The buckets are `force_destroy` and the datasets are
+`delete_contents_on_destroy`. You must remove two things by hand:
 
 * the auto-registered Agent Registry entry that `deploy_mcp_cloud_run.sh` created,
 * an engine that you deployed through path A (`gcloud`/SDK `delete`, see `docs/deploy.md`).

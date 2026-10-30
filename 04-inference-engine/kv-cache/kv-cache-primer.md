@@ -50,7 +50,7 @@ Step N:                    Step N+1:
    to attend                 read all of it again
 ```
 
-Note that **the engine does not cache Q**. The query of a past token had one use: the calculation of the output of that token. The engine never needs that query again. The engine reads only K and V again.
+**The engine does not cache Q**. The query of a past token had one use: the calculation of the output of that token. The engine never needs that query again. The engine reads only K and V again.
 
 In practice, you cannot turn off this optimization. Every inference engine in production does it. The question of interest is not *if* you cache, but *what it costs*.
 
@@ -68,7 +68,7 @@ This distinction is the core of GPU inference.
 
 **Decode** is the phase that generates the output, one token per forward pass. There is only one token of new work. But to do that work, you must read every model weight and the full KV cache from memory. Decode is **memory-bandwidth-bound**: the tensor cores are idle most of the time while they wait for data. The latency of this phase is your *tokens per second*.
 
-Why is decode bandwidth-bound? An H100 does roughly 1,000 TFLOP/s in fp16, but it moves only about 3.35 TB/s from HBM. To keep the arithmetic units busy, you need ~300 floating-point operations per byte loaded.
+Why is decode bandwidth-bound? An H100 does approximately 1,000 TFLOP/s in fp16, but it moves only about 3.35 TB/s from HBM. To keep the arithmetic units busy, you need ~300 floating-point operations per byte loaded.
 
 Attention over a cache does about **1 FLOP per byte** in fp16 with full multi-head attention. The kernel loads each cached K or V element (2 bytes) one time. It uses that element in one multiply-add (2 FLOPs) for its one query head. In general, the intensity is ${2g/b}$ FLOP per byte, where $g$ query heads share each KV head and each cached value has $b$ bytes. Thus GQA with `g = 4` (Llama 3 8B) gets to 4 FLOP/B.
 
@@ -109,7 +109,7 @@ per token = 2 × 32 × 8 × 128 × 2 = 131,072 bytes = 128 KiB
 
 The *weights* of the model are a fixed ~16 GB (15 GiB) in fp16. On an 80 GB H100, that batch of 32 users already uses more memory than the model itself. The cache is the part that scales with your traffic and your context lengths. The weights do not change in size.
 
-Now do the calculation in the other direction. After the weights, an 80 GB H100 has ~64 GB left. That memory holds at most **59** sessions of 8K tokens with an fp16 cache, or **119** with an fp8 cache (`kerncore.kv.sessions_per_gpu`). That is an upper bound: an engine also reserves memory for activations and for its allocator.
+Now do the calculation in the other direction. After the weights, an 80 GB H100 has ~64 GB left. That memory holds at most **59** sessions of 8K tokens with an fp16 cache, or **119** with an fp8 cache (`kerncore.kv.sessions_per_gpu`). Each count is an upper bound: an engine also reserves memory for activations and for its allocator.
 
 **Now remove the architectural trick.** Llama 2 13B uses full multi-head attention, with 40 layers and 40 KV heads:
 
@@ -155,7 +155,7 @@ The techniques are in the approximate order of how universally models use them:
 
 **Cross-layer sharing.** Adjacent layers share cache entries. The model does not store one set for each layer.
 
-**Offloading.** Move cold cache blocks to host RAM or NVMe, and move them back on demand. This gives more capacity, but it costs latency over PCIe.
+**Offloading.** Move cold cache blocks to host RAM or NVMe, and move them back on demand. Offloading gives more capacity, but it costs latency over PCIe.
 
 ---
 

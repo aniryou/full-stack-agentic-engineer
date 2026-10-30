@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="556" viewBox="0 0 1000 556" role="img" aria-label="The reference architecture of Part 4: the client, the load balancer, the gateway, Pub/Sub, the orchestrator with the model gateway and the tool executor, and the two stores." style="color: #E4EAE7">
+  <title>The reference architecture of Part 4: the client, the load balancer, the gateway, Pub/Sub, the orchestrator with the model gateway and the tool executor, and the two stores.</title>
+  <rect x="0" y="0" width="1000" height="556" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <!-- client and edge -->
+    <rect x="16" y="24" width="186" height="46" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="109" y="52" text-anchor="middle" font-weight="600">App / web chat</text>
+    <rect x="16" y="100" width="186" height="80" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="109" y="124" text-anchor="middle" font-weight="600">Global external ALB</text>
+    <text x="109" y="144" text-anchor="middle" font-size="11.5" fill="#97A59F">Cloud Armor rate limits</text>
+    <text x="109" y="162" text-anchor="middle" font-size="11.5" fill="#97A59F">+ WAF · IAP</text>
+    <!-- gateway -->
+    <rect x="16" y="206" width="186" height="136" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="109" y="230" text-anchor="middle" font-weight="600">gateway</text>
+    <text x="109" y="248" text-anchor="middle" font-size="11.5" fill="#7ADACF">Cloud Run</text>
+    <text x="109" y="270" text-anchor="middle" font-size="11.5">auth · admission</text>
+    <text x="109" y="287" text-anchor="middle" font-size="11.5">enqueue · SSE relay</text>
+    <text x="109" y="309" text-anchor="middle" font-size="11.5" fill="#97A59F">request-based</text>
+    <text x="109" y="326" text-anchor="middle" font-size="11.5" fill="#97A59F">conc 250, min 2</text>
+    <!-- Pub/Sub -->
+    <ellipse cx="382" cy="226" rx="88" ry="8" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <path d="M294 226 L294 316 A88 8 0 0 0 470 316 L470 226" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="382" y="256" text-anchor="middle" font-weight="600">Pub/Sub agent-turns</text>
+    <text x="382" y="276" text-anchor="middle" font-size="11.5" fill="#97A59F">ack 600 s</text>
+    <text x="382" y="293" text-anchor="middle" font-size="11.5" fill="#97A59F">retry 10–600 s</text>
+    <text x="382" y="310" text-anchor="middle" font-size="11.5" fill="#97A59F">DLQ after 5</text>
+    <!-- orchestrator -->
+    <rect x="550" y="206" width="204" height="136" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="652" y="230" text-anchor="middle" font-weight="600">orchestrator</text>
+    <text x="652" y="248" text-anchor="middle" font-size="11.5" fill="#7ADACF">Cloud Run</text>
+    <text x="652" y="270" text-anchor="middle" font-size="11.5">durable loop · budgets</text>
+    <text x="652" y="287" text-anchor="middle" font-size="11.5">checkpoints</text>
+    <text x="652" y="309" text-anchor="middle" font-size="11.5" fill="#97A59F">instance-based</text>
+    <text x="652" y="326" text-anchor="middle" font-size="11.5" fill="#97A59F">conc 80, min 2</text>
+    <!-- model gateway and Gemini -->
+    <rect x="550" y="44" width="204" height="80" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="652" y="68" text-anchor="middle" font-weight="600">model gateway</text>
+    <text x="652" y="89" text-anchor="middle" font-size="11.5" fill="#97A59F">routing · buckets · retry</text>
+    <text x="652" y="106" text-anchor="middle" font-size="11.5" fill="#97A59F">breaker · fallback</text>
+    <rect x="798" y="44" width="186" height="80" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="891" y="68" text-anchor="middle" font-weight="600">Gemini</text>
+    <text x="891" y="89" text-anchor="middle" font-size="11.5">global endpoint</text>
+    <text x="891" y="106" text-anchor="middle" font-size="11.5">PT + spill-over</text>
+    <!-- tools -->
+    <rect x="798" y="232" width="186" height="84" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="891" y="256" text-anchor="middle" font-weight="600">tool executor</text>
+    <text x="891" y="277" text-anchor="middle" font-size="11.5" fill="#97A59F">bulkhead · breaker</text>
+    <text x="891" y="294" text-anchor="middle" font-size="11.5" fill="#97A59F">cache · idempotency</text>
+    <rect x="798" y="378" width="186" height="98" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="891" y="402" text-anchor="middle" font-weight="600">tool services</text>
+    <text x="891" y="420" text-anchor="middle" font-size="11.5" fill="#97A59F">Cloud Run</text>
+    <text x="891" y="442" text-anchor="middle" font-size="11.5">CRM · billing · network</text>
+    <text x="891" y="459" text-anchor="middle" font-size="11.5">KB · MCP</text>
+    <!-- Redis -->
+    <ellipse cx="382" cy="370" rx="88" ry="8" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <path d="M294 370 L294 434 A88 8 0 0 0 470 434 L470 370" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="382" y="397" text-anchor="middle" font-weight="600">Memorystore Valkey</text>
+    <text x="382" y="415" text-anchor="middle" font-size="11.5" fill="#97A59F">streams · locks</text>
+    <text x="382" y="431" text-anchor="middle" font-size="11.5" fill="#97A59F">buckets · idem · level</text>
+    <!-- Firestore -->
+    <ellipse cx="382" cy="462" rx="88" ry="8" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <path d="M294 462 L294 532 A88 8 0 0 0 470 532 L470 462" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="382" y="490" text-anchor="middle" font-weight="600">Firestore</text>
+    <text x="382" y="508" text-anchor="middle" font-size="11.5" fill="#97A59F">sessions · turns</text>
+    <text x="382" y="524" text-anchor="middle" font-size="11.5" fill="#97A59F">steps · TTL</text>
+    <!-- edges -->
+    <g stroke="#97A59F" stroke-width="1.2" fill="none">
+      <path d="M109 70 L109 98" marker-end="url(#arr)"/>
+      <path d="M109 180 L109 204" marker-end="url(#arr)"/>
+      <path d="M202 274 L292 274" marker-end="url(#arr)"/>
+      <path d="M470 274 L548 274" marker-end="url(#arr)"/>
+      <path d="M652 206 L652 126" marker-end="url(#arr)"/>
+      <path d="M754 84 L796 84" marker-end="url(#arr)"/>
+      <path d="M754 274 L796 274" marker-end="url(#arr)"/>
+      <path d="M891 316 L891 376" marker-end="url(#arr)"/>
+      <path d="M150 344 L150 402 L292 402" marker-start="url(#arr)" marker-end="url(#arr)"/>
+      <path d="M70 342 L70 498 L292 498" marker-end="url(#arr)"/>
+      <path d="M612 342 L612 402 L472 402" marker-end="url(#arr)"/>
+      <path d="M700 344 L700 498 L472 498" marker-start="url(#arr)" marker-end="url(#arr)"/>
+    </g>
+    <g font-size="11" fill="#97A59F" text-anchor="middle">
+      <text x="248" y="234">publish,</text>
+      <text x="248" y="249">ordering key</text>
+      <text x="248" y="264">= session</text>
+      <text x="510" y="249">push</text>
+      <text x="510" y="264">+ OIDC</text>
+    </g>
+  </g>
+</svg>

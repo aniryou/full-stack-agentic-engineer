@@ -312,21 +312,9 @@ The Cloud Run fleet for all of this system is a few dozen vCPUs. That is approxi
 
 ## 4. The reference architecture
 
-```mermaid
-flowchart LR
-  U[App / web chat] --> LB[Global external ALB<br/>Cloud Armor rate limits + WAF<br/>IAP]
-  LB --> GW[gateway · Cloud Run<br/>auth · admission · enqueue · SSE relay<br/>request-based, conc 250, min 2]
-  GW -- publish, ordering key = session --> PS[(Pub/Sub agent-turns<br/>ack 600 s · retry 10–600 s · DLQ after 5)]
-  PS -- push + OIDC --> OR[orchestrator · Cloud Run<br/>durable loop · budgets · checkpoints<br/>instance-based, conc 80, min 2]
-  OR --> MG[model gateway<br/>routing · buckets · retry · breaker · fallback]
-  MG --> G[Gemini · global endpoint<br/>PT + spill-over]
-  OR --> TE[tool executor<br/>bulkhead · breaker · cache · idempotency]
-  TE --> TS[tool services · Cloud Run<br/>CRM · billing · network · KB · MCP]
-  OR <--> FS[(Firestore<br/>sessions · turns · steps · TTL)]
-  OR --> RS[(Memorystore Valkey<br/>streams · locks · buckets · idem · level)]
-  GW <--> RS
-  GW --> FS
-```
+![The reference architecture of Part 4: the client, the load balancer, the gateway, Pub/Sub, the orchestrator with the model gateway and the tool executor, and the two stores.](figures/reference-architecture.svg)
+
+*The reference architecture of Part 4. The gateway and the orchestrator are two Cloud Run services with a Pub/Sub queue between them. Both use Firestore for the durable state and Redis for the hot state.*
 
 A turn, from end to end: the client posts a message. The gateway authenticates the request. It examines the bucket of the tenant and the global in-flight cap, and it decides a degrade level. It writes the turn to Firestore. It publishes to Pub/Sub with the session id as ordering key. Then it starts to relay the event stream of the turn to the client over SSE.
 
@@ -425,18 +413,7 @@ Admission control is the circuit breaker on the feedback loop of 1.6. It sits at
 
 The cap starts at the token-budget number from 3.3. You adjust it from load tests. Priority classes (an agent-assist console, a VIP tier) bypass it.
 
-```mermaid
-flowchart TB
-    T(["a turn arrives at<br/>the gateway, before<br/>it has cost anything"]) --> Q1["1. the token bucket of<br/>the tenant: a noisy brand<br/>cannot take all of the pool"]
-    Q1 --> Q2["2. the degrade level of<br/>the system, from Redis"]
-    Q2 --> Q3{"3. above the cap?<br/>level 3: in-flight ≥ cap<br/>or queue age ≥ 30 s"}
-    Q3 -- "no, or a priority class" --> RUN["admit: the turn runs at<br/>the level, 0 to 2: the model,<br/>the thinking level, the tools<br/>and the output cap"]
-    Q3 -- "yes, and below priority 2" --> SHED["shed: 503 with a Retry-After<br/>that grows with the level"]
-    SHED -. "the client adds jitter,<br/>then comes back" .-> T
-    RUN --> SIG["the signals that every<br/>instance publishes:<br/>in-flight turns, the age<br/>of the oldest queued turn,<br/>the share of rate-limited<br/>model calls in the last<br/>minute, an open breaker"]
-    SIG --> LV["AdmissionController.compute_level()<br/>level 1: in-flight ≥ 80 % of cap,<br/>queue age ≥ 10 s or 429 ratio ≥ 5 %<br/>level 2: a breaker open,<br/>or 429 ratio ≥ 15 %<br/>a raised level is held ten to<br/>fifteen seconds before it goes down"]
-    LV -- "written to Redis: every<br/>instance degrades together" --> Q2
-```
+![The admission loop of §5.3: the three questions of the gateway, the admit and shed outcomes, and the signals that set the degrade level in Redis.](figures/admission-loop.svg)
 
 *The admission loop of §5.3. The gateway asks its three questions before a turn costs anything, and it sheds at level 3 with a 503 and a `Retry-After`. The admitted turns produce the signals, `AdmissionController.compute_level()` turns them into the level, and Redis shares the level with every instance.*
 
