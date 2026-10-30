@@ -27,7 +27,7 @@ python3 -m sandboxlab env      # which isolation levels this machine can actuall
 Google Cloud deployment, optional. No part of the lab needs a GPU.*
 
 Each notebook starts with *the one-minute version*. Then it shows worked examples that use the library. Then it
-gives 3–6 exercises (implement the key check, predict a number, read a manifest). After each exercise,
+gives 3–6 exercises. For example, you implement the key check, predict a number or read a manifest. After each exercise,
 a check prints ✅. The notebook ends with *in a design review*.
 
 The answers are in [`solutions/`](solutions/). The lab takes about 8 hours in all.
@@ -88,7 +88,7 @@ python3 -m sandboxlab gke-review                   # the GKE Sandbox Terraform c
 python3 -m jupyterlab notebooks                    # the exercises; answers in solutions/
 ```
 
-Optional: `pip install --no-deps cel-python lark jmespath pendulum google-re2` lets the tests evaluate
+Optional: `pip install --no-deps cel-python lark jmespath pendulum google-re2` lets the tests run
 the CEL of the ValidatingAdmissionPolicy. The tests then make sure that the CEL agrees with the offline
 predictor. Without these packages, the tests skip this check.
 
@@ -98,8 +98,8 @@ Read the [identity primer](../../../06-gateway/identity-security/agentic-identit
 §6.2 (code execution) and §5 (the gateway path for credentials) first. This topic gives the full design of
 the "Sandboxed execution" control of that primer. It uses these parts of other topics again:
 
-- the tool contract of the [07.1 agent](../../agent-fundamentals/agent-core/) (the `run_code` tool
-  returns the same result shape),
+- the tool contract of the [07.1 agent](../../agent-fundamentals/agent-core/): the `run_code` tool
+  returns the same result shape,
 - the [scaling primer](../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md)
   §1/§5 (admission, cost per action, the idempotency-key recipe),
 - the manifest and kind conventions of layer 03's [gpu-scheduling](../../../03-kubernetes-gpu/gpu-scheduling/).
@@ -116,7 +116,7 @@ nothing. This lab never imports it. For prices and for where to get compute, see
 | `process.py` | ~280 | `Unsandboxed` (the contrast) and `ProcessSandbox` (clean env, temporary workspace, rlimits, dedicated UID, network namespace). `ExecResult.to_tool_result()` returns the 07.1 shape |
 | `probes.py` | ~420 | the attacks that a hijacked model can run, against stand-ins and canaries. Each attack is harmless by construction and has a verdict `CONTAINED`/`LEAKED`/`N/A`. The module also has the verdict table |
 | `seccomp.py` | ~115 | the default seccomp profile of Docker minus `memfd_create`/`execveat`/`socketcall` and the extra socket families. The module derives the profile and shows a diff |
-| `docker.py` | ~235 | the hardened `docker run` builder (flag by flag, with what each flag stops) and the gVisor install steps |
+| `docker.py` | ~235 | the hardened `docker run` builder and the gVisor install steps. The builder gives the flags one at a time, with what each flag stops |
 | `proxy/` | ~530 | `server.py` is the egress proxy with an allowlist, credential injection, SSRF guards, reflection redaction and an audit line for each decision (TCP or Unix socket). `stub.py` is a stand-in upstream. `client.py` is the snippet for the sandbox side |
 | `agent/` | ~350 | `loop.py` is the 07.1 loop with tiers, turn budgets, idempotency keys and audit. `tools.py` has `run_code`/`fetch_url`, which go through the sandbox and the proxy |
 | `k8s/` | ~1,670 | `manifests.py` has typed builders. `admission.py` is the offline admission predictor (PSS + VAP + RuntimeClass), with CEL that agrees with the predictor. `policy.py` renders one policy into each enforcement point. `runner.py` has Job and warm-pool runners over a real or simulated cluster. `render.py` writes the deploy YAML |

@@ -131,7 +131,7 @@ flowchart LR
   B -- on a fleet --> G[The batch grows<br/>without errors]
 ```
 
-*The feedback loop of 1.6, without a brake. Each pass puts more turns in flight, and the model becomes slower again. On the API, the loop shows itself as a 429 storm, and on a fleet, the batch grows without an error.*
+*The feedback loop of §1.6, without a brake. Step 6 closes the loop back to step 2, so each pass puts more turns in flight. On the API, the loop shows itself as a 429 storm, and on a fleet, the batch grows without an error.*
 
 The load generator (`scalelab/sim.py`, notebook 05) reproduces the two forms (simulated). The simulated API pool has 3 M TPM. In it, 120 users with simple retries push the p95 turn to 39 s. The run has 394 rate-limit responses and 35 failed turns.
 
@@ -496,7 +496,7 @@ flowchart LR
   E -- no --> W["Wait for the fleet,<br/>or shed"]
 ```
 
-*The spill-over rule of `HybridBackend` in the model gateway. A call goes to the Mistral API only when the fleet saturation is above 0.9 and the turn carries no personal data.*
+*The spill-over rule in the model gateway. `HybridBackend` sends a call to the Mistral API when the fleet saturation is above 0.9. The policy gate then lets only a turn with no personal data go to the API.*
 
 > **Pitfall.** Do not say "We use the SDK's retries" without a deadline, or "vLLM will tell us when it's overloaded" without `--max-num-queued-reqs`. The first retries into a turn that already timed out for the user. The second waits for a signal that never comes.
 

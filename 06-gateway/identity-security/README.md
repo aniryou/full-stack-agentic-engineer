@@ -49,7 +49,7 @@ Open the notebooks in JupyterLab (`python3 -m pip install jupyterlab`) or from t
 
 ## How it fits
 
-This topic needs nothing from the layers below it. It is the control plane of the gateway. It runs on local
+This topic needs nothing from the layers below it. It is the control plane of the gateway, and it runs on local
 fakes. It pairs with [`scaling-admission-cost/`](../scaling-admission-cost/README.md). That topic says how much an
 agent can run, and this topic says what the agent can do.
 
@@ -69,4 +69,4 @@ discipline. In the [curriculum's spiral](../../CURRICULUM.md#31-why-this-order),
   (verify).
 - [`llm-gateway`](../llm-gateway/README.md) (module 06.7) covers the MCP client-side authorization flow (discovery,
   then PKCE, then code, then token), DPoP nonces, the SPIFFE Workload API and SVID rotation. Its primer covers the
-  flow and the nonces in §8. The primer covers the Workload API and rotation in brief in §6.5.
+  flow and the nonces in §8. The `llm-gateway` primer covers the Workload API and rotation in brief in §6.5.

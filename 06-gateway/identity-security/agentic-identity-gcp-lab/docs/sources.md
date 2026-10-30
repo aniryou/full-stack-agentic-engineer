@@ -60,7 +60,7 @@
         1. The direct ADK path: the token goes back to the agent process.
         2. The Agent Gateway path: the auth manager encrypts the end-user creds, and only the gateway decrypts them. The agent never sees the raw credential.
     - Source: https://docs.cloud.google.com/iam/docs/auth-with-3lo-v2
-- ADK 2.8.0 internals (verified from the installed source):
+- ADK 2.8.0 internals, as the installed source shows them:
     - `google.adk.integrations.agent_identity.GcpAuthProvider` uses `google.cloud.agentidentitycredentials_v1.AuthProviderCredentialsServiceClient.retrieve_credentials(RetrieveCredentialsRequest(auth_provider, user_id, scopes, continue_uri))`.
     - The response oneof: success{header, token} | pending | uri_consent_required{authorization_uri, consent_nonce} | consent_rejected. The env var `AGENT_IDENTITY_CREDENTIALS_TARGET_HOST` overrides the endpoint.
     - `BaseAuthProvider.get_auth_credential(auth_config, context)`, `CredentialManager.register_auth_provider(provider)`. The experimental feature flags are PLUGGABLE_AUTH and AUTHENTICATED_FUNCTION_TOOL.

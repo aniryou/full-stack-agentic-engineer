@@ -82,9 +82,9 @@ scaling lab has a hosted-vs-own-GPUs path (its Mistral primer and notebook 05). 
 
 The [`llm-gateway`](llm-gateway/README.md) topic comes last in the layer. It applies the token bucket and the
 breakers of the scaling topic to tokens and providers. It also applies the token discipline of the identity topic to
-provider keys and MCP servers. It also goes down to the prefix cache of layer 04 and to the router of layer 05. The
-gateway sends a per-tenant `cache_salt` to that prefix cache. A self-hosted target is a pool, and the endpoint picker of that pool selects the
-pod.
+provider keys and MCP servers. It also goes down to the prefix cache of layer 04, with the per-tenant `cache_salt` that
+the gateway sends. It also goes down to the router of layer 05. A self-hosted target is a pool, and the endpoint picker
+of that pool selects the pod.
 
 In the [curriculum's spiral](../CURRICULUM.md#31-why-this-order), this layer comes after the orchestrator (05) and
 before the agents (07). If you already build agents, the curriculum suggests a fast read of 06.1 first, for

@@ -10,8 +10,8 @@
 # **egress proxy** inside the trust boundary. The proxy compares the host with an **allowlist**. For the hosts on the
 # allowlist, it **injects the credential** on the way out.
 #
-# The secret lives only in the proxy. This is the same "gateway path" that the identity primer describes (the agent
-# never sees the raw credential), one layer down. It is also the header-injection pattern that managed services like
+# The secret lives only in the proxy. This is the same "gateway path" that the identity primer describes, one layer
+# down. On that path, the agent never sees the raw credential. The proxy is also the header-injection pattern that managed services like
 # E2B use on the host side.
 #
 # To keep the secret there, the proxy must also do these things:
@@ -94,7 +94,7 @@ for e in proxy.events:
 #
 # ## Worked example 2 — a redirect is not followed
 # The API on the allowlist answers `302 Location: http://localhost:<attacker>/steal`. The default `urlopen` of Python
-# follows it *and copies the injected `Authorization` header onto the new request*. That gives the credential to a
+# follows it *and copies the injected `Authorization` header onto the new request*. This copy gives the credential to a
 # host that nobody put on the allowlist, while the log shows only the permitted host. Instead, the proxy returns the
 # 302 to the caller. A request for the new URL is a new request, and the proxy examines it against the allowlist
 # again.
@@ -273,4 +273,4 @@ print("✅ the process sandbox leaks a raw socket; every rung that owns the netw
 # 3. *Why not just permit DNS everywhere?* Broad DNS is an exfiltration channel (data in query names). Let the
 #    proxy resolve names. The sandbox reaches only the proxy, by hostAliases.
 # 4. *The API on the allowlist returns a 302 to a different host. What must the proxy do?* Give the 3xx back, and
-#    do not follow it. If the proxy follows it, it replays the injected credential to an unchecked host.
+#    do not follow it. If the proxy follows the redirect, it replays the injected credential to an unchecked host.

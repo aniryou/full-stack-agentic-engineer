@@ -30,11 +30,11 @@ Each token gets three vectors from its current representation, through three lea
 
 Take "it" in *"The animal didn't cross the street because it was too tired."*
 
-For example, a useful query for "it" can encode a description such as "pronoun, needs an antecedent." The key for "animal" matches that query well. The key for "street" does not. The token "it" receives a mixture of values, with most of the weight on "animal". Its representation now holds "refers to the animal." Nobody writes this into a program. It comes out of training.
+For example, a useful query for "it" can encode a description such as "pronoun, needs an antecedent." The key for "animal" matches that query well. The key for "street" does not. The token "it" gets a mixture of values, with most of the weight on "animal". Its representation now holds "refers to the animal." Nobody writes this into a program. It comes out of training.
 
 ### 2.2 The formula, term by term
 
-For $n$ tokens with the query, key and value matrices $Q$, $K$, $V$ (each is $n \times d_k$, where $d_k$ is the per-head dimension):
+Take $n$ tokens with the query, key and value matrices $Q$, $K$, $V$. Each of these matrices is $n \times d_k$, where $d_k$ is the per-head dimension. Attention is:
 
 $$
 \operatorname{Attention}(Q, K, V) = \operatorname{softmax}\left(\frac{QK^\top}{\sqrt{d_k}}\right) \cdot V
@@ -61,7 +61,7 @@ $$
 
 *The toy calculation of §2.3 as a lookup. The query of token 3 meets each key, and the dot products give the scores. The softmax changes the scores into positive weights with a sum of 1. The weighted sum of the values is the output of token 3, in value space.*
 
-At the end, token 3 holds mostly the value of token 1, with a small part of each other value. Note two things. First, the weights are a convex combination. Thus, attention calculates an average of the values, and it does not make one value larger. Second, the output is in value space. What a token *receives* comes from $W_V$, not from the raw embedding of the token that it attends to.
+At the end, token 3 holds mostly the value of token 1, with a small part of each other value. Note two things. First, the weights are a convex combination. Thus, attention calculates an average of the values, and it does not make one value larger. Second, the output is in value space. What a token *gets* comes from $W_V$, not from the raw embedding of the token that it attends to.
 
 ### 2.4 Self-attention and cross-attention
 
@@ -112,7 +112,7 @@ GPT-2 small has 12 heads of 64 dimensions. Llama-2 7B has 32 heads of 128. The h
 
 After attention, the vector of each token goes independently through a two-layer feed-forward network. The network does three steps:
 
-1. It expands the vector to approximately $4 \cdot d_{\text{model}}$ (or ~2.7× with modern gated variants).
+1. It increases the width of the vector to approximately $4 \cdot d_{\text{model}}$ (or ~2.7× with modern gated variants).
 2. It applies a nonlinearity (GELU, or SwiGLU today).
 3. It projects the vector back down to $d_{\text{model}}$.
 
@@ -130,7 +130,7 @@ Second, a single **residual stream** goes through the full network. Each block r
 
 **Normalization** (LayerNorm, or now more frequently RMSNorm) scales the vector of each token to unit scale before each sub-layer. It keeps activations in a numerically comfortable range. It also makes training much less sensitive to the learning rate.
 
-The original paper normalized *after* the residual addition ("post-norm"). Almost all designs since GPT-2 normalize *before* the sub-layer ("pre-norm"). Pre-norm trains stably at large scale without a delicate warmup. This is one of the few architectural changes since 2017 that everyone adopted.
+The original paper normalized *after* the residual addition ("post-norm"). Almost all designs after GPT-2 normalize *before* the sub-layer ("pre-norm"). Pre-norm trains stably at large scale without a delicate warmup. This is one of the few architectural changes after 2017 that everyone adopted.
 
 ### 3.4 The mental model
 
@@ -167,9 +167,9 @@ Nothing in Sections 2 or 3 depends on the token order. Attention is a weighted a
 
 Thus, the design must inject the position. There are three generations of solutions:
 
-- **Sinusoidal encodings** (original paper): this method adds a fixed vector of sines and cosines at different frequencies to the embedding of each token. The vector is unique for each position, and similar for positions that are near.
+- **Sinusoidal encodings** (original paper): this method adds a fixed vector of sines and cosines at different frequencies to the embedding of each token. The vector is unique for each position, and almost the same for positions that are near.
 - **Learned absolute positions** (GPT-2, BERT): an embedding table with the position as its index. This method is simple and effective, but it has no definition after the training length.
-- **Rotary position embeddings, RoPE** (Su et al., 2021, and used by Llama and most current open models): this method adds nothing to the embedding. It rotates each query and key vector through an angle proportional to its position. The method sets the angles so that $q \cdot k$ depends only on the *relative* distance between the two tokens. What attention uses is "how far apart", not "where in absolute terms". When the method encodes that directly, it extrapolates better to longer contexts (with some frequency-scaling tricks).
+- **Rotary position embeddings, RoPE** (Su et al., 2021, and used by Llama and most current open models): this method adds nothing to the embedding. It rotates each query and key vector through an angle proportional to its position. The method sets the angles so that $q \cdot k$ depends only on the *relative* distance between the two tokens. What attention uses is "how far apart", not "where in absolute terms". When the method encodes the relative distance directly, it extrapolates better to longer contexts (with some frequency-scaling tricks).
 
 You do not need the trigonometry of RoPE. You must know two things. First, position is a design choice, bolted on to a core that is blind to order. Second, that choice controls how well a model handles lengths that its training did not include.
 
@@ -186,11 +186,11 @@ Two simplifications came after it:
 
 *The three flavors of §5 as attention patterns. Each cell says if the token of the row attends to the token of the column. The encoder sees both directions, the decoder sees only the tokens before it, and the encoder-decoder adds cross-attention from the decoder to the encoder output.*
 
-Decoder-only won the scaling race, and the reason is important. Next-token prediction gives a training signal at *every* position of *every* sequence. It needs no labels, and it makes no distinction between input and output. You can write any task as "here is some text; continue it." This is true for translation, summarization, classification and code. The result is one objective, one architecture and data with effectively no limit.
+Decoder-only won the race to scale, and the reason is important. Next-token prediction gives a training signal at *every* position of *every* sequence. It needs no labels, and it makes no distinction between input and output. You can write any task as "here is some text; continue it." This is true for translation, summarization, classification and code. The result is one objective, one architecture and data with effectively no limit.
 
 Encoder-decoder models stay excellent when the task has a clear structure from input to output. Examples are T5 and the systems behind most machine translation and speech recognition. For general-purpose models, decoder-only is the default.
 
-In the rest of this primer, "Transformer" means decoder-only, unless the text says otherwise.
+In the rest of this primer, "Transformer" means decoder-only, unless the text gives a different definition.
 
 ## 6. Training
 
@@ -214,11 +214,11 @@ Three quantities set what a pretrained model can do:
 - **$D$**, the training tokens.
 - **$C$**, the compute. **$C \approx 6 \cdot N \cdot D$** FLOPs is a good approximation of it: 2 per parameter per token for the forward pass, and 4 for the backward pass.
 
-Scaling laws (Kaplan et al., 2020, and Hoffmann et al., "Chinchilla", 2022) showed two things. First, the loss decreases as a smooth power law in each quantity. Second, for a fixed compute budget, there is an optimal balance. This balance is roughly 20 tokens per parameter, if the training cost is the only thing that is important to you.
+Scaling laws (Kaplan et al., 2020, and Hoffmann et al., "Chinchilla", 2022) showed two things. First, the loss decreases as a smooth power law in each quantity. Second, for a fixed compute budget, one balance is the best. This balance is approximately 20 tokens per parameter, if the training cost is the only thing that is important to you.
 
-In practice, the training of models now goes far past that point (Llama-3 8B on ~15 trillion tokens, nearly 2,000 per parameter). The reason is that a smaller model with longer training costs less to *serve*. Also, over the life of a model, the cost to serve it is the largest cost.
+In practice, the training of models now goes far past that point (Llama-3 8B on ~15 trillion tokens, almost 2,000 per parameter). The reason is that a smaller model with longer training costs less to *serve*. Also, over the life of a model, the cost to serve it is the largest cost.
 
-**Practitioner note.** This is why people who train large models feel that architecture debates have low stakes. The block changed in details since 2017 (Section 9), but not in kind. Nearly all the capability gain came from $N$, $D$, data quality and the training procedure. The first question about a proposed architectural change is this: does it move the scaling curve, or only the constant in front of it?
+**Practitioner note.** This is why people who train large models feel that architecture debates have low stakes. The block changed in details after 2017 (Section 9), but not in kind. Almost all the capability gain came from $N$, $D$, data quality and the training procedure. The first question about a proposed architectural change is this: does it move the scaling curve, or only the constant in front of it?
 
 ### 6.3 Post-training is not architecture
 
@@ -275,7 +275,7 @@ Temperature, top-p, top-k and repetition penalties act on the output distributio
 
 ### 8.1 Parameter accounting
 
-Per block, if you do not count biases and norms (both are negligible):
+Per block, if you do not count biases and norms (both are very small):
 
 | Component | Parameters |
 |---|---|
@@ -283,7 +283,7 @@ Per block, if you do not count biases and norms (both are negligible):
 | MLP with 4× expansion: $W_{\text{up}}$, $W_{\text{down}}$ | $8 \cdot d^2$ |
 | **Per block** | **$\approx 12 \cdot d^2$** |
 
-Add the embeddings: $\text{vocab} \times d$. Double this number if the input and output embeddings are not tied.
+Add the embeddings: $\text{vocab} \times d$. Double this number if the model does not tie the input and output embeddings.
 
 Do a check against GPT-2 small ($d$ = 768, $L$ = 12, vocab = 50,257, tied embeddings, learned positions). The terms are 12 × 12 × 768² ≈ 85M, plus 50,257 × 768 ≈ 39M, plus 1,024 × 768 positions ≈ 0.8M. Total ≈ 124M. ✓
 
@@ -333,7 +333,7 @@ You can still recognize the 2017 design in every frontier model. The changes are
 | Change | Replaces | Why |
 |---|---|---|
 | Pre-norm | Post-norm | Stable training at depth without fragile warmup |
-| RMSNorm | LayerNorm | Same effect. It removes the mean-centering and costs less. |
+| RMSNorm | LayerNorm | Same effect. It does not subtract the mean, and it costs less. |
 | RoPE | Learned absolute positions | Relative position, better length extrapolation |
 | SwiGLU / GeGLU | ReLU or GELU MLP | Gated activation gets a lower loss at equal compute. Three matrices with ~2.7× hidden width keep the parameter count equal. |
 | No bias terms | Biases everywhere | Slightly more stable at scale, fewer parameters, no measurable loss |
@@ -343,7 +343,7 @@ You can still recognize the 2017 design in every frontier model. The changes are
 | Sliding-window attention | Full attention in every layer | Some layers attend only to the last $w$ tokens, often interleaved with full-attention layers. This puts a limit on the cost of long inputs. |
 | Latent / compressed K/V (for example, multi-head latent attention) | Standard K/V | Project $K$ and $V$ through a low-rank bottleneck. This decreases the KV cache more. |
 
-A "Llama-style" model has pre-norm RMSNorm, RoPE, SwiGLU, GQA, no biases and a BPE tokenizer. Most open-weight models use this recipe. If you can read one of those models, you can read nearly all of them.
+A "Llama-style" model has pre-norm RMSNorm, RoPE, SwiGLU, GQA, no biases and a BPE tokenizer. Most open-weight models use this recipe. If you can read one of those models, you can read almost all of them.
 
 **Beyond text.** The same block handles images. It cuts an image into patches and flattens each patch into a vector. Then it uses the patches as tokens (Vision Transformer, 2020). Audio, video and protein sequences work in the same way. Most multimodal LLMs attach an encoder to a text model, and feed the outputs of the encoder in as extra tokens.
 
@@ -357,7 +357,7 @@ The property that defines the Transformer is not that it understands language. T
 
 **Depth is a fixed compute budget per token.** With $L$ blocks, each token gets exactly $L$ sequential steps of computation, and the difficulty of the question does not change this. This is why chain-of-thought helps. When the model writes intermediate tokens, it can spend more forward passes, and more attention over its own scratch work, on one problem. "Thinking" models make the same move a standard part of the method.
 
-A model can fail a task in one step that it can do in ten. In that case, the limit is often this fixed depth, not a lack of knowledge.
+A model can fail a task in one step that it can do in ten. In that case, the limit is often this fixed depth, not an absence of knowledge.
 
 **In-context learning is a learned circuit, not a magic property.** The best-studied example is the *induction head*. An induction head is a pair of attention heads that together implement "find the last time this token appeared and copy what followed it". It comes out early in training. It explains much of the ability of a model to learn patterns from a few examples in the prompt.
 
@@ -440,7 +440,7 @@ loss = F.cross_entropy(logits[:, :-1].reshape(-1, logits.size(-1)),
                        idx[:, 1:].reshape(-1))
 ```
 
-The loss compares the prediction of each position with the token that actually came next. Note one practical detail. With the default initialization of PyTorch, the initial loss is far above $\ln(\text{vocab}) \approx 10.8$. GPT-2 initializes weights with standard deviation 0.02, and this brings the initial loss to roughly that value. At the start, a well-initialized language model predicts a near-uniform distribution. An initial loss far from $\ln(\text{vocab})$ is a common early signal of a bug.
+The loss compares the prediction of each position with the token that actually came next. Note one practical detail. With the default initialization of PyTorch, the initial loss is far above $\ln(\text{vocab}) \approx 10.8$. GPT-2 initializes weights with standard deviation 0.02, and this brings the initial loss to approximately that value. At the start, a well-initialized language model predicts a near-uniform distribution. An initial loss far from $\ln(\text{vocab})$ is a common early signal of a bug.
 
 Replace `nn.LayerNorm` with RMSNorm, the position table with RoPE and the MLP with SwiGLU. Then share K/V across groups of heads. The result is a modern open-weight model.
 
@@ -461,10 +461,10 @@ Replace `nn.LayerNorm` with RMSNorm, the position table with RoPE and the MLP wi
 ## 13. Further reading, in order
 
 1. Jay Alammar, *The Illustrated Transformer*: the standard visual walkthrough.
-2. Andrej Karpathy, *Let's build GPT: from scratch, in code, spelled out* (video) and the `nanoGPT` repository: Section 11, expanded into a full training run.
+2. Andrej Karpathy, *Let's build GPT: from scratch, in code, spelled out* (video) and the `nanoGPT` repository: Section 11, extended to a full training run.
 3. Vaswani et al., *Attention Is All You Need* (2017): short, and easy to read after you have the picture.
 4. Harvard NLP, *The Annotated Transformer*: the paper as executable code.
-5. Hoffmann et al., *Training Compute-Optimal Large Language Models* (Chinchilla, 2022): the scaling intuitions in Section 6.
+5. Hoffmann et al., *Training Compute-Optimal Large Language Models* (Chinchilla, 2022): the intuitions about scale in Section 6.
 6. Dao et al., *FlashAttention* (2022): why memory access, not FLOPs, controls the attention cost.
 7. Olsson et al., *In-context Learning and Induction Heads* (2022): what a learned circuit looks like in detail.
 8. Touvron et al., *Llama 2* (2023): a complete, documented modern recipe.

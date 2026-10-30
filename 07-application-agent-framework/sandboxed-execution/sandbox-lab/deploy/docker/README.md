@@ -18,7 +18,7 @@ network, one route out, and no key.
 **Cost.** $0. The image is ~50 MB compressed (verify). gVisor is a ~30 MB package (verify).
 
 **Clean up.** There is nothing to clean. Containers run with `--rm`. `run-with-proxy.sh` stops its proxy
-and stub on exit. It leaves only `/tmp/sandboxlab-egress/` (a token file that you can read). To remove
+and stub on exit. It leaves only `/tmp/sandboxlab-egress/`, which holds a token file that you can read. To remove
 the directory, run `rm -rf /tmp/sandboxlab-egress`.
 
 **Needs.** You need Docker Engine or Docker Desktop. For gVisor (`install-gvisor.sh`), you need Linux 5.6+,

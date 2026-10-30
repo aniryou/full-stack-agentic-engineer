@@ -137,7 +137,7 @@ print("✅ causal mask")''',
 """## 4. Splitting into heads
 
 Heads are only slices of the feature dimension. Reshape `(n, d)` into `(h, n, d/h)`. Thus, each head has its own
-`(n, d_head)` matrix. Also write the inverse, which concatenates the heads back. This exercise needs no arithmetic, only reshapes and a transpose.""",
+`(n, d_head)` matrix. Also write the inverse. The inverse concatenates the heads back. This exercise needs no arithmetic, only reshapes and a transpose.""",
 '''def split_heads(x, h):
     n, d = x.shape
     return x.reshape(n, h, d // h).transpose(1, 0, 2)   # (n, d) -> (n, h, dh) -> (h, n, dh)
@@ -259,7 +259,7 @@ print("✅ parameter count")''',
 (
 """## 8. Prove it to yourself: attention is order-blind
 
-The next code cell has nothing to fill in (it uses your exercises 1-5). Run it. Then answer the question that comes after it.""",
+The next code cell has nothing to fill in. The cell uses your exercises 1-5. Run it. Then answer the question that comes after it.""",
 '''X = rng.standard_normal((5, 8))
 p = init_block(d=8, h=2)
 perm = rng.permutation(5)
@@ -279,7 +279,7 @@ r"""**Question.** Section 3 of this notebook used a *causal* mask. Will the shuf
 
 <details><summary>Answer</summary>
 
-No. The definition of the causal mask uses positions (token $i$ can see tokens $\le i$). Thus, the mask already adds order. This is because after a shuffle, a token can see a different set of neighbours. Even without a positional embedding, a causal Transformer is not fully order-blind.
+No. The definition of the causal mask uses positions. Token $i$ can see tokens $\le i$. After a shuffle, a token can see a different set of neighbours. Thus, the mask already adds order. Even without a positional embedding, a causal Transformer is not fully order-blind.
 </details>""",
 None, None, None,
 ),

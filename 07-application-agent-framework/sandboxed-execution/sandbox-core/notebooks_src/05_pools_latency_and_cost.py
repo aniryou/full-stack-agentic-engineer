@@ -18,7 +18,7 @@
 #
 # In a **replace-after-use** warm pool, each sandbox runs one execution, and then the pool destroys it. A replacement
 # starts in the background and becomes warm. Thus every execution holds a slot for its run *and* for the cold start of
-# its replacement. **Little's law** gives the *mean* occupancy λ·(t_exec + t_cold). That is the offered load: a floor,
+# its replacement. **Little's law** gives the *mean* occupancy λ·(t_exec + t_cold). This mean is the offered load: a floor,
 # not a size, because with exactly that many slots the queue never clears. **Erlang C** on that load turns a target
 # "fraction that waits for a warm sandbox" into a slot count.
 #
@@ -76,7 +76,7 @@ for name, cold, src in levels:
 # %% [markdown]
 # ## Worked example 2 — Little's law gives the mean, not the pool (FACTS §12)
 # Let $\lambda = 5$ executions/s, with a run of 2 s each and a cold start of 3 s. On average, 10 sandboxes are busy
-# and 15 are replacements in warm-up. That gives **25 slots occupied on average**. That is the offered load $a$ in
+# and 15 are replacements in warm-up. That gives **25 slots occupied on average**. This mean is the offered load $a$ in
 # Erlangs. But a pool of exactly 25 slots has nothing spare for the moments when many arrivals come at the same time.
 
 # %%
@@ -89,7 +89,7 @@ print(f"P(wait) with c = 25 slots: {pool.erlang_c(a, 25):.3f}  (the queue never 
 # %% [markdown]
 # ## Worked example 3 — Erlang C: how many slots for a wait target
 # Replace-after-use holds a slot for $t_{\text{exec}} + t_{\text{cold}} = 5$ s, so $a = 25$. A **reuse** pool holds
-# it for $t_{\text{exec}}$ only, $a = 10$. In a reuse pool, one warm sandbox serves execution after execution. That is
+# it for $t_{\text{exec}}$ only, $a = 10$. In a reuse pool, one warm sandbox serves execution after execution. Reuse is
 # faster and lower in cost, but state carries over. The tables give $P(\text{wait})$ and the mean wait in the queue by
 # slot count.
 
@@ -138,7 +138,7 @@ print(f"at 1.3 run_code calls/turn (scaling primer): ${pool.actions_cost(1.3, fl
 # ## Exercise 5.1 — predict the slot count, then check it
 # The run_code rate of the scaling primer is $\lambda = 27.1 \times 0.2 = 5.42$/s. Use $t_{\text{exec}} = 2$ s,
 # $t_{\text{cold}} = 3$ s and a target of at most 20% of requests that wait for a warm sandbox. First, **predict**
-# the replace-after-use slot count (hint: it is not the Little's-law mean, 27.1). Then implement
+# the replace-after-use slot count. Hint: the count is not the Little's-law mean, 27.1. Then implement
 # `slots(lam, t_exec, t_cold, target)` with `pool.erlang_c`. It returns the smallest $c$ whose
 # $P(\text{wait}) \le \text{target}$, when each execution holds a slot for $t_{\text{exec}} + t_{\text{cold}}$.
 
@@ -199,7 +199,7 @@ print("✅ Erlang C matches, including at a = 162.6 Erlangs where a**c / c! woul
 
 # %% [markdown]
 # ## Exercise 5.3 — choose an isolation level for a latency budget
-# A tool must return within a **2-second** p95 and start from cold each time (no warm pool). From the levels
+# A tool must return in a **2-second** p95 and start from cold each time (no warm pool). From the levels
 # table, set `viable` to the set of level names whose cold start alone fits inside 1 s. That leaves ~1 s for the
 # code. The point: on a busy GKE cluster, pod-per-execution cold starts go over the budget. You need a warm pool or
 # a lighter boundary.

@@ -13,14 +13,14 @@
 # rule, budget ceiling. The system enforces the policy **twice**:
 #
 # - by the executor at run time,
-# - by the cluster (Pod Security *restricted*, a default-deny NetworkPolicy, a Job that does not
-#   retry, a ValidatingAdmissionPolicy).
+# - by the cluster, through Pod Security *restricted*, a default-deny NetworkPolicy, a Job that does not
+#   retry and a ValidatingAdmissionPolicy.
 #
 # The same policy object renders both. One honest limit: the egress hosts that a request lists are the *model's own
 # claim*. Thus a check of them is a review aid, not enforcement. The NetworkPolicy is the enforcement.
 #
-# Side effects mean at-least-once delivery. Thus an **idempotency key** (turn, step, call index, args hash: the recipe
-# of the scaling primer) lets a redelivered step return the stored result. The step does not run two times.
+# Side effects mean at-least-once delivery. Thus an **idempotency key** lets a redelivered step return the stored
+# result. The step does not run two times. The key uses the recipe of the scaling primer: turn, step, call index, args hash.
 #
 # Primer: `../PRIMER.md` §3 (the execution contract), §5 (sandboxes on Kubernetes). This notebook uses two things
 # again: the idempotency recipe of the scaling primer
@@ -47,7 +47,7 @@ print("bad run ->", {k: bad.as_tool_result()[k] for k in ("ok", "error", "hint")
 # %% [markdown]
 # ## Worked example 2 — the budget ceiling and clamping
 # A policy carries a **maximum** budget. A request can ask for less, never more. `evaluate` denies a request over the
-# ceiling, and `clamp` lowers each field that exceeds it. The model cannot widen its own envelope.
+# ceiling, and `clamp` lowers each field that is more than the ceiling. The model cannot widen its own envelope.
 
 # %%
 policy = SandboxPolicy(name="demo", max_budgets=Budgets(cpu_s=2, wall_s=5, memory_mb=256))
@@ -244,5 +244,5 @@ print("✅ the linter catches retries, a deadline shorter than a cold start, clu
 #    `backoffLimit: 0` and `restartPolicy: Never`. Then put a limit on the full Job with `activeDeadlineSeconds`.
 # 4. *The Job's `activeDeadlineSeconds` equals the code's 5-second wall budget. What occurs on a busy cluster?* The
 #    deadline counts from the start of the Job. Thus the time to schedule the pod, the scale-up and the image pull
-#    use it up. Kubernetes kills a cold pod (`DeadlineExceeded`) before the code runs. Give the Job a startup
+#    use up the deadline. Kubernetes kills a cold pod (`DeadlineExceeded`) before the code runs. Give the Job a startup
 #    allowance, and enforce the wall budget inside the pod.
