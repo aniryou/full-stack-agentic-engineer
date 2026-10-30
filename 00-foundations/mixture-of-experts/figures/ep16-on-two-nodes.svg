@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="330" viewBox="0 0 920 330" role="img" aria-label="Two 8-GPU nodes under EP 16: each GPU has 7 peers over NVLink in its node and 8 peers in the other node behind its one 400 Gb/s InfiniBand NIC." style="color: #E4EAE7">
+  <title>Two 8-GPU nodes under EP 16: each GPU has 7 peers over NVLink in its node and 8 peers in the other node behind its one 400 Gb/s InfiniBand NIC.</title>
+  <rect x="0" y="0" width="920" height="330" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <rect x="20" y="20" width="376" height="222" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="208" y="40" font-size="11.5" fill="#97A59F" text-anchor="middle" font-weight="600">node A: 8 GPUs, one NVLink domain</text>
+    <rect x="40" y="106" width="336" height="30" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="208" y="125" text-anchor="middle" font-weight="600">NVLink</text>
+    <rect x="40" y="54" width="72" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="76" y="76" text-anchor="middle">GPU 0</text>
+    <line x1="76" y1="88" x2="76" y2="106" stroke="#97A59F" stroke-width="1.2"/>
+    <rect x="128" y="54" width="72" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="164" y="76" text-anchor="middle">GPU 1</text>
+    <line x1="164" y1="88" x2="164" y2="106" stroke="#97A59F" stroke-width="1.2"/>
+    <rect x="216" y="54" width="72" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="252" y="76" text-anchor="middle">GPU 2</text>
+    <line x1="252" y1="88" x2="252" y2="106" stroke="#97A59F" stroke-width="1.2"/>
+    <rect x="304" y="54" width="72" height="34" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="340" y="76" text-anchor="middle" font-weight="600" fill="#7ADACF">GPU 3</text>
+    <line x1="340" y1="88" x2="340" y2="106" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="40" y="154" width="72" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="76" y="176" text-anchor="middle">GPU 4</text>
+    <line x1="76" y1="136" x2="76" y2="154" stroke="#97A59F" stroke-width="1.2"/>
+    <rect x="128" y="154" width="72" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="164" y="176" text-anchor="middle">GPU 5</text>
+    <line x1="164" y1="136" x2="164" y2="154" stroke="#97A59F" stroke-width="1.2"/>
+    <rect x="216" y="154" width="72" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="252" y="176" text-anchor="middle">GPU 6</text>
+    <line x1="252" y1="136" x2="252" y2="154" stroke="#97A59F" stroke-width="1.2"/>
+    <rect x="304" y="154" width="72" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="340" y="176" text-anchor="middle">GPU 7</text>
+    <line x1="340" y1="136" x2="340" y2="154" stroke="#97A59F" stroke-width="1.2"/>
+    <rect x="524" y="20" width="376" height="222" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="712" y="40" font-size="11.5" fill="#97A59F" text-anchor="middle" font-weight="600">node B: 8 GPUs, one NVLink domain</text>
+    <rect x="544" y="106" width="336" height="30" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="712" y="125" text-anchor="middle" font-weight="600">NVLink</text>
+    <rect x="544" y="54" width="72" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="580" y="76" text-anchor="middle">GPU 8</text>
+    <line x1="580" y1="88" x2="580" y2="106" stroke="#97A59F" stroke-width="1.2"/>
+    <rect x="632" y="54" width="72" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="668" y="76" text-anchor="middle">GPU 9</text>
+    <line x1="668" y1="88" x2="668" y2="106" stroke="#97A59F" stroke-width="1.2"/>
+    <rect x="720" y="54" width="72" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="756" y="76" text-anchor="middle">GPU 10</text>
+    <line x1="756" y1="88" x2="756" y2="106" stroke="#97A59F" stroke-width="1.2"/>
+    <rect x="808" y="54" width="72" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="844" y="76" text-anchor="middle">GPU 11</text>
+    <line x1="844" y1="88" x2="844" y2="106" stroke="#97A59F" stroke-width="1.2"/>
+    <rect x="544" y="154" width="72" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="580" y="176" text-anchor="middle">GPU 12</text>
+    <line x1="580" y1="136" x2="580" y2="154" stroke="#97A59F" stroke-width="1.2"/>
+    <rect x="632" y="154" width="72" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="668" y="176" text-anchor="middle">GPU 13</text>
+    <line x1="668" y1="136" x2="668" y2="154" stroke="#97A59F" stroke-width="1.2"/>
+    <rect x="720" y="154" width="72" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="756" y="176" text-anchor="middle">GPU 14</text>
+    <line x1="756" y1="136" x2="756" y2="154" stroke="#97A59F" stroke-width="1.2"/>
+    <rect x="808" y="154" width="72" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="844" y="176" text-anchor="middle">GPU 15</text>
+    <line x1="844" y1="136" x2="844" y2="154" stroke="#97A59F" stroke-width="1.2"/>
+    <text x="208" y="214" font-size="11.5" fill="#7ADACF" text-anchor="middle">GPU 3: 7 peers over NVLink</text>
+    <text x="712" y="214" font-size="11.5" fill="#97A59F" text-anchor="middle">the other 8 peers of GPU 3</text>
+    <rect x="406" y="50" width="90" height="44" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="451" y="68" text-anchor="middle" font-weight="600">NIC</text>
+    <text x="451" y="85" font-size="11" text-anchor="middle" fill="#E39A62">400 Gb/s IB</text>
+    <g stroke="#97A59F" stroke-width="1.2" fill="none">
+      <path d="M376 71 L404 71" marker-end="url(#arr)"/>
+      <path d="M496 71 L522 71" marker-end="url(#arr)"/>
+    </g>
+    <text x="451" y="114" font-size="11" fill="#97A59F" text-anchor="middle">one NIC per GPU</text>
+    <text x="451" y="130" font-size="11" fill="#97A59F" text-anchor="middle">8 peers</text>
+    <text x="460" y="270" font-size="11.5" fill="#97A59F" text-anchor="middle">all-to-alls per step, DeepSeek-V3 at batch 512, 4K context, EP 16 (simulated)</text>
+    <text x="460" y="292" text-anchor="middle">0.9 ms if all 16 GPUs share one NVLink domain</text>
+    <text x="460" y="314" text-anchor="middle" fill="#E39A62">3.8 ms as two 8-GPU nodes: 22% of a 17.6 ms step with no overlap</text>
+  </g>
+</svg>

@@ -16,6 +16,7 @@ Standard library only.
 from __future__ import annotations
 
 import importlib.util
+import math
 import pathlib
 import sys
 
@@ -54,16 +55,16 @@ def sig(v: float, digits: int = 6) -> float:
 DEFAULT_SCORE = ("LeastAllocated", (("cpu", 1), ("memory", 1)))          # upstream default: spread on cpu+memory
 BINPACK_SCORE = ("MostAllocated", (("cpu", 1), ("memory", 1), (GPU, 5)))  # the primer's gpu-binpack profile
 NODES, PODS, SHAPE = 4, 16, 8          # four empty 8-GPU nodes, sixteen 1-GPU pods, then one 8-GPU pod
+LAST = 24                              # from the 25th pod on only one node has room, and the two lines coincide
 
 
-def arrivals(strategy: str, resources) -> tuple[list[int], object]:
-    """Stranded GPUs for an 8-GPU pod after each 1-GPU pod (8 cores, 64 GiB) that the scheduler binds, until
-    the four nodes are full; and the cluster as it was after the primer's sixteen pods."""
+def arrivals(strategy: str, resources) -> tuple[list[int], tuple[int, float]]:
+    """Stranded GPUs for an 8-GPU pod after each 1-GPU pod (8 cores, 64 GiB) that the scheduler binds, up to
+    LAST pods; and (stranded, fragmentation) as they were after the primer's sixteen pods."""
     cluster = make_cluster(hosts=NODES)
     sched = Scheduler(cluster, strategy, resources)
     out, at_example = [stranded_gpus(cluster, SHAPE)], None
-    capacity = cluster.free(GPU)
-    for i in range(capacity):
+    for i in range(LAST):
         sched.submit(gpu_pod(f"p{i}", 1))
         sched.run()
         out.append(stranded_gpus(cluster, SHAPE))
@@ -96,7 +97,7 @@ def spec_stranded_arrivals() -> dict:
              "anchor": "end"},
             {"kind": "point", "x": PODS, "y": s16, "label": f"{s16} stranded, {f16:.0%}", "style": "warm"},
             {"kind": "point", "x": PODS, "y": p16, "label": f"{p16} stranded, {g16:.0%}", "style": "accent",
-             "anchor": "middle", "dy": 17},
+             "dy": 18},
         ],
         "legend": "top-right",
         "note": "computed by gpusched.scheduler.Scheduler and stranded_gpus (k8s-gpu-core)",
@@ -118,12 +119,12 @@ def spec_spot_gang() -> dict:
     def label(n):
         h, s = expected_runtime_h(WORK_H, n, RATE, RESTART_H), gang_survival(n, WORK_H, RATE)
         return f"{n} node{'s' if n > 1 else ''}: {h:.1f} h, survives {s:.1%}"
-    place = {1: {"anchor": "start", "dy": 24}, 4: {"anchor": "start", "dy": 20}, 16: {"anchor": "end", "dy": -6}}
+    place = {1: {"anchor": "start", "dy": 24}, 4: {"anchor": "start", "dy": 16}, 16: {"anchor": "end", "dy": -6}}
     return {
         "kind": "line",
         "title": ("Expected wall-clock hours of a 24-hour job on Spot against the number of nodes in the gang, when "
                   "every reclaim restarts the whole gang, at 0.005 reclaims per node-hour and a 15-minute restart."),
-        "width": 880, "height": 360,
+        "width": 880, "height": 400,
         "x": {"label": "nodes in the gang", "min": 1, "max": ns[-1], "ticks": [1, 4, 8, 12, 16]},
         "y": {"label": "expected wall-clock (h)", "min": 0, "max": 84, "ticks": [0, 20, 40, 60, 80]},
         "series": [
@@ -136,7 +137,7 @@ def spec_spot_gang() -> dict:
              "style": "accent", **place[n]} for n in TABLE_ROWS
         ],
         "legend": "none",
-        "note": "computed by gpusched.autoscaler.expected_runtime_h and gang_survival (k8s-gpu-core)",
+        "note": "computed by gpusched.autoscaler.expected_runtime_h and gang_survival (k8s-gpu-core); illustrative rate",
     }
 
 
@@ -167,9 +168,9 @@ def spec_queued_provisioning() -> dict:
     return {
         "kind": "line",
         "title": ("Nodes billed against time while a 16-node gang waits for its last node, in one simulated run: "
-                  "the ordinary pool bills each node from its grant, the queued pool creates all 16 nodes together."),
+                  "the ordinary pool creates each node at its grant, and the queued pool creates all 16 nodes together."),
         "width": 880, "height": 360,
-        "x": {"label": "time after the request (h)", "min": 0, "max": sig(round(start_h * 2 + 0.5) / 2),
+        "x": {"label": "time after the request (h)", "min": 0, "max": math.ceil(start_h * 2) / 2,
               "ticks": [0, 0.5, 1, 1.5, 2, 2.5]},
         "y": {"label": "nodes billed", "min": 0, "max": 22, "ticks": [0, 4, 8, 12, 16]},
         "series": [

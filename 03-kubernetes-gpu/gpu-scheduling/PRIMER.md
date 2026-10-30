@@ -367,6 +367,13 @@ On the left, sixteen GPUs are free, and an 8-GPU pod can use none of them. A use
 GPUs for a pod shape**. These are the free GPUs that cannot hold one more pod of that shape. Also,
 **fragmentation** = stranded / free.
 
+![Stranded GPUs for an 8-GPU pod as 1-GPU pods arrive one at a time at four empty 8-GPU nodes, under the default score and under MostAllocated with a GPU weight of 5.](figures/stranded-gpus-as-pods-arrive.svg)
+
+*The chart shows the stranded GPUs for an 8-GPU pod after each 1-GPU pod, with the two score strategies of the
+sketch. The default spread makes all four nodes partly full, but MostAllocated fills one node before the next.
+`scheduler.Scheduler` and `scheduler.stranded_gpus()` compute the two lines, and `tests/test_figures.py` pins the
+chart.*
+
 A pod shape is a bundle: $k$ GPUs *plus* CPU and memory. Thus, in general, node $n$ can take
 $\mathit{fits}_n = \min_{\text{resources } r} \lfloor \mathit{free}_{n,r} / \mathit{request}_r \rfloor$ more such
 pods. Its usable GPUs are $k \cdot \mathit{fits}_n$, and $\text{stranded} = \sum_{\text{nodes}} (\text{free GPUs}_n - k \cdot \mathit{fits}_n)$.
@@ -785,6 +792,12 @@ uses an illustrative $\lambda$ = 0.005 per node-hour, and a 24-hour job with $R$
 The size of the gang multiplies the hazard. Write checkpoints at the interval that layer 01 §7.2 calculates
 (Young/Daly). Or put large gangs on reserved or flex-start capacity.
 
+![Expected wall-clock hours of a 24-hour job on Spot against the number of nodes in the gang, when every reclaim restarts the whole gang, at 0.005 reclaims per node-hour and a 15-minute restart.](figures/spot-gang-wall-clock.svg)
+
+*The chart shows the expected wall-clock hours of the 24-hour job against the gang size, with the three table rows
+as points. Each label also gives the probability that the gang survives 24 h. `autoscaler.expected_runtime_h()` and
+`autoscaler.gang_survival()` compute the values, and `tests/test_figures.py` pins the chart.*
+
 ### 7.3 Queued provisioning, ComputeClass, Autopilot
 
 A gang has a problem that an ordinary scale-up cannot solve. Nodes arrive one at a time, and the cloud bills every
@@ -809,6 +822,12 @@ pool.
 The ordinary pool paid **31.3 node-hours (251 GPU-hours)** for nodes that waited for their peers. The queued pool
 paid **1.3**, and in every run it paid only for the boot. Also, over 200 seeds the ordinary pool averages **22.4 node-hours** and a
 1.95 h start. Queued provisioning does not create capacity. With it, you do not pay for the partial set.
+
+![Nodes billed against time while a 16-node gang waits for its last node, in one simulated run: the ordinary pool creates each node at its grant, and the queued pool creates all 16 nodes together.](figures/queued-provisioning-billed-nodes.svg)
+
+*The chart shows the nodes that each pool pays for while the gang waits, in the simulated run with seed 0. The
+ordinary pool creates each node at its grant, but the queued pool creates all 16 nodes together and pays only for
+the boot. `autoscaler.provision()` computes both lines, and `tests/test_figures.py` pins the chart.*
 
 ```mermaid
 sequenceDiagram

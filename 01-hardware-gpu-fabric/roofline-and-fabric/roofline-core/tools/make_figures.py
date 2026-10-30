@@ -139,7 +139,7 @@ def spec_decode_step() -> dict:
                   "HBM limit."),
         "width": 880, "height": 380,
         "x": {"label": "batch (sequences of 2K tokens)", "scale": "linear",
-              "ticks": [0, 32, 64, 96, 128, 160, 192, 224], "min": 0, "max": 224},
+              "ticks": [0, 32, 64, 96, 128, 160, 192, 224], "min": -8, "max": 224},
         "y": {"label": "step time (ms)", "min": 0, "max": 24, "ticks": [0, 4, 8, 12, 16, 20, 24]},
         "series": [
             {"name": "step time", "x": xs, "y": step, "style": "accent"},

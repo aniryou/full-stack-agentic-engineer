@@ -13,6 +13,7 @@ Every value is SIMULATED (a roofline model), never a measurement.
 from __future__ import annotations
 
 import importlib.util
+import inspect
 import pathlib
 import sys
 
@@ -35,7 +36,11 @@ FIGURES_DIR = LAB.parent / "figures"
 H100 = perf.GPUS["H100-SXM"]
 LLAMA_8B = perf.LLMS["llama-3.1-8b"]
 LLAMA_1B = perf.LLMS["llama-3.2-1b"]          # the draft of §7 (same tokenizer)
-DEFAULT_EFF = (0.6, 0.8)                     # perf.step_cost's flop_eff and bw_eff, the primer's §3 assumptions
+_STEP_DEFAULTS = inspect.signature(perf.step_cost).parameters           # read, not copied: the primer's §3 assumptions
+DEFAULT_EFF = (_STEP_DEFAULTS["flop_eff"].default, _STEP_DEFAULTS["bw_eff"].default)
+OVERHEAD_S = _STEP_DEFAULTS["overhead_s"].default
+ASSUMPTIONS = f"{DEFAULT_EFF[0]:.0%} FLOPs, {DEFAULT_EFF[1]:.0%} bandwidth, {1e3 * OVERHEAD_S:g} ms"
+EXERCISE_2_4_BUDGETS = [256, 512, 1024, 2048, 4096, 8192]                 # notebook 02, exercise 2.4's candidates
 
 
 def _ms(seconds: float) -> float:
@@ -77,8 +82,8 @@ def spec_step_time_vs_tokens() -> dict:
                       "anchor": anchor, "dy": dy})
     return {
         "kind": "line",
-        "title": ("The simulated time of one step of Llama-3.1-8B on an H100 against the tokens in the step, "
-                  "with the memory term and the compute term of the roofline."),
+        "title": ("The simulated step time of Llama-3.1-8B on an H100 against the tokens in the step, "
+                  "with the two roofline terms."),
         "x": {"label": "tokens in the step", "scale": "log", "ticks": [1, 4, 16, 64, 256, 1024, 4096], "max": 8192},
         "y": {"label": "step time (ms)", "scale": "log", "ticks": [2, 5, 10, 20, 50, 100, 200], "min": 2, "max": 300},
         "series": [                                                             # the step time last, on top
@@ -90,29 +95,31 @@ def spec_step_time_vs_tokens() -> dict:
         ],
         "marks": marks,
         "legend": "top-left",
-        "note": "SIMULATED: computed by minengine.perf.step_cost and knee_tokens (60% FLOPs, 80% bandwidth, 2 ms)",
+        "note": f"SIMULATED: computed by minengine.perf.step_cost and knee_tokens ({ASSUMPTIONS})",
     }
 
 
 def spec_token_budget_worst_step() -> dict:
     """§3: the worst step (64 decodes at 2,000 tokens of context plus one full prefill chunk) against the budget."""
     decodes = [(2000, 1)] * 64
-    budgets = list(range(128, 2048 + 1, 16))                                     # 512 and 1,024 are on the grid
+    # the candidates, not a continuous curve: the primer's rule ("the largest budget whose worst step meets the ITL
+    # SLO") picks from this list, and a continuous budget would pass up to ~950 tokens
+    budgets = [b for b in EXERCISE_2_4_BUDGETS if b <= 2048]
     worst = {b: _ms(perf.step_time(H100, LLAMA_8B, decodes + [(0, b - len(decodes))])) for b in budgets}
     alone = _ms(perf.step_time(H100, LLAMA_8B, decodes))
     slo_ms = 25                                                                  # the p99 ITL target of §3
     return {
         "kind": "line",
-        "title": ("The simulated worst step of 64 decodes at 2,000 tokens of context plus one prefill chunk on an "
-                  "H100, against the token budget, with the 25 ms ITL target."),
+        "title": ("The simulated worst step of 64 decodes and one prefill chunk on an H100 against the token budget, "
+                  "with the 25 ms ITL target."),
         "x": {"label": "token budget, max_num_batched_tokens (tokens)", "scale": "log",
-              "ticks": [128, 256, 512, 1024, 2048]},
+              "ticks": budgets, "min": 200, "max": 2600},
         "y": {"label": "worst step time (ms)", "min": 0, "max": 60, "ticks": [0, 10, 20, 30, 40, 50, 60]},
         "series": [                                                             # the worst step last, on top
             {"name": "64 decodes alone", "x": [budgets[0], budgets[-1]], "y": [alone, alone], "style": "muted",
              "dash": True},
             {"name": "64 decodes + one prefill chunk", "x": budgets, "y": [worst[b] for b in budgets],
-             "style": "accent"},
+             "style": "accent", "markers": True},
         ],
         "marks": [
             {"kind": "hline", "y": slo_ms, "label": f"p99 ITL target: {slo_ms} ms", "style": "warm", "anchor": "end"},
@@ -122,7 +129,7 @@ def spec_token_budget_worst_step() -> dict:
              "style": "accent", "anchor": "end", "dy": -10},
         ],
         "legend": "top-left",
-        "note": "SIMULATED: computed by minengine.perf.step_time (60% FLOPs, 80% bandwidth, 2 ms)",
+        "note": f"SIMULATED: computed by minengine.perf.step_time ({ASSUMPTIONS})",
     }
 
 
@@ -136,7 +143,7 @@ def spec_spec_speedup_vs_k() -> dict:
     return {
         "kind": "line",
         "title": ("The speedup of speculative decoding against the draft depth k at an acceptance rate of 0.8, "
-                  "for a free draft and for a draft step that costs 0.1 of a target step."),
+                  "for a draft cost c of 0 and 0.1."),
         "x": {"label": "draft tokens per round, k", "ticks": ks, "min": 1, "max": 12},
         "y": {"label": "speedup over plain decode (×)", "min": 0, "max": 5, "ticks": [0, 1, 2, 3, 4, 5]},
         "series": [
@@ -177,8 +184,8 @@ def spec_spec_speedup_vs_batch() -> dict:
     lean = [gain(b, 200, draft_overhead_s=0.0) for b in batches]
     return {
         "kind": "line",
-        "title": ("The simulated speedup of speculative decoding with a 1B draft for an 8B target on an H100, "
-                  "against the concurrent requests, at contexts of 200 and 2,000 tokens."),
+        "title": ("The simulated speedup of a 1B draft for an 8B target on an H100 against the concurrent requests, "
+                  "at 200 and 2,000 tokens of context."),
         "x": {"label": "concurrent requests (batch)", "scale": "log",
               "ticks": [1, 2, 4, 8, 16, 32, 64, 128, 256]},
         "y": {"label": "speedup over plain decode (×)", "min": 0, "max": 2.2, "ticks": [0, 0.5, 1, 1.5, 2]},

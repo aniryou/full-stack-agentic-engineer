@@ -259,6 +259,10 @@ A worked example uses three memories. The memories are A (last used 1 h ago, imp
 | paper | A 1.0, B 0.6364, C 0 (from 0.9950, 0.8867, 0.6970) | A 0, B 1, C 0.4286 | A 1, B 0.5, C 0 | **A 2.0000, B 2.1364, C 0.4286** |
 | code | C 1.0, B 0.4975, A 0 (from 0.99, 0.9801, 0.9703) | same | same | **A 3.0000, B 3.7487, C 1.3571** |
 
+![The normalised recency term of A, B and C against the hours from the last access, in the paper form and the code form.](figures/recency-two-forms.svg)
+
+*After min-max normalisation, the paper form gives the largest recency term to the most recent memory, A. The code form uses only the rank of each memory, so the oldest memory, C, gets the largest term. `memcore.retrieve.recency` and `memcore.retrieve.minmax` compute the values, and `tests/test_figures.py` pins the chart.*
+
 Both forms rank B, A, C here, but for different reasons. The inversion in the code shows on knowledge updates. Take raw episodes at a
 60-token budget over the 30 users of the harness. There, the code form answers **70.0%** of knowledge-update questions with the superseded
 value, and the paper form **0.0%**. The recall of the code form is higher (35.8% vs 17.6%), because its relevance weight of 3 suits long
@@ -360,6 +364,10 @@ The **knee** is the smallest budget whose recall is not more than 2 points below
 the whole profile fits. Raw episodes have not reached their knee at 120. Read the episodes' 15.4% accuracy at **zero** recall: these are the
 two unanswerable questions per user, correct because the memory knows nothing.
 
+![Recall for consolidated facts and raw episodes, and the accuracy of raw episodes, against the per-turn token budget over the 30 users of the harness.](figures/recall-vs-budget.svg)
+
+*Recall of consolidated facts reaches its knee at 90 tokens, where the whole profile fits. Raw episodes stay below the facts, and at 15 and 30 tokens their accuracy comes only from the two unanswerable questions. `memcore.harness.recall_vs_budget` and `memcore.harness.knee` compute the values, and `tests/test_figures.py` pins the chart.*
+
 The paraphrase subset shows the cost of the embedder: at 30 tokens extraction questions score 100% and their paraphrases 67%. The preference
 paraphrase ("Where does the user like to sit on a plane?") scores 0% until every fact fits. The reason is that it shares no token with "The
 user's seat preference is aisle."
@@ -410,6 +418,10 @@ is the whole history.
 ![The prompt at turn 8 in the four layouts, to scale, with the cached prefix and the uncached part the engine prefills again: 56 tokens with no memory or a pinned profile, 1,560 with memory before the history, 600 with memory at the tail.](figures/prompt-layouts-turn-8.svg)
 
 *The teal part of each bracket is the cached prefix, and the warm part is what the engine prefills again at turn 8. Memory before the history changes the prefix at each turn, so the whole history misses. The pinned profile is the same bytes at each turn, and memory at the tail leaves most of the history cached.*
+
+![The tokens that the engine prefills again at each turn from turn 2 to turn 20, for the four layouts of memory in the prompt.](figures/uncached-tokens-per-turn.svg)
+
+*From turn 2, the uncached part of the prompt increases at each turn with memory before the history, because the whole history misses. With memory at the tail it stays at 600 tokens, and with a pinned profile it stays at 56, the same as with no memory. `memcore.budget.hits_per_turn` computes the values, and `tests/test_figures.py` pins the chart.*
 
 mini-engine-core notebook [`03_prefix_caching`](../../04-inference-engine/serving-engine/mini-engine-core/notebooks/03_prefix_caching.ipynb)
 exercise 3.4 ("lay out an agent prompt for the cache") makes the same point for timestamps. So does 07.2 notebook
@@ -473,6 +485,10 @@ the scaling primer sends 4–6 k. Then each turn from the second clears the mini
 Below the minimum, memory costs 12% more than none in every layout (its 400 tokens, at full price). Above it, memory before the history
 costs **46%** more than a pinned profile and 53% more than no memory, for the same answers. Also, the larger prompt is *lower-cost* than the
 smaller one, because the provider caches the larger one. This is a threshold, not a slope.
+
+![Dollars per 8-turn session on a hosted API against the size of the system prompt, for the four layouts, with a 4,096-token caching minimum.](figures/session-cost-vs-system-prompt.svg)
+
+*Each step down is one more turn whose prompt clears the 4,096-token minimum, so a larger system prompt can cost less. With a small system prompt, the three memory layouts cost the same, and with a large one memory before the history costs the most. `memcore.budget.hits_per_turn` and `memcore.budget.turn_cost` compute the values, and `tests/test_figures.py` pins the chart.*
 
 **Extraction has a price too.** An extraction call after every turn (600 tokens in, 60 out) costs
 **$0.00144** — 72% of a cached turn-8 answer ($0.00199, pinned, 4,000-token system prompt). It is also 22% of one billed at full price

@@ -533,7 +533,7 @@ Erlang C assumes exponential hold times. A cold start of constant length varies 
 
 ![The share of requests that wait for a warm sandbox against the pool size, for a replace-after-use pool and a reuse pool at 5 executions/s.](figures/pool-wait-vs-slots.svg)
 
-*The chart shows $P(\text{wait})$ against the slot count $c$ for the replace-after-use pool and the reuse pool at $\lambda = 5$ executions/s. Erlang C gives 1.0 up to the mean occupancy $a$ of each pool, and the simulated points, with a constant cold start, are lower. `pool.erlang_c()` and `pool.simulate()` in the core compute the points, and `tests/test_figures.py` pins the chart.*
+*The chart shows $P(\text{wait})$ against the slot count $c$ for the replace-after-use pool and the reuse pool at $\lambda = 5$ executions/s. Each curve stays at 1.0 up to the mean occupancy $a$ of its pool. The curves go below the wait target 0.2 at 31 slots and at 14 slots. `pool.erlang_c()` in the core computes the two curves, and `tests/test_figures.py` pins the chart.*
 
 **Where the arrival rate comes from.** It comes from the workload, through the arithmetic of §3.2 of the scaling primer: **27.1 tool calls/s at peak**. If a fifth of them are `run_code`, $\lambda \approx$ **5.4/s** (27.1 × 0.2 = 5.42). That rate gives a mean occupancy of 27.1 and **34** replace-after-use slots for $P(\text{wait}) \le 0.2$.
 

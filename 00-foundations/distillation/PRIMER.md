@@ -63,7 +63,7 @@ term on the logits of the student is $T \cdot (q_T - p_T)$.
 
 ![Four panels show what each recipe of the core takes from the teacher: hard labels, logit KD, SeqKD and on-policy GKD.](figures/four-recipes.svg)
 
-*In each panel, the labels on the arrows say what the student takes from the teacher. Hard labels and logit KD train on given text (§1, §2), and SeqKD trains on text that the teacher wrote (§3). In on-policy GKD, the student samples its own text, and the teacher gives a score to every position of it (§4).*
+*In each panel, the label on the arrow from the teacher to the student says what the student takes from the teacher. Hard labels and logit KD train on given text (§1, §2), and SeqKD trains on text that the teacher wrote (§3). In on-policy GKD, the student samples its own text, and the teacher gives a score to every position of it (§4).*
 
 The payoff is in serving, with a 1.5B student as the example. It is ~16× cheaper per token on the roofline than a 32B
 teacher served on two H100s (the 96× you get against one H100). That 96× is a separate case: on one H100, the teacher
@@ -511,7 +511,7 @@ answer is correct with probability $1 - e_0 \cdot (1 - q)^L$ ($e_0 = 0.8,\; q = 
 ```mermaid
 flowchart LR
   T["Teacher<br/>RL, 16,000<br/>rollouts"] -->|"1,000<br/>traces"| F{"filter"}
-  F -->|"all, correct only,<br/>or correct and<br/>L ≤ 16 or 12"| S["Student copies<br/>the stop rule<br/>LengthPolicy.fit()"]
+  F -->|"all, correct only,<br/>or correct and<br/>L ≤ 16 or 12"| S["Student copies<br/>the procedure:<br/>LengthPolicy.fit()"]
   S -->|"thinking<br/>length"| W["serving workload<br/>decode-heavy,<br/>heavy-tailed"]
   S --> K["accuracy from<br/>its own<br/>knowledge q"]
 ```
@@ -598,7 +598,7 @@ flowchart LR
   K --> S["student"]
 ```
 
-*The parent has two edges: Minitron prunes it by activation importance, and the unpruned parent gives the soft targets for KD. `TinyLM.prune_width()` does the same at a small scale, with the 16 most active units of the 64-unit teacher.*
+*Minitron prunes the parent by activation importance, and then KD from the unpruned parent repairs the pruned model. Minitron uses the parent twice: once to select what to keep, and once as the teacher.*
 
 The core does the same at a small scale (`TinyLM.prune_width()`, notebook 01). It prunes the 64-unit teacher to its
 16 most active units on the student's 242 training contexts. Then it does KD from the parent on those contexts. The

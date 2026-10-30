@@ -56,8 +56,7 @@ def test_every_number_a_chart_prints_is_in_the_primer(name):
 
 
 def test_the_sizing_chart_marks_the_primer_points():
-    """The §6 marks: 26, 31 and 14 slots from Erlang C, and the two simulated shares the primer quotes."""
+    """The §6 marks: 26, 31 and 14 slots from Erlang C, and the mean occupancy of the replace-after-use pool."""
     labels = {m.get("label") for m in mf.spec_pool_wait_vs_slots()["marks"]}
-    for label in ("26 slots: 0.782", "31 slots: 0.180", "14 slots: 0.174", "simulated: 91% wait",
-                  "simulated: 14% wait", "25 slots occupied on average"):
+    for label in ("26 slots: 0.782", "31 slots: 0.180", "14 slots: 0.174", "25 slots occupied on average"):
         assert label in labels, label

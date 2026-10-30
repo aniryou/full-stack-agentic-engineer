@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="360" viewBox="0 0 880 360" role="img" aria-label="Recall for consolidated facts and raw episodes, and the accuracy of raw episodes, against the per-turn token budget over the 30 users of the harness." style="color: #E4EAE7">
+  <title>Recall for consolidated facts and raw episodes, and the accuracy of raw episodes, against the per-turn token budget over the 30 users of the harness.</title>
+  <desc>{"kind":"line","legend":"none","marks":[{"anchor":"end","kind":"vline","label":"knee: 90 tokens","label_pos":"bottom","style":"accent","x":90},{"anchor":"end","dy":-9,"kind":"point","label":"60 tokens: 90.9%","style":"accent","x":60,"y":90.9090909},{"anchor":"start","dy":16,"kind":"point","label":"60 tokens: 17.6%","style":"warm","x":60,"y":17.5757576},{"anchor":"start","dy":-9,"kind":"point","label":"15.4% at zero recall","style":"muted","x":15,"y":15.3846154},{"anchor":"start","kind":"text","style":"accent","text":"consolidated facts: recall","x":93,"y":88},{"anchor":"start","kind":"text","style":"muted","text":"raw episodes: accuracy","x":93,"y":53},{"anchor":"start","kind":"text","style":"warm","text":"raw episodes: recall","x":93,"y":15}],"note":"computed by memcore.harness.recall_vs_budget and memcore.harness.knee","series":[{"markers":true,"name":"consolidated facts: recall","style":"accent","x":[15,30,45,60,90,120],"y":[50.3030303,79.6969697,90.0,90.9090909,100.0,100.0]},{"markers":true,"name":"raw episodes: recall","style":"warm","x":[15,30,45,60,90,120],"y":[0.0,0.0,16.969697,17.5757576,26.3636364,39.6969697]},{"dash":true,"markers":true,"name":"raw episodes: accuracy","style":"muted","x":[15,30,45,60,90,120],"y":[15.3846154,15.3846154,29.7435897,30.2564103,37.6923077,48.974359]}],"title":"Recall for consolidated facts and raw episodes, and the accuracy of raw episodes, against the per-turn token budget over the 30 users of the harness.","x":{"label":"memory budget per turn (tokens)","max":124,"min":10,"ticks":[15,30,45,60,90,120]},"y":{"label":"share of questions (%)","max":108,"min":0,"ticks":[0,20,40,60,80,100]}}</desc>
+  <rect x="0" y="0" width="880" height="360" rx="8" fill="#161E1C"/>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12" fill="currentColor">
+    <g stroke="#27322E" stroke-width="1">
+      <line x1="66.0" y1="290.0" x2="858.0" y2="290.0"/>
+      <line x1="66.0" y1="240.4" x2="858.0" y2="240.4"/>
+      <line x1="66.0" y1="190.7" x2="858.0" y2="190.7"/>
+      <line x1="66.0" y1="141.1" x2="858.0" y2="141.1"/>
+      <line x1="66.0" y1="91.5" x2="858.0" y2="91.5"/>
+      <line x1="66.0" y1="41.9" x2="858.0" y2="41.9"/>
+    </g>
+    <g stroke="#55635E" stroke-width="1.2">
+      <line x1="66.0" y1="290.0" x2="858.0" y2="290.0"/>
+      <line x1="66.0" y1="290.0" x2="66.0" y2="22.0"/>
+    </g>
+    <g font-size="11" fill="#97A59F">
+      <text x="58.0" y="293.5" text-anchor="end">0</text>
+      <text x="58.0" y="243.9" text-anchor="end">20</text>
+      <text x="58.0" y="194.2" text-anchor="end">40</text>
+      <text x="58.0" y="144.6" text-anchor="end">60</text>
+      <text x="58.0" y="95.0" text-anchor="end">80</text>
+      <text x="58.0" y="45.4" text-anchor="end">100</text>
+      <text x="100.7" y="306.0" text-anchor="middle">15</text>
+      <text x="204.9" y="306.0" text-anchor="middle">30</text>
+      <text x="309.2" y="306.0" text-anchor="middle">45</text>
+      <text x="413.4" y="306.0" text-anchor="middle">60</text>
+      <text x="621.8" y="306.0" text-anchor="middle">90</text>
+      <text x="830.2" y="306.0" text-anchor="middle">120</text>
+    </g>
+    <text x="462.0" y="332.0" text-anchor="middle" fill="#97A59F">memory budget per turn (tokens)</text>
+    <text x="16" y="156.0" text-anchor="middle" fill="#97A59F" transform="rotate(-90 16 156.0)">share of questions (%)</text>
+    <clipPath id="plot"><rect x="65.0" y="16.0" width="794.0" height="275.0"/></clipPath>
+    <g clip-path="url(#plot)">
+      <path d="M100.7 165.2 L204.9 92.2 L309.2 66.7 L413.4 64.4 L621.8 41.9 L830.2 41.9" fill="none" stroke="#4CC5B7" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <circle cx="100.7" cy="165.2" r="3" fill="#161E1C" stroke="#4CC5B7" stroke-width="1.6"/>
+      <circle cx="204.9" cy="92.2" r="3" fill="#161E1C" stroke="#4CC5B7" stroke-width="1.6"/>
+      <circle cx="309.2" cy="66.7" r="3" fill="#161E1C" stroke="#4CC5B7" stroke-width="1.6"/>
+      <circle cx="413.4" cy="64.4" r="3" fill="#161E1C" stroke="#4CC5B7" stroke-width="1.6"/>
+      <circle cx="621.8" cy="41.9" r="3" fill="#161E1C" stroke="#4CC5B7" stroke-width="1.6"/>
+      <circle cx="830.2" cy="41.9" r="3" fill="#161E1C" stroke="#4CC5B7" stroke-width="1.6"/>
+      <path d="M100.7 290.0 L204.9 290.0 L309.2 247.9 L413.4 246.4 L621.8 224.6 L830.2 191.5" fill="none" stroke="#E39A62" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <circle cx="100.7" cy="290.0" r="3" fill="#161E1C" stroke="#E39A62" stroke-width="1.6"/>
+      <circle cx="204.9" cy="290.0" r="3" fill="#161E1C" stroke="#E39A62" stroke-width="1.6"/>
+      <circle cx="309.2" cy="247.9" r="3" fill="#161E1C" stroke="#E39A62" stroke-width="1.6"/>
+      <circle cx="413.4" cy="246.4" r="3" fill="#161E1C" stroke="#E39A62" stroke-width="1.6"/>
+      <circle cx="621.8" cy="224.6" r="3" fill="#161E1C" stroke="#E39A62" stroke-width="1.6"/>
+      <circle cx="830.2" cy="191.5" r="3" fill="#161E1C" stroke="#E39A62" stroke-width="1.6"/>
+      <path d="M100.7 251.8 L204.9 251.8 L309.2 216.2 L413.4 214.9 L621.8 196.5 L830.2 168.5" fill="none" stroke="#97A59F" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="6 4"/>
+      <circle cx="100.7" cy="251.8" r="3" fill="#161E1C" stroke="#97A59F" stroke-width="1.6"/>
+      <circle cx="204.9" cy="251.8" r="3" fill="#161E1C" stroke="#97A59F" stroke-width="1.6"/>
+      <circle cx="309.2" cy="216.2" r="3" fill="#161E1C" stroke="#97A59F" stroke-width="1.6"/>
+      <circle cx="413.4" cy="214.9" r="3" fill="#161E1C" stroke="#97A59F" stroke-width="1.6"/>
+      <circle cx="621.8" cy="196.5" r="3" fill="#161E1C" stroke="#97A59F" stroke-width="1.6"/>
+      <circle cx="830.2" cy="168.5" r="3" fill="#161E1C" stroke="#97A59F" stroke-width="1.6"/>
+    </g>
+    <line x1="621.8" y1="22.0" x2="621.8" y2="290.0" stroke="#4CC5B7" stroke-width="1.2" stroke-dasharray="4 3"/>
+    <text x="616.8" y="282.0" text-anchor="end" font-size="11" fill="#4CC5B7">knee: 90 tokens</text>
+    <circle cx="413.4" cy="64.4" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="404.4" y="55.4" text-anchor="end" font-size="11" fill="#4CC5B7">60 tokens: 90.9%</text>
+    <circle cx="413.4" cy="246.4" r="4.5" fill="#E39A62" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="422.4" y="262.4" text-anchor="start" font-size="11" fill="#E39A62">60 tokens: 17.6%</text>
+    <circle cx="100.7" cy="251.8" r="4.5" fill="#97A59F" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="109.7" y="242.8" text-anchor="start" font-size="11" fill="#97A59F">15.4% at zero recall</text>
+    <text x="642.6" y="71.6" text-anchor="start" font-size="11" fill="#4CC5B7">consolidated facts: recall</text>
+    <text x="642.6" y="158.5" text-anchor="start" font-size="11" fill="#97A59F">raw episodes: accuracy</text>
+    <text x="642.6" y="252.8" text-anchor="start" font-size="11" fill="#E39A62">raw episodes: recall</text>
+    <text x="10" y="353.0" font-size="10.5" fill="#97A59F" font-family="JetBrains Mono, monospace">computed by memcore.harness.recall_vs_budget and memcore.harness.knee</text>
+  </g>
+</svg>

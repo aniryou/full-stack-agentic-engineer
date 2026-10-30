@@ -439,7 +439,7 @@ Take 4 ops (bias, GELU, dropout, residual add) on a 4096 × 8192 bf16 activation
 Fusion changes no FLOPs and removes 67% of the bytes. The fused kernel still reads each distinct input one
 time and writes the result one time.
 
-![Four elementwise ops as four kernels that write each intermediate result to HBM, and as one fused kernel that writes only the result.](figures/fusion-unfused-vs-fused.svg)
+![Four elementwise ops as four kernels that each read from HBM and write back to it, and as one fused kernel that reads its inputs and writes the result one time.](figures/fusion-unfused-vs-fused.svg)
 
 *Count the arrows to and from HBM. Without fusion, each op reads its input from HBM and writes its result back, and the residual add also reads the residual. The fused kernel reads the two inputs one time and writes one result: 201 MB instead of 604 MB (`fusion_bytes()`).*
 
@@ -502,7 +502,7 @@ Take 8 H100s over NVLink 4 as a worked example. The two terms of the ring meet a
 
 ![All-reduce time over 8 GPUs against the message size on log axes: a ring and recursive doubling over NVLink 4, and a ring through 400 Gb/s NICs.](figures/allreduce-time-vs-message-size.svg)
 
-*The chart shows the all-reduce time over 8 GPUs against the message size, with the 70B decode and prefill messages of §5.3. Each point marks the size where the latency term and the bandwidth term of a ring are equal. The decode message is latency-bound, and the prefill message is bandwidth-bound. The core computes the curves with `roofline.fabric.ring_allreduce_time()` and `recursive_doubling_allreduce_time()`, and `tests/test_figures.py` pins the chart.*
+*The chart shows the all-reduce time over 8 GPUs against the message size, with the 70B decode and prefill messages of §5.3. The two points with the label "terms meet" show the size where the latency term and the bandwidth term of a ring are equal. The decode message is latency-bound, and the prefill message is bandwidth-bound. The core computes the curves with `roofline.fabric.ring_allreduce_time()` and `recursive_doubling_allreduce_time()`, and `tests/test_figures.py` pins the chart.*
 
 ### 5.3 Tensor parallelism: the collective inside every layer
 
@@ -728,7 +728,7 @@ $$
 \end{aligned}
 $$
 
-![A time line with checkpoint writes, a failure, the lost work since the last checkpoint and a restart.](figures/checkpoint-interval-timeline.svg)
+![A time line with checkpoint writes, a failure, the lost work after the last checkpoint and a restart.](figures/checkpoint-interval-timeline.svg)
 
 *A job writes a checkpoint every $\tau$ seconds, and each write takes $\delta$. The failure loses the work after the last checkpoint (the dashed box), about $\tau/2$ on average. After the restart $R$, the job computes that work again (§7.2).*
 

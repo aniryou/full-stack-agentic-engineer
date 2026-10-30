@@ -2,14 +2,13 @@
 """The charts of the topic's PRIMER.md, computed by sandboxcore (tools/orchestration/FIGURE-STYLE.md §7).
 
 Each chart is a spec builder, ``spec_<name>() -> dict``, that computes every value with the core's own functions
-from the inputs the primer names (§6: 5 executions/s, a 2 s run and a 3 s cold start; a wait target of 0.2; the
-simulation's seed 1 and 30,000 arrivals). ``tools/orchestration/svgchart.py`` renders the spec into the house
-style, and ``main()`` writes each chart into ``../figures/`` beside the primer. ``tests/test_figures.py`` calls
-``svgchart.check_figure()`` with the same builders, so a committed chart fails the test when the core computes
-other values.
+from the inputs the primer names (§6: 5 executions/s, a 2 s run and a 3 s cold start; a wait target of 0.2).
+``tools/orchestration/svgchart.py`` renders the spec into the house style, and ``main()`` writes each chart into
+``../figures/`` beside the primer. ``tests/test_figures.py`` calls ``svgchart.check_figure()`` with the same
+builders, so a committed chart fails the test when the core computes other values.
 
-Only closed forms (Erlang C) and the two simulated figures that ``tests/test_pool.py`` pins are charted; the
-latencies of §2 and §6 are measurements or ``(verify)`` inputs, so they are never charted.
+Only closed forms (Erlang C) are charted. The seeded simulation of §6 (``pool.simulate()``) is a sample, not a
+closed form, and the latencies of §2 and §6 are measurements or ``(verify)`` inputs, so they are never charted.
 
 Run it from anywhere: ``python3 tools/make_figures.py`` (standard library only, like the core). The output is
 deterministic: two runs give the same bytes.
@@ -46,7 +45,6 @@ LAM = 5.0           # executions/s
 T_EXEC = 2.0        # s, the run
 T_COLD = 3.0        # s, the cold start of a replacement
 TARGET = 0.2        # the wait target: P(wait) <= 0.2
-SIM_N, SIM_SEED = 30_000, 1     # the simulation of §6 (SIMULATED, seed 1, 30,000 arrivals)
 
 
 def _sig(v: float) -> float:
@@ -67,9 +65,6 @@ def spec_pool_wait_vs_slots() -> dict:
     p_rau, p_reuse = pool.erlang_c(a_rau, c_rau), pool.erlang_c(a_reuse, c_reuse)
     c_first = int(a_rau) + 1
     p_first = pool.erlang_c(a_rau, c_first)
-    sim_floor = pool.simulate(LAM, T_EXEC, T_COLD, int(a_rau), n=SIM_N, mode="replace_after_use", seed=SIM_SEED)
-    sim_sized = pool.simulate(LAM, T_EXEC, T_COLD, c_rau, n=SIM_N, mode="replace_after_use", seed=SIM_SEED)
-    f_floor, f_sized = round(sim_floor.frac_waited, 2), round(sim_sized.frac_waited, 2)
     return {
         "kind": "line",
         "title": "The share of requests that wait for a warm sandbox against the pool size, for a replace-after-use "
@@ -90,13 +85,9 @@ def spec_pool_wait_vs_slots() -> dict:
              "anchor": "start", "dy": -12},
             {"kind": "point", "x": c_reuse, "y": _sig(p_reuse), "label": f"{c_reuse} slots: {p_reuse:.3f}",
              "style": "violet", "anchor": "start", "dy": -12},
-            {"kind": "point", "x": int(a_rau), "y": f_floor, "label": f"simulated: {round(100 * f_floor)}% wait",
-             "style": "yellow", "anchor": "end"},
-            {"kind": "point", "x": c_rau, "y": f_sized, "label": f"simulated: {round(100 * f_sized)}% wait",
-             "style": "yellow", "anchor": "end", "dy": 4},
         ],
         "legend": "top-right",
-        "note": "computed by sandboxcore.pool.erlang_c, pool.slots_for_wait_target and pool.simulate (seed 1)",
+        "note": "computed by sandboxcore.pool.mean_occupancy, pool.erlang_c and pool.slots_for_wait_target",
     }
 
 

@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="360" viewBox="0 0 880 360" role="img" aria-label="Dollars per 8-turn session on a hosted API against the size of the system prompt, for the four layouts, with a 4,096-token caching minimum." style="color: #E4EAE7">
+  <title>Dollars per 8-turn session on a hosted API against the size of the system prompt, for the four layouts, with a 4,096-token caching minimum.</title>
+  <desc>{"kind":"line","legend":"top-right","marks":[{"anchor":"start","kind":"vline","label":"2,000-token system prompt","label_pos":"bottom","style":"muted","x":2000},{"anchor":"start","kind":"vline","label":"4,000-token system prompt","label_pos":"bottom","style":"muted","x":4000},{"anchor":"end","dy":-9,"kind":"point","label":"0.04464","style":"plain","x":2000,"y":0.04464},{"anchor":"start","dy":16,"kind":"point","label":"0.03984","style":"muted","x":2000,"y":0.03984},{"anchor":"start","dy":-9,"kind":"point","label":"0.03084","style":"warm","x":4000,"y":0.03084},{"anchor":"start","dy":26,"kind":"point","label":"0.02116","style":"accent","x":4000,"y":0.0211632}],"note":"computed by memcore.budget.hits_per_turn and memcore.budget.turn_cost","series":[{"dash":true,"name":"none","style":"muted","x":[1000,1250,1500,1750,2000,2250,2500,2750,2935,2936,3000,3095,3096,3250,3255,3256,3415,3416,3500,3575,3576,3735,3736,3750,3895,3896,4000,4055,4056,4250,4500,4750,5000,5250,5500,5750,6000],"y":[0.02784,0.03084,0.03384,0.03684,0.03984,0.04284,0.04584,0.04884,0.05106,0.0456072,0.0462888,0.0472992,0.0418464,0.0432624,0.0433224,0.0378696,0.0391296,0.0336768,0.0342528,0.0347208,0.029268,0.030096,0.0246432,0.0246816,0.0252552,0.0198024,0.0201432,0.0201984,0.0202104,0.020724,0.0213048,0.0220368,0.0226176,0.0231984,0.0239304,0.0245112,0.0252432]},{"dash":false,"name":"before_history","style":"warm","x":[1000,1250,1500,1750,2000,2250,2500,2535,2536,2695,2696,2750,2855,2856,3000,3015,3016,3175,3176,3250,3335,3336,3495,3496,3500,3655,3656,3750,4000,4250,4500,4750,5000,5250,5500,5750,6000],"y":[0.03264,0.03564,0.03864,0.04164,0.04464,0.04764,0.05064,0.05106,0.0476592,0.0493512,0.0457344,0.0462528,0.0472104,0.0433776,0.0445224,0.0446376,0.0405888,0.0416328,0.037368,0.037716,0.038196,0.0337152,0.0343272,0.0296304,0.0296784,0.0300264,0.0300384,0.0302592,0.03084,0.031572,0.0321528,0.0328848,0.0334656,0.0340464,0.0347784,0.0353592,0.03594]},{"dash":false,"name":"pinned","style":"accent","x":[1000,1250,1500,1750,2000,2250,2500,2535,2536,2695,2696,2750,2855,2856,3000,3015,3016,3175,3176,3250,3335,3336,3495,3496,3500,3655,3656,3750,4000,4250,4500,4750,5000,5250,5500,5750,6000],"y":[0.03264,0.03564,0.03864,0.04164,0.04464,0.04764,0.05064,0.05106,0.0456072,0.0472992,0.0418464,0.0423648,0.0433224,0.0378696,0.0390144,0.0391296,0.0336768,0.0347208,0.029268,0.029616,0.030096,0.0246432,0.0252552,0.0198024,0.0198504,0.0201984,0.0202104,0.0204312,0.0211632,0.021744,0.0223248,0.0230568,0.0236376,0.0242184,0.0249504,0.0255312,0.0262632]},{"dash":false,"name":"tail","style":"violet","x":[1000,1250,1500,1750,2000,2250,2500,2535,2536,2695,2696,2750,2855,2856,3000,3015,3016,3175,3176,3250,3335,3336,3495,3496,3500,3655,3656,3750,4000,4250,4500,4750,5000,5250,5500,5750,6000],"y":[0.03264,0.03564,0.03864,0.04164,0.04464,0.04764,0.05064,0.05106,0.0463632,0.0480552,0.0433584,0.0438768,0.0448344,0.0401376,0.0412824,0.0413976,0.0367008,0.0377448,0.033048,0.033396,0.033876,0.0291792,0.0297912,0.0250944,0.0251424,0.0254904,0.0255024,0.0257232,0.026304,0.027036,0.0276168,0.0283488,0.0289296,0.0295104,0.0302424,0.0308232,0.031404]}],"title":"Dollars per 8-turn session on a hosted API against the size of the system prompt, for the four layouts, with a 4,096-token caching minimum.","x":{"label":"system prompt (tokens)","max":6000,"min":1000,"ticks":[1000,2000,3000,4000,5000,6000]},"y":{"label":"$ per 8-turn session","max":0.06,"min":0,"tick_labels":["0","0.01","0.02","0.03","0.04","0.05","0.06"],"ticks":[0,0.01,0.02,0.03,0.04,0.05,0.06]}}</desc>
+  <rect x="0" y="0" width="880" height="360" rx="8" fill="#161E1C"/>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12" fill="currentColor">
+    <g stroke="#27322E" stroke-width="1">
+      <line x1="66.0" y1="290.0" x2="858.0" y2="290.0"/>
+      <line x1="66.0" y1="245.3" x2="858.0" y2="245.3"/>
+      <line x1="66.0" y1="200.7" x2="858.0" y2="200.7"/>
+      <line x1="66.0" y1="156.0" x2="858.0" y2="156.0"/>
+      <line x1="66.0" y1="111.3" x2="858.0" y2="111.3"/>
+      <line x1="66.0" y1="66.7" x2="858.0" y2="66.7"/>
+      <line x1="66.0" y1="22.0" x2="858.0" y2="22.0"/>
+    </g>
+    <g stroke="#55635E" stroke-width="1.2">
+      <line x1="66.0" y1="290.0" x2="858.0" y2="290.0"/>
+      <line x1="66.0" y1="290.0" x2="66.0" y2="22.0"/>
+    </g>
+    <g font-size="11" fill="#97A59F">
+      <text x="58.0" y="293.5" text-anchor="end">0</text>
+      <text x="58.0" y="248.8" text-anchor="end">0.01</text>
+      <text x="58.0" y="204.2" text-anchor="end">0.02</text>
+      <text x="58.0" y="159.5" text-anchor="end">0.03</text>
+      <text x="58.0" y="114.8" text-anchor="end">0.04</text>
+      <text x="58.0" y="70.2" text-anchor="end">0.05</text>
+      <text x="58.0" y="25.5" text-anchor="end">0.06</text>
+      <text x="66.0" y="306.0" text-anchor="middle">1,000</text>
+      <text x="224.4" y="306.0" text-anchor="middle">2,000</text>
+      <text x="382.8" y="306.0" text-anchor="middle">3,000</text>
+      <text x="541.2" y="306.0" text-anchor="middle">4,000</text>
+      <text x="699.6" y="306.0" text-anchor="middle">5,000</text>
+      <text x="858.0" y="306.0" text-anchor="middle">6,000</text>
+    </g>
+    <text x="462.0" y="332.0" text-anchor="middle" fill="#97A59F">system prompt (tokens)</text>
+    <text x="16" y="156.0" text-anchor="middle" fill="#97A59F" transform="rotate(-90 16 156.0)">$ per 8-turn session</text>
+    <clipPath id="plot"><rect x="65.0" y="16.0" width="794.0" height="275.0"/></clipPath>
+    <g clip-path="url(#plot)">
+      <path d="M66.0 165.6 L105.6 152.2 L145.2 138.8 L184.8 125.4 L224.4 112.0 L264.0 98.6 L303.6 85.2 L343.2 71.8 L372.5 61.9 L372.7 86.3 L382.8 83.2 L397.8 78.7 L398.0 103.1 L422.4 96.8 L423.2 96.5 L423.4 120.8 L448.5 115.2 L448.7 139.6 L462.0 137.0 L473.9 134.9 L474.0 159.3 L499.2 155.6 L499.4 179.9 L501.6 179.8 L524.6 177.2 L524.7 201.5 L541.2 200.0 L549.9 199.8 L550.1 199.7 L580.8 197.4 L620.4 194.8 L660.0 191.6 L699.6 189.0 L739.2 186.4 L778.8 183.1 L818.4 180.5 L858.0 177.2" fill="none" stroke="#97A59F" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="6 4"/>
+      <path d="M66.0 144.2 L105.6 130.8 L145.2 117.4 L184.8 104.0 L224.4 90.6 L264.0 77.2 L303.6 63.8 L309.1 61.9 L309.3 77.1 L334.5 69.6 L334.6 85.7 L343.2 83.4 L359.8 79.1 L360.0 96.2 L382.8 91.1 L385.2 90.6 L385.3 108.7 L410.5 104.0 L410.7 123.1 L422.4 121.5 L435.9 119.4 L436.0 139.4 L461.2 136.7 L461.4 157.7 L462.0 157.4 L486.6 155.9 L486.7 155.8 L501.6 154.8 L541.2 152.2 L580.8 149.0 L620.4 146.4 L660.0 143.1 L699.6 140.5 L739.2 137.9 L778.8 134.7 L818.4 132.1 L858.0 129.5" fill="none" stroke="#E39A62" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="M66.0 144.2 L105.6 130.8 L145.2 117.4 L184.8 104.0 L224.4 90.6 L264.0 77.2 L303.6 63.8 L309.1 61.9 L309.3 86.3 L334.5 78.7 L334.6 103.1 L343.2 100.8 L359.8 96.5 L360.0 120.8 L382.8 115.7 L385.2 115.2 L385.3 139.6 L410.5 134.9 L410.7 159.3 L422.4 157.7 L435.9 155.6 L436.0 179.9 L461.2 177.2 L461.4 201.5 L462.0 201.3 L486.6 199.8 L486.7 199.7 L501.6 198.7 L541.2 195.5 L580.8 192.9 L620.4 190.3 L660.0 187.0 L699.6 184.4 L739.2 181.8 L778.8 178.6 L818.4 176.0 L858.0 172.7" fill="none" stroke="#4CC5B7" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="M66.0 144.2 L105.6 130.8 L145.2 117.4 L184.8 104.0 L224.4 90.6 L264.0 77.2 L303.6 63.8 L309.1 61.9 L309.3 82.9 L334.5 75.4 L334.6 96.3 L343.2 94.0 L359.8 89.7 L360.0 110.7 L382.8 105.6 L385.2 105.1 L385.3 126.1 L410.5 121.4 L410.7 142.4 L422.4 140.8 L435.9 138.7 L436.0 159.7 L461.2 156.9 L461.4 177.9 L462.0 177.7 L486.6 176.1 L486.7 176.1 L501.6 175.1 L541.2 172.5 L580.8 169.2 L620.4 166.6 L660.0 163.4 L699.6 160.8 L739.2 158.2 L778.8 154.9 L818.4 152.3 L858.0 149.7" fill="none" stroke="#B7A3F0" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    </g>
+    <line x1="224.4" y1="22.0" x2="224.4" y2="290.0" stroke="#97A59F" stroke-width="1.2" stroke-dasharray="4 3"/>
+    <text x="229.4" y="282.0" text-anchor="start" font-size="11" fill="#97A59F">2,000-token system prompt</text>
+    <line x1="541.2" y1="22.0" x2="541.2" y2="290.0" stroke="#97A59F" stroke-width="1.2" stroke-dasharray="4 3"/>
+    <text x="546.2" y="282.0" text-anchor="start" font-size="11" fill="#97A59F">4,000-token system prompt</text>
+    <circle cx="224.4" cy="90.6" r="4.5" fill="#E4EAE7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="215.4" y="81.6" text-anchor="end" font-size="11" fill="#E4EAE7">0.04464</text>
+    <circle cx="224.4" cy="112.0" r="4.5" fill="#97A59F" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="233.4" y="128.0" text-anchor="start" font-size="11" fill="#97A59F">0.03984</text>
+    <circle cx="541.2" cy="152.2" r="4.5" fill="#E39A62" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="550.2" y="143.2" text-anchor="start" font-size="11" fill="#E39A62">0.03084</text>
+    <circle cx="541.2" cy="195.5" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="550.2" y="221.5" text-anchor="start" font-size="11" fill="#4CC5B7">0.02116</text>
+    <g font-size="11.5">
+      <rect x="715.8" y="30.0" width="134.2" height="78.0" rx="5" fill="#161E1C" fill-opacity="0.9" stroke="#27322E"/>
+      <line x1="725.8" y1="43.0" x2="743.8" y2="43.0" stroke="#97A59F" stroke-width="2" stroke-dasharray="6 4"/>
+      <text x="749.8" y="47.0" fill="currentColor">none</text>
+      <line x1="725.8" y1="60.0" x2="743.8" y2="60.0" stroke="#E39A62" stroke-width="2"/>
+      <text x="749.8" y="64.0" fill="currentColor">before_history</text>
+      <line x1="725.8" y1="77.0" x2="743.8" y2="77.0" stroke="#4CC5B7" stroke-width="2"/>
+      <text x="749.8" y="81.0" fill="currentColor">pinned</text>
+      <line x1="725.8" y1="94.0" x2="743.8" y2="94.0" stroke="#B7A3F0" stroke-width="2"/>
+      <text x="749.8" y="98.0" fill="currentColor">tail</text>
+    </g>
+    <text x="10" y="353.0" font-size="10.5" fill="#97A59F" font-family="JetBrains Mono, monospace">computed by memcore.budget.hits_per_turn and memcore.budget.turn_cost</text>
+  </g>
+</svg>

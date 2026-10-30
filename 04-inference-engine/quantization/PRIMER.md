@@ -805,9 +805,9 @@ flowchart LR
   K[("compressed-tensors<br/>checkpoint")] --> V
   P["other producers:<br/>GPTQModel,<br/>ModelOpt"] -.-> V
   subgraph S["the serving environment"]
-    V["vLLM reads<br/>quant_method"] --> G{"run as what<br/>on this GPU?"}
+    V["vLLM reads<br/>quant_method"] --> G{"run as<br/>what?"}
     G -->|"quantized<br/>activations, GPU<br/>has the datapath"| N["W8A8 or W4A4<br/>kernel"]
-    G -->|"16-bit<br/>activations, or<br/>no datapath"| W["weight-only:<br/>Marlin, or Machete<br/>on Hopper"]
+    G -->|"16-bit activations,<br/>or no such<br/>datapath"| W["weight-only:<br/>Marlin, or Machete<br/>on Hopper"]
     G -->|"outside the<br/>capability range"| E["the load fails:<br/>Minimum<br/>capability"]
   end
 ```
@@ -887,7 +887,7 @@ SIMULATED with the assumptions of serving-engine §8 (80% bandwidth, 60% FLOPs, 
 ```mermaid
 flowchart LR
   T["cost.table():<br/>one row per scheme<br/>and KV dtype"] --> A{"runs, fits,<br/>meets every<br/>target?"}
-  A -->|"no"| X["out of<br/>the list"]
+  A -->|"no"| X["the row<br/>drops out"]
   A -->|"yes"| O["the rows that pass,<br/>in order of typical<br/>accuracy cost"]
   M["measure<br/>the schemes for<br/>your model (§8)"] -.->|"changes<br/>the order"| O
   O --> C["cost.choose():<br/>the first row"]

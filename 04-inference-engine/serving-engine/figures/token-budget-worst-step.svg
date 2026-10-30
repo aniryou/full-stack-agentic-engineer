@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="880" height="360" viewBox="0 0 880 360" role="img" aria-label="The simulated worst step of 64 decodes at 2,000 tokens of context plus one prefill chunk on an H100, against the token budget, with the 25 ms ITL target." style="color: #E4EAE7">
-  <title>The simulated worst step of 64 decodes at 2,000 tokens of context plus one prefill chunk on an H100, against the token budget, with the 25 ms ITL target.</title>
-  <desc>{"kind":"line","legend":"top-left","marks":[{"anchor":"end","kind":"hline","label":"p99 ITL target: 25 ms","style":"warm","y":25},{"anchor":"end","dy":20,"kind":"point","label":"512 tokens: 14.4 ms","style":"accent","x":512,"y":14.361},{"anchor":"end","dy":-10,"kind":"point","label":"1,024: 26.7 ms","style":"accent","x":1024,"y":26.7235}],"note":"SIMULATED: computed by minengine.perf.step_time (60% FLOPs, 80% bandwidth, 2 ms)","series":[{"dash":true,"name":"64 decodes alone","style":"muted","x":[128,2048],"y":[13.8638,13.8638]},{"name":"64 decodes + one prefill chunk","style":"accent","x":[128,144,160,176,192,208,224,240,256,272,288,304,320,336,352,368,384,400,416,432,448,464,480,496,512,528,544,560,576,592,608,624,640,656,672,688,704,720,736,752,768,784,800,816,832,848,864,880,896,912,928,944,960,976,992,1008,1024,1040,1056,1072,1088,1104,1120,1136,1152,1168,1184,1200,1216,1232,1248,1264,1280,1296,1312,1328,1344,1360,1376,1392,1408,1424,1440,1456,1472,1488,1504,1520,1536,1552,1568,1584,1600,1616,1632,1648,1664,1680,1696,1712,1728,1744,1760,1776,1792,1808,1824,1840,1856,1872,1888,1904,1920,1936,1952,1968,1984,2000,2016,2032,2048],"y":[13.8669,13.8677,13.8685,13.8693,13.87,13.8708,13.8716,13.8724,13.8732,13.874,13.8747,13.8755,13.8763,13.8771,13.8779,13.8786,13.8794,13.8802,13.881,13.8818,13.8826,13.8833,13.8841,13.9784,14.361,14.7438,15.1268,15.5101,15.8936,16.2773,16.6613,17.0455,17.4299,17.8145,18.1994,18.5845,18.9698,19.3553,19.7411,20.1271,20.5133,20.8997,21.2864,21.6733,22.0604,22.4478,22.8353,23.2231,23.6112,23.9994,24.3879,24.7766,25.1655,25.5547,25.9441,26.3337,26.7235,27.1136,27.5039,27.8944,28.2851,28.6761,29.0673,29.4587,29.8504,30.2422,30.6343,31.0267,31.4192,31.812,32.205,32.5982,32.9917,33.3853,33.7793,34.1734,34.5677,34.9623,35.3571,35.7522,36.1474,36.5429,36.9387,37.3346,37.7308,38.1272,38.5238,38.9206,39.3177,39.715,40.1125,40.5103,40.9083,41.3065,41.7049,42.1036,42.5024,42.9015,43.3009,43.7004,44.1002,44.5002,44.9005,45.3009,45.7016,46.1026,46.5037,46.9051,47.3067,47.7085,48.1105,48.5128,48.9153,49.3181,49.721,50.1242,50.5276,50.9312,51.3351,51.7392,52.1435]}],"title":"The simulated worst step of 64 decodes at 2,000 tokens of context plus one prefill chunk on an H100, against the token budget, with the 25 ms ITL target.","x":{"label":"token budget, max_num_batched_tokens (tokens)","scale":"log","ticks":[128,256,512,1024,2048]},"y":{"label":"worst step time (ms)","max":60,"min":0,"ticks":[0,10,20,30,40,50,60]}}</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="360" viewBox="0 0 880 360" role="img" aria-label="The simulated worst step of 64 decodes and one prefill chunk on an H100 against the token budget, with the 25 ms ITL target." style="color: #E4EAE7">
+  <title>The simulated worst step of 64 decodes and one prefill chunk on an H100 against the token budget, with the 25 ms ITL target.</title>
+  <desc>{"kind":"line","legend":"top-left","marks":[{"anchor":"end","kind":"hline","label":"p99 ITL target: 25 ms","style":"warm","y":25},{"anchor":"end","dy":20,"kind":"point","label":"512 tokens: 14.4 ms","style":"accent","x":512,"y":14.361},{"anchor":"end","dy":-10,"kind":"point","label":"1,024: 26.7 ms","style":"accent","x":1024,"y":26.7235}],"note":"SIMULATED: computed by minengine.perf.step_time (60% FLOPs, 80% bandwidth, 2 ms)","series":[{"dash":true,"name":"64 decodes alone","style":"muted","x":[256,2048],"y":[13.8638,13.8638]},{"markers":true,"name":"64 decodes + one prefill chunk","style":"accent","x":[256,512,1024,2048],"y":[13.8732,14.361,26.7235,52.1435]}],"title":"The simulated worst step of 64 decodes and one prefill chunk on an H100 against the token budget, with the 25 ms ITL target.","x":{"label":"token budget, max_num_batched_tokens (tokens)","max":2600,"min":200,"scale":"log","ticks":[256,512,1024,2048]},"y":{"label":"worst step time (ms)","max":60,"min":0,"ticks":[0,10,20,30,40,50,60]}}</desc>
   <rect x="0" y="0" width="880" height="360" rx="8" fill="#161E1C"/>
   <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12" fill="currentColor">
     <g stroke="#27322E" stroke-width="1">
@@ -24,25 +24,28 @@
       <text x="58.0" y="114.8" text-anchor="end">40</text>
       <text x="58.0" y="70.2" text-anchor="end">50</text>
       <text x="58.0" y="25.5" text-anchor="end">60</text>
-      <text x="66.0" y="306.0" text-anchor="middle">128</text>
-      <text x="264.0" y="306.0" text-anchor="middle">256</text>
-      <text x="462.0" y="306.0" text-anchor="middle">512</text>
-      <text x="660.0" y="306.0" text-anchor="middle">1,024</text>
-      <text x="858.0" y="306.0" text-anchor="middle">2,048</text>
+      <text x="142.2" y="306.0" text-anchor="middle">256</text>
+      <text x="356.3" y="306.0" text-anchor="middle">512</text>
+      <text x="570.3" y="306.0" text-anchor="middle">1,024</text>
+      <text x="784.3" y="306.0" text-anchor="middle">2,048</text>
     </g>
     <text x="462.0" y="332.0" text-anchor="middle" fill="#97A59F">token budget, max_num_batched_tokens (tokens)</text>
     <text x="16" y="156.0" text-anchor="middle" fill="#97A59F" transform="rotate(-90 16 156.0)">worst step time (ms)</text>
     <clipPath id="plot"><rect x="65.0" y="16.0" width="794.0" height="275.0"/></clipPath>
     <g clip-path="url(#plot)">
-      <path d="M66.0 228.1 L858.0 228.1" fill="none" stroke="#97A59F" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="6 4"/>
-      <path d="M66.0 228.1 L99.6 228.1 L129.7 228.1 L157.0 228.1 L181.8 228.0 L204.7 228.0 L225.9 228.0 L245.6 228.0 L264.0 228.0 L281.3 228.0 L297.6 228.0 L313.1 228.0 L327.7 228.0 L341.7 228.0 L355.0 228.0 L367.7 228.0 L379.8 228.0 L391.5 228.0 L402.7 228.0 L413.5 228.0 L423.9 228.0 L433.9 228.0 L443.6 228.0 L452.9 227.6 L462.0 225.9 L470.8 224.1 L479.3 222.4 L487.6 220.7 L495.6 219.0 L503.5 217.3 L511.1 215.6 L518.5 213.9 L525.7 212.1 L532.8 210.4 L539.7 208.7 L546.4 207.0 L553.0 205.3 L559.4 203.5 L565.7 201.8 L571.8 200.1 L577.8 198.4 L583.7 196.6 L589.5 194.9 L595.1 193.2 L600.7 191.5 L606.1 189.7 L611.5 188.0 L616.7 186.3 L621.9 184.5 L626.9 182.8 L631.9 181.1 L636.8 179.3 L641.6 177.6 L646.3 175.9 L650.9 174.1 L655.5 172.4 L660.0 170.6 L664.4 168.9 L668.8 167.1 L673.1 165.4 L677.3 163.7 L681.5 161.9 L685.6 160.2 L689.6 158.4 L693.6 156.7 L697.6 154.9 L701.5 153.2 L705.3 151.4 L709.1 149.7 L712.8 147.9 L716.5 146.2 L720.1 144.4 L723.7 142.6 L727.3 140.9 L730.8 139.1 L734.3 137.4 L737.7 135.6 L741.1 133.8 L744.4 132.1 L747.7 130.3 L751.0 128.5 L754.2 126.8 L757.4 125.0 L760.5 123.2 L763.7 121.5 L766.8 119.7 L769.8 117.9 L772.8 116.2 L775.8 114.4 L778.8 112.6 L781.7 110.8 L784.6 109.1 L787.5 107.3 L790.3 105.5 L793.1 103.7 L795.9 101.9 L798.7 100.2 L801.4 98.4 L804.1 96.6 L806.8 94.8 L809.5 93.0 L812.1 91.2 L814.7 89.4 L817.3 87.7 L819.9 85.9 L822.4 84.1 L824.9 82.3 L827.4 80.5 L829.9 78.7 L832.3 76.9 L834.8 75.1 L837.2 73.3 L839.6 71.5 L841.9 69.7 L844.3 67.9 L846.6 66.1 L848.9 64.3 L851.2 62.5 L853.5 60.7 L855.8 58.9 L858.0 57.1" fill="none" stroke="#4CC5B7" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="M142.2 228.1 L784.3 228.1" fill="none" stroke="#97A59F" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="6 4"/>
+      <path d="M142.2 228.0 L356.3 225.9 L570.3 170.6 L784.3 57.1" fill="none" stroke="#4CC5B7" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <circle cx="142.2" cy="228.0" r="3" fill="#161E1C" stroke="#4CC5B7" stroke-width="1.6"/>
+      <circle cx="356.3" cy="225.9" r="3" fill="#161E1C" stroke="#4CC5B7" stroke-width="1.6"/>
+      <circle cx="570.3" cy="170.6" r="3" fill="#161E1C" stroke="#4CC5B7" stroke-width="1.6"/>
+      <circle cx="784.3" cy="57.1" r="3" fill="#161E1C" stroke="#4CC5B7" stroke-width="1.6"/>
     </g>
     <line x1="66.0" y1="178.3" x2="858.0" y2="178.3" stroke="#E39A62" stroke-width="1.2" stroke-dasharray="4 3"/>
     <text x="854.0" y="173.3" text-anchor="end" font-size="11" fill="#E39A62">p99 ITL target: 25 ms</text>
-    <circle cx="462.0" cy="225.9" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
-    <text x="453.0" y="245.9" text-anchor="end" font-size="11" fill="#4CC5B7">512 tokens: 14.4 ms</text>
-    <circle cx="660.0" cy="170.6" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
-    <text x="651.0" y="160.6" text-anchor="end" font-size="11" fill="#4CC5B7">1,024: 26.7 ms</text>
+    <circle cx="356.3" cy="225.9" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="347.3" y="245.9" text-anchor="end" font-size="11" fill="#4CC5B7">512 tokens: 14.4 ms</text>
+    <circle cx="570.3" cy="170.6" r="4.5" fill="#4CC5B7" stroke="#161E1C" stroke-width="1.5"/>
+    <text x="561.3" y="160.6" text-anchor="end" font-size="11" fill="#4CC5B7">1,024: 26.7 ms</text>
     <g font-size="11.5">
       <rect x="76.0" y="30.0" width="237.2" height="44.0" rx="5" fill="#161E1C" fill-opacity="0.9" stroke="#27322E"/>
       <line x1="86.0" y1="43.0" x2="104.0" y2="43.0" stroke="#97A59F" stroke-width="2" stroke-dasharray="6 4"/>
