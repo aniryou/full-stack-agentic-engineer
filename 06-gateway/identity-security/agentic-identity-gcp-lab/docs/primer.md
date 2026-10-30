@@ -10,15 +10,15 @@ An agent is a **workload that turns untrusted text into privileged actions**. Ev
 
 - *Untrusted text*: the model reads prompts, tool results, web pages, documents, and messages from other agents. The model cannot reliably find the difference between instructions and data. Anything that the agent reads is an attack surface.
 - *Privileged actions*: the agent holds credentials and calls tools. Its blast radius is the union of everything that those credentials can do.
-- *Workload*: it runs in some location, under some identity. You must be able to govern it like any other production system. It must have a name and permissions, you must be able to observe it, and you must be able to revoke it.
+- *Workload*: it runs in some location, under some identity. You must be able to govern it like any other production system. It must have a name and permissions, you must be able to monitor it, and you must be able to revoke it.
 
 Five ideas do most of the work. If you remember nothing else, remember these five:
 
 1. **Every agent is a first-class principal.** It is not a shared service account, and it is not "the app". Each agent has one cryptographic identity, its own IAM bindings and its own audit trail. On Google Cloud, this is **Agent Identity** (SPIFFE-based, certificate-bound).
 2. **Two authorities, always distinguished.** An agent acts either under its *own authority* (its identity and permissions) or *on behalf of a user* (delegated authority, the user's consent and permissions). Tokens, policy and logs must all show which authority applies. When the agent acts under delegated authority, they must show both identities.
-3. **Least privilege per action, not per agent.** The credential for a tool call must have the scope of that call only. It must have the narrowest audience, the narrowest scope and the shortest lifetime. It must also be bound to the caller. Brokers and token exchange make this low-cost.
+3. **Least privilege per action, not per agent.** The credential for a tool call must have the scope of that call only. It must have the narrowest audience, the narrowest scope and the shortest lifetime. It must also be bound to the caller. Brokers and token exchange make per-action credentials low-cost.
 4. **Deterministic controls outrank probabilistic ones.** Prompt-level defenses (Model Armor, instructions, classifiers) decrease the risk. IAM, network perimeters, allowlists and confirmation gates *bound* the risk. Make the design so that a fully hijacked model still cannot go outside the deterministic envelope.
-5. **Observable by construction.** The system logs every tool call with the user, the agent, the decision and the trace ID. You can attribute every use of a credential. You can detect anomalies. A revocation needs only one policy change.
+5. **Observable by construction.** The system logs every tool call with the user, the agent, the decision and the trace ID. You can attribute every use of a credential. You can find anomalies. A revocation needs only one policy change.
 
 The reference implementation puts these ideas into **four policy enforcement points (PEPs)** around the agent loop:
 
@@ -33,7 +33,7 @@ It also has one **identity plane** (Agent Identity + Auth Manager + token exchan
 
 ## 1. Why agents break classical identity assumptions
 
-Classical IAM has two kinds of principals. The first kind is **humans** (interactive, able to give consent, slow, MFA-protected). The second kind is **workloads** (non-interactive, deterministic, a code path that does not change, one service account per deployment). Agents are in neither group. If you force agents into one of the two groups, the design fails in ways that you can predict.
+Classical IAM has two kinds of principals. The first kind is **humans**: interactive, able to give consent, slow and MFA-protected. The second kind is **workloads**. A workload is non-interactive and deterministic, with a code path that does not change and one service account per deployment. Agents are in neither group. If you force agents into one of the two groups, the design fails in ways that you can predict.
 
 ![Three parties share one tool call: the user asks, the model selects the tool and its arguments from a context window that holds instructions and untrusted data in one channel, and the agent runtime makes the call with a credential, under its own authority or on behalf of the user.](agent-three-parties.svg)
 
@@ -115,19 +115,19 @@ An agentic system has more principals than a classical app. Name all of them:
 
 - **User**: the human controller. An IdP (Google Workspace / Cloud Identity, Okta, Entra) authenticates the user. The user gives consent for what the agent can do on their behalf.
 - **Agent**: the workload that runs the agent loop. It must have its own identity. On Google Cloud, this is an **Agent Identity** SPIFFE ID such as `spiffe://agents.global.org-123.system.id.goog/resources/aiplatform/projects/987/locations/us-central1/reasoningEngines/support-agent`. In IAM, the form of this identity is `principal://agents.global.org-123.system.id.goog/resources/aiplatform/...`.
-- **Tool / resource server**: an MCP server, an API, a database. It has its own identity (for mTLS and for its own outbound calls). Most important, it is an OAuth **resource server** that validates the tokens issued *for it*.
+- **Tool / resource server**: an MCP server, an API, a database. It has its own identity for mTLS and for its own outbound calls. Most important, it is an OAuth **resource server** that validates the tokens issued *for it*.
 - **Model endpoint**: Gemini on the Agent Platform. The agent authenticates to it. You can apply policy (Model Armor floor settings) at this boundary.
 - **Peer agents**: other agents that the agent calls over A2A. Each peer agent has its own identity and Agent Card.
-- **Operators / developers**: people with admin roles. They are a frequent blind spot (who can change the instructions or the tool list of the agent?).
+- **Operators / developers**: people with admin roles. They are a frequent blind spot. Who can change the instructions or the tool list of the agent?
 
 ### 3.2 Own authority vs delegated authority
 
 Every action of the agent is under one of two authorities. Make this explicit in code, tokens and logs:
 
 - **Own authority**: the agent uses *its* identity and *its* IAM grants. Example: the agent writes traces to Cloud Logging or reads a shared knowledge base. It can also call a 2-legged-OAuth SaaS API with credentials that the organization gave *the agent*. Audit logs show only the identity of the agent.
-- **Delegated authority (on behalf of a user)**: the agent acts with credentials that *the user consented to*, typically 3-legged OAuth. Example: the agent reads the user's calendar, creates a ticket as the user, or sends a query to BigQuery with the user's own dataset permissions. Audit logs must show **both** the agent and the user. Google's Agent Identity does exactly this when it acts through Auth Manager.
+- **Delegated authority (on behalf of a user)**: the agent acts with credentials that *the user consented to*, usually 3-legged OAuth. Example: the agent reads the user's calendar, creates a ticket as the user, or sends a query to BigQuery with the user's own dataset permissions. Audit logs must show **both** the agent and the user. Google's Agent Identity does exactly this when it acts through Auth Manager.
 
-You cannot use one authority in place of the other. A common design error is to give broad permissions to the agent's own identity ("it needs to read everyone's tickets"). The correct design uses delegation: the agent reads *this user's* tickets with *this user's* token. Delegation keeps the agent's own blast radius small. It also makes authorization decisions the problem of the resource, which already knows how to authorize users.
+You cannot use one authority in place of the other. A common design error is to give broad permissions to the agent's own identity because "it needs to read everyone's tickets". The correct design uses delegation: the agent reads *this user's* tickets with *this user's* token. Delegation keeps the agent's own blast radius small. It also makes authorization decisions the problem of the resource, which already knows how to authorize users.
 
 ```mermaid
 flowchart LR
@@ -163,7 +163,7 @@ Today, these runtimes support Agent Identity: **Agent Runtime** (Agent Engine, r
 Know these two things:
 
 - **Migration from a service account to an agent identity creates a new principal with no inherited permissions.** Grant the roles (Policy Analyzer helps) before you change `--identity-type`. You cannot grant legacy bucket roles to agent identities.
-- **The opt-out exists and is a red flag.** `GOOGLE_API_PREVENT_AGENT_TOKEN_SHARING_FOR_GCP_SERVICES=False` disables token binding. The documentation strongly discourages it. If you see it in the config of a deployment, that is a finding.
+- **The opt-out exists and is a red flag.** `GOOGLE_API_PREVENT_AGENT_TOKEN_SHARING_FOR_GCP_SERVICES=False` disables token binding. The documentation strongly discourages it. If you see this setting in the config of a deployment, that is a finding.
 
 ### 3.4 Where the older primitives still fit
 
@@ -184,7 +184,7 @@ Agent Identity does not replace the rest of Google Cloud IAM. You use them toget
 
     Before it issues anything, the STS verifies both inputs. The subject token must have an audience that the STS serves. The actor token must authenticate the agent (with the agent's own credential, not a claim in the request).
 
-    If the subject token carries `may_act` (§4.4), only the actor that it names can act for the user. Chains (`act.act`) represent multi-hop delegation. Google's own STS uses this grant for Workload Identity Federation.
+    If the subject token carries `may_act` (§4.4), only the actor that it names can act for the user. Chains (`act.act`) show multi-hop delegation. Google's own STS uses this grant for Workload Identity Federation.
 
 - **RFC 9449 DPoP**: on every request, the client proves that it has a private key, with a signed `DPoP` header (`htm`, `htu`, `iat`, `jti`, `ath`). The token carries `cnf.jkt`. A replayed bearer token without the key fails.
 - **RFC 8705 mTLS-bound tokens**: the token carries `cnf.x5t#S256` (certificate thumbprint). The resource server makes sure that the TLS client certificate matches. This is what "certificate-bound" means for Agent Identity.
@@ -205,7 +205,7 @@ Design authorization as layers. Each layer fails closed, independently of the ot
 1. **Resource layer (IAM).** This layer makes the final decision. Bind the agent principal (or principalSet) to the narrowest roles on the narrowest resources. Use IAM Conditions for time limits and resource-name constraints. Use deny policies and PAB policies for "never, regardless of allows".
 2. **Runtime layer (ADK callbacks / plugin).** `before_tool_callback` sees the resolved tool name and arguments *before* execution. In this layer, you enforce tool allowlists, tiers (read/write/destructive), argument constraints, per-user scopes, budgets and human confirmation. If the callback returns a result, the runtime skips the tool. The reference implementation has a `SecurityPlugin` that does this for every agent in the runner.
 3. **Network layer (Agent Gateway + VPC Service Controls).** The gateway is the single egress point for traffic from an agent to a tool or another agent. IAP enforces IAM per SPIFFE ID on resources registered in Agent Registry (unregistered destinations must have `iap.resources.egressViaIAP`). VPC-SC perimeters accept agent identities in ingress/egress rules. They can also set conditions on MCP attributes: `mcp.toolName`, `mcp.method`, `mcp.tool.isReadOnly`. For example, let an agent *read* from a Workspace MCP server, but deny `send_email`.
-4. **Model-side layer (Model Armor).** Model Armor screens prompts and responses (and, at the gateway, tool traffic). It looks for prompt injection/jailbreak, sensitive data, malicious URLs and RAI categories. Apply it as project **floor settings** (a baseline that nobody can turn off) plus per-request **templates**. The request-level template takes precedence over the floor. The floor takes precedence over Gemini's built-in safety filters.
+4. **Model-side layer (Model Armor).** Model Armor screens prompts and responses (and, at the gateway, tool traffic). It looks for prompt injection/jailbreak, sensitive data, malicious URLs and RAI categories. Apply it as project **floor settings** plus per-request **templates**. The floor settings are a baseline that nobody can turn off. The request-level template takes precedence over the floor. The floor takes precedence over Gemini's built-in safety filters.
 
 As the agent developer, you control the runtime layer most. The resource and network layers are the layers that still hold if your code is incorrect.
 
@@ -221,7 +221,7 @@ Classify every tool one time, in policy, not in prose:
 - **WRITE**: reversible side effects (`add_comment`, `create_draft`). These tools must be on an explicit allowlist. When the agent acts for a user, these tools also need the user's scope.
 - **DESTRUCTIVE / EXTERNAL**: irreversible, financial, or the action goes outside the trust boundary (`issue_refund`, `send_email`, `fetch_url`). These tools need human confirmation, unless the arguments are in a narrow, pre-approved argument envelope (for example, refund ≤ $50 on the caller's own order). A tool that takes a URL also needs an egress allowlist.
 
-If the tool is unknown, the decision is **deny**. The policy engine evaluates the policy against a `ToolCallRequest`. That request carries the agent principal, the user, the authority mode, the tool, the arguments and the scopes. MCP tool annotations (`readOnlyHint`, `destructiveHint`) and VPC-SC's `mcp.tool.isReadOnly` express the same tiers at the protocol and network layers. Keep them consistent.
+If the tool is unknown, the decision is **deny**. The policy engine examines a `ToolCallRequest` against the policy. That request carries the agent principal, the user, the authority mode, the tool, the arguments and the scopes. MCP tool annotations (`readOnlyHint`, `destructiveHint`) and VPC-SC's `mcp.tool.isReadOnly` express the same tiers at the protocol and network layers. Keep them consistent.
 
 ### 4.3 Scoped credential per tool call
 
@@ -237,7 +237,7 @@ In ADK, you register `GcpAuthProvider()` one time. Then you attach a `GcpAuthPro
 
 ### 4.4 Human-in-the-loop, done right
 
-Confirmation is a control only if the person sees **what will execute**, not what the model *says* that it will do. Show the tool name, the exact arguments, the authority (own, or on behalf of whom) and the policy reason. ADK supports this natively. A `FunctionTool(require_confirmation=True)` or `tool_context.request_confirmation(hint=…, payload=…)` pauses the tool and emits an `adk_request_confirmation` function call. The client renders it and replies with a `ToolConfirmation(confirmed=True)`. Log the approval with the approver's identity, because it is part of the delegation chain.
+Confirmation is a control only if the person sees **what will execute**, not what the model *says* that it will do. Show the tool name, the exact arguments, the authority (own, or on behalf of whom) and the policy reason. ADK supports this natively. A `FunctionTool(require_confirmation=True)` or `tool_context.request_confirmation(hint=…, payload=…)` pauses the tool and sends an `adk_request_confirmation` function call. The client renders it and replies with a `ToolConfirmation(confirmed=True)`. Log the approval with the approver's identity, because it is part of the delegation chain.
 
 ### 4.5 Bounding the envelope: deny, PAB, and org policy
 
@@ -298,7 +298,7 @@ The full build of this control is in [07-application-agent-framework/sandboxed-e
 
 ### 6.3 Plan → check → act
 
-For multi-step tasks, make the agent produce a plan (the list of tool calls that it intends to make). Send the plan through the same policy engine as a dry run. Only after that, execute the plan step by step, with enforcement at each step. Budgets (tokens, tool calls, spend) and loop detection are part of this layer, because cascading failures (ASI08) are usually unbounded loops with valid credentials.
+For multi-step tasks, make the agent produce a plan. The plan is the list of tool calls that the agent intends to make. Send the plan through the same policy engine as a dry run. Only after that, execute the plan step by step, with enforcement at each step. Budgets (tokens, tool calls, spend) and loop detection are part of this layer, because cascading failures (ASI08) are usually unbounded loops with valid credentials.
 
 **In one sentence:** "Prompt injection is a property of the medium, thus I do not rely on the model to resist it. I screen inputs and outputs with Model Armor floor settings. I tag and sanitize everything that comes back from tools, and I constrain arguments structurally. I put egress on an allowlist, and I keep destructive actions behind confirmation. If a hijacked model can only call read-only tools and a confirmation-gated refund, the injection is contained."
 
@@ -312,8 +312,8 @@ The MCP authorization specification (revision 2025-11-25) sets the roles. The **
 
 - Servers **MUST** implement **Protected Resource Metadata** (RFC 9728) and advertise it. They use `WWW-Authenticate: Bearer resource_metadata="…"` on 401 and/or `/.well-known/oauth-protected-resource[/path]`. Clients find the authorization server from it (RFC 8414 or OIDC discovery).
 - Clients **MUST** use **PKCE (S256)**. If the AS metadata does not have `code_challenge_methods_supported`, they **MUST** refuse to continue.
-- Clients **MUST** send the **`resource` parameter** (RFC 8707) in both authorization and token requests. Its value is the canonical URI of the MCP server. Servers **MUST** validate that tokens were issued *for them* (audience).
-- **No token passthrough.** A server must not accept tokens issued for other resources. It must not forward the token that it received to upstream APIs. If it calls upstream, it is a separate OAuth client with a separate token. This is the confused-deputy guard.
+- Clients **MUST** send the **`resource` parameter** (RFC 8707) in both authorization and token requests. Its value is the canonical URI of the MCP server. Servers **MUST** validate that the authorization server issued the tokens *for them* (audience).
+- **No token passthrough.** A server must not accept tokens issued for other resources. It must not forward the token that it got to upstream APIs. If it calls upstream, it is a separate OAuth client with a separate token. This is the confused-deputy guard.
 - Tokens go in `Authorization: Bearer`, never in query strings. A `403 insufficient_scope` with a `scope` challenge starts step-up authorization. Redirect URIs are localhost or HTTPS. Access tokens are short-lived. Public clients use refresh-token rotation.
 
 The reference MCP server implements exactly this with the native auth of the `mcp` SDK (`TokenVerifier`, `AuthSettings(resource_server_url=…, required_scopes=…)`). It maps scopes to tools (`tickets:read` and `tickets:write`) and publishes `readOnlyHint`/`destructiveHint` annotations. As an option, it also enforces DPoP.
@@ -322,12 +322,12 @@ On Google Cloud, you can host an MCP server on Cloud Run with `--functional-type
 
 ### 7.2 A2A: identity between agents
 
-The A2A protocol (v1.0) puts authentication in the **Agent Card**. The card has `securitySchemes` (API key, HTTP bearer, OAuth 2, OpenID Connect, mutual TLS) and `security` requirements per skill. An **authenticated extended card** can expose more skills. A task can enter `TASK_STATE_AUTH_REQUIRED` to ask for credentials during the task. All bindings (JSON-RPC, gRPC, HTTP+JSON) need TLS. Cards can be **signed** (`AgentCardSignature`, JWS), thus a client can verify that nobody tampered with the card.
+The A2A protocol (v1.0) puts authentication in the **Agent Card**. The card has `securitySchemes` (API key, HTTP bearer, OAuth 2, OpenID Connect, mutual TLS) and `security` requirements per skill. An **authenticated extended card** can expose more skills. A task can enter `TASK_STATE_AUTH_REQUIRED` to ask for credentials during the task. All bindings (JSON-RPC, gRPC, HTTP+JSON) need TLS. Cards can be **signed** (`AgentCardSignature`, JWS), thus a client can make sure that nobody tampered with the card.
 
 Design rules for multi-agent systems:
 
-- Every hop is a new authorization decision. Sub-agent B validates the token that it receives (issuer, audience = B, scope). If B must make more calls, it exchanges the token. It never forwards the token.
-- The delegation chain is explicit (`act` claims or equivalent), and every hop logs it. The user's consent propagates. The agent's own authority does not silently expand.
+- Every hop is a new authorization decision. Sub-agent B validates the token that it gets (issuer, audience = B, scope). If B must make more calls, it exchanges the token. It never forwards the token.
+- The delegation chain is explicit (`act` claims or equivalent), and every hop logs it. The user's consent propagates. The agent's own authority does not silently increase.
 - Cards and registries are the supply-chain control. Call only agents whose cards are registered (Agent Registry) and, ideally, signed.
 - Put budget and depth limits on agent-to-agent recursion.
 
@@ -339,7 +339,7 @@ Design rules for multi-agent systems:
 
 - **Perimeters.** Put the Agent Platform, the MCP servers, Secret Manager, the Agent Identity services (`agentidentity.googleapis.com`, `agentidentitycredentials.googleapis.com`), and the data stores in a VPC-SC perimeter. Use ingress/egress rules with agent principals. Route Google APIs through the restricted VIP. When you include Agent Platform in a perimeter, the perimeter automatically blocks the agents' public-internet access. You want this behavior by default. Add explicit egress for the few destinations that are legitimate.
 - **Private connectivity.** Agent Runtime supports PSC-interface network attachments and DNS peering for private tool endpoints. Cloud Run MCP servers must use internal ingress and IAM invoker bindings for the agent principal.
-- **Encryption and residency.** Use CMEK on Agent Engine (`encryption_spec.kms_key_name`), Secret Manager, logs and data stores. Select regions deliberately. Model Armor's Vertex integration and Agent Identity have region lists. Auth Manager vault residency is not the same in all regions. For any regulated workload, put that on the Verify list.
+- **Encryption and residency.** Use CMEK on Agent Engine (`encryption_spec.kms_key_name`), Secret Manager, logs and data stores. Select regions deliberately. Model Armor's Vertex integration and Agent Identity have region lists. The residency of the Auth Manager vault is not the same in all regions. For any regulated workload, put the region lists and the vault residency on the Verify list.
 - **Tenancy.** Decide the isolation unit. One option is per-tenant agent deployments (strongest, most cost). The other option is shared agents with per-user delegation and per-tenant memory/session partitions. Sessions and Memory Bank must use the user/tenant as the key, and must never be searchable across tenants. RAG retrieval must be ACL-aware. That is, it runs under the user's delegated identity, or it filters by the user's entitlements *before* content reaches the model.
 - **Logs are data too.** Prompts and tool results often contain PII. Apply Sensitive Data Protection to what you log, and restrict log-bucket access.
 
@@ -364,12 +364,12 @@ The minimum viable audit for an agent action is a single structured event. The e
 - latency,
 - the provenance tags of the inputs that led to this action.
 
-Emit it from the runtime layer (the plugin). Then the event exists even when the tool fails.
+Write the event from the runtime layer (the plugin). Then the event exists even when the tool fails.
 
 On Google Cloud, this event joins native signals:
 
 - Cloud Audit Logs (with both identities for delegated actions),
-- **Agent Observability** (traces of reasoning and tool calls),
+- **Agent Observability**, with traces of reasoning and tool calls,
 - **Agent Gateway** telemetry to Cloud Logging/Trace,
 - **Agent Anomaly Detection** and **Agent Threat Detection**,
 - the **Agent Security Dashboard** in Security Command Center (asset discovery, agent-model relationships, vulnerabilities).
@@ -378,11 +378,11 @@ Propagate `traceparent` through MCP `_meta` and A2A calls. Then one trace goes f
 
 The governance loop has these steps, in this order:
 
-1. **register** (Agent Registry as the inventory and allowlist),
-2. **permit** (IAM/PAB/VPC-SC on principals and principalSets),
-3. **observe** (audit + anomaly detection),
-4. **revoke** (a deny policy or a perimeter rule removes the reach of an agent instantly, with no new deployment),
-5. **evaluate** (Agent Evaluation/Simulation and red-team suites run against every release, with injection corpora).
+1. **register**: Agent Registry as the inventory and allowlist,
+2. **permit**: IAM/PAB/VPC-SC on principals and principalSets,
+3. **observe**: audit + anomaly detection,
+4. **revoke**: a deny policy or a perimeter rule removes the reach of an agent instantly, with no new deployment,
+5. **evaluate**: Agent Evaluation/Simulation and red-team suites run against every release, with injection corpora.
 
 Treat instructions, tool lists and policies as versioned artifacts with review.
 
@@ -467,11 +467,11 @@ The practice notebooks (`notebooks/*_practice.ipynb`) include deliberately flawe
 
 ### 11.3 Trade-offs you should be ready to argue
 
-- Per-agent identity against shared identity (attribution and revocation against operational overhead).
-- Direct credential path against gateway path (simplicity against a runtime that never holds user secrets).
-- Confirmation friction against argument envelopes (safety against user experience).
-- `INSPECT_ONLY` against `INSPECT_AND_BLOCK` (visibility first, then enforcement, and the cost of false positives).
-- Sandboxed execution against capability (what an "analysis" agent loses when it cannot reach the network).
+- Per-agent identity against shared identity: attribution and revocation against operational overhead.
+- Direct credential path against gateway path: simplicity against a runtime that never holds user secrets.
+- Confirmation friction against argument envelopes: safety against user experience.
+- `INSPECT_ONLY` against `INSPECT_AND_BLOCK`: visibility first, then enforcement, and the cost of false positives.
+- Sandboxed execution against capability: what an "analysis" agent loses when it cannot reach the network.
 
 ---
 
