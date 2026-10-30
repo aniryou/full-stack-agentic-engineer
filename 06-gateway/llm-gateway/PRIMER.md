@@ -391,8 +391,8 @@ sufficient for the traffic that they will take.
 ![Failed requests of a fallback chain against its number of targets, with no common-mode failure, with a gateway at 99.95 %, and with a 0.1 % common-mode failure.](figures/chain-availability-common-mode.svg)
 
 *The y axis is the share of failed requests, on a log scale. The labels give the availability, as the prose prints
-it. Each fallback at 99.0 % divides the independent failures by 100, but a common-mode failure stays as a floor. `routing.chain_availability()` in the core computes each point,
-and `tests/test_figures.py` pins the chart.*
+it. Each fallback at 99.0 % divides the independent failures by 100, but a common-mode failure stays as a floor.
+`routing.chain_availability()` in the core computes each point, and `tests/test_figures.py` pins the chart.*
 
 The expected latency and cost come from a walk along the chain (`routing.chain_cost(steps)`). Each step succeeds with
 probability $p$, and every later outcome pays the time of a failure. In a bad hour, the primary fails 5 % of
