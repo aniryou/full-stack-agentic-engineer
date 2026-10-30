@@ -49,11 +49,11 @@ scale. Thus INT4 needs groups of 32–128 and a calibration method.
 - **GPTQ** lets later columns absorb the rounding error of each column, through the inverse Hessian of the
   calibration inputs.
 - **AWQ** scales up the weights that meet large activations.
-- **SmoothQuant** moves activation outliers into the weights, so that INT8 activations survive.
-- Float grids (FP8 E4M3, NVFP4) tolerate outliers better than integer grids, because their error is relative.
+- **SmoothQuant** moves activation outliers into the weights, so that the error of INT8 activations stays small.
+- Float grids (FP8 E4M3, NVFP4) give a smaller error on outliers than integer grids, because their error is relative.
 - Keep the LM head, embeddings, norms, softmax and MoE routers in 16-bit.
 
-Checkpoints come from llm-compressor as compressed-tensors. vLLM detects the format and selects a kernel for each
+Checkpoints come from llm-compressor as compressed-tensors. vLLM finds the format and selects a kernel for each
 GPU generation. An FP8 checkpoint on an A100 runs weight-only. Measure the damage first as KL and top-1 agreement.
 Then measure the task accuracy **with its standard error**. Compare both against a budget that you write down
 before you look.
@@ -67,7 +67,7 @@ before you look.
 arithmetic intensity of an LLM step is approximately the number of tokens in it
 ([§3](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md#3-llm-inference-on-the-roofline)). Thus:
 
-| What a step is bound by | When | What quantization must cut | Schemes that cut it |
+| What limits a step | When | What quantization must cut | Schemes that cut it |
 |---|---|---|---|
 | weight bytes | decode at small batch | bytes per weight | W4A16, W8A16, FP8/INT8 W8A8, NVFP4 |
 | KV bytes | decode at long context × large batch | bytes per KV element | FP8 KV, INT4/INT2 KV |
@@ -99,7 +99,7 @@ Up to ~120 tokens, W4A16 keeps the full byte ratio. The table in vllm-internals 
 `cost.gemm_time()` in `tests/test_repo_numbers.py` calculates that table again. The table shows W4A16 at 102 µs against
 BF16's 392 µs for one token. Between ~120 and ~460 tokens, the speedup of W4A16 decreases. In that range, W4A16
 pays for BF16 math, but BF16 still pays for bytes. The speedup is 1.7× at 256 tokens, and nothing at 462 and
-beyond (the two are equal at 2,048).
+beyond, for example at 2,048, where W4A16 and BF16 take the same time.
 
 Thus decode batches of a few hundred still get a gain from INT4, but long prefill chunks do not. Real kernels lose
 the gain sooner, because the dequantization is not free (§4).
@@ -156,9 +156,9 @@ convention widens the range to include 0, and it covers [min, max] instead of [�
 `[−0.3, 0, 0.05, 0.4, 1.2]` it gives scale 0.1 and zero point 3, and 0 is exact (`formats.asym_params()`). It
 halves the step for one-sided data, for example ReLU outputs.
 
-**Floating point.** A float has a sign, $e$ exponent bits with a bias, and $m$ mantissa bits. Within one power of
-two, the step is $2^{\text{exponent} - m}$, so the **relative** error is at most $2^{-(m+1)}$ at any magnitude.
-Below the smallest normal exponent, the distance between values stays constant (subnormals).
+**Floating point.** A float has a sign, $e$ exponent bits with a bias, and $m$ mantissa bits. From one power of two to
+the next, the step is $2^{\text{exponent} - m}$, so the **relative** error is at most $2^{-(m+1)}$ at any
+magnitude. Below the smallest normal exponent, the distance between values stays constant (subnormals).
 `formats.FloatFormat.grid()` lists every value from the bit patterns, and `formats.to_float()` rounds to that grid
 (ties to even, with saturation). On 100,000 values, `to_float` is bit-identical to the `float8_e4m3fn` and
 `float8_e5m2` casts of torch (notebook 01).
@@ -195,10 +195,10 @@ attention, see FlashAttention deep dive §9.1: bf16 has range, and fp16 has prec
     $$
 
     where $2 = \lfloor \log_2 6 \rfloor$ (`formats.mxfp4()`). A block whose amax is 5 gets exponent 0 (byte 127).
-    A block whose amax is 0.75 gets −3 (byte 124). The scale floors to a power of two. Thus the block max is in
+    A block whose amax is 0.75 gets −3 (byte 124). The scale rounds down to a power of two. Thus the block max is in
     [4, 8) on the E2M1 grid. Above 6, the format clips the value, and near 4 the top codes stay unused.
 
-    The producers differ here. compressed-tensors writes the MXFP4 checkpoints of llm-compressor. It first rounds
+    The producers use different rules here. compressed-tensors writes the MXFP4 checkpoints of llm-compressor. It first rounds
     amax to a power of two, and it rounds **up** when the mantissa is ≥ 1.75 (`round_to_power_2`). Thus its block
     max is in [3.5, 7) (`formats.mxfp4(rule="compressed-tensors")`, and the lab's `fp4.mxfp4_scale_exponent()`).
 
@@ -239,8 +239,8 @@ $$
 $$
 
 Take 128×256 Gaussian weights with one scale per channel. Here (crest factor 3.07), the rule predicts 43.2 dB at
-INT8 and the grid measures 43.1; at INT4 it predicts 19.1 and the grid measures 18.4. The model is valid from 4
-bits up. At 2–3 bits, where the noise is no longer busy, it predicts too high. In serving-engine §8, the measured
+INT8 and the grid measures 43.1; at INT4 it predicts 19.1 and the grid measures 18.4. The rule is valid from 4
+bits up. At 2–3 bits, where the noise is no longer busy, the rule predicts too high. In serving-engine §8, the measured
 slope is the same: 43.0 dB per channel at INT8 against 17.9 at INT4.
 
 **Outliers dominate.** The last term is the crest factor, and each 10× of amax over rms costs 20 dB, which is more
@@ -260,7 +260,7 @@ layout). It returns the scales in the shapes of compressed-tensors:
 |---|---|---|---|
 | per tensor | (1,) | nothing | FP8 weights and static activations |
 | per channel (output row) | (out, 1) | an outlier row | INT8 and FP8 weights |
-| per group of g inputs | (out, in / g) | an outlier within g inputs | INT4 (g = 128, 64, 32), FP4 (16, 32) |
+| per group of g inputs | (out, in / g) | an outlier in g inputs | INT4 (g = 128, 64, 32), FP4 (16, 32) |
 | per token | (tokens, 1) | an outlier token | dynamic INT8/FP8 activations |
 | per block r × c | (out / r, in / c) | an outlier tile | DeepSeek-V3 FP8 (128 × 128) |
 
@@ -283,7 +283,7 @@ apply, because its scales come from activation magnitudes.
 
 **Activation outliers are a different problem.** The weight columns that meet a large activation channel are
 usually ordinary. In the first up-projection of `quantcore.TinyModel`, the columns behind its four outlier channels
-have absmax 0.353–0.392 against a median column of 0.375. Thus no weight granularity isolates them. But they cause
+have absmax 0.353–0.392 against a median column of 0.375. Thus no weight granularity isolates them. But these columns cause
 98.4% of that layer's INT4 g32 output error (`granularity.output_error_by_input()`). The reason is that the
 rounding error of a column reaches the output multiplied by its input.
 
@@ -292,7 +292,7 @@ next paragraph, and §5).
 
 **Activations.** The engine quantizes them at run time. It uses one scale per token (dynamic, one max-reduction per
 token), or one static per-tensor scale that calibration sets. LLM activations have a few channels that are large in
-*every* token. In `quantcore.TinyModel`, they come from RMSNorm gains of 25–40×. The input of the first
+*every* token. In `quantcore.TinyModel`, these channels come from RMSNorm gains of 25–40×. The input of the first
 up-projection has four channels with absmax 76–120 against a median channel absmax of 3.0.
 
 Per-token INT8 gives 1.4% error on that tensor as a whole, but **11.1%** on the 60 ordinary channels. The reason is
@@ -337,8 +337,8 @@ Also, the full model is never 16/4.125 smaller. The recipes keep the embedding a
 | Llama-3.1-8B (untied) | 16.06 GB | 9.08 GB | 5.70 GB | 2.82× | 13.1% |
 | Llama-3.1-70B | 141.1 GB | 72.7 GB | 39.5 GB | 3.57× | 3.0% |
 
-The kernels limit the group sizes. The group size must divide `in_features` (llm-compressor gives an error at
-initialization, and Marlin rejects such a layer). Marlin supports groups of −1 (per channel), 32, 64 and 128, and
+The kernels limit the group sizes. The group size must divide `in_features`. If it does not, llm-compressor gives an error at
+initialization, and Marlin rejects the layer. Marlin supports groups of −1 (per channel), 32, 64 and 128, and
 Machete supports −1, 64 and 128 (vLLM source, verify). A 576-wide model cannot use g128.
 
 ## 4. Weight-only post-training quantization
@@ -346,8 +346,8 @@ Machete supports −1, 64 and 128 (vLLM source, verify). A 576-wide model cannot
 ### RTN and GPTQ
 
 **Round to nearest (RTN)** needs no data. Each weight goes to the nearest code of its group (`gptq.rtn()`). On
-the tiny model, INT8 is free, INT4 g32 costs 6.6 points (90.3% → 83.7%) and INT3 22 points (notebook 03).
-Larger models tolerate RTN better. In the GPTQ paper, LLaMA-7B goes from 5.68 to 6.29 WikiText-2 perplexity at
+the tiny model, INT8 costs no points, INT4 g32 costs 6.6 points (90.3% → 83.7%) and INT3 22 points (notebook 03).
+In larger models, RTN causes a smaller loss. In the GPTQ paper, LLaMA-7B goes from 5.68 to 6.29 WikiText-2 perplexity at
 4-bit RTN, and to 25.5 at 3-bit (README, verify).
 
 **GPTQ** minimises the output error of each layer, $\lVert X W^\top - X Q^\top \rVert^2$ over calibration tokens
@@ -398,7 +398,7 @@ paper reports 8.07 perplexity against RTN's 25.54 on LLaMA-7B (verify).
 ### AWQ, calibration data and rotations
 
 **AWQ** protects the weights that meet large activations. The rounding error of a weight reaches the output
-multiplied by its input. Thus the input channels with large activations own most of the output error.
+multiplied by its input. Thus the input channels with large activations cause most of the output error.
 
 AWQ multiplies those weight columns by ${s > 1}$ before it rounds them, and it divides the activations by $s$. It
 folds ${1/s}$ into the previous RMSNorm gain (or the rows of the previous linear). Thus
@@ -417,10 +417,10 @@ Keep the best $\alpha$. $\alpha = 0$ is RTN, so AWQ never loses on calibration d
 
 On the first up-projection of the tiny model, the loss curve is U-shaped, with its minimum at α = 0.30, 0.58 of
 RTN's loss. With too small a scale, the salient channels stay coarse. With too large a scale, they set the group
-scale for the whole group. AWQ decreases the output error of the up-projections by ~25% (0.0939 → 0.0715). It does
+scale for the whole group. AWQ decreases the output error of the up-projections by ~25% (0.0939 → 0.0715). AWQ does
 not do much for the down-projections, which have no dominant channels.
 
-When AWQ quantizes the up-projections alone at INT3, it beats GPTQ: 85.9% against 84.7%. The two methods compose: the AWQ scales go
+When AWQ quantizes the up-projections alone at INT3, it beats GPTQ: 85.9% against 84.7%. You can use the two methods together: the AWQ scales go
 first, then the GPTQ rounding (llm-compressor: an `AWQModifier`, then a `GPTQModifier`). They combine for the lowest
 KL of all: 0.0307 at INT4 g32. The llm-awq code also searches for a per-group **clipping** threshold (amax × 1.00 down to
 0.55), and it skips the q/k projections (verify). The "duo" variant of llm-compressor divides by
@@ -430,7 +430,7 @@ $\text{w_mean}^{1-\alpha}$.
 teaches the model nothing. It cannot save a format that is too coarse.
 
 On the tiny model, GPTQ INT3 gets 78.4% with 16 samples, 82.4% with 64, 84.4% with 256 and 85.0% with 1,024. Three
-other 256-sample draws give 83.4–84.6%. This shows that past a few hundred samples, the samples that you drew are as
+other 256-sample draws give 83.4–84.6%. These numbers show that past a few hundred samples, the samples that you drew are as
 important as their number. With 256 samples from only 2 of the 16 classes, it still gets 83.0%, and with 256
 samples of pure noise 84.5%. Outlier channels and input correlations are properties of the weights and the norm
 gains. Any input shows them.
@@ -439,7 +439,7 @@ On real models, the text is still important. Chat templates, languages and long 
 statistics. Calibrate on data that looks like your traffic. The recipes use 512 sequences × 2,048 tokens (GPTQ),
 128–512 × 512 (AWQ) and 512 × 512 (SmoothQuant) (§9, verify).
 
-**Rotations** (QuaRot, SpinQuant, QuIP) multiply W and X by an orthogonal matrix, often a Hadamard. This does not
+**Rotations** (QuaRot, SpinQuant, QuIP) multiply W and X by an orthogonal matrix, often a Hadamard. The rotation does not
 change $X W^\top$, and it spreads the energy of an outlier over all channels. The FlashAttention deep dive §9.4
 measures this on attention. There, a random Hadamard takes the INT4 error on a K with one 20× channel from 52% to
 24%. llm-compressor ships SpinQuant and QuIP transforms. The details of QuaRot are (verify).
@@ -472,11 +472,11 @@ $$
 y[t, j] = s_x[t] \cdot s_w[j] \cdot \sum_k \mathit{qx}[t, k] \cdot \mathit{qw}[j, k]
 $$
 
-INT8 uses an INT32 accumulator. FP8 uses FP32 (but see the last item of the next list, about the FP8 tensor
-core).
+INT8 uses an INT32 accumulator. FP8 uses FP32. But see the last item of the next list, about the FP8 tensor
+core.
 
-An emulation with integer codes and integer accumulation gives the fake-quantized product to within 10⁻¹⁴
-(notebook 04). This has three consequences:
+An emulation with integer codes and integer accumulation gives the fake-quantized product with a difference of at most 10⁻¹⁴
+(notebook 04). This form of the W8A8 GEMM has three consequences:
 
 - The activation scale can change per token, and the weight scale per output channel. But **neither can change
   along k**, the reduction axis. That is why SmoothQuant must move per-input-channel variation into the weights,
@@ -520,11 +520,11 @@ token (dynamic) or per tensor (static). DeepSeek-V3 ships `weight_block_size [12
 Because FP8 has a float grid, it usually needs no smoothing. With the outlier channels of the tiny model, FP8
 per-token activations have 2.7% error on the ordinary channels, against 11.1% for INT8. But for well-scaled
 values, three mantissa bits are coarser than the seven of INT8. Over the full model, FP8 W8A8 has 6× the KL of
-INT8 W8A8 (0.0186 against 0.00296), with accuracy within noise.
+INT8 W8A8 (0.0186 against 0.00296). The difference in accuracy is not more than the noise.
 
 Block scales have a small effect on FP8 at ordinary ranges. Take a weight tile 30× larger than the rest.
 Per-tensor, per-channel and 128 × 128-block FP8 all give 3.7–3.9% output error, while INT8 per token and channel
-gives 0.9% (notebook 04). Block scales are useful when ranges exceed E4M3's $2^{14.8}$, in training. They are also
+gives 0.9% (notebook 04). Block scales are useful when ranges go above E4M3's $2^{14.8}$, in training. They are also
 useful because a kernel that already tiles by 128 can apply them at no cost. There is no CUTLASS block-FP8 kernel
 for SM89 (vLLM source, verify).
 
@@ -540,7 +540,7 @@ gives these values for Llama-3.1-8B on a B200 (`cost.table()`, SIMULATED, verify
 
 **W4A4's accuracy risk is the activations.** Sixteen activations share one E4M3 scale, and the largest of them sets
 that scale. An outlier channel 30× the typical value sets that scale at 30/6 = 5 typical values per unit of the
-E2M1 grid. Then a typical neighbour is at 0.2 on that grid. That is below the 0.25 that rounds up to the smallest
+E2M1 grid. Then a typical neighbour is at 0.2 on that grid. The value 0.2 is below the 0.25 that rounds up to the smallest
 step of E2M1, so the neighbour becomes zero.
 
 The first up-projection of the tiny model has its four outlier channels in three of its four 16-channel blocks.
@@ -577,7 +577,7 @@ attention" can mean an FP8 KV cache with BF16 math, or FP8 matrix multiplies. Th
 ## 6. KV-cache quantization
 
 The KV cache is an activation that the engine stores for later. The engine quantizes it one time when it writes
-it, and dequantizes it at every read. At long context and large batch, it is most of what decode streams
+it, and dequantizes it at every read. At long context and large batch, the KV cache is most of what decode streams
 ([layer 01 §3.4](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md#34-kv-reads-cap-decode-intensity)).
 When you halve it, you get two gains (`kvquant.kv_bits_per_element()`, `cost.Model.kv_bytes_per_token()`,
 `cost.sessions()`).
@@ -602,7 +602,7 @@ context. FP8 KV takes a decode step from 17.5 ms to 11.3 ms (`cost.step_cost()`,
 
 **FP8 KV and its scale.** vLLM's `--kv-cache-dtype` accepts `fp8` (= `fp8_e4m3`) and `fp8_e5m2`, plus
 per-token-head dynamic types (`int4_per_token_head`, `int8_per_token_head`, `fp8_per_token_head`) and NVFP4 on
-SM100 (verify). The static scales `k_scale` and `v_scale` come from the checkpoint and are **1.0 otherwise**.
+SM100 (verify). The static scales `k_scale` and `v_scale` come from the checkpoint. If the checkpoint does not have them, they are **1.0**.
 Per-attention-head scales work only with the FlashAttention backend. On one synthetic decode head
 (`kvquant.synthetic_qkv()`: keys with four outlier channels of magnitude ~12, values with a shared mean), the
 attention-output error is:
@@ -663,9 +663,9 @@ loses at 4 bits and below, at the cost of a training run (measure it per model).
 Quantization-aware distillation (QAD) trains the quantized model to match the outputs of the full-precision model,
 not labels. The full-precision model is the teacher in the loss of
 [distillation §2](../../00-foundations/distillation/PRIMER.md#2-soft-targets-temperature-and-the-choice-of-divergence).
-NVIDIA's NVFP4 W4A4 note reports the result of 500 QAD iterations. They recovered an instruction-following
+NVIDIA's NVFP4 W4A4 note reports the result of 500 QAD iterations. These iterations recovered an instruction-following
 benchmark that lost 2.6 points after PTQ, with a checkpoint that went from 67 to 22 GiB (ModelOpt, 2026-09-16,
-verify). This has the same economics as the post-training stages in
+verify). QAD has the same economics as the post-training stages in
 [rl-and-thinking-models §1](../../00-foundations/rl-and-thinking-models/PRIMER.md#1-from-pretraining-to-post-training):
 a low-cost post-training step on top of a large model.
 
@@ -688,11 +688,11 @@ snapshot (verify).
   `granularity.argmax_agreement()`). It needs no labels. It sees damage that a task score hides in its average.
 - **Perplexity** on held-out text (`eval.perplexity()`). It has a low cost, but it does not see failures on
   generation-heavy tasks.
-- **Task accuracy** on evals like your traffic. This is what users feel, and it moves in both directions.
+- **Task accuracy** on evals like your traffic. Task accuracy is what users feel, and it moves in both directions.
 
 On the tiny model, INT4 RTN has KL 0.259, top-1 agreement 87.5% and accuracy 83.7%: it lost 341 right answers and
 gained 79. GPTQ has KL 0.048, 95.5% and 89.7%, losing 85 and gaining 61 (`eval.compare()`). The net accuracy makes
-the number of changed answers look smaller than it is. Greedy text is the most brittle metric of all. In
+the number of changed answers look smaller than it is. Greedy text is the metric that changes most easily. In
 serving-engine §8, an INT8 model with 99.8% top-1 agreement diverges from the BF16 greedy text after 13 tokens.
 
 **Error bars.** lm-eval reports $\text{stderr} = \text{sample stddev} / \sqrt{n}$. For a 0/1 metric, this is
@@ -704,9 +704,9 @@ $$
 
 In the FP8 example of vLLM, 250 GSM8K items at 76.8% give ±0.0268.
 
-That is the error bar of one score. A drop is the difference of two scores. In an unpaired comparison, its
+The stderr is the error bar of one score. A drop is the difference of two scores. In an unpaired comparison, its
 standard error is $\sqrt{\mathrm{se}_{\text{ref}}^2 + \mathrm{se}_{\text{quant}}^2}$, $\sqrt{2}$ larger
-(`eval.diff_stderr()`). A drop smaller than about two of those is noise. 250 items cannot see a drop smaller than
+(`eval.diff_stderr()`). A drop smaller than about two times this standard error is noise. 250 items cannot see a drop smaller than
 ~7.6 points. To resolve 1 point at 77%, the eval takes 14,169 items per model.
 
 The quantized and reference models answer the **same** items. Thus use a paired comparison. Only the items that
@@ -714,7 +714,7 @@ flipped carry information. McNemar's test on them is
 $z = (\text{gained} - \text{lost}) / \sqrt{\text{gained} + \text{lost}}$ (`eval.paired_z()`, the lab's notebook 03).
 
 Here is an example on the tiny model. AWQ + GPTQ INT4 drops 0.9 points on 4,000 items: inside the unpaired bar of
-±1.4, but 85 lost against 51 gained gives z = −2.9. That is a small loss, but it is real.
+±1.4, but 85 lost against 51 gained gives z = −2.9. The loss is small, but it is real.
 
 **lm-evaluation-harness** (0.4.13, verify) is the standard runner:
 
@@ -725,7 +725,7 @@ lm_eval --model vllm --model_args pretrained=$MODEL,add_bos_token=True,gpu_memor
 lm_eval --model local-completions --model_args model=$MODEL,base_url=http://HOST:8000/v1/completions --tasks gsm8k
 ```
 
-When you compare quantized models, pass `add_bos_token=True`, because the vLLM docs note that quantized models can be sensitive to it.
+When you compare quantized models, pass `add_bos_token=True`, because the vLLM docs say that quantized models can be sensitive to it.
 `--limit` is "for testing only". The default for GSM8K is 5-shot `exact_match`. MMLU is 57 subtasks with the
 score `acc`.
 
@@ -738,7 +738,7 @@ score `acc`.
   ([mixture-of-experts §6.7](../../00-foundations/mixture-of-experts/PRIMER.md#67-quantized-experts)).
 - **Long context.** KV errors accumulate over thousands of positions, and outlier tokens set per-tensor scales.
 - **Long generations and thinking models.** A flipped near-tie changes everything after it. A reasoning trace of
-  thousands of tokens gives such a flip thousands of chances to occur. Evaluate with the full generation length.
+  thousands of tokens gives such a flip thousands of chances to occur. Run the eval with the full generation length.
 - **Multilingual inputs.** Calibration in one language does not fully represent the activation statistics of
   other languages.
 - **Tool calling and structured output.** An argument that is incorrect by one token is incorrect. Do an
@@ -845,7 +845,7 @@ each id before you rely on it).
 |---|---|---|---|---|---|---|
 | W4A16 Marlin (GPTQ, AWQ, compressed-tensors) | SM75 | yes | yes | yes | Machete | yes (Machete is SM90-only) |
 | FP8 weight-only (Marlin FP8) | SM75 | yes | yes | native FP8 instead | native FP8 instead | native FP8 instead |
-| FP8 W8A8 (CUTLASS, SM89 needs CUDA ≥ 12.4) | SM89 | runs W8A16 | runs W8A16 | yes (no block-FP8 CUTLASS) | yes + block, DeepGEMM | yes |
+| FP8 W8A8 (CUTLASS, CUDA ≥ 12.4 on SM89) | SM89 | runs W8A16 | runs W8A16 | yes (no block-FP8 CUTLASS) | yes + block, DeepGEMM | yes |
 | INT8 W8A8 (CUTLASS) | SM75, < SM100 | yes | yes | yes | yes | **no** |
 | NVFP4 W4A4 (CUTLASS/FlashInfer, CUDA ≥ 12.8) | SM100 | W4A16 | W4A16 | W4A16 | W4A16 | yes |
 | FP8 KV cache | SM80 backends | **no** | FlashInfer | FlashInfer | FA3 | yes |
@@ -894,7 +894,7 @@ model. Then change the order for your model. The decision:
 | **Ampere** (A100) | W4A16 or FP8 weight-only | INT8 W8A8 | + FP8 KV (FlashInfer) | FP8 checkpoints run W8A16 |
 | **Ada** (L4, RTX 4090) | W4A16 or FP8 | **FP8 W8A8** | + FP8 KV | CUTLASS FP8 needs CUDA ≥ 12.4. There is no block-FP8 CUTLASS. |
 | **Hopper** (H100, H200) | W4A16 (Machete) or FP8 | FP8 W8A8 (block or per-channel) | + FP8 KV (FA3) | the FP8 default |
-| **Blackwell** (B200, RTX PRO 6000) | NVFP4 | **NVFP4 W4A4** (with smoothing or rotation, only after it passes an eval), FP8 | + FP8 KV (NVFP4 KV on B200/SM100 only) | There is no INT8 W8A8. W4A16 is Marlin, not Machete. |
+| **Blackwell** (B200, RTX PRO 6000) | NVFP4 | **NVFP4 W4A4** with smoothing or rotation, or FP8. Use NVFP4 W4A4 only after it passes an eval. | + FP8 KV (NVFP4 KV on B200/SM100 only) | There is no INT8 W8A8. W4A16 is Marlin, not Machete. |
 
 Notebook 05 works through these examples with `cost.table()` and `cost.choose()`:
 
@@ -903,7 +903,7 @@ Notebook 05 works through these examples with `cost.table()` and `cost.choose()`
 - **Free T4, Llama-3.1-8B, ≥ 20 sessions and a prefill ≤ 700 ms.** W4A16: 16-bit weights do not fit at all. 8-bit
   weights leave room for 16 sessions, INT4 for 29.
 - **One H100, Llama-3.1-70B.** BF16 (141.1 GB) does not fit. FP8 (72.7 GB) fits, but with no useful concurrency.
-  With the core's round memory inputs (0.9 × 80 GB − 1 GB, `cost.kv_blocks()`), it leaves no room for a single 4K
+  With the core's round memory inputs (0.9 × 80 GB − 1 GB, `cost.kv_blocks()`), FP8 leaves no room for a single 4K
   session.
 
   An H100 reports 79.65 GiB. At vLLM's defaults on that memory, the lab's `kv.size()` leaves room for 2 such
@@ -919,17 +919,17 @@ Notebook 05 works through these examples with `cost.table()` and `cost.choose()`
 **$0.132/M** (SIMULATED). That is 6.4× cheaper, not 2×. The reasons are fewer bytes per step, and a 5× larger batch
 that shares each step.
 
-This agrees with the knob table of serving-engine §8. `kv_cache_dtype fp8` gives 2× KV capacity and faster
+These results agree with the knob table of serving-engine §8. `kv_cache_dtype fp8` gives 2× KV capacity and faster
 long-context decode. `quantization` gives memory and decode speed. It gives prefill speed only for FP8 (or INT8,
 FP4) W8A8. Both cost accuracy, and both depend on the kernels that are available for each GPU.
 
-**Where to run it**, concept by concept, on GCP and elsewhere (prices and obtainability are in [`COMPUTE.md`](../../COMPUTE.md)):
+**Where to run it**, concept by concept, on GCP and elsewhere (prices and obtainability: [`COMPUTE.md`](../../COMPUTE.md)):
 
 | To learn | T0 (laptop / Colab CPU) | Non-GCP GPU (T1) | GCP (T3) |
 |---|---|---|---|
 | §2–§6 mechanics, §10 decisions | `quant-core` notebooks 01–05 | — | — |
 | checkpoint production (§9) | the lab's numpy/torch path on a bundled small model | llm-compressor on any 16–24 GB GPU. A 0.5B model fits a free T4 (verify). | a `g2-standard-4` L4 VM (Spot) |
-| INT4 serving, INT8 W8A8 | the lab's fake server (simulated) | Colab/Kaggle T4 (free, `--dtype half`, no FP8 compute or FP8 KV) | L4 via the serving lab's Cloud Run or GKE deploy |
+| INT4 serving, INT8 W8A8 | the lab's fake server (simulated) | Colab/Kaggle T4 (free, `--dtype half`, no FP8 compute or FP8 KV) | L4 through the serving lab's Cloud Run or GKE deploy |
 | FP8 W8A8 and FP8 KV | emulation in `quantcore` | RTX 4090 on RunPod/Vast (~$0.3–0.4/hr, verify), L4 | L4 (G2, Cloud Run), H100 (A3) |
 | FP4 / NVFP4 | `formats.nvfp4()`, `cost.table()` | a rented B200 or RTX PRO 6000 (verify) | A4 (B200), G4 / Cloud Run (RTX PRO 6000, verify) |
 
@@ -972,7 +972,7 @@ that we wrote down first."
    The memory and decode-byte savings stay, but prefill runs at the BF16 rate. INT8 W8A8 with SmoothQuant is the
    prefill lever on Ampere. Also, FP8 KV on an A100 moves attention to FlashInfer.
 3. *INT4 RTN lost 5 points on our model. What next, before we give up on 4 bits?* Calibrate. Use GPTQ, act-order
-   and groups of 128 (or 64/32 if the kernel permits them). For layers whose inputs have outlier channels, use AWQ
+   and groups of 128. If the kernel permits groups of 64/32, you can use them instead. For layers whose inputs have outlier channels, use AWQ
    first. On our toy model, GPTQ took INT4 from −6.6 to −0.6 points.
 
    Then make sure that the recipe excludes the LM head and the routers. Also make sure that the calibration data
@@ -1014,7 +1014,7 @@ that we wrote down first."
 | **Calibration data** | sample inputs used to calculate H, activation statistics or static scales |
 | **Dynamic / static scales** | calculated per token at run time / set from calibration |
 | **Epilogue** | the GEMM's final step that applies scales (and bias, activation) to the accumulator |
-| **Dequantize-on-the-fly** | weight-only kernels (Marlin, Machete) expand 4-bit weights to 16-bit in registers |
+| **Dequantize-on-the-fly** | weight-only kernels (Marlin, Machete) convert 4-bit weights to 16-bit in registers |
 | **k_scale / v_scale** | per-layer FP8 KV scales in a checkpoint. They are 1.0 if absent. |
 | **KIVI** | sub-8-bit KV: keys per channel, values per token, a full-precision residual window |
 | **Crest factor** | amax / rms: every 10× costs 20 dB of SQNR |

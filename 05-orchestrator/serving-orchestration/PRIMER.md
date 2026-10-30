@@ -38,12 +38,12 @@ blocks. These basics are in [`00-foundations/gpu-capacity-planning/PRIMER.md`](.
 
 - **A replica is a stateful cache, not a stateless server.** The replica that gets a request changes the cost of
   the request. The replica that already holds the prefix of the request does not do most of the prefill. Also,
-  requests differ by one to two orders of magnitude in prefill work, KV memory and residency time. Thus a count of
+  requests are different by one to two orders of magnitude in prefill work, KV memory and residency time. Thus a count of
   requests (round-robin, least-connections) does not balance the work.
 - **Routing is a knob between locality and load.** Prefix affinity increases the hit rate until a hot prefix
   overloads its replica. A router that balances load spreads the work, but the replicas must prefill everything
   again. Production routers (the llm-d endpoint picker) filter the endpoints. Then they score prefix match, queue
-  depth and KV use with weights, and they select the maximum. Or they stay sticky until an estimated TTFT penalty
+  depth and KV usage with weights, and they select the maximum. Or they stay sticky until an estimated TTFT penalty
   tells them to spread the work.
 - **Autoscale on work in flight, not GPU utilisation.**
     - The rule of the HPA is $\lceil \text{current} \times \text{metric} / \text{target} \rceil$. It has a 10 %
@@ -118,7 +118,7 @@ amounts.
 
 ### 1.2 Why round-robin and least-connections fail
 
-Web load balancers assume small, similar, stateless requests. LLM requests are not small, not similar and not
+Web load balancers assume requests that are small, alike and stateless. LLM requests are not small, not alike and not
 stateless:
 
 - **Cost spread.** A request uses a replica in three currencies: prefill compute, KV blocks and residency time.
@@ -257,7 +257,7 @@ schedulingProfiles:
 
 The 3:2:2 weights are not a random example. They are the default profile that the llm-d-router Helm chart installs
 (`default-plugins.yaml` in v0.10.0, when its latency predictor is off) `(verify)`. The `default-weighted` preset of
-the lab has the same weights. A default is a start point, not the result of an adjustment. §2.5 shows that the optimum moves with
+the lab has the same weights. A default is a start point, not the result of an adjustment. §2.5 shows that the best weights move with
 the workload.
 
 If a configuration omits a piece, a default goes in its place (a `max-score-picker`, a `single-profile-handler`,
@@ -326,9 +326,9 @@ A sweep of only the prefix weight (queue and KV at 2) shows the tension:
 - weight 3: 0.87, 0.37 s,
 - weight 30: 0.82, 3.4 s with imbalance 2.3.
 
-The hit rate saturates early, but the imbalance continues to increase. With a hotter prefix (Zipf 2.0, the top
-agent sends two thirds of the sessions), the p95 of pure prefix hashing reached 81 s. The EPP held 0.47 s (the
-affinity filter: 1.37 s). The knob has an optimum that depends on the workload. Thus adjust the knob on a replay of
+The hit rate saturates early, but the imbalance continues to increase. With a hotter prefix (Zipf 2.0), the top
+agent sends two thirds of the sessions. With that prefix, the p95 of pure prefix hashing reached 81 s. The EPP held 0.47 s (the
+affinity filter: 1.37 s). The best value of the knob depends on the workload. Thus adjust the knob on a replay of
 real traffic, and monitor the hit rate *and* the per-replica load.
 
 On this workload, the optimized-baseline rows are behind the 3:2:2 chart default. The reason is what their gate can
@@ -360,9 +360,9 @@ LRU bound (`ApproxPrefixIndex`). It never learns about evictions. A **precise** 
 events of the engines (`PreciseIndex`). The llm-d counterpart of a precise index is the `precise-prefix-cache-producer`. Its
 block size must match the `--block-size` of the engine.
 
-In the simulations here, the approximate index stays within noise of the precise one. The approximate index stayed within noise even when its
-size was 15× too large and 73 % of its entries were phantoms. The cause is that agent turns come back within
-seconds, and the entries that the router actually reads are fresh.
+In the simulations here, the difference between the approximate index and the precise one stays in the noise. The difference stayed in the noise even when the
+size of the approximate index was 15× too large and 73 % of its entries were phantoms. The cause is that agent turns come back after only a few
+seconds, and the entries that the router reads are fresh.
 
 The difference is important in two cases. The first case is a distant reuse (long tool pauses, many tenants,
 small caches). In that case, the KV is also gone, and only tiers help (§6). In the second case, you want the router
@@ -388,12 +388,12 @@ flow-control guide, adjusted for Qwen3-32B on 16 H100s, use 132. The queue has b
 requests expire (`defaultRequestTTL`).
 
 `fleetsim.FlowControl` models the concurrency-detector path. It sends a request only to an endpoint under its cap.
-If no endpoint is under its cap, it holds the request in the router, highest priority first and FCFS within a
+If no endpoint is under its cap, it holds the request in the router, highest priority first and FCFS in each
 priority. It counts the TTL rejections and the queue-bound rejections as `shed`.
 
 ![Requests from the gateway wait in the router queue by priority band, the router sends one to an endpoint only when the concurrency-detector says that the endpoint is under its cap, and the router sheds requests after their TTL or when the queue is full.](figures/flow-control-router-queue.svg)
 
-*Flow control holds a burst in the router, with the higher priority band first and FCFS within a band (§3.1). The router sends a request only to an endpoint under its cap (the concurrency-detector). The router sheds a request after its TTL, or when the queue is full, and the gateway returns 429 or 503.*
+*Flow control holds a burst in the router, with the higher priority band first and FCFS in each band (§3.1). The router sends a request only to an endpoint under its cap (the concurrency-detector). The router sheds a request after its TTL, or when the queue is full, and the gateway returns 429 or 503.*
 
 Little's law gives the size of the cap:
 
@@ -428,8 +428,8 @@ with `spec.poolRef` and `spec.priority` as an int32) sets the priority for a wor
 valid, and an unset priority counts as 0. The effect of the number depends on the `flowControl` feature gate:
 
 - **Gate on (flow control):** requests wait in the router by priority band, and the router always serves a higher
-  band first. The router enforces fairness only *within* a band (the default ordering is global FCFS). The API
-  documentation of the resource describes this behaviour, and `fleetsim.FlowControl` models it (the table in §3.1).
+  band first. The router enforces fairness only *inside* a band. Inside a band, the default ordering is global FCFS. The API
+  documentation of the resource describes the behaviour with the gate on, and `fleetsim.FlowControl` models it (the table in §3.1).
 - **Gate off (the llm-d-router v0.10.0 default):** there is no router queue and no ordering. The legacy admission
   check only marks negative-priority objectives as *sheddable*. While the saturation detector reports saturation of
   the pool, the router rejects their requests with HTTP 429. It admits and routes each request at priority 0 or
@@ -449,7 +449,7 @@ their TTL, and a full queue rejects new arrivals. The gateway changes these reje
 
 | Question | Layer | Mechanism |
 |---|---|---|
-| Is this tenant within budget? Is it necessary to degrade or shed? | 06 gateway | token buckets, in-flight caps, degrade levels, in [`scalelab/admission.py`](../../06-gateway/scaling-admission-cost/agentic-scaling-lab/scalelab/admission.py) |
+| Is this tenant under its budget? Is it necessary to degrade or shed? | 06 gateway | token buckets, in-flight caps, degrade levels, in [`scalelab/admission.py`](../../06-gateway/scaling-admission-cost/agentic-scaling-lab/scalelab/admission.py) |
 | Which request goes next, and to which replica, when replicas are busy? | 05 router | flow control, priorities, saturation detection |
 | Which requests share the next engine step? | 04 engine | continuous batching, token budget, preemption |
 
@@ -484,7 +484,7 @@ $$
 \end{aligned}
 $$
 
-Here the ratio is a per-pod average, in milli-units, and the tolerance is 0.1 in each direction.
+Here the ratio is a per-pod average, in milli-units. The tolerance is 0.1 in each direction.
 
 Worked examples (`pods_metric_replicas()`):
 
@@ -506,12 +506,12 @@ Then:
       controller to skip a change that ends inside the band, or that reverses direction.
     - Two ready pods with 10 queued requests each (target 2) ask for $\lceil 20 \div 2 \rceil = 10$. The answer is
       not 50 (10 current replicas × a ratio of 5), because the ratio multiplies the pods that *reported*. With 8
-      Pending, $(10 + 10 + 0 \times 8) \div 10 \div 2 = 1.0$ holds at 10. At 10.5 each (1.05), it still holds. A
+      Pending, the ratio is $(10 + 10 + 0 \times 8) \div 10 \div 2 = 1.0$, and the HPA holds at 10. At 10.5 each (1.05), it still holds. A
       calculation that ignores the Pending pods gives 11.
     - The other side of this: a capped metric increases the fleet by a factor of cap/target at the most for each
       cold start (§4.2). While a replica starts, `fleetsim` counts it as Pending for its full cold start (the
       same on a scale-up).
-2. **Multiple metrics:** calculate each one, then use the largest.
+2. **More than one metric:** calculate each one, then use the largest.
 3. **Stabilization** (`HPA.step()`): scale-down uses the **maximum** recommendation of the last
    `stabilizationWindowSeconds` (default 300). Scale-up uses the minimum over its window (default 0).
 4. **Policies**: in each `periodSeconds`, each policy permits `Pods: +value` or `Percent: ×(1 ± value/100)`. Both
@@ -546,7 +546,7 @@ The table shows one L4 replica under a chat load that increases (simulated, note
 | 3.5 | 1.00 | 60 | 0.75 | 0.3 | 0.64 s |
 
 "GPU utilisation" is the fraction of time when a kernel runs. This is what `nvidia-smi` reports. It is 1.00 at a
-seventh of the load that the replica can serve within a 1 s TTFT SLO. The cause is continuous batching: it always
+seventh of the load that the replica can serve while the replica meets a 1 s TTFT SLO. The cause is continuous batching: it always
 runs a step while any request is in flight. Layer 02 §8 has the DCGM fields that measure more.
 
 The next table shows a step from 1.5 to 7.5 req/s, with each HPA on one signal. The HPAs have min 1, max 8 and a
@@ -565,8 +565,8 @@ highest load that still meets the SLO (3.5 req/s: 60.6 requests in flight, KV 0.
 minus a one-third margin for the cold start. This gives 40 in flight and KV 0.5 (`pick_target` in notebook 03).
 
 In-flight requests are the requests that run plus the requests that wait. They also contain the requests that the
-router or the gateway holds. The queue-based KEDA path of llm-d uses this signal (the EPP flow-control queue plus the
-requests that run). That path needs the `flowControl` feature gate (§3.1), which is off
+router or the gateway holds. The queue-based KEDA path of llm-d uses this signal: the EPP flow-control queue plus the
+requests that run. That path needs the `flowControl` feature gate (§3.1), which is off
 by default in v0.10.0. With the gate off, the EPP holds no queue, and the router of the lab has no queue either.
 Thus requests wait in the engines.
 
@@ -575,7 +575,7 @@ In that case, the same signal is the sum over pods of the engines' own `vllm:num
 writes the two as one Pods-metric HPA (`extra_metrics`).
 
 In both cases, the signal counts *requests*. It is safe while the requests are alike, and it is incorrect when the
-mix changes. The same 40-per-pod HPA ran on a chat + RAG step with about half the rate of the chat step. It had
+mix changes. The same 40-per-pod HPA ran on a chat + RAG step with about half the rate of the chat step. The step had
 ~15 % of requests RAG with ~6,000-token prompts, three quarters of the prefill that the prefix cache does not cover.
 Thus the RAG requests had three quarters of the uncached prefill. The HPA reached 0.69 SLO attainment (TTFT ≤ 2 s) against 0.94 on chat (simulated, notebook 03).
 
@@ -606,7 +606,7 @@ terms:
 - **engine warm-up**: KV allocation, CUDA-graph capture, compilation.
 
 `ColdStart.estimate()` uses a free node, a 10 GB image at 0.25 GB/s, 16 GB of weights at 0.5 GB/s and 30 s of
-warm-up. It gives 40 + 32 + 30 = **102 s** (these are assumptions to replace with measurements). The Kubernetes-side
+warm-up. It gives 40 + 32 + 30 = **102 s**. These inputs are assumptions to replace with measurements. The Kubernetes-side
 solutions are in layer 03 §8: image streaming, secondary boot disks, GCS FUSE, Hyperdisk ML, startup probes.
 
 The cold start sets how many requests wait in a queue during a step:
@@ -641,7 +641,7 @@ money only when the *node* goes:
 Take six 20-minute bursts a day at 1 req/s (`scale_to_zero` in notebook 03). The cloud bills the node for
 6 × 35 minutes = 3.5 hours instead of 24. This saves about $14 a day at an assumed $0.70/hour for a
 `g2-standard-4` (verify). But about 2,400 requests a day wait for the 402 s cold start: 201 s on average, up to
-402 s, plus the backlog drain. This is the correct choice for an internal batch tool, and the incorrect choice for a
+402 s, plus the backlog drain. Scale to zero is the correct choice for an internal batch tool, and the incorrect choice for a
 chat that customers use.
 
 If you scale only the pod to zero, and the node stays, you save nothing. Per-second serverless GPUs (Cloud Run)
@@ -655,7 +655,7 @@ prefill and decode pools separately. Its optimisation targets are:
 
 - `throughput` (default: queue and KV thresholds),
 - `latency`,
-- `load` (user thresholds on prefill queue tokens and decode KV use),
+- `load` (user thresholds on prefill queue tokens and decode KV usage),
 - `sla` (TTFT/ITL targets against a performance model with an online adjustment from per-iteration engine
   metrics).
 
@@ -693,7 +693,7 @@ $$
 $$
 
 `fleetsim.disagg.transfer_s()` gives these values. A 4,096-token prompt on an 8B model (131,072 B/token) is
-512 MiB. That is 10.7 ms over 400 Gb/s RDMA, 43 ms over 100 GbE and 0.43 s over 10 GbE. On a 70B model
+512 MiB. The transfer takes 10.7 ms over 400 Gb/s RDMA, 43 ms over 100 GbE and 0.43 s over 10 GbE. On a 70B model
 (327,680 B/token), it is 1.34 GB and 26.8 ms at 400 Gb/s.
 
 Compare the transfer with the prefill that it replaces. 6,000 tokens take 1.59 s to prefill on the L4 model, but
@@ -718,11 +718,11 @@ $$
 SLO:
 
 - Prefill: 7,272 tokens/s ÷ (3,781 × 0.7) = **2.75 replicas**.
-- Decode: batch 5 (KV-bound: 6,185 tokens of context is 387 blocks each, `max_decode_batch()`). That gives 71.6
+- Decode: batch 5 (KV-bound, `max_decode_batch()`). The KV cache sets the bound: the context of each request is 6,185 tokens, that is, 387 blocks. Batch 5 gives 71.6
   output tokens/s per replica, thus **4.19 replicas**.
 
 A simulation of every split of eight replicas used `search_pd()` (notebook 04, SLO TTFT ≤ 3 s, TPOT ≤ 80 ms).
-**3P5D** won with 0.86 SLO attainment. Aggregated serving reached 0.68 (the chunk stall breaks the tight TPOT).
+**3P5D** won with 0.86 SLO attainment. In aggregated serving, the chunk stall breaks the tight TPOT. Thus aggregated serving reached 0.68.
 Unbalanced splits collapsed: 1P7D to a 106 s TTFT p95, and 7P1D to a 2.4 s TPOT p95.
 
 The decode batch is the number to calculate by hand (the exercise of notebook 04). The KV pool sets a cap of
@@ -738,7 +738,7 @@ The decode batch is the number to calculate by hand (the exercise of notebook 04
       `prefix-based-pd-decider` sends the prompt to a prefill pod only if the uncached part of the prompt there is
       at least `nonCachedTokens`. The `fleetsim` name of this limit is `pd_threshold`. The sidecar of the decode
       pod does what the decision says.
-- **Slow links** (the transfer time is near the prefill time) and **fast GPUs on ordinary networks**.
+- **Slow links** and **fast GPUs on ordinary networks**. A link is slow when the transfer time is near the prefill time.
 - **An incorrect ratio or a small fleet.** Two pools divide the capacity into fragments. Aggregated serving
   multiplexes the two phases on every GPU. Of the seven splits of eight L4s in §5.3, only 3P5D was better than
   aggregated serving.
@@ -840,8 +840,8 @@ load. The recomputed-token floor (~18 % here) is the new tool output that each t
 
 ## 7. Multi-model, multi-LoRA and model routing
 
-- **One pool per base model.** An `InferencePool` selects the pods of one model server deployment (llm-d assumes
-  one base model per pool). Several models mean several pools, and the gateway selects the pool. It uses the path,
+- **One pool per base model.** An `InferencePool` selects the pods of one model server deployment. llm-d assumes
+  one base model per pool. Several models mean several pools, and the gateway selects the pool. It uses the path,
   a header, or the model name in the body (body-based routing, now in `llm-d-inference-payload-processor`).
 - **Adapters ride the base model.** LoRA adapters are small next to the base weights. Thus one replica can hold
   many. But a batch mixes only a few (vLLM `--max-loras`), and the load of an adapter takes time.
@@ -903,13 +903,13 @@ combine, the slowest rank, the EPLB-style rebalance and the selection of a wide-
   HTTPRoute.
 - **llm-d** (CNCF Sandbox) supplies "well-lit paths": optimized baseline, precise prefix-cache routing, tiered
   prefix cache, P/D disaggregation, wide-EP, flow control, workload autoscaling, agentic serving, batch serving.
-- **GKE Inference Gateway** is the managed Gateway implementation of the same model in GKE. It has InferencePool v1
-  (GKE manages the CRD from 1.34.0-gke.1626000), an EPP, `gke-l7-regional-external-managed` or internal
-  GatewayClasses, a proxy-only subnet, and Managed Prometheus for autoscaling metrics.
+- **GKE Inference Gateway** is the managed Gateway implementation of the same model in GKE. It has InferencePool v1,
+  an EPP, `gke-l7-regional-external-managed` or internal
+  GatewayClasses, a proxy-only subnet, and Managed Prometheus for autoscaling metrics. GKE manages the InferencePool v1 CRD from 1.34.0-gke.1626000.
 - **NVIDIA Dynamo** (1.x) is a full serving stack with its own frontend and KV router, or an EPP behind a GIE
   gateway.
 - **Ray Serve LLM** serves engines as Ray deployments, with the autoscaling and routing of Ray. It is the choice
-  when the platform is Ray (GKE has a Ray operator add-on). **KServe** wraps engines in Kubernetes serving
+  when the platform is Ray. GKE has a Ray operator add-on. **KServe** wraps engines in Kubernetes serving
   resources, with an LLM-specific resource built on llm-d components (verify versions).
 
 These parts work together, and they do not compete. The Gateway API routes, the EPP selects endpoints, the engine
@@ -964,7 +964,7 @@ material. The [`inference-gateway-lab`](inference-gateway-lab/) takes these conc
   sizes vary, the signal is seconds of prefill backlog plus KV occupancy. The target comes from a load test at the
   SLO. I keep the 5-minute scale-down window, and I decrease the cold start term by term. Utilisation is of no use,
   because continuous batching holds it at the maximum.
-- *How to split*: aggregated, with an adjusted chunk budget, until ITL p99 or the model size says otherwise. Then
+- *How to split*: aggregated, with an adjusted chunk budget, until ITL p99 or the model size says to split. Then
   xPyD, sized from the input/output ratio, with a condition on prompt length, over RDMA.
 
 For agent sessions, I use a DRAM offload tier on every replica and session-sticky routing. If we must rebalance
@@ -974,7 +974,7 @@ freely, I use a shared KV store instead."
 
 1. *Round-robin keeps request counts perfectly even. Why is the tail still bad?*
 
-    Requests differ by one to two orders of magnitude in prefill, KV and residency. Equal counts are unequal work,
+    Requests are different by one to two orders of magnitude in prefill, KV and residency. Equal counts are unequal work,
     and round-robin ignores both queues and caches. Least-waiting or power-of-two on in-flight load decreases p95 by
     half on the notebook-01 mix.
 
@@ -995,14 +995,14 @@ freely, I use a shared KV store instead."
 
     It holds at 10, because $(20 + 0 \times 8) \div 10 \div 2 = 1.0$ is inside the band. The calculation without the
     band also gives $\lceil 20 \div 2 \rceil = 10$. The ratio multiplies the pods that reported. This is why the
-    answer is not $10 \times 5 = 50$. The zeros only stop small changes. At 10.5 each, it still holds, where a
+    answer is not $10 \times 5 = 50$. The zeros only stop small changes. At 10.5 each, it still holds, but a
     calculation that ignores the Pending pods gives 11.
 
 4. *Why not autoscale on `num_requests_waiting` alone?*
 
     It is ~0 whenever the capacity is sufficient. Thus the HPA scales down, the queue comes back, and the fleet
-    goes up and down in a sawtooth. Use it together with the requests that run (the HPA takes the max over
-    metrics), or scale on work in flight. If prompt sizes vary, count the work in tokens. In notebook 03, a request
+    goes up and down in a sawtooth. Use it together with the requests that run, because the HPA takes the max over
+    metrics. Or scale on work in flight. If prompt sizes vary, count the work in tokens. In notebook 03, an HPA with a request
     target adjusted for chat decreased to 0.69 SLO attainment on a chat + RAG mix.
 
 5. *When is P/D disaggregation a bad idea?*
@@ -1072,12 +1072,12 @@ The date of the check is 2026-09-26. Examine each item again before you rely on 
 - llm-d-router Helm chart default profile (`default-plugins.yaml`, v0.10.0, latency predictor off): `prefix-cache-scorer` 3, `queue-scorer` 2, `kv-cache-utilization-scorer` 2.
 - The llm-d optimized baseline is `prefix-cache-affinity-filter` (threshold 0.80, `maxTTFTPenaltyMs` 18,000, `peakPrefillThroughput` 15,928 for Qwen3-32B on 2× H100 TP=2 with vLLM 0.19) + `token-load-scorer` (`queueThresholdTokens` 4,194,304). The EPP metrics refresh every 50 ms.
 - llm-d flow control: the feature gate is `flowControl`, off by default in v0.10.0. With the gate off, the legacy admission check only rejects priority < 0 with 429 at saturation, and there is no priority ordering. With the gate on, the defaults are `global-strict-fairness-policy`, `fcfs-ordering-policy` and `utilization-detector`. The production guidance is `concurrency-detector` (default `maxConcurrency` 100, and 132 in the values of the flow-control guide for Qwen3-32B on 16 H100s).
-- llm-d workload autoscaling: the recommendation is KEDA + EPP metrics. The queue-based path (flow-control queue + the requests that run) and the saturation-based path both need the `flowControl` gate. The token-aware path uses EPP in-flight tokens ÷ calibrated `peakPrefillThroughput`, plus KV occupancy. There is also an SLO-aware path. Workload Variant Autoscaler: deprecated (final v0.9.0).
+- llm-d workload autoscaling: the recommendation is KEDA + EPP metrics. The queue-based path and the saturation-based path both need the `flowControl` gate. The queue-based path uses the flow-control queue + the requests that run. The token-aware path uses EPP in-flight tokens ÷ calibrated `peakPrefillThroughput`, plus KV occupancy. There is also an SLO-aware path. Workload Variant Autoscaler: deprecated (final v0.9.0).
 - llm-d P/D: `disagg-profile-handler` + `prefix-based-pd-decider` (`nonCachedTokens`, `promptTokens`).
 - Cluster autoscaler: `--scale-down-unneeded-time` is 10 min upstream. The managed autoscaler of GKE can use a different value. A GPU node becomes allocatable in ~300 s: this is an assumption from layer 03.
 - Kubernetes HPA: sync 15 s, tolerance 0.1, scale-down window 300 s, default policies as in §4.1. `HPAConfigurableTolerance`: alpha 1.33, beta 1.35, GA 1.37. `HPAScaleToZero`: alpha (off) through 1.36, beta (on by default) from 1.37. Examine the version and the feature gates of your cluster.
 - NVIDIA Dynamo 1.0 GA 2026-03-16. The runtime images were at 1.5.0 at the date of this primer. Planner targets: `throughput`, `latency`, `load`, `sla`.
 - vLLM metric names as in §2.1 (`vllm:kv_cache_usage_perc`, and in older releases `vllm:gpu_cache_usage_perc`). `NixlConnector` is the default P/D connector of llm-d. `MooncakeConnector` needs equal TP.
-- Spec-sheet inputs to the engine profiles: L4 24 GB, 0.3 TB/s, 121 dense bf16 TFLOP/s. H100 SXM 80 GB, 3.35 TB/s, 989 dense bf16 TFLOP/s (layer 01 has the dated catalogue).
+- Spec-sheet inputs to the engine profiles: L4 24 GB, 0.3 TB/s, 121 dense bf16 TFLOP/s. H100 SXM 80 GB, 3.35 TB/s, 989 dense bf16 TFLOP/s. Layer 01 has the dated catalogue.
 - The tier bandwidths in §6 (DRAM 50 GB/s over PCIe, NVMe 6 GB/s, 20 GB/s RDMA store) are assumptions. The L4 price ($0.70/hour on demand, `g2-standard-4`) is approximate.
 - KServe's LLM resource and Ray Serve LLM feature details (P/D, prefix-aware routing): examine the current releases.

@@ -18,7 +18,7 @@ This primer explains how to train a small model to behave like a large one, and 
 covers these topics:
 
 - why a student learns more per example from the distribution of a teacher than from labels,
-- which divergence to minimise, and what each divergence makes a student do when the student is too small,
+- which divergence to make as small as possible, and what each divergence makes a student do when the student is too small,
 - distillation from the text of the teacher (sequence-level), and from the scores that the teacher gives to the
   student's own samples (on-policy),
 - the distillation of the traces of a thinking model,
@@ -135,8 +135,8 @@ Apache 2.0. DeepSeek-R1 is MIT, and its README says that the series permits "dis
 
 The Llama 3.1 and 3.2 licences have a condition for a model that trains on Llama outputs and that you distribute.
 The name of that model must have "Llama" at the start (verify). Some hosted-API terms put limits on the use of
-outputs to build competing models (verify). Read the terms that you use. The student is also under
-the licence of its base model (the R1 Qwen distills keep the Apache 2.0 of Qwen, verify).
+outputs to build models that compete with the provider (verify). Read the terms that you use. The student is also under
+the licence of its base model. The R1 distilled Qwen models keep the Apache 2.0 of Qwen (verify).
 
 **Where this starts.** The [RL primer §1](../rl-and-thinking-models/PRIMER.md#1-from-pretraining-to-post-training)
 puts distillation in post-training (SFT on the outputs of a stronger model). Its
@@ -223,7 +223,7 @@ $$
   mode-seeking (GKD β = 1, and the sampled-token reward).
 - $\mathrm{JSD}(\beta)$: `divergences.jsd()`
 
-The source of your training samples (the $\lambda$ of GKD, §4) and the divergence that you minimise (its $\beta$)
+The source of your training samples (the $\lambda$ of GKD, §4) and the divergence in your loss (its $\beta$)
 are separate choices. GKD runs either divergence on either data. Reverse KL is the natural partner of the student's
 own samples. The reason is that its per-token estimate needs only one value: the teacher's log-probability of the
 token that the student sampled. The argument of MiniLLM (Gu et al.) is that the reverse direction is correct for
@@ -239,13 +239,13 @@ The core fits a one-bump student (a discretised Gaussian) to a two-bump teacher 
 | JSD, β = 0.5 | 5.0, 9.9 | 0.1789 | 0.454 | 0.00 |
 | reverse KL | 2.0, 0.7 | 0.6931 = ln 2 | 0.019 | 0.51 |
 
-The forward fit is nearly flat. It puts 45.4% of its samples where the teacher almost never goes, and most of these
+The forward fit is almost flat. It puts 45.4% of its samples where the teacher almost never goes, and most of these
 samples are in the space between the modes. The reverse fit selects one mode and leaves half of the teacher's mass
 uncovered. With this family, the fit of the JSD flips from covering to seeking between β = 0.6 and β = 0.7.
 
 ![A one-bump student fitted to a two-bump teacher: forward KL spreads across both modes, reverse KL selects one mode.](figures/forward-reverse-kl.svg)
 
-*`divergences.fit_bump()` fits a one-bump student to a teacher with two modes, at 2 and 8, on 11 tokens, under forward and under reverse KL. The forward fit is nearly flat, and it puts 0.454 of its mass where the teacher gives less than 1%. The reverse fit selects one mode, and it leaves 0.51 of the teacher's mass uncovered, where the student gives less than 1%. The dashed boxes mark those tokens.*
+*`divergences.fit_bump()` fits a one-bump student to a teacher with two modes, at 2 and 8, on 11 tokens, under forward and under reverse KL. The forward fit is almost flat, and it puts 0.454 of its mass where the teacher gives less than 1%. The reverse fit selects one mode, and it leaves 0.51 of the teacher's mass uncovered, where the student gives less than 1%. The dashed boxes mark those tokens.*
 
 For classification, the choice has almost no effect, because you use only the argmax. For generation, every sampled
 token conditions the next token. Thus where the student puts its low-probability mass is what it writes.
@@ -268,7 +268,7 @@ other way. RL keeps the policy near the reference. Distillation pulls the policy
 **SeqKD is SFT on text the teacher wrote** (Kim and Rush 2016). Generate completions for a set of prompts. Keep the
 good completions. Then fine-tune the student on them with the ordinary cross-entropy (`seqkd.sft()`).
 
-SeqKD needs no logits, so it works through any API. It is the recipe behind the R1 distills, and behind the
+SeqKD needs no logits, so it works through any API. It is the recipe behind the R1 distilled models, and behind the
 off-policy stage of the strong-to-weak distillation of Qwen3. The recipe and its numbers are in the
 [RL primer §1 and §5](../rl-and-thinking-models/PRIMER.md#5-thinking-models).
 
@@ -346,15 +346,15 @@ That is 1.300 GPU-hours on an H100 at 40% MFU, $14.30 at $11/GPU-hour (`cost.fix
 ## 4. On-policy distillation
 
 **The method** (Agarwal et al., GKD, and Gu et al., MiniLLM). Sample a continuation from the *student*. Ask the
-teacher for its distribution at every position, or only for its log-probability of each sampled token. Minimise a
-divergence there. The student learns exactly on the prefixes that it will produce, so exposure bias has no place to
+teacher for its distribution at every position, or only for its log-probability of each sampled token. Make a
+divergence there as small as possible. The student learns exactly on the prefixes that it will produce, so exposure bias has no place to
 hide.
 
-TRL's `GKDTrainer` minimises $\mathrm{JSD}(\beta)$ and mixes the data sources per batch:
+TRL's `GKDTrainer` makes $\mathrm{JSD}(\beta)$ as small as possible, and it mixes the data sources per batch:
 
 - With probability $\lambda$, the student generates (on-policy).
-- Otherwise, with `seq_kd=True`, the teacher generates.
-- Otherwise, the trainer uses the completion from the dataset (supervised KD).
+- If not, with `seq_kd=True`, the teacher generates.
+- If not, the trainer uses the completion from the dataset (supervised KD).
 
 `onpolicy.gkd_train()` has the same loop.
 
@@ -381,7 +381,7 @@ flowchart LR
   U -.->|"next batch"| C{"λ coin flip<br/>of part 1"}
 ```
 
-*Part 2 of the GKD loop. The teacher gives its full next-token distribution at every position of that text, and the student minimises JSD(β) there. At β = 1, the per-token reward of the policy-gradient view gives the same gradient in expectation (`onpolicy.token_pg_identity()`). Then the next batch goes back to the λ coin flip of part 1.*
+*Part 2 of the GKD loop. The teacher gives its full next-token distribution at every position of that text, and the student makes JSD(β) as small as possible there. At β = 1, the per-token reward of the policy-gradient view gives the same gradient in expectation (`onpolicy.token_pg_identity()`). Then the next batch goes back to the λ coin flip of part 1.*
 
 **Exposure bias removed.** Continue the training of the §3 KD student with GKD at λ = 1 for 300 steps (notebook
 02):
@@ -467,11 +467,11 @@ token twice as dear. At sixteen 4K-token samples per prompt, that is 8.39 × 10�
 10¹⁵ with the reference).
 
 The generation of the student is decode-bound, and the score pass of the teacher is prefill-shaped. FLOPs make the
-first look less costly than it is, relative to the second. Thus, in GPU time, the pass of the teacher costs less
+generation of the student look less costly than it is, relative to the score pass of the teacher. Thus, in GPU time, the pass of the teacher costs less
 than its FLOPs show. But the cost reduction is not in the step. It is in the number of steps, because the dense
 signal needs a much smaller number of steps.
 
-Qwen3's report compares the two from the same off-policy-distilled 8B checkpoint. RL reached AIME'24 67.6 in 17,920
+Qwen3's report compares RL and on-policy distillation from the same off-policy-distilled 8B checkpoint. RL reached AIME'24 67.6 in 17,920
 GPU-hours, and on-policy distillation reached 74.4 in 1,800 (verify).
 
 The tinker-cookbook recipe distils Qwen3.5-9B-Base from Qwen3.5-9B, a teacher of the same size, with rank-128 LoRA (verify). SFT on OpenThoughts3 (traces that another model wrote) reaches AIME'24 ~65% (verify). Then on-policy distillation reaches ~76.7% in 200 steps of 512 prompt groups, with rollouts of up to 16K tokens (verify). This is not a small budget.
@@ -481,12 +481,12 @@ number.
 **The shared-tokenizer requirement.** For per-token scores, the teacher must read the tokens of the student. TRL's
 GKD raises an error if the `vocab_size` of the two configs is different (verify). Qwen2.5-7B and larger have 152,064,
 against 151,936 for the small Qwen2.5 and all Qwen3 models (verify). Thus you cannot use GKD to distil a 0.5B from a
-7B, although the token ids match. The cross-tokenizer methods are in §6.
+7B, but the token ids match. The cross-tokenizer methods are in §6.
 
 **TRL, concretely (1.14.0, the version that the lab pins; the same on 1.17.0 of 2026-10-29, verify).**
 `GKDConfig`/`GKDTrainer` are experimental: `from trl.experimental.gkd import GKDConfig, GKDTrainer`. Their defaults
-are `lmbda=0.5`, `beta=0.5`, `temperature=0.9` (sampling only: the loss runs at T = 1), `max_new_tokens=128` and
-`seq_kd=False`. $\lambda$ is a per-batch coin flip. Since 1.17.0, `GKDTrainer` logs a hint to move to
+are `lmbda=0.5`, `beta=0.5`, `temperature=0.9`, `max_new_tokens=128` and
+`seq_kd=False`. The `temperature` sets only the sampling, and the loss runs at T = 1. $\lambda$ is a per-batch coin flip. From 1.17.0, `GKDTrainer` logs a hint to move to
 `DistillationTrainer` when `lmbda=1.0` and `temperature=1.0`, because that configuration is the stable trainer (verify).
 
 `DistillationTrainer` / `DistillationConfig` are stable API (`from trl import …`). They are always on-policy, with
@@ -562,7 +562,7 @@ its own best length at a cost of 0.01 per token is 27.5 tokens, not the 19.9 it 
 (`ThinkToy.optimal_length()`). The RL of the teacher ran with no length cost, so its 19.9 is where 16,000 rollouts
 left it, not an optimum.
 
-Distillation copies the procedure that the teacher found, not the procedure that the student needs. Evaluate the
+Distillation copies the procedure that the teacher found, not the procedure that the student needs. Measure the
 student at its own best budget. Think about a short RL stage after distillation. Long-tail facts are the same story
 at scale. The Inkling-Small of the model-landscape primer beat its parent on reasoning and lost on factuality
 ([§4.10](../model-landscape/open-weight-llms-primer.md#410-thinking-machines-lab-us)).
@@ -598,7 +598,7 @@ over five data draws, with four initialisations each for the fresh students:
 | fresh | 0.097 (0.074–0.132) | 0.278 (0.240–0.331) | 0.853 (0.818–0.934) |
 
 Pruning alone breaks the model, but not back to nothing. KD repairs it fast: after 20 steps, the worst pruned
-student beats the best fresh student. By 100 steps, the two are within seed noise. Pruning gives a head start in
+student beats the best fresh student. By 100 steps, the difference between the two is inside the seed noise. Pruning gives a head start in
 training steps, not a better student. This is also the shape of the claim of Minitron: fewer training tokens per
 model.
 
@@ -622,7 +622,7 @@ the Qwen3-235B-A22B MoE (verify).
 methods work across tokenizers (all verify):
 
 - Universal Logit Distillation compares sorted probability vectors instead of aligned tokens.
-- TRL's experimental GOLD trainer aligns text spans and merges their logits (`use_uld_loss`). Since TRL 1.17.0 it also
+- TRL's experimental GOLD trainer aligns text spans and merges their logits (`use_uld_loss`). From TRL 1.17.0, it also
   has X-Token, an off-policy cross-tokenizer loss with a precomputed projection matrix (`xtoken_loss_type`, verify).
 - The `use_heterogeneous_vocab` of vLLM lets a draft of another vocabulary propose greedily.
 
@@ -707,8 +707,8 @@ by weight bytes, so k = 4 gives 1.45×, 1.74× and 2.11× at α = 0.6, 0.7 and 0
 per-step overheads. Measure $c$, as the serving primer says.
 
 **Draft-as-student designs** (verify). EAGLE trains a one-layer head that extrapolates the second-to-top-layer
-features of the target. EAGLE-3 fuses low-, mid- and high-level target features. In its training code, it minimises
-cross-entropy against the softmax of the target over 7 unrolled steps. This is soft-target distillation from the
+features of the target. EAGLE-3 fuses low-, mid- and high-level target features. In its training code, it makes the
+cross-entropy against the softmax of the target as small as possible, over 7 unrolled steps. This is soft-target distillation from the
 target. The EAGLE README reports 3× (EAGLE) and 5.6× (EAGLE-3) over vanilla decoding, for a 13B Vicuna on 2×RTX
 3090 in fp16.
 
@@ -755,7 +755,7 @@ the loss of §2. Over the 121 contexts of the toy (notebook 05):
 | + on-policy GKD (§4) | 0.185 | 0.942 | 0.923 |
 | 8 units, KD on everything (§1's capacity gap) | 0.322 | 0.934 | 0.826 |
 
-**Task accuracy with intervals, per slice.** Users feel the task accuracy, and a single number hides where a student
+**Task accuracy with intervals, per slice.** Users feel the task accuracy. A single number hides where a student
 fails. Report the accuracy per slice, with a Wilson interval:
 
 $$
@@ -808,7 +808,7 @@ The second hazard is contamination. A teacher that saw a benchmark can reproduce
 the score of the student on that benchmark measures memory, not skill. Remove the contamination from the prompts
 and the outputs (§3).
 
-For thinking students, evaluate with the full generation length. By default, lm-eval's gsm8k uses greedy decoding
+For thinking students, run the evals with the full generation length. By default, lm-eval's gsm8k uses greedy decoding
 and 256 generated tokens (verify). This is too few for a trace (the lab's notebook 03).
 
 ## 9. The economics of a student
@@ -935,7 +935,7 @@ tokens that the verifier discards.
 
 "SFT on teacher text has exposure bias: the student trains on the teacher's prefixes and decodes on its own. Thus
 the second stage is on-policy. The student samples, the teacher gives a score to every token in one forward pass,
-and we minimise a divergence there. It is RL with a dense per-token reward, and it needs a shared tokenizer.
+and we make a divergence there as small as possible. It is RL with a dense per-token reward, and it needs a shared tokenizer.
 
 "We start it from the SFT student, as the published recipes do, and we sweep $\beta$. Reverse KL increases the
 probability of a token only in proportion to the student's own probability of it. Thus it is slow wherever the
@@ -992,14 +992,14 @@ below that."
 | Temperature $T$ | It divides the logits before the softmax. T > 1 makes the distribution flatter and shows the small probabilities. |
 | $T^2$ factor | It multiplies the soft loss, so that its gradient does not decrease as $1/T^2$. |
 | Logit matching | MSE on centred logits: the $T \to \infty$ limit of $T^2 \cdot \mathrm{KL}$ |
-| Forward KL, $\mathrm{KL}(p \,\Vert\, q)$ | teacher-weighted, mode-covering. SFT and KD minimise it (GKD β = 0). |
+| Forward KL, $\mathrm{KL}(p \,\Vert\, q)$ | teacher-weighted, mode-covering. SFT and KD make it as small as possible (GKD β = 0). |
 | Reverse KL, $\mathrm{KL}(q \,\Vert\, p)$ | student-weighted, mode-seeking. It is GKD β = 1 and the default of TRL's `DistillationTrainer`. The sampled-token reward estimates it. On-policy data can use either divergence. |
 | Generalised $\mathrm{JSD}(\beta)$ | $\beta \cdot \mathrm{KL}(p \,\Vert\, m) + (1 - \beta) \cdot \mathrm{KL}(q \,\Vert\, m)$, $m = \beta p + (1 - \beta)\, q$. In TRL, β = 0 is forward and β = 1 is reverse. |
 | Total variation (TV) | $\tfrac{1}{2} \sum \lvert p - q \rvert$. $1 - \mathrm{TV}$ is the acceptance rate of a draft. |
 | SeqKD | sequence-level KD: SFT on teacher-generated outputs |
 | Supervised KD | the teacher's distribution as target on given (dataset or teacher) text: GKD with λ = 0 |
 | Exposure bias | The student trains on the teacher's prefixes and decodes on its own. It gets to states that it never trained on, and whole outputs become incorrect more often as the length increases. |
-| On-policy distillation / GKD | The student samples, the teacher gives a score to its tokens, and you minimise a divergence there. |
+| On-policy distillation / GKD | The student samples, the teacher gives a score to its tokens, and you make a divergence there as small as possible. |
 | $\lambda$ (lmbda) | the fraction of batches that the student generates in GKD |
 | Per-token reward | $r_t = \log \pi_T(y_t \mid \cdot) - \log \pi_S(y_t \mid \cdot)$: reverse KL as a dense RL reward |
 | Rejection sampling | a filter that keeps only the teacher samples that a verifier accepts |
@@ -1032,7 +1032,7 @@ Papers:
 - DeepSeek-AI, *DeepSeek-R1* (arXiv:2501.12948). Qwen Team, *Qwen3 Technical Report* (arXiv:2505.09388).
 - Shumailov et al., *AI models collapse when trained on recursively generated data*, Nature 631, 2024.
 
-Code and documentation (read 2026-09-27; TRL v1.17.0 and vLLM v0.32.0 read again on 2026-10-30):
+Code and documentation (read 2026-09-27, with TRL v1.17.0 and vLLM v0.32.0 read again on 2026-10-30):
 
 - TRL `github.com/huggingface/trl` v1.14.0: `trl/experimental/gkd/gkd_trainer.py`, `gkd_config.py`,
   `trl/trainer/distillation_trainer.py`, `distillation_config.py`, `sft_config.py`, `docs/source/gkd_trainer.md`,
@@ -1059,7 +1059,7 @@ Code and documentation (read 2026-09-27; TRL v1.17.0 and vLLM v0.32.0 read again
     - the [RL and thinking-models primer](../rl-and-thinking-models/PRIMER.md) and [`rl-core`](../rl-and-thinking-models/rl-core/)
       (`rlcore.pg`, `rlcore.tasks.ThinkTask`), with its fact sheet
       [`tools/orchestration/facts/rl-and-thinking-models.md`](../../tools/orchestration/facts/rl-and-thinking-models.md)
-      (the R1, Qwen3 and ThinkTask facts that this primer uses again),
+      for the R1, Qwen3 and ThinkTask facts in this primer,
     - the [mixture-of-experts primer](../mixture-of-experts/PRIMER.md),
     - the [model-landscape primer](../model-landscape/open-weight-llms-primer.md),
     - the [agentic scaling primer](../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) (`scalelab`),
@@ -1082,15 +1082,15 @@ against the versions that you pin.
     - `DistillationTrainer`/`DistillationConfig` stable and always on-policy: `beta` 1.0, `temperature` 1.0 on both
       logits, `max_completion_length` 512, 256-position loss chunks,
     - its quick start, Qwen2.5-0.5B from 1.5B,
-    - GOLD (`use_uld_loss`) experimental, with X-Token since 1.17.0; the MiniLLM trainer, experimental in 1.14.0, is
-      gone since 1.15.0,
+    - GOLD (`use_uld_loss`) experimental, with X-Token from 1.17.0, and the MiniLLM trainer, experimental in 1.14.0 and
+      gone from 1.15.0,
     - on 1.17.0 (2026-10-29): the same GKD and Distillation defaults, the hint from `GKDTrainer` at `lmbda=1.0` and
       `temperature=1.0`, transformers 5.22.1 and peft 0.21.2 when checked,
     - `SFTConfig` and the other configs with bf16 as the default, unless you set `fp16`.
 - **vLLM 0.30.0:**
     - `--speculative-config` and its `method` values,
-    - `draft_sample_method="greedy"` by default (then the position-0 acceptance counter reads
-      $p(\operatorname{argmax} q)$),
+    - `draft_sample_method="greedy"` by default, and then the position-0 acceptance counter reads
+      $p(\operatorname{argmax} q)$,
     - the equal-vocab-size check of `draft_model`, and `use_heterogeneous_vocab`,
     - the `vllm:spec_decode_*` counters, and the logged "draft acceptance rate" = $\text{accepted} \div \text{drafted}$,
     - `prompt_logprobs`, `--max-logprobs` default 20, `--logprobs-mode` default `raw_logprobs`,
@@ -1108,7 +1108,7 @@ against the versions that you pin.
 - **Results quoted:**
     - Qwen3 Table 21 (8B: RL 67.6 at 17,920 GPU-hours, on-policy distillation 74.4 at 1,800),
     - tinker-cookbook (Qwen3.5-9B-Base from Qwen3.5-9B, rank-128 LoRA: ~65% to ~76.7% AIME'24, 200 steps × 512
-      groups, 16K-token rollouts; the same on 2026-10-30),
+      groups, 16K-token rollouts, and the same on 2026-10-30),
     - the on-policy stage of Qwen3 and of the tinker-cookbook, which starts from an SFT checkpoint,
     - Minitron (40× fewer tokens, 1.8×, up to 16% MMLU),
     - the Llama 3.2 and Gemma 2/3 distillation statements,
@@ -1120,6 +1120,6 @@ against the versions that you pin.
     - the lm-eval gsm8k defaults (greedy, 256 tokens).
 - **Prices and hardware:** H100 ~$11/GPU-hour on demand (Spot ~$3.7), Gemini 3.5 Flash $9.00/M output (06 lab,
   2026-09-05), and the device figures in `cost.GPUS` (roofline.specs'). The Flash price was the same on the price pages
-  on 2026-10-30, which also list newer and cheaper Flash models (verify). The T4 fits (16 bytes per parameter for
+  on 2026-10-30, which also list newer and lower-cost Flash models (verify). The T4 fits (16 bytes per parameter for
   AdamW with an fp32 master, 2.49 GB of fp32 logits per 4,096 tokens) are predictions.
   [`COMPUTE.md`](../../COMPUTE.md) and the lab keep them current.

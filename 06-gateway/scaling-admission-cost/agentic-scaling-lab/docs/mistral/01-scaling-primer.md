@@ -1,8 +1,8 @@
 # Scaling Agentic Solutions on Mistral — a primer
 
-*This primer explains how to size and deploy an agentic solution on Mistral models. The models run on Mistral's API (hosted) or on your own GPUs (self-hosted). The worked example is the support agent of a Singapore telco. The date of the fact check is 19 September 2026, and the sections have numbers so that you can use them in drills. The callouts are **Numbers** (anchors to keep in your head), **Verify** (facts that change) and **Pitfall** (the mistake that occurs most often in actual designs).*
+*This primer explains how to size and deploy an agentic solution on Mistral models. The models run on Mistral's API (hosted) or on your own GPUs (self-hosted). The worked example is the support agent of a Singapore telco. The date of the fact check is 19 September 2026. The sections have numbers so that you can use them in drills. The callouts give anchors to keep in your head (**Numbers**), facts that change (**Verify**) and the mistake that occurs most often in actual designs (**Pitfall**).*
 
-> **How this differs from [the primer](../01-scaling-primer.md).** This is the primer of the Mistral provider. It is a rewrite, not a copy: the two primers share about a quarter of their lines. The thesis, the turn as the unit of work and the mechanisms of §5 are the same ideas, worked again. The new part is the second way to pay for tokens, which an open-weight model permits: your own vLLM fleet. This new part contains these topics:
+> **How this is different from [the primer](../01-scaling-primer.md).** This is the primer of the Mistral provider. It is a rewrite, not a copy: the two primers share about a quarter of their lines. The thesis, the turn as the unit of work and the mechanisms of §5 are the same ideas, worked again. The new part is the second way to pay for tokens, which an open-weight model permits: your own vLLM fleet. This new part contains these topics:
 >
 > - the batch-dependent time per token (§1.3),
 > - sovereignty as a dimension of scale (§1.8),
@@ -30,7 +30,7 @@ With Mistral, there are two ways to pay for those tokens. The selection between 
 
 On your own GPUs, or on an in-country sovereign GPU cloud, the constraint is a fleet that you sized. The fleet runs open-weight models on vLLM. You pay for it by the GPU-hour, busy or not. Its latency depends on how much load you put on it.
 
-The API is the default until sovereignty, latency control or customisation says otherwise. Part 3 gives the price of that "otherwise". The anchor scenario is a Singapore operator at 100,000 conversations a day. For this scenario, the API costs about $40 k a month. A fleet sized for the peak costs about $55 k on on-demand H100s, or approximately the price of the API on committed H100s. The fleet has the lower price only below about $4.95 a GPU-hour, so residency decides, not price.
+The API is the default until sovereignty, latency control or customisation makes a different path necessary. Part 3 gives the price of that different path. The anchor scenario is a Singapore operator at 100,000 conversations a day. For this scenario, the API costs about $40 k a month. A fleet sized for the peak costs about $55 k on on-demand H100s, or approximately the price of the API on committed H100s. The fleet has the lower price only below about $4.95 a GPU-hour, so residency decides, not price.
 
 A deployment design must answer four things:
 
@@ -81,7 +81,7 @@ Each decode step moves the weights (15.7 GB for Ministral 3 14B in FP8) through 
 
 ### 1.4 Cost scales with context, and context grows
 
-The bill is tokens, and the input is the largest part. A support turn sends 5 k tokens of prompt, tool schemas, customer context and history, and it receives 200 back. On Mistral Small 4 ($0.15 / $0.60 per million, cached input $0.015), the anchor call costs $0.000505 with the prefix cached. The 2,300 uncached input tokens are 68 % of that cost. On Medium 3.5 ($1.50 / $7.50 / $0.15), the same call is $0.005355, 10.6 times more. Thus, if you route 10 % of calls to Medium 3.5, they make 54 % of the bill of the planning mix.
+The bill is tokens, and the input is the largest part. A support turn sends 5 k tokens of prompt, tool schemas, customer context and history, and it gets 200 back. On Mistral Small 4 ($0.15 / $0.60 per million, cached input $0.015), the anchor call costs $0.000505 with the prefix cached. The 2,300 uncached input tokens are 68 % of that cost. On Medium 3.5 ($1.50 / $7.50 / $0.15), the same call is $0.005355, 10.6 times more. Thus, if you route 10 % of calls to Medium 3.5, they make 54 % of the bill of the planning mix.
 
 Three levers change the cost by integer factors:
 
@@ -99,7 +99,7 @@ At some point in a turn, the agent opens a ticket or changes a plan. The process
 - A node drains.
 - The provider reclaims a spot node.
 - The model call times out.
-- The queue delivers the message again.
+- The queue sends the message again.
 
 RabbitMQ quorum queues give at-least-once delivery with manual acknowledgement, and nothing stronger. Thus the loop must be *replayable*:
 
@@ -141,7 +141,7 @@ On two Ministral 3 14B replicas, the same overload gives *zero errors and zero 4
 
 ### 1.7 Multi-agent multiplies everything
 
-A coordinator with three specialists changes 2.2 model calls per turn into eight. It multiplies the cost by 3.6×, and it multiplies the latency by 2× although the specialists run in parallel. At 95 % per hop, the probability that every hop succeeds goes from $0.95^{2.2} \approx 0.89$ to $0.95^{8} \approx 0.66$. Thus the multi-agent question is never "how do I scale the coordinator". The question is "what measured problem justifies that multiple". Usually, the problem is a tool set that is too large for one context, or permissions that must be different for each step.
+A coordinator with three specialists changes 2.2 model calls per turn into eight. It multiplies the cost by 3.6×. The specialists run in parallel, but the coordinator still multiplies the latency by 2×. At 95 % per hop, the probability that every hop succeeds goes from $0.95^{2.2} \approx 0.89$ to $0.95^{8} \approx 0.66$. Thus the multi-agent question is never "how do I scale the coordinator", but "what measured problem justifies that multiple". Usually, the problem is a tool set that is too large for one context, or permissions that must be different for each step.
 
 ### 1.8 Sovereignty is a scaling dimension
 
@@ -151,7 +151,7 @@ The marketplaces fill a part of the gap. On Amazon Bedrock, Large 3 and Ministra
 
 Two routes keep data in Singapore: your own GPUs (AWS p5, GCP a3 or Azure ND H200 v5 in-region) and an in-country sovereign GPU cloud. For the sovereign cloud, examine where each of its data centres is. The sites of a regional provider can be across the border (verify).
 
-The licence is a second gate. Small 4, Large 3 and Ministral 3 are Apache 2.0. Medium 3.5 has a Modified MIT licence. Above $20 M of global monthly revenue, that licence makes a commercial licence necessary, and every telco in the region is above that revenue. Thus a self-hosted Medium 3.5 needs a commercial licence, which you negotiate with Mistral.
+The licence is a second gate. Small 4, Large 3 and Ministral 3 are Apache 2.0. Medium 3.5 has a Modified MIT licence. Above $20 M of global monthly revenue, that licence makes a commercial licence necessary. Every telco in the region is above that revenue. Thus a self-hosted Medium 3.5 needs a commercial licence, which you negotiate with Mistral.
 
 In Singapore, the driver is governance, not law. There is no general mandate for localisation. The MAS Guidelines on AI Risk Management (consulted November 2025 to January 2026) push regulated firms toward model-risk controls. The MAS AI Risk Management Toolkit (20 March 2026) also pushes them in that direction. The operator's own risk function changes "personal data stays in Singapore" into a requirement.
 
@@ -194,7 +194,7 @@ The anchor scenario is a fictional Singapore mobile operator, Meridian Mobile, w
 |---|---|
 | Conversations per day | 100,000 |
 | Peak hour against daily average | 3× |
-| Network-incident spike against average | 10× (an outage, and 75 % of intents are "no signal") |
+| Network-incident spike against average | 10× (an outage, with "no signal" in 75 % of intents) |
 | Turns per conversation | 6 |
 | Model calls per turn | 2.2 (plan, answer, sometimes a third) |
 | Tool calls per turn | 1.3 (0.7 CRM, 0.25 billing, the rest network status and knowledge base) |
@@ -230,7 +230,7 @@ Say the calculation out loud in four steps:
 
 The peak is 14.3 M, inside a 20 M limit. An incident is 47.7 M, two and a half times the limit in tokens and in requests. The peak needs a support ticket. You must *shape* the incident, because no tier makes 48 M TPM appear in a minute. The second reason is that no fleet sized for the peak carries 2.3 times the peak.
 
-> **Verify.** Find out if cached tokens count at full weight against the TPM limit. The docs define the limit as input plus output, and they say nothing about cached tokens. Thus the lab counts cached tokens fully and treats relief as upside.
+> **Verify.** Find out if cached tokens count at full weight against the TPM limit. The docs define the limit as input plus output, and they say nothing about cached tokens. Thus the lab counts cached tokens fully and treats relief as a gain.
 >
 > Also examine the scope of the limit (workspace or organisation) and the absence of a `Retry-After` header. Cause a 429. Then read the headers.
 
@@ -242,7 +242,7 @@ $$
 
 On the hosted path, 6.9 × 6 ≈ 42 at average, 125 at peak and 417 during an incident. Concurrent *sessions* are eleven times larger, because users think between turns. A conversation lasts 6 × (6 + 60) ≈ 400 s, which gives 460 / 1,400 / 4,600 sessions.
 
-The token limit also puts a cap on concurrency. 20 M TPM ÷ 60 ≈ 333 k tokens/s. A turn uses 2.2 × 5,200 ≈ 11.4 k tokens over 6 s ≈ 1.9 k tokens/s. Thus the limit sustains about 175 turns in flight, or 29 turns per second. This is the start value for the in-flight cap of the admission controller (`AdmissionConfig.max_inflight` in `scalelab/admission.py`). It is above the peak demand and below the incident.
+The token limit also puts a cap on concurrency. 20 M TPM ÷ 60 ≈ 333 k tokens/s. A turn uses 2.2 × 5,200 ≈ 11.4 k tokens over 6 s ≈ 1.9 k tokens/s. Thus the limit sustains about 175 turns in flight, or 29 turns per second. This number is the start value for the in-flight cap of the admission controller (`AdmissionConfig.max_inflight` in `scalelab/admission.py`). It is above the peak demand and below the incident.
 
 On the self-hosted path, the turn is longer (10 s at the batch selected in 3.5). Thus the in-flight turns are 69 / 208 / 692, and the cap comes from the fleet: 293 at peak.
 
@@ -266,9 +266,9 @@ The calculation:
 - Thirteen calls a conversation ≈ $0.0067.
 - One call in ten on Medium 3.5 at $0.005355 doubles this to $0.0131.
 
-Uncached input is two-thirds of a Small 4 call. Thus the prefix cache is worth more than any output cap. The 10 % escalation share is 54 % of the mix. Thus the routing rule for Medium 3.5 is the line in the prompt with the highest cost.
+Uncached input is two-thirds of a Small 4 call. Thus the prefix cache is worth more than any output cap. The 10 % escalation share is 54 % of the cost of the mix. Thus the routing rule for Medium 3.5 is the line in the prompt with the highest cost.
 
-The other half of the hosted plan is the request. Peak demand with 30 % headroom is **60 requests per second, 19 M tokens per minute and 209 B tokens a month** on Small 4. This request goes in the ticket to Mistral support, with the model id and the daily curve. The free tier covers 10 % of the average TPM, and the paid tiers are console-only. Thus do these steps before the pilot ends: start pay-as-you-go on the operator's organisation, read the limits and send the ticket.
+The other half of the hosted plan is the rate-limit request. Peak demand with 30 % headroom is **60 requests per second, 19 M tokens per minute and 209 B tokens a month** on Small 4. This request goes in the ticket to Mistral support, with the model id and the daily curve. The free tier covers 10 % of the average TPM, and the paid tiers are console-only. Thus do these steps before the pilot ends: start pay-as-you-go on the operator's organisation, read the limits and send the ticket.
 
 > **Verify.** The list prices on 19 September 2026:
 >
@@ -327,13 +327,13 @@ The two bills grow with volume. The API grows linearly at $0.0131 a conversation
 | Neocloud | 3.75 | $30,112 | $0.0099 | 0.76× | 14 k |
 | GCP on-demand | 11.06 | $88,812 | $0.0292 | 2.23× | 41 k |
 
-Thus the fleet costs more on on-demand H100s (about $15.5 k a month more than the API). It is level on three-year commitments and APAC capacity blocks. The capacity-block prices are for Tokyo, Sydney and Mumbai, not Singapore. The fleet costs less on neocloud GPUs (about $9.6 k a month less).
+Thus the fleet costs more on on-demand H100s (about $15.5 k a month more than the API). It costs approximately the same as the API on three-year commitments and APAC capacity blocks. The capacity-block prices are for Tokyo, Sydney and Mumbai, not Singapore. The fleet costs less on neocloud GPUs (about $9.6 k a month less).
 
 Volume is important only at the bottom. The fleet never runs fewer than two replicas. Above about 14 k conversations a day at $3.75, 17 k at $4.72–4.86 and 25 k at $6.88, the volume amortises that floor. Above the floor, the price of the GPU-hour decides, not the size of the organisation.
 
 The cost of the fleet does not decrease when the traffic decreases. Thus the hybrid is the self-hosted analogue of "provisioned throughput plus pay-as-you-go spill-over". The hybrid uses a fleet for the base load and the API for the peak hours. It increases the utilisation of the fleet, and with it the GPU price at which the fleet costs less. The condition is that the data policy lets the peak traffic leave.
 
-The second tension is latency. The hosted turn is 6 s. The self-hosted turn of the plan is 10 s, because 20 ms times 200 tokens is four seconds a call. A 6-second turn on the fleet needs a step of about 11 ms. This replica gives that step only at a batch of three to five. That is 30–46 H100s at peak, not 11: three to four times the GPUs and $150–230 k a month on-demand.
+The second tension is latency. The hosted turn is 6 s. The self-hosted turn of the plan is 10 s, because 20 ms times 200 tokens is four seconds a call. A 6-second turn on the fleet needs a step of about 11 ms. This replica gives that step only at a batch of three to five. At that batch, the fleet needs 30–46 H100s at peak, not 11: three to four times the GPUs and $150–230 k a month on-demand.
 
 There are three alternatives:
 
@@ -357,7 +357,7 @@ The non-GPU estate is a few dozen vCPUs of pods plus a small Postgres, Redis and
 
 ### 3.8 What breaks first
 
-| Level | Resource | Demand against limit | Fix |
+| Level | Resource | Demand against limit | Solution |
 |---|---|---:|---|
 | Incident | Hosted RPS limit (60) | 2.55× | shape demand (admission, degrade levels), ask for burst headroom |
 | Incident | Hosted TPM limit (20 M) | 2.38× | shape demand, use a sibling model with its own limit, decrease the tokens per call |
@@ -399,7 +399,7 @@ Then the pod writes the transcript and publishes the terminal event. It decremen
 
 *Gateway and orchestrator are separate Deployments* because they scale on different signals and fail in different ways. A streaming connection costs a coroutine and a few kilobytes. The loop costs tokens, tool calls and the memory of a full context.
 
-*A queue sits between them, although the user waits,* because the queue does three things:
+*The user waits, but a queue sits between the gateway and the orchestrator,* because the queue does three things:
 
 - It changes a burst into a backlog with one observable number: the age of the oldest turn that has not started.
 - It gives at-least-once execution with redelivery.
@@ -426,7 +426,7 @@ NVIDIA NIM containers are applicable for a team that wants a supported, profiled
 
 Mistral's Agents & Conversations API and the Temporal-based AI Studio Agent Runtime run the loop for you on the hosted path. They have handoffs, built-in tools and MCP Connectors (public preview). But they are not on regional endpoints, they have a `client.beta.*` label, and they do not have Ministral 3. They also give less control over budgets and checkpoints.
 
-Kafka, NATS JetStream or a cloud's managed queue can replace RabbitMQ. Kafka has no per-message nack or dead-lettering, so you build the retry topic. A single-cloud deployment can replace the estate with the managed pieces of that cloud. The *mechanisms* in Part 5 are the same in every case, and only the place where you configure them is different. The Kubernetes shape is the shape that a platform team can use again across workloads and clouds.
+Kafka, NATS JetStream or a cloud's managed queue can replace RabbitMQ. Kafka has no per-message nack or dead-letter queue, so you build the retry topic. A single-cloud deployment can replace the estate with the managed pieces of that cloud. The *mechanisms* in Part 5 are the same in every case, and only the place where you configure them is different. The Kubernetes shape is the shape that a platform team can use again across workloads and clouds.
 
 ---
 
@@ -437,7 +437,7 @@ Kafka, NATS JetStream or a cloud's managed queue can replace RabbitMQ. Kafka has
 On the API, you shape the demand before it reaches the limit, in three layers.
 
 1. An in-flight cap at the gateway (5.3) sets the maximum number of turns that make tokens at one time.
-2. A token bucket per model in the model gateway (`TokenBucket` in `scalelab/resilience.py`) spreads calls within each second. At the incident, the requests-per-second limit binds first. The rate of the bucket is *your share* of the granted limit. Its capacity is about six seconds of refill. When there is more than one pod, the bucket is a Lua script in Redis.
+2. A token bucket per model in the model gateway (`TokenBucket` in `scalelab/resilience.py`) spreads calls across each second. At the incident, the requests-per-second limit binds first. The rate of the bucket is *your share* of the granted limit. Its capacity is about six seconds of refill. When there is more than one pod, the bucket is a Lua script in Redis.
 3. You select the endpoint and the tier for each call:
    - the global endpoint, unless the data policy says EU or US,
    - the Priority Tier, for traffic that must not wait in a queue. With `service_tier="auto"`, the API changes to the standard tier when the Priority Tier runs out, and the response reports `service_tier`.
@@ -485,7 +485,7 @@ Model ids are in the configuration, never in the code. This is also how you surv
 
 Spill-over is the fallback that is also a capacity strategy. The model gateway (`HybridBackend`) sends a call to the API when the saturation of the fleet goes above 0.9. Saturation is the sequences that run plus the sequences that wait, against the batch at which the fleet meets its latency target. The gateway records which backend served each call. In the lab's hybrid overload run, the API served 30 % of calls.
 
-The gate is policy. A turn is eligible when its traffic carries no personal data (the incident bulletin, a generic plan question, a knowledge-base lookup on redacted text). All other traffic waits for the fleet, or the gateway sheds it. That rule lets you size a fleet for the base load in a residency-bound deployment. The operator's risk function signs the rule, so write it with them.
+The gate is policy. A turn is eligible when its traffic carries no personal data (the incident bulletin, a generic plan question, a knowledge-base lookup on redacted text). All other traffic waits for the fleet, or the gateway sheds it. That rule lets you size a fleet for the base load in a residency-bound deployment. The operator's risk function signs the rule, so write it with the risk function.
 
 ```mermaid
 flowchart LR
@@ -504,7 +504,7 @@ flowchart LR
 
 Admission control is the brake on the feedback loop of 1.6, in its two forms. It sits at the gateway, before a turn costs anything. It asks three questions in this order:
 
-1. Is this tenant within its budget?
+1. Is this tenant inside its budget?
 2. What is the degrade level of the system?
 3. If the gateway admits this turn, does the number of in-flight turns go above the in-flight cap?
 
@@ -529,7 +529,7 @@ The controller writes the level to Redis, so every pod goes to the same degrade 
 
 Two details make the difference between an implementation that works and a diagram:
 
-- Levels 1 and 2 need hysteresis (the lab holds a raised level for 15 s), or the level flaps. Level 3 uses the instantaneous cap, because it must switch off at the moment the turns drain.
+- Levels 1 and 2 need hysteresis, or the level flaps. In the lab, the hysteresis holds a raised level for 15 s. Level 3 uses the instantaneous cap, because it must switch off at the moment the turns drain.
 - The *client* must add jitter to `Retry-After`, or every shed user returns at the same time.
 
 ### 5.4 Durable execution
@@ -562,7 +562,7 @@ On the fleet, vLLM's prefix caching is on by default. The hit rate is `vllm:pref
 
 Compaction keeps the input bounded. When the pending history goes above a token threshold, the low-cost model summarises everything except the verbatim tail. It does this *after* the turn is complete. The anchor's 5,000-token call assumes compaction, and without it each turn adds 400 to 800 tokens. Thus the call of the twelfth turn is two to three times the call of the first, and the cost increases by the same factor. On a fleet, the KV per call grows, and the batch becomes smaller.
 
-Set an output cap for each task, and set reasoning for each task with `reasoning_effort`. Set reasoning off for routing, extraction and support answers. Set it on only where a measured problem needs it. This is because Mistral bills reasoning tokens as output, at four to five times the input price. On a fleet, they are decode steps that the whole batch pays for.
+Set an output cap for each task. Set reasoning for each task with `reasoning_effort`. Set reasoning off for routing, extraction and support answers. Set it on only where a measured problem needs it. This is because Mistral bills reasoning tokens as output, at four to five times the input price. On a fleet, they are decode steps that the whole batch pays for.
 
 ### 5.6 Tools at scale
 
@@ -575,7 +575,7 @@ The tools are usually the real bottleneck. The reason is that their owners sized
 5. A timeout.
 6. One retry, for idempotent reads only.
 
-Failures come back to the model as *structured data* (`{"error": "billing: rate limited"}`), never as exceptions that abort the turn. This is because the model can usually give an answer without the missing fact. Also, an aborted turn is the outcome with the highest cost of all.
+Failures come back to the model as *structured data* (`{"error": "billing: rate limited"}`), never as exceptions that abort the turn. This is because the model can usually give an answer without the fact that the tool did not return. Also, an aborted turn is the outcome with the highest cost of all.
 
 Two habits remove most tool latency from the critical path:
 
@@ -598,7 +598,7 @@ The time-to-first-token that the user sees comes after the plan, the tools and t
 |---|---|---|
 | `--max-num-seqs` | 32 on the Ministral 14B replica (default 128) | puts a cap on the batch, and thus on the time per token. Above it, the latency becomes worse with no signal. |
 | `--max-model-len` | 32,768 (default 262,144) | frees the KV memory reserved for contexts that never occur |
-| `--max-num-batched-tokens` | 16,384 (the API-server default since 0.28) | the chunked-prefill budget per step. A smaller value is better for inter-token latency, and a larger value is better for TTFT. |
+| `--max-num-batched-tokens` | 16,384 (the API-server default from version 0.28) | the chunked-prefill budget per step. A smaller value is better for inter-token latency, and a larger value is better for TTFT. |
 | `--gpu-memory-utilization` | 0.92 (the default). Mistral's Small 4 and Medium 3.5 cards use 0.8. | headroom for activations. If the value is too high, a long prompt stops the pod. |
 | `--kv-cache-dtype fp8` | on, after an evaluation on your own transcripts | makes the KV bytes half: two times the resident sequences, a lighter step |
 | `--max-num-queued-reqs` / `--max-num-queued-tokens` | about 2 × `max_num_seqs` / a few × 16 k | new in 0.29: a 503 when the queue is full. Both have no limit by default, and that is the silent collapse. |
@@ -606,7 +606,7 @@ The time-to-first-token that the user sees comes after the plan, the tools and t
 | `--speculative-config` | EAGLE drafts published for Small 4, Medium 3.5 and Large 3 (`num_speculative_tokens` 3). On Ministral, try n-gram or a draft model. | a lower time per token at the same batch. This is the route to a six-second turn without four times the GPUs. |
 | Weight loading | `--load-format runai_streamer` or a node-local NVMe cache, `--kv-cache-memory-bytes` to skip profiling, the weight-load and tool-parser flags from each model card | 15.7 GB streams in about 30 s, and 121 GB in about a minute at 2 GiB/s. Often, the image pull is the slowest part of the 3–8-minute cold start. |
 | KEDA | vLLM: `sum(vllm:num_requests_waiting)` at an `AverageValue` of 5 and `vllm:kv_cache_usage_perc` at 0.8. Poll 15 s, cooldown 300–360 s. Min = the peak fleet (11), max = the incident (34). Orchestrator: queue length, about 40 messages per pod. | headroom only. Static capacity carries the peak, because a replica needs minutes to appear. |
-| GPU node pool and pods | static nodes for the peak on reserved or capacity-block terms. One replica per GPU, with `nvidia.com/gpu` requests equal to limits. vLLM pods with 4–8 vCPU, and memory of at least the weights again. Orchestrator: 2 vCPU / 2 GiB at concurrency 80. | no time-slicing (no memory isolation) and no MIG (no slice holds a 14 B model with useful KV) |
+| GPU node pool and pods | static nodes for the peak on reserved or capacity-block terms. One replica per GPU, with `nvidia.com/gpu` requests equal to limits. vLLM pods with 4–8 vCPU, and memory of at least the weights again. Orchestrator: 2 vCPU / 2 GiB at concurrency 80. | no time-slicing (no memory isolation) and no MIG (no slice with sufficient memory for a 14 B model and useful KV) |
 | PodDisruptionBudget, rollout, termination | vLLM `minAvailable` = peak fleet − 1. `maxSurge` 1 needs a spare GPU. Grace 60 s on the orchestrator, 30 s on vLLM with requests drained. | A drain must never take two replicas. A rollout of eleven takes an hour, unless there is a spare. |
 
 `--max-num-seqs` and the replica count set the latency of the fleet, not a percentage on an autoscaler. The values in the table come from the load test in notebook 05 (simulated). Calculate them again from `vllm bench serve` on the real hardware.
@@ -719,7 +719,7 @@ The API does not replace the design for availability. On 19 September 2026, the 
 | Stage | Conversations/day | What you need | What you can skip |
 |---|---:|---|---|
 | Pilot on the API | ≤ 1,000 | One service, a synchronous loop, budgets, structured tool errors, traces, `prompt_cache_key` and pinned model ids. Pay-as-you-go on the operator's own organisation, so that the tiers start to go up. | queue, Redis, admission control, GPUs, the Priority Tier |
-| Production v1 on the API | 1,000–20,000 | the gateway/orchestrator split, RabbitMQ, Postgres checkpoints, idempotency, the SSE relay, per-turn budgets, dashboards, the rate-limit ticket | the fleet (below the two-replica floor of 14–25 k a day, the volume does not amortise it), multi-region, per-tenant quotas |
+| Production v1 on the API | 1,000–20,000 | the gateway/orchestrator split, RabbitMQ, Postgres checkpoints, idempotency, the SSE relay, per-turn budgets, dashboards, the rate-limit ticket | the fleet, multi-region, per-tenant quotas. Below the two-replica floor of 14–25 k a day, the volume does not amortise the fleet. |
 | Scale: the decision point | 20,000–200,000 | Admission control with degrade levels, second-level smoothing, sibling fallbacks, compaction and caching. The hosted/self-hosted arithmetic on the operator's own numbers (the fleet costs less below about $4.95 per GPU-hour). Then a negotiated limit plus the Priority Tier, or committed GPUs in-region with policy-gated spill-over. | llm-d or KServe until the fleet goes above about ten replicas |
 | Sovereign and enterprise | > 200,000, multi-brand, hard residency | A fleet sized for the peak in-country, on committed terms. An inference gateway with cache-aware routing and priority. Per-tenant quotas and cost allocation. A second availability zone. A custom model when the measured problem is quality in the workload's domain or languages. | — |
 
@@ -762,9 +762,9 @@ Custom models come late and for a different reason. Forge is Mistral's custom-mo
 - "What is the daily volume?" (the volume amortises the two-replica floor above 14–25 k a day. Above that, the GPU price decides.)
 - "What does an H100-hour cost you, and on what term?" (under about $4.95, the fleet costs less than the API. At $6.88 on-demand, it costs $15.5 k a month more.)
 - "Do you want Medium 3.5 on your own GPUs?" (a commercial licence and an eight-GPU replica).
-- "Which organisation holds the Mistral keys, and which tier is it on?" (other projects share the limit, and its numbers are console-only).
+- "Which organisation holds the Mistral keys, and which tier is it on?" (the limit shared with other projects, and the console-only numbers of the tier).
 - "Do you need an SLA?" (the Priority Tier at +75 %, or the fleet).
-- "What happens to traffic during an outage?" (the incident factor, and the traffic that can spill over).
+- "What happens to traffic during an outage?" (the incident factor, and the traffic eligible for spill-over).
 - "Which downstream system has the lowest QPS ceiling?" (bulkheads, caches, prefetch).
 - "What must never happen twice?" (idempotency scope).
 
