@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="768" height="240" viewBox="0 0 768 240" role="img" aria-label="Four requests with output lengths 2, 9, 3 and 4 in two slots: static batching takes 13 steps and continuous batching takes 9." style="color: #E4EAE7">
+  <title>Four requests with output lengths 2, 9, 3 and 4 in two slots: static batching takes 13 steps and continuous batching takes 9.</title>
+  <rect x="0" y="0" width="768" height="240" rx="8" fill="#161E1C"/>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="28" fill="#97A59F">Output lengths [2, 9, 3, 4], two slots. One cell is one step.</text>
+
+    <!-- static batching -->
+    <rect x="24" y="44" width="396" height="176" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="222" y="64" text-anchor="middle" fill="#97A59F">Static batching · 13 steps · 69% slot utilisation</text>
+    <g font-size="11" fill="#97A59F" text-anchor="middle">
+      <text x="96" y="88">1</text><text x="120" y="88">2</text><text x="144" y="88">3</text><text x="168" y="88">4</text>
+      <text x="192" y="88">5</text><text x="216" y="88">6</text><text x="240" y="88">7</text><text x="264" y="88">8</text>
+      <text x="288" y="88">9</text><text x="312" y="88">10</text><text x="336" y="88">11</text><text x="360" y="88">12</text>
+      <text x="384" y="88">13</text>
+    </g>
+    <text x="76" y="114" text-anchor="end" font-size="11.5" fill="#97A59F">slot 1</text>
+    <text x="76" y="152" text-anchor="end" font-size="11.5" fill="#97A59F">slot 2</text>
+    <!-- slot 1 -->
+    <rect x="84" y="96" width="48" height="28" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="108" y="114" text-anchor="middle" font-size="11.5">r0 (2)</text>
+    <rect x="132" y="96" width="168" height="28" rx="4" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="216" y="114" text-anchor="middle" font-size="11.5">idle</text>
+    <rect x="300" y="96" width="72" height="28" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="336" y="114" text-anchor="middle" font-size="11.5">r2 (3)</text>
+    <rect x="372" y="96" width="24" height="28" rx="4" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <!-- slot 2 -->
+    <rect x="84" y="134" width="216" height="28" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="192" y="152" text-anchor="middle" font-size="11.5">r1 (9)</text>
+    <rect x="300" y="134" width="96" height="28" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="348" y="152" text-anchor="middle" font-size="11.5">r3 (4)</text>
+    <!-- batch boundary -->
+    <path d="M300 92 L300 170" stroke="#97A59F" stroke-width="1" stroke-dasharray="4 3" fill="none"/>
+    <text x="192" y="184" text-anchor="middle" font-size="11" fill="#97A59F">batch 1</text>
+    <text x="348" y="184" text-anchor="middle" font-size="11" fill="#97A59F">batch 2</text>
+    <text x="222" y="207" text-anchor="middle" font-size="11" fill="#97A59F">a slot is idle until the longest request of its batch finishes</text>
+
+    <!-- continuous batching -->
+    <rect x="444" y="44" width="300" height="176" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="594" y="64" text-anchor="middle" fill="#97A59F">Continuous batching · 9 steps · 100%</text>
+    <g font-size="11" fill="#97A59F" text-anchor="middle">
+      <text x="516" y="88">1</text><text x="540" y="88">2</text><text x="564" y="88">3</text><text x="588" y="88">4</text>
+      <text x="612" y="88">5</text><text x="636" y="88">6</text><text x="660" y="88">7</text><text x="684" y="88">8</text>
+      <text x="708" y="88">9</text>
+    </g>
+    <text x="496" y="114" text-anchor="end" font-size="11.5" fill="#97A59F">slot 1</text>
+    <text x="496" y="152" text-anchor="end" font-size="11.5" fill="#97A59F">slot 2</text>
+    <rect x="504" y="96" width="48" height="28" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="528" y="114" text-anchor="middle" font-size="11.5">r0 (2)</text>
+    <rect x="552" y="96" width="72" height="28" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="588" y="114" text-anchor="middle" font-size="11.5">r2 (3)</text>
+    <rect x="624" y="96" width="96" height="28" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="672" y="114" text-anchor="middle" font-size="11.5">r3 (4)</text>
+    <rect x="504" y="134" width="216" height="28" rx="4" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="612" y="152" text-anchor="middle" font-size="11.5">r1 (9)</text>
+    <text x="594" y="207" text-anchor="middle" font-size="11" fill="#97A59F">a request that waits takes the freed slot</text>
+  </g>
+</svg>

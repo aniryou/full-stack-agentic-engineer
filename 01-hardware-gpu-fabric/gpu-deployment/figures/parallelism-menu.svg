@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="350" viewBox="0 0 900 350" role="img" aria-label="Tensor parallelism does an all-reduce at each layer and expert parallelism does an all-to-all shuffle of the tokens, so both stay inside the NVLink domain; pipeline parallelism passes only the activations and data parallelism needs near-zero communication for inference, so both go across the network." style="color: #E4EAE7">
+  <title>Tensor parallelism does an all-reduce at each layer and expert parallelism does an all-to-all shuffle of the tokens, so both stay inside the NVLink domain; pipeline parallelism passes only the activations and data parallelism needs near-zero communication for inference, so both go across the network.</title>
+  <rect x="0" y="0" width="900" height="350" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="14" y="26" fill="#97A59F">Four of the five ways to divide the work across GPUs (§4). TP and EP stay inside the NVLink domain, and PP and DP go across the network.</text>
+
+    <!-- inside the NVLink domain: x 12..446 -->
+    <rect x="12" y="40" width="434" height="298" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="229" y="58" text-anchor="middle" fill="#97A59F">inside the NVLink domain (scale-up)</text>
+
+    <!-- TP panel: x 22..224, inner 36..210 -->
+    <rect x="22" y="68" width="202" height="260" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="123" y="88" text-anchor="middle" font-weight="600" font-size="12">tensor parallelism (TP)</text>
+    <text x="123" y="104" text-anchor="middle" font-size="11" fill="#97A59F">a slice of each layer per GPU</text>
+    <g font-size="11" fill="#97A59F" text-anchor="middle">
+      <text x="77.5" y="126">GPU 0</text><text x="168.5" y="126">GPU 1</text>
+    </g>
+    <g fill="none" stroke="currentColor" stroke-width="1">
+      <rect x="36" y="132" width="83" height="20" rx="3"/><rect x="127" y="132" width="83" height="20" rx="3"/>
+      <rect x="36" y="176" width="83" height="20" rx="3"/><rect x="127" y="176" width="83" height="20" rx="3"/>
+      <rect x="36" y="220" width="83" height="20" rx="3"/><rect x="127" y="220" width="83" height="20" rx="3"/>
+    </g>
+    <g font-size="11" text-anchor="middle">
+      <text x="77.5" y="146">layer 1</text><text x="168.5" y="146">layer 1</text>
+      <text x="77.5" y="190">layer 2</text><text x="168.5" y="190">layer 2</text>
+      <text x="77.5" y="234">layer 3</text><text x="168.5" y="234">layer 3</text>
+    </g>
+    <g fill="#16302A" stroke="#4CC5B7" stroke-width="1.2">
+      <rect x="36" y="156" width="174" height="16" rx="3"/><rect x="36" y="200" width="174" height="16" rx="3"/>
+    </g>
+    <g font-size="11" fill="#7ADACF" text-anchor="middle">
+      <text x="123" y="168">all-reduce</text><text x="123" y="212">all-reduce</text>
+    </g>
+    <g font-size="11" text-anchor="middle">
+      <text x="123" y="266" fill="#97A59F">communication: extremely high,</text>
+      <text x="123" y="281" fill="#97A59F">an all-reduce at each layer</text>
+      <text x="123" y="296" fill="#E39A62">across a slow network:</text>
+      <text x="123" y="311" fill="#E39A62">catastrophic</text>
+    </g>
+
+    <!-- EP panel: x 234..436, inner 248..422 -->
+    <rect x="234" y="68" width="202" height="260" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="335" y="88" text-anchor="middle" font-weight="600" font-size="12">expert parallelism (EP)</text>
+    <text x="335" y="104" text-anchor="middle" font-size="11" fill="#97A59F">experts on different GPUs</text>
+    <rect x="248" y="116" width="174" height="22" rx="3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="335" y="131" text-anchor="middle" font-size="11" fill="#7ADACF">tokens: an all-to-all shuffle</text>
+    <g stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)">
+      <path d="M289.5 140 L289.5 156"/><path d="M380.5 140 L380.5 156"/>
+    </g>
+    <g font-size="11" fill="#97A59F" text-anchor="middle">
+      <text x="289.5" y="170">GPU 0</text><text x="380.5" y="170">GPU 1</text>
+    </g>
+    <g fill="none" stroke="currentColor" stroke-width="1">
+      <rect x="248" y="178" width="83" height="20" rx="3"/><rect x="339" y="178" width="83" height="20" rx="3"/>
+      <rect x="248" y="206" width="83" height="20" rx="3"/><rect x="339" y="206" width="83" height="20" rx="3"/>
+    </g>
+    <g font-size="11" text-anchor="middle">
+      <text x="289.5" y="192">expert 0</text><text x="380.5" y="192">expert 2</text>
+      <text x="289.5" y="220">expert 1</text><text x="380.5" y="220">expert 3</text>
+    </g>
+    <g font-size="11" text-anchor="middle">
+      <text x="335" y="266" fill="#97A59F">communication: the all-to-all</text>
+      <text x="335" y="281" fill="#97A59F">shuffle needs much bandwidth</text>
+      <text x="335" y="296" fill="#E39A62">load imbalance often occurs</text>
+    </g>
+
+    <!-- across the network: x 454..888 -->
+    <rect x="454" y="40" width="434" height="298" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="671" y="58" text-anchor="middle" fill="#97A59F">across the network (scale-out)</text>
+
+    <!-- PP panel: x 464..666, inner 478..652 -->
+    <rect x="464" y="68" width="202" height="260" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="565" y="88" text-anchor="middle" font-weight="600" font-size="12">pipeline parallelism (PP)</text>
+    <text x="565" y="104" text-anchor="middle" font-size="11" fill="#97A59F">the model divided by layer</text>
+    <rect x="478" y="116" width="174" height="34" rx="3" fill="none" stroke="currentColor" stroke-width="1"/>
+    <text x="565" y="130" text-anchor="middle" font-size="11">GPU 0</text>
+    <text x="565" y="144" text-anchor="middle" font-size="11" fill="#97A59F">layers 1–20</text>
+    <path d="M565 150 L565 164" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+    <rect x="478" y="166" width="174" height="20" rx="3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="565" y="180" text-anchor="middle" font-size="11" fill="#7ADACF">only the activations</text>
+    <path d="M565 186 L565 200" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+    <rect x="478" y="202" width="174" height="34" rx="3" fill="none" stroke="currentColor" stroke-width="1"/>
+    <text x="565" y="216" text-anchor="middle" font-size="11">GPU 1</text>
+    <text x="565" y="230" text-anchor="middle" font-size="11" fill="#97A59F">layers 21–40</text>
+    <g font-size="11" text-anchor="middle">
+      <text x="565" y="266" fill="#97A59F">communication: low,</text>
+      <text x="565" y="281" fill="#97A59F">the activations at each boundary</text>
+      <text x="565" y="296" fill="#E39A62">the cost: pipeline bubbles</text>
+    </g>
+
+    <!-- DP panel: x 676..878, inner 690..864 -->
+    <rect x="676" y="68" width="202" height="260" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="777" y="88" text-anchor="middle" font-weight="600" font-size="12">data parallelism (DP)</text>
+    <text x="777" y="104" text-anchor="middle" font-size="11" fill="#97A59F">a full copy per replica</text>
+    <rect x="722" y="116" width="110" height="26" rx="3" fill="none" stroke="currentColor" stroke-width="1"/>
+    <text x="777" y="133" text-anchor="middle" font-size="11">load balancer</text>
+    <g stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)">
+      <path d="M757 144 L731.5 188"/><path d="M797 144 L822.5 188"/>
+    </g>
+    <text x="777" y="178" text-anchor="middle" font-size="11" fill="#97A59F">requests</text>
+    <g fill="none" stroke="currentColor" stroke-width="1">
+      <rect x="690" y="190" width="83" height="40" rx="3"/><rect x="781" y="190" width="83" height="40" rx="3"/>
+    </g>
+    <g font-size="11" text-anchor="middle">
+      <text x="731.5" y="206">GPU 0</text><text x="822.5" y="206">GPU 1</text>
+      <text x="731.5" y="221" fill="#97A59F">full model</text><text x="822.5" y="221" fill="#97A59F">full model</text>
+    </g>
+    <g font-size="11" text-anchor="middle">
+      <text x="777" y="266" fill="#97A59F">communication: near zero</text>
+      <text x="777" y="281" fill="#97A59F">for inference</text>
+      <text x="777" y="296" fill="#7ADACF">it scales the throughput,</text>
+      <text x="777" y="311" fill="#7ADACF">not the model size</text>
+    </g>
+  </g>
+</svg>

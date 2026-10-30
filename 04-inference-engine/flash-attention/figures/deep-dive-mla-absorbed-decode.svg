@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Absorbed MLA decode: the cache holds one 576-value latent per token, the query absorbs the key up-projection, the kernel attends over the latent directly, and the value up-projection moves to the output side." style="color: #E4EAE7">
+  <title>Absorbed MLA decode: the cache holds one 576-value latent per token, the query absorbs the key up-projection, the kernel attends over the latent directly, and the value up-projection moves to the output side.</title>
+  <rect x="0" y="0" width="900" height="436" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="28" fill="#97A59F">MLA decode with absorbed weights (§8.1), DeepSeek-V3 dimensions (verify): 128 query heads, one shared latent per token</text>
+    <text x="270" y="60" font-size="11" fill="#97A59F">query side, one token</text>
+    <rect x="270" y="68" width="150" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="345" y="88" text-anchor="middle" font-weight="600">q_nope^h</text>
+    <text x="345" y="104" text-anchor="middle" font-size="11" fill="#97A59F">128 dims</text>
+    <rect x="476" y="68" width="210" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="581" y="88" text-anchor="middle" fill="#7ADACF" font-weight="600">q̃_h = (W_UK^h)ᵀ q_nope^h</text>
+    <text x="581" y="104" text-anchor="middle" font-size="11" fill="#7ADACF">512 dims: W_UK absorbed</text>
+    <path d="M420 90 L474 90" fill="none" stroke="#4CC5B7" stroke-width="1.2" marker-end="url(#arrA)"/>
+    <rect x="270" y="126" width="150" height="40" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="345" y="144" text-anchor="middle" font-weight="600">q_rope^h</text>
+    <text x="345" y="160" text-anchor="middle" font-size="11" fill="#97A59F">64 dims</text>
+    <rect x="24" y="180" width="216" height="96" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="132" y="202" text-anchor="middle" font-weight="600">KV cache, per token j</text>
+    <text x="132" y="222" text-anchor="middle" fill="#7ADACF" font-family="JetBrains Mono, monospace" font-size="11">c_j (512) ; k_rope,j (64)</text>
+    <text x="132" y="242" text-anchor="middle" font-size="11" fill="#7ADACF">576 values = 1,152 bytes in bf16</text>
+    <text x="132" y="260" text-anchor="middle" font-size="11" fill="#7ADACF">shared by all 128 heads</text>
+    <rect x="24" y="68" width="216" height="80" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="132" y="90" text-anchor="middle" font-weight="600">the multi-head equivalent</text>
+    <text x="132" y="110" text-anchor="middle" font-size="11">128 heads × (192 key + 128 value)</text>
+    <text x="132" y="128" text-anchor="middle" font-size="11">80 KB per token per layer: 71× more</text>
+    <path d="M132 148 L132 178" fill="none" stroke="#97A59F" stroke-width="1.2" stroke-dasharray="4 3"/>
+    <rect x="270" y="190" width="420" height="76" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="480" y="212" text-anchor="middle" font-weight="600">scores: q̃_h · c_j + q_rope^h · k_rope,j</text>
+    <text x="480" y="232" text-anchor="middle" fill="#97A59F" font-family="JetBrains Mono, monospace" font-size="11">FA3 HasQv: S = q·kᵀ + qv·vᵀ</text>
+    <text x="480" y="252" text-anchor="middle" font-size="11" fill="#97A59F">q: the 64 rotary dims · qv: the 512 absorbed dims · k = k_rope · v = c</text>
+    <path d="M581 112 L581 188" fill="none" stroke="#4CC5B7" stroke-width="1.2" marker-end="url(#arrA)"/>
+    <path d="M345 166 L345 188" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <path d="M240 228 L268 228" fill="none" stroke="#4CC5B7" stroke-width="1.2" marker-end="url(#arrA)"/>
+    <rect x="726" y="190" width="150" height="76" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="801" y="212" text-anchor="middle" font-weight="600">softmax</text>
+    <text x="801" y="232" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">p_{h,j}</text>
+    <text x="801" y="252" text-anchor="middle" font-size="11" fill="#97A59F">one row per head h</text>
+    <path d="M690 228 L724 228" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <rect x="270" y="316" width="220" height="60" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="380" y="338" text-anchor="middle" fill="#7ADACF" font-weight="600">Σ_j p_{h,j} c_j</text>
+    <text x="380" y="358" text-anchor="middle" font-size="11" fill="#7ADACF">512 dims: attend over c_j directly</text>
+    <rect x="530" y="316" width="200" height="60" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="630" y="338" text-anchor="middle" font-weight="600">W_UV^h</text>
+    <text x="630" y="358" text-anchor="middle" font-size="11" fill="#97A59F">can be folded into W_O</text>
+    <rect x="770" y="316" width="106" height="60" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="823" y="338" text-anchor="middle" font-weight="600">out_h</text>
+    <text x="823" y="358" text-anchor="middle" font-size="11" fill="#97A59F">128 dims</text>
+    <path d="M801 266 L801 292 L380 292 L380 314" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <path d="M490 346 L528 346" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <path d="M730 346 L768 346" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <path d="M132 276 L132 346 L268 346" fill="none" stroke="#4CC5B7" stroke-width="1.2" marker-end="url(#arrA)"/>
+    <text x="140" y="330" font-size="11" fill="#7ADACF">c_j is also the value</text>
+    <text x="24" y="406" font-size="11.5" fill="#97A59F">per cached token: 2·576·128 + 2·512·128 = 278,528 FLOPs over 1,152 bytes = 242 FLOP/B in bf16, against the H100 ridge of 295</text>
+    <text x="24" y="424" fill="#97A59F" font-family="JetBrains Mono, monospace" font-size="11">fa_calculators.mla_decode_intensity()</text>
+  </g>
+</svg>

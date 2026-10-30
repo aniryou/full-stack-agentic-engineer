@@ -391,6 +391,45 @@ find . -maxdepth 5 -name '*.ipynb' ! -path '*/.ipynb_checkpoints/*' | wc -l
   style. Not done, as before: docstrings and code comments, the root documents, and a check against the STE dictionary
   proper. **Baseline unchanged: 385 notebooks.**
 
+- **2026-10-10 — figures: diagrams and images for every primer (PR #51).** The 29 primer-like documents of the eight
+  layers had two hand-drawn SVGs (the identity primer's) and five Mermaid blocks between them; this pass gave them, the
+  root README and the curriculum **162 figures in 31 documents** (108 SVG files, about 0.8 MB in all, and 54 Mermaid blocks):
+  every `PRIMER.md`, the FlashAttention deep dive and primer, the kv-cache, paged-attention, vLLM-internals, transformer,
+  capacity-planning, model-landscape, GPU, GPU-deployment, identity, scaling, vector-database, embeddings and the three
+  durable primers. The brief is `tools/orchestration/FIGURE-STYLE.md`: a figure shows a mechanism the prose explains
+  over several paragraphs, never a table in boxes; Mermaid (`flowchart`, `sequenceDiagram`, `stateDiagram-v2`, no init
+  directive or `classDef`, so GitHub and the site, which loads mermaid@11, theme it) for flows, sequences, state
+  machines and architectures; a hand-written SVG in the house style of the identity primer's two figures (a dark
+  `#161E1C` card, outlined boxes, one teal accent for the subject, a warm box for a cost or hazard, muted labelled
+  edges, no external resource) in `figures/` beside the document for layouts, timelines, memory and bit layouts and
+  charts; every figure is an insertion only (the prose, headings, fences, ASCII sketches, tables, lists, links and
+  mathematics are verbatim, so the pinned-fragment tests and the site navigation are untouched) with an italic caption
+  in STE; a figure states no fact the prose does not, and a number inside one appears verbatim in the document; axis
+  scale marks are the only exception. `tools/orchestration/render_figures.js` renders every Mermaid block and SVG of a
+  document to PNG with headless Chromium (a writer's check that fails on a block that does not parse; CI does not run
+  it; the site generator's `collect_images` already copies `figures/` beside the pages). The root README got a
+  repository map (`site/assets/repo-map.svg`: the eight layers, their one-line jobs and their topic folders, the
+  twelve primer + core + lab topics highlighted) and `CURRICULUM.md` §3.2 the 31 steps of the path as a Mermaid figure
+  grouped into the rounds of the spiral. **Process:** twenty builder agents, one per document group, each reading the
+  whole document and the core it names, drawing, then rendering and looking at every PNG, holding the STE linter's
+  counts to the committed version's (no new finding), `mdlinks.py` and the core's tests; then three Workflow runs of Opus 5.5 agents (layers 00–01, 02–04, 05–07): an adversarial verifier per document with
+  fix authority for local defects and an independent re-check of every edited document. The verifiers checked all
+  163 figures and fixed 143 of them locally (a few mechanisms: the GKD loop's back edge, the trace pipeline's stop
+  rule, an EP all-to-all claimed in every configuration, a Pending pod counted as 0 in both directions; and labels,
+  the owner of a number, (verify) tags, margins, font sizes and captions), found none wrong beyond a local fix, and
+  the re-checks caught and fixed the few regressions the verifiers introduced. One figure was removed (the
+  model-landscape adaptation ladder restated the list above it). Four SVGs of the gpu-scheduling primer had a
+  duplicate attribute, which the renderer's inline mode passed but a browser loading an image rejects, so
+  `tools/ci/tests/test_svg_wellformed.py` now parses every tracked SVG as XML in CI and `render_figures.js` loads an
+  SVG as an `<img>`, as GitHub and the site do. One heading of the vLLM internals primer said four requests where its
+  example has three.
+  The memory primer's `test_primer_shape` band (600 to 900 lines) was widened to 1,100 with a comment, since the
+  figures add 100 lines and the titles and drills it also asserts are the real shape; no other test changed. Not
+  done, by decision: figures in the notebooks (Colab renders neither Mermaid nor relative images), the layer and topic
+  READMEs (navigational), and charts generated from the cores with a check test (the quantitative figures copy the
+  primer's pinned numbers instead, which the tests already hold). The linter's totals are unchanged on every document.
+  **Baseline unchanged: 385 notebooks.**
+
 ## Housekeeping
 - Deduped 2026-09-26: `07-.../long-running-durable/PRIMER.md` is the only copy of the durable-execution primer, and
   `long-running-durable/lra-gcp/docs/primer.md` the only lra primer (the byte-identical twins were removed).

@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="330" viewBox="0 0 960 330" role="img" aria-label="Three cold starts of a 70B bf16 replica on one time scale: with one stream the fetch of the weights is 84% of 1,681 s, with parallel and streamed weights the node provision is the largest of 281 s, and on a warm node the engine init is 93% of 97 s." style="color: #E4EAE7">
+  <title>Three cold starts of a 70B bf16 replica on one time scale: with one stream the fetch of the weights is 84% of 1,681 s, with parallel and streamed weights the node provision is the largest of 281 s, and on a warm node the engine init is 93% of 97 s.</title>
+  <rect x="0" y="0" width="960" height="330" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="32" font-weight="600">Cold start of a 70B replica, bf16 (141 GB), 8 GPUs: the stages to one scale (cold_start())</text>
+    <text x="24" y="52" font-size="11" fill="#97A59F">stage inputs assumed: provision 120 s, image 60 s, engine init 90 s; the largest stage of each row is orange</text>
+    <text x="176" y="97" text-anchor="end" font-size="11.5">new node,</text>
+    <text x="176" y="112" text-anchor="end" font-size="11.5">one stream</text>
+    <rect x="190" y="86" width="204.0" height="30" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="292.0" y="105" text-anchor="middle" font-size="11" fill="#E4EAE7">provision 120 s</text>
+    <rect x="394.0" y="86" width="102.0" height="30" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="445.0" y="105" text-anchor="middle" font-size="11" fill="#E4EAE7">image 60 s</text>
+    <rect x="496.0" y="86" width="114.0" height="30" rx="3" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <rect x="622.0" y="86" width="114.0" height="30" rx="3" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <line x1="611.0" y1="119" x2="619.0" y2="83" stroke="#E39A62" stroke-width="1.2"/>
+    <line x1="614.0" y1="119" x2="622.0" y2="83" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="604.0" y="105" text-anchor="end" font-size="11" fill="#E39A62">fetch weights</text>
+    <text x="628.0" y="105" font-size="11" fill="#E39A62">1,411 s (84%)</text>
+    <line x1="736.0" y1="84" x2="736.0" y2="118" stroke="#E39A62" stroke-width="2"/>
+    <text x="740.0" y="132" font-size="10.5" fill="#E39A62">copy to GPU 0.35 s</text>
+    <rect x="738.0" y="86" width="153.0" height="30" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="814.5" y="105" text-anchor="middle" font-size="11" fill="#E4EAE7">init + warm-up 90 s</text>
+    <text x="903.0" y="105" font-weight="600">1,681 s</text>
+    <text x="176" y="163" text-anchor="end" font-size="11.5">new node, parallel</text>
+    <text x="176" y="178" text-anchor="end" font-size="11.5">+ streamed weights</text>
+    <rect x="190" y="152" width="204.0" height="30" rx="3" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="292.0" y="171" text-anchor="middle" font-size="11" fill="#E39A62">provision 120 s (43%)</text>
+    <rect x="394.0" y="152" width="102.0" height="30" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="445.0" y="171" text-anchor="middle" font-size="11" fill="#E4EAE7">image 60 s</text>
+    <rect x="496.0" y="152" width="19.2" height="30" rx="3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <line x1="505.605" y1="152" x2="505.605" y2="142" stroke="#4CC5B7" stroke-width="1"/>
+    <text x="505.605" y="138" text-anchor="middle" font-size="10.5" fill="#7ADACF">weights, streamed 11.3 s</text>
+    <rect x="515.2" y="152" width="153.0" height="30" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="591.7" y="171" text-anchor="middle" font-size="11" fill="#E4EAE7">init + warm-up 90 s</text>
+    <text x="680.2" y="171" font-weight="600">281 s</text>
+    <text x="176" y="229" text-anchor="end" font-size="11.5">warm node, checkpoint</text>
+    <text x="176" y="244" text-anchor="end" font-size="11.5">in page cache</text>
+    <rect x="190.0" y="218" width="12.1" height="30" rx="3" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <line x1="196.035" y1="218" x2="196.035" y2="208" stroke="#4CC5B7" stroke-width="1"/>
+    <text x="196.035" y="204" text-anchor="middle" font-size="10.5" fill="#7ADACF">weights 7.1 s</text>
+    <rect x="202.1" y="218" width="153.0" height="30" rx="3" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="278.6" y="237" text-anchor="middle" font-size="11" fill="#E39A62">init + warm-up 90 s (93%)</text>
+    <text x="367.1" y="237" font-weight="600">97 s</text>
+    <line x1="190" y1="302" x2="394.0" y2="302" stroke="#97A59F" stroke-width="1"/>
+    <line x1="190" y1="298" x2="190" y2="306" stroke="#97A59F" stroke-width="1"/>
+    <line x1="394.0" y1="298" x2="394.0" y2="306" stroke="#97A59F" stroke-width="1"/>
+    <text x="292.0" y="318" text-anchor="middle" font-size="10.5" fill="#97A59F">120 s</text>
+    <text x="410.0" y="306" font-size="11" fill="#97A59F">to scale, except the first row's fetch segment, which has a break</text>
+  </g>
+</svg>

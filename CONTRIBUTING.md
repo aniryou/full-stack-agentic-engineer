@@ -105,6 +105,14 @@ SPEC below is [`tools/orchestration/SPEC.md`](tools/orchestration/SPEC.md), the 
   `tools/orchestration/ste_lint.py` as the checker (one topic on 2026-10-03, the rest on 2026-10-04). A change
   there keeps that style; the root documents (this file, `README.md`, `CURRICULUM.md`, `COMPUTE.md`, `COLAB.md`)
   keep the rules above.
+- Figures: a mechanism the prose explains over several paragraphs gets a diagram, by
+  [`tools/orchestration/FIGURE-STYLE.md`](tools/orchestration/FIGURE-STYLE.md): a Mermaid block (flows, sequences,
+  state machines, architectures; no init directive or `classDef`, so GitHub and the site theme it) or a hand-written
+  SVG in the house style (a dark card, one teal accent) in `figures/` beside the document (layouts, timelines, memory
+  and bit layouts, charts). A figure is an insertion with an italic caption (in STE in the layers), states no fact the
+  prose does not, and carries a number only verbatim from the document; the ASCII sketches in code fences stay.
+  `node tools/orchestration/render_figures.js md <doc> <outdir>` renders every Mermaid block and SVG to PNG to look at
+  (its header names the prerequisites; CI does not run it).
 
 ### Run tiers
 

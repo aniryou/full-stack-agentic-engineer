@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="430" viewBox="0 0 900 430" role="img" aria-label="On a time axis, one slot of each pool: a replace-after-use slot runs for 2 s and then warms a replacement for 3 s off the request path, a reuse slot runs execution after execution, and cold-on-demand puts the 3 s cold start on the path of every request." style="color: #E4EAE7">
+  <title>On a time axis, one slot of each pool: a replace-after-use slot runs for 2 s and then warms a replacement for 3 s off the request path, a reuse slot runs execution after execution, and cold-on-demand puts the 3 s cold start on the path of every request.</title>
+  <rect x="0" y="0" width="900" height="430" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="30" font-size="11" fill="#97A59F">one slot of each pool, with t_exec = 2 s and t_cold = 3 s</text>
+
+    <!-- lane 1: replace-after-use -->
+    <text x="24" y="80" font-weight="600">replace-after-use</text>
+    <text x="24" y="97" font-size="11" fill="#97A59F">the safe default</text>
+    <path d="M230 42 L230 58" fill="none" stroke="#4CC5B7" stroke-width="1.2" marker-end="url(#arrA)"/>
+    <text x="238" y="50" font-size="11" fill="#7ADACF">a request arrives</text>
+    <rect x="230" y="62" width="200" height="40" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="330" y="87" text-anchor="middle" font-weight="600">run, t_exec = 2 s</text>
+    <rect x="430" y="62" width="300" height="40" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="580" y="79" text-anchor="middle" font-size="11">the replacement warms, t_cold = 3 s</text>
+    <text x="580" y="95" text-anchor="middle" font-size="11" fill="#97A59F">off the request path</text>
+    <text x="738" y="87" font-size="11" fill="#97A59F">warm again at 5 s</text>
+    <path d="M230 110 L230 116 L730 116 L730 110" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <text x="480" y="132" text-anchor="middle" font-size="11" fill="#97A59F">the slot is held 5 s: t_exec + t_cold = 5 sandbox-seconds per execution</text>
+
+    <!-- lane 2: reuse -->
+    <text x="24" y="180" font-weight="600">reuse</text>
+    <text x="24" y="197" font-size="11" fill="#97A59F">one warm sandbox,</text>
+    <text x="24" y="213" font-size="11" fill="#97A59F">many executions</text>
+    <g fill="none" stroke="#4CC5B7" stroke-width="1.2" marker-end="url(#arrA)">
+      <path d="M230 142 L230 158"/>
+      <path d="M430 142 L430 158"/>
+      <path d="M630 142 L630 158"/>
+    </g>
+    <text x="238" y="150" font-size="11" fill="#7ADACF">requests arrive</text>
+    <rect x="230" y="162" width="200" height="40" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="330" y="187" text-anchor="middle" font-weight="600">run, t_exec = 2 s</text>
+    <rect x="430" y="162" width="200" height="40" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="530" y="187" text-anchor="middle" font-weight="600">run</text>
+    <rect x="630" y="162" width="200" height="40" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="730" y="187" text-anchor="middle" font-weight="600">run</text>
+    <path d="M230 210 L230 216 L430 216 L430 210" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <text x="330" y="232" text-anchor="middle" font-size="11" fill="#97A59F">the slot is held t_exec = 2 s per execution</text>
+    <rect x="480" y="212" width="350" height="26" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="655" y="229" text-anchor="middle" font-size="11">state carries between executions (§3)</text>
+
+    <!-- lane 3: cold-on-demand -->
+    <text x="24" y="280" font-weight="600">cold-on-demand</text>
+    <text x="24" y="297" font-size="11" fill="#97A59F">no pool</text>
+    <path d="M230 242 L230 258" fill="none" stroke="#4CC5B7" stroke-width="1.2" marker-end="url(#arrA)"/>
+    <text x="238" y="250" font-size="11" fill="#7ADACF">a request arrives</text>
+    <rect x="230" y="262" width="300" height="40" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="380" y="279" text-anchor="middle" font-size="11" font-weight="600">cold start, t_cold = 3 s</text>
+    <text x="380" y="295" text-anchor="middle" font-size="11" fill="#97A59F">on the request's path</text>
+    <rect x="530" y="262" width="200" height="40" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="630" y="287" text-anchor="middle" font-weight="600">run, t_exec = 2 s</text>
+    <path d="M230 310 L230 316 L530 316 L530 310" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <text x="380" y="332" text-anchor="middle" font-size="11" fill="#97A59F">every request waits at least the 3 s cold start</text>
+
+    <!-- the time axis -->
+    <path d="M230 352 L846 352" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <g stroke="#97A59F" stroke-width="1">
+      <path d="M230 348 L230 356"/>
+      <path d="M330 348 L330 356"/>
+      <path d="M430 348 L430 356"/>
+      <path d="M530 348 L530 356"/>
+      <path d="M630 348 L630 356"/>
+      <path d="M730 348 L730 356"/>
+      <path d="M830 348 L830 356"/>
+    </g>
+    <g font-size="11" fill="#97A59F" text-anchor="middle">
+      <text x="230" y="372">0 s</text>
+      <text x="330" y="372">1 s</text>
+      <text x="430" y="372">2 s</text>
+      <text x="530" y="372">3 s</text>
+      <text x="630" y="372">4 s</text>
+      <text x="730" y="372">5 s</text>
+      <text x="830" y="372">6 s</text>
+    </g>
+    <text x="858" y="356" font-size="11" fill="#97A59F">time</text>
+
+    <!-- the arithmetic that follows -->
+    <text x="450" y="400" text-anchor="middle" font-size="11" fill="#97A59F">Little's law at λ = 5 executions/s: 10 busy + 15 warming = 25 slots occupied on average, the floor.</text>
+    <text x="450" y="416" text-anchor="middle" font-size="11" fill="#97A59F">Erlang C turns a wait target into a slot count: 31 slots for P(wait) ≤ 0.2 (pool.slots_for_wait_target).</text>
+  </g>
+</svg>

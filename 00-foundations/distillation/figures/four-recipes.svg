@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="540" viewBox="0 0 880 540" role="img" aria-label="What flows from the teacher to the student in the four recipes of the core: hard labels, logit KD, SeqKD and on-policy GKD." style="color: #E4EAE7">
+  <title>What flows from the teacher to the student in the four recipes of the core: hard labels, logit KD, SeqKD and on-policy GKD.</title>
+  <rect x="0" y="0" width="880" height="540" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <rect x="20" y="20" width="410" height="240" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="36" y="42" fill="#97A59F" font-size="11.5">A · Hard labels  <tspan font-family="JetBrains Mono, monospace" font-size="11">losses.hard_ce()</tspan></text>
+    <text x="36" y="60" font-size="11" fill="#97A59F">the baseline: a model of the same size, trained</text>
+    <text x="36" y="74" font-size="11" fill="#97A59F">from scratch on the same tokens</text>
+    <rect x="40" y="92" width="110" height="56" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="95" y="114" text-anchor="middle" font-weight="600">Teacher</text>
+    <text x="95" y="134" font-size="11" fill="#97A59F" text-anchor="middle">its distribution p</text>
+    <rect x="300" y="92" width="110" height="56" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="355" y="114" text-anchor="middle" font-weight="600">Student</text>
+    <text x="355" y="134" font-size="11" fill="#7ADACF" text-anchor="middle">q = softmax(v)</text>
+    <path d="M150 120 L298 120" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <text x="225" y="111" font-size="11" fill="#97A59F" text-anchor="middle">one sampled token y</text>
+    <text x="225" y="138" font-size="11" fill="#97A59F" text-anchor="middle">at every position</text>
+    <text x="225" y="220" font-size="11" text-anchor="middle" font-family="JetBrains Mono, monospace">loss: CE(y, q)</text>
+    <text x="225" y="240" font-size="11" fill="#97A59F" text-anchor="middle">toy, 242 examples: rule accuracy 0.678</text>
+    <rect x="450" y="20" width="410" height="240" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="466" y="42" fill="#97A59F" font-size="11.5">B · Logit KD  <tspan font-family="JetBrains Mono, monospace" font-size="11">losses.kd()</tspan></text>
+    <text x="466" y="60" font-size="11" fill="#97A59F">needs logits over the whole vocabulary:</text>
+    <text x="466" y="74" font-size="11" fill="#97A59F">the teacher's weights, the same tokenizer</text>
+    <rect x="470" y="92" width="110" height="56" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="525" y="114" text-anchor="middle" font-weight="600">Teacher</text>
+    <text x="525" y="134" font-size="11" fill="#97A59F" text-anchor="middle">logits z</text>
+    <rect x="730" y="92" width="110" height="56" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="785" y="114" text-anchor="middle" font-weight="600">Student</text>
+    <text x="785" y="134" font-size="11" fill="#7ADACF" text-anchor="middle">q_T = softmax(v/T)</text>
+    <path d="M580 120 L728 120" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <text x="655" y="111" font-size="11" fill="#97A59F" text-anchor="middle">soft targets p_T</text>
+    <text x="655" y="138" font-size="11" fill="#97A59F" text-anchor="middle">at every position</text>
+    <text x="655" y="220" font-size="11" text-anchor="middle" font-family="JetBrains Mono, monospace">loss: α·T²·KL(p_T ‖ q_T) + (1 − α)·CE</text>
+    <text x="655" y="240" font-size="11" fill="#97A59F" text-anchor="middle">toy, 242 examples: rule accuracy 0.876</text>
+    <rect x="20" y="280" width="410" height="240" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="36" y="302" fill="#97A59F" font-size="11.5">C · SeqKD  <tspan font-family="JetBrains Mono, monospace" font-size="11">seqkd.pipeline(), seqkd.sft()</tspan></text>
+    <text x="36" y="320" font-size="11" fill="#97A59F">needs samples only:</text>
+    <text x="36" y="334" font-size="11" fill="#97A59F">any API or server</text>
+    <rect x="40" y="352" width="110" height="56" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="95" y="374" text-anchor="middle" font-weight="600">Teacher</text>
+    <text x="95" y="394" font-size="11" fill="#97A59F" text-anchor="middle">writes the text</text>
+    <rect x="300" y="352" width="110" height="56" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="355" y="374" text-anchor="middle" font-weight="600">Student</text>
+    <text x="355" y="394" font-size="11" fill="#7ADACF" text-anchor="middle">SFT on that text</text>
+    <path d="M150 380 L298 380" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <text x="225" y="371" font-size="11" fill="#97A59F" text-anchor="middle">n samples per prompt</text>
+    <text x="225" y="398" font-size="11" fill="#97A59F" text-anchor="middle">verifier · dedupe · SFT</text>
+    <rect x="50" y="426" width="350" height="32" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="225" y="446" font-size="11.5" text-anchor="middle" font-weight="600">the bill: every generated token, kept or discarded</text>
+    <text x="225" y="480" font-size="11" text-anchor="middle" font-family="JetBrains Mono, monospace">loss: CE on the teacher's tokens</text>
+    <text x="225" y="500" font-size="11" fill="#97A59F" text-anchor="middle">toy at T = 1: 1,920 teacher tokens paid, 132 used</text>
+    <rect x="450" y="280" width="410" height="240" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="466" y="302" fill="#97A59F" font-size="11.5">D · On-policy GKD  <tspan font-family="JetBrains Mono, monospace" font-size="11">onpolicy.gkd_train()</tspan></text>
+    <text x="466" y="320" font-size="11" fill="#97A59F">needs the teacher's distribution on the student's</text>
+    <text x="466" y="334" font-size="11" fill="#97A59F">text: its weights, the same tokenizer</text>
+    <rect x="470" y="352" width="110" height="56" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="525" y="374" text-anchor="middle" font-weight="600">Teacher</text>
+    <text x="525" y="394" font-size="11" fill="#97A59F" text-anchor="middle">scores the text</text>
+    <rect x="730" y="352" width="110" height="56" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="785" y="374" text-anchor="middle" font-weight="600">Student</text>
+    <text x="785" y="394" font-size="11" fill="#7ADACF" text-anchor="middle">samples its text</text>
+    <path d="M730 370 L582 370" fill="none" stroke="#4CC5B7" stroke-width="1.2" marker-end="url(#arrA)"/>
+    <text x="655" y="361" font-size="11" fill="#7ADACF" text-anchor="middle">its own samples</text>
+    <path d="M580 392 L728 392" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <text x="655" y="410" font-size="11" fill="#97A59F" text-anchor="middle">scores every position</text>
+    <rect x="480" y="426" width="350" height="32" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="655" y="446" font-size="11.5" text-anchor="middle" font-weight="600">the cost: one forward pass of the teacher per token</text>
+    <text x="655" y="480" font-size="11" text-anchor="middle" font-family="JetBrains Mono, monospace">loss: JSD(β) at every position</text>
+    <text x="655" y="500" font-size="11" fill="#97A59F" text-anchor="middle">β = 0 forward KL, β = 1 reverse KL · as RL: r_t = log π_T − log π_S</text>
+  </g>
+</svg>

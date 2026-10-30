@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="324" viewBox="0 0 880 324" role="img" aria-label="On one 80 GB GPU, a 70B model at FP8 takes 70 GB of weights and leaves 10 GB, minus overhead, of KV cache for approximately 20 to 25 concurrent 1K-token requests; the KV cache is the variable cost that grows with the sequence length and the concurrency." style="color: #E4EAE7">
+  <title>On one 80 GB GPU, a 70B model at FP8 takes 70 GB of weights and leaves 10 GB, minus overhead, of KV cache for approximately 20 to 25 concurrent 1K-token requests; the KV cache is the variable cost that grows with the sequence length and the concurrency.</title>
+  <rect x="0" y="0" width="880" height="324" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="26" fill="#97A59F">A 70B model at FP8 on one 80 GB GPU (§3.4). The bar is 80 GB, to scale.</text>
+
+    <!-- the 80 GB bar, 10 px per GB -->
+    <text x="790" y="52" text-anchor="middle" font-size="10.5" fill="#97A59F">10 GB left, minus overhead</text>
+    <path d="M790 56 L790 68" stroke="#97A59F" stroke-width="1" fill="none"/>
+    <rect x="40" y="70" width="700" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="390" y="89" text-anchor="middle" font-weight="600">weights 70 GB</text>
+    <text x="390" y="105" text-anchor="middle" font-size="10.5" fill="#97A59F">a fixed cost that you pay one time</text>
+    <rect x="740" y="70" width="100" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="790" y="89" text-anchor="middle" font-weight="600" font-size="11.5">KV cache</text>
+    <text x="790" y="105" text-anchor="middle" font-size="10.5" fill="#7ADACF">and overhead</text>
+    <path d="M790 116 L790 146" stroke="#97A59F" stroke-width="1" fill="none"/>
+    <text x="40" y="128" font-size="10.5" fill="#97A59F">0 GB</text>
+    <text x="736" y="128" text-anchor="end" font-size="10.5" fill="#97A59F">70 GB</text>
+    <text x="840" y="128" text-anchor="end" font-size="10.5" fill="#97A59F">80 GB</text>
+    <text x="840" y="160" text-anchor="end" font-size="10.5" fill="#7ADACF">approximately 20–25 concurrent 1K-token requests</text>
+
+    <!-- the variable cost -->
+    <text x="40" y="190" font-size="11" fill="#97A59F">the KV cache is the variable cost: it grows with the sequence length and with the number of concurrent requests</text>
+    <rect x="40" y="202" width="220" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="150" y="220" text-anchor="middle" font-weight="600" font-size="11.5">one token: 320 KB</text>
+    <text x="150" y="236" text-anchor="middle" font-size="10.5" fill="#97A59F">a 70B-class model at FP16</text>
+    <path d="M260 224 L298 224" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+    <rect x="300" y="202" width="240" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="420" y="220" text-anchor="middle" font-weight="600" font-size="11.5">a 4,000-token prompt: 1.3 GB</text>
+    <text x="420" y="236" text-anchor="middle" font-size="10.5" fill="#7ADACF">for a single request</text>
+    <path d="M540 224 L578 224" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+    <rect x="580" y="202" width="260" height="44" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="710" y="220" text-anchor="middle" font-weight="600" font-size="11.5">× your concurrency target</text>
+    <text x="710" y="236" text-anchor="middle" font-size="10.5" fill="#97A59F">the cause of most out-of-memory failures</text>
+
+    <!-- headroom -->
+    <rect x="40" y="268" width="800" height="36" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="440" y="290" text-anchor="middle" font-size="11.5">Keep 10–20% headroom (§3.3). A deployment that you plan to 98% memory utilisation will fail.</text>
+  </g>
+</svg>

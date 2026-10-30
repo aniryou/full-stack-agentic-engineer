@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="582" viewBox="0 0 960 582" role="img" aria-label="The repository map: eight layers from the agent at the top to the GPUs at the bottom, with the foundations beneath, and the topic folders of each layer; the twelve primer + core + lab topics are highlighted." style="color: #E4EAE7">
+  <title>The repository map: eight layers from the agent at the top to the GPUs at the bottom, with the foundations beneath, and the topic folders of each layer; the twelve primer + core + lab topics are highlighted.</title>
+  <rect x="0" y="0" width="960" height="582" rx="8" fill="#161E1C"/>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="26" font-size="11.5" fill="#97A59F">read bottom-up: each layer is built on the one below it</text>
+    <text x="24" y="60" font-family="JetBrains Mono, monospace" font-size="12.5" fill="#7ADACF">07</text>
+    <text x="54" y="60" font-weight="600">Agents and applications</text>
+    <text x="237" y="60" font-size="11.5" fill="#97A59F">build the agent: loop, tools, sandboxes, state, memory, durability, evals, RAG</text>
+    <rect x="54" y="68" width="128" height="20" rx="10" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <text x="118" y="82" text-anchor="middle" font-size="11">agent-fundamentals</text>
+    <rect x="190" y="68" width="141" height="20" rx="10" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <text x="260" y="82" text-anchor="middle" font-size="11">long-running-durable</text>
+    <rect x="339" y="68" width="97" height="20" rx="10" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <text x="388" y="82" text-anchor="middle" font-size="11">retrieval-rag</text>
+    <rect x="444" y="68" width="134" height="20" rx="10" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="511" y="82" text-anchor="middle" font-size="11" fill="#7ADACF">sandboxed-execution</text>
+    <rect x="586" y="68" width="91" height="20" rx="10" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="632" y="82" text-anchor="middle" font-size="11" fill="#7ADACF">agent-memory</text>
+    <text x="24" y="116" font-family="JetBrains Mono, monospace" font-size="12.5" fill="#7ADACF">06</text>
+    <text x="54" y="116" font-weight="600">Gateway</text>
+    <text x="121" y="116" font-size="11.5" fill="#97A59F">decide who may run what: identity, policy, model routing, rate limits, admission, cost</text>
+    <rect x="54" y="124" width="122" height="20" rx="10" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <text x="115" y="138" text-anchor="middle" font-size="11">identity-security</text>
+    <rect x="184" y="124" width="153" height="20" rx="10" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <text x="260" y="138" text-anchor="middle" font-size="11">scaling-admission-cost</text>
+    <rect x="345" y="124" width="85" height="20" rx="10" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="388" y="138" text-anchor="middle" font-size="11" fill="#7ADACF">llm-gateway</text>
+    <text x="24" y="172" font-family="JetBrains Mono, monospace" font-size="12.5" fill="#7ADACF">05</text>
+    <text x="54" y="172" font-weight="600">Orchestrator</text>
+    <text x="157" y="172" font-size="11.5" fill="#97A59F">run many engine replicas as one service: routing, autoscaling, P/D split</text>
+    <rect x="54" y="180" width="147" height="20" rx="10" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="128" y="194" text-anchor="middle" font-size="11" fill="#7ADACF">serving-orchestration</text>
+    <text x="24" y="228" font-family="JetBrains Mono, monospace" font-size="12.5" fill="#7ADACF">04</text>
+    <text x="54" y="228" font-weight="600">Inference engine</text>
+    <text x="186" y="228" font-size="11.5" fill="#97A59F">run one model fast: attention kernels, the KV cache, batching, quantization</text>
+    <rect x="54" y="236" width="67" height="20" rx="10" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <text x="88" y="250" text-anchor="middle" font-size="11">kv-cache</text>
+    <rect x="129" y="236" width="110" height="20" rx="10" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <text x="184" y="250" text-anchor="middle" font-size="11">paged-attention</text>
+    <rect x="247" y="236" width="110" height="20" rx="10" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <text x="302" y="250" text-anchor="middle" font-size="11">flash-attention</text>
+    <rect x="365" y="236" width="85" height="20" rx="10" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <text x="408" y="250" text-anchor="middle" font-size="11">kernel-core</text>
+    <rect x="458" y="236" width="104" height="20" rx="10" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="510" y="250" text-anchor="middle" font-size="11" fill="#7ADACF">serving-engine</text>
+    <rect x="570" y="236" width="91" height="20" rx="10" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="616" y="250" text-anchor="middle" font-size="11" fill="#7ADACF">quantization</text>
+    <rect x="669" y="236" width="104" height="20" rx="10" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <text x="721" y="250" text-anchor="middle" font-size="11">vllm-internals</text>
+    <text x="24" y="284" font-family="JetBrains Mono, monospace" font-size="12.5" fill="#7ADACF">03</text>
+    <text x="54" y="284" font-weight="600">Kubernetes and GPU scheduling</text>
+    <text x="281" y="284" font-size="11.5" fill="#97A59F">make GPUs schedulable: device plugin, scheduler, gangs, quotas, capacity</text>
+    <rect x="54" y="292" width="104" height="20" rx="10" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="106" y="306" text-anchor="middle" font-size="11" fill="#7ADACF">gpu-scheduling</text>
+    <text x="24" y="340" font-family="JetBrains Mono, monospace" font-size="12.5" fill="#7ADACF">02</text>
+    <text x="54" y="340" font-weight="600">CUDA, NCCL and runtime</text>
+    <text x="230" y="340" font-size="11.5" fill="#97A59F">get from a container to a GPU: driver, CUDA, NCCL, container runtime</text>
+    <rect x="54" y="348" width="97" height="20" rx="10" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="102" y="362" text-anchor="middle" font-size="11" fill="#7ADACF">cuda-and-nccl</text>
+    <text x="24" y="396" font-family="JetBrains Mono, monospace" font-size="12.5" fill="#7ADACF">01</text>
+    <text x="54" y="396" font-weight="600">Hardware and fabric</text>
+    <text x="208" y="396" font-size="11.5" fill="#97A59F">read the machine: spec sheets, the roofline, fabrics, cost of a token</text>
+    <rect x="54" y="404" width="79" height="20" rx="10" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <text x="94" y="418" text-anchor="middle" font-size="11">gpu-primer</text>
+    <rect x="141" y="404" width="104" height="20" rx="10" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <text x="193" y="418" text-anchor="middle" font-size="11">gpu-deployment</text>
+    <rect x="253" y="404" width="134" height="20" rx="10" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="320" y="418" text-anchor="middle" font-size="11" fill="#7ADACF">roofline-and-fabric</text>
+    <line x1="24" y1="440" x2="936" y2="440" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="936" y="454" text-anchor="end" font-size="11" fill="#97A59F">beneath the stack</text>
+    <text x="24" y="472" font-family="JetBrains Mono, monospace" font-size="12.5" fill="#7ADACF">00</text>
+    <text x="54" y="472" font-weight="600">Foundations</text>
+    <text x="150" y="472" font-size="11.5" fill="#97A59F">the model itself: transformers, capacity, MoE, RL and thinking, distillation</text>
+    <rect x="54" y="480" width="91" height="20" rx="10" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <text x="100" y="494" text-anchor="middle" font-size="11">transformers</text>
+    <rect x="153" y="480" width="147" height="20" rx="10" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <text x="226" y="494" text-anchor="middle" font-size="11">gpu-capacity-planning</text>
+    <rect x="308" y="480" width="110" height="20" rx="10" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <text x="363" y="494" text-anchor="middle" font-size="11">model-landscape</text>
+    <rect x="426" y="480" width="128" height="20" rx="10" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="490" y="494" text-anchor="middle" font-size="11" fill="#7ADACF">mixture-of-experts</text>
+    <rect x="562" y="480" width="153" height="20" rx="10" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="638" y="494" text-anchor="middle" font-size="11" fill="#7ADACF">rl-and-thinking-models</text>
+    <rect x="723" y="480" width="91" height="20" rx="10" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="768" y="494" text-anchor="middle" font-size="11" fill="#7ADACF">distillation</text>
+    <path d="M14 48 L10 48 L10 426 L14 426" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <rect x="54" y="518" width="134" height="20" rx="10" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="121" y="532" text-anchor="middle" font-size="11" fill="#7ADACF">primer + core + lab</text>
+    <text x="198" y="532" font-size="11" fill="#97A59F">twelve topics in this shape: a primer, a from-scratch core, a fuller lab</text>
+    <rect x="54" y="546" width="48" height="20" rx="10" fill="none" stroke="#97A59F" stroke-width="1"/>
+    <text x="78" y="560" text-anchor="middle" font-size="11">topic</text>
+    <text x="112" y="560" font-size="11" fill="#97A59F">the other topics: a primer with exercises, practice notebooks, or a lab of its own</text>
+  </g>
+</svg>

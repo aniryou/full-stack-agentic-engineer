@@ -35,6 +35,10 @@ It also has one **identity plane** (Agent Identity + Auth Manager + token exchan
 
 Classical IAM has two kinds of principals. The first kind is **humans** (interactive, able to give consent, slow, MFA-protected). The second kind is **workloads** (non-interactive, deterministic, a code path that does not change, one service account per deployment). Agents are in neither group. If you force agents into one of the two groups, the design fails in ways that you can predict.
 
+![Three parties share one tool call: the user asks, the model selects the tool and its arguments from a context window that holds instructions and untrusted data in one channel, and the agent runtime makes the call with a credential, under its own authority or on behalf of the user.](agent-three-parties.svg)
+
+*Three parties share one tool call. The user asks. The model selects the tool and the arguments from a context window that mixes instructions and untrusted data. The agent runtime makes the call with a credential, under its own authority or on behalf of the user (§0, §3.2).*
+
 | Assumption in classical IAM | What agents do instead | Consequence |
 |---|---|---|
 | The code of a workload sets its behavior | At runtime, the model selects the tools to call and their arguments. Untrusted input has an effect on this selection. | You cannot list what the workload "needs". You must bound what it *can* do, and put a gate on what it *does*. |
@@ -84,6 +88,23 @@ Two habits make a threat model credible when you draw it on a whiteboard:
     Each flow across a boundary gets an identity, a policy and a log.
 
 - **Ask "what if the model is fully adversarial?"** for each tool. If the answer is "it can do X, and nothing outside the model stops it", X is your risk. Then add the deterministic control.
+
+```mermaid
+flowchart TB
+    U(["User"]) -- "ASI09: a confident,<br/>incorrect summary<br/>wins an approval" --> FE["Front-end"]
+    FE -- "identity and consent" --> AG["Agent runtime<br/>ASI03: a shared account,<br/>a replayed user token<br/>ASI10: an agent outside<br/>policy, an orphaned<br/>deployment"]
+    AG --> M["Model endpoint<br/>ASI01: injected<br/>instructions change<br/>the objective"]
+    AG --> T["MCP servers and tools<br/>ASI02: malicious<br/>arguments<br/>ASI04: a malicious<br/>server, a poisoned<br/>tool description"]
+    AG --> P["Peer agents<br/>ASI07: no auth between<br/>agents, a forwarded<br/>token<br/>ASI08: a chain of calls"]
+    AG --> MEM[("Memory and session store<br/>ASI06: injected content<br/>stays and comes back")]
+    AG --> NET["The open internet<br/>ASI01: a web page,<br/>an email, and the way<br/>out for exfiltration"]
+    AG --> SB[["Code execution<br/>ASI05: the model's<br/>code runs with the<br/>agent's credentials"]]
+    M ~~~ MEM
+    T ~~~ NET
+    P ~~~ SB
+```
+
+*The arrows are the flows that cross a trust boundary, with the OWASP risks of §2 that appear on them. Each flow gets an identity, a policy and a log. ASI03 and ASI10 are risks of the agent itself.*
 
 **In one sentence:** "I use the agentic top ten of OWASP as the checklist. But the design question is always the same. Assume that an attacker hijacked the model. What is the worst thing that it can do with the credentials and tools that it holds? Which control outside the model stops it?"
 
@@ -176,6 +197,24 @@ Design authorization as layers. Each layer fails closed, independently of the ot
 
 As the agent developer, you control the runtime layer most. The resource and network layers are the layers that still hold if your code is incorrect.
 
+```mermaid
+flowchart TB
+    MA["the model call:<br/>Model Armor floor settings<br/>screen the prompt before<br/>it, the response after it"] -- "a tool call" --> EV
+    EV["before_tool_callback<br/>(SecurityPlugin) calls<br/>PolicyEngine.evaluate():<br/>agent, user, authority<br/>mode, tool, arguments,<br/>scopes, counters"] --> D{"decision"}
+    D -- "deny: the callback returns<br/>a result and the runtime<br/>skips the tool" --> DENY["DENY: an unknown tool,<br/>an agent not on the<br/>allowlist, the wrong<br/>authority, a missing scope,<br/>an argument outside its<br/>constraint, a blocked<br/>host, a budget"]
+    D -- "DESTRUCTIVE or<br/>EXTERNAL, outside the<br/>pre-approved envelope" --> CONF["CONFIRM:<br/>adk_request_confirmation<br/>shows the tool and<br/>the exact arguments"]
+    CONF -- "ToolConfirmation(confirmed=True),<br/>logged with the approver" --> ALLOW
+    D -- "READ by default,<br/>WRITE on the allowlist,<br/>or inside the envelope" --> ALLOW["ALLOW"]
+    ALLOW --> BR["the broker (Auth Manager<br/>or the STS): a credential<br/>for this tool only, with<br/>the audience, a minimal<br/>scope, a short TTL and,<br/>when delegated, the user<br/>as subject"]
+    BR --> NR
+    subgraph NR ["the network and resource layers"]
+        direction LR
+        GW["Agent Gateway and<br/>VPC-SC: IAP per<br/>SPIFFE ID, conditions<br/>on mcp.toolName and<br/>mcp.tool.isReadOnly"] --> RS["the resource server<br/>validates the audience,<br/>the scope, the expiry and<br/>the binding. IAM on the<br/>resource decides last."]
+    end
+```
+
+*One tool call goes through the four policy enforcement points of §4.1. Model Armor screens the model call. The runtime layer decides on the tool call: `PolicyEngine.evaluate()` denies by default, asks for a confirmation, or permits. Then the broker narrows the credential to the call, the gateway and the perimeter check the destination, and IAM on the resource decides last.*
+
 ### 4.2 Tool tiers and deny-by-default
 
 Classify every tool one time, in policy, not in prose:
@@ -243,6 +282,22 @@ Everything that enters the context window from outside the developer's own instr
 - **Tag provenance.** Wrap tool results before they reach the model, with the source, the trust level and a timestamp. Keep the tag in the audit record. Then you can trace a later bad decision to the content that caused it.
 - **Sanitize tool output.** Remove control characters and known instruction patterns from untrusted sources. Never let the model interpret a tool result as a new system instruction.
 - **Validate arguments structurally.** Use tool input schemas with tight types and enums. Refuse free-form URLs/SQL where a constrained form is sufficient. Enforce an **egress allowlist** for any tool that takes a URL, because SSRF and exfiltration are the same bug in an agent.
+
+```mermaid
+flowchart TB
+    UP(["the user's prompt"]) --> SP["screen_prompt():<br/>Model Armor or an<br/>equivalent, for injection,<br/>jailbreak, sensitive data,<br/>malicious URIs"]
+    SP -- "only a prompt that<br/>is not blocked" --> MODEL["the model: instructions<br/>and data in one<br/>context window"]
+    MODEL --> SR["screen_response(): data<br/>leakage, malicious URIs"]
+    SR --> OUT(["the answer to the user"])
+    MODEL -- "a tool call" --> ARGS["tool input schemas with<br/>tight types and enums,<br/>EgressPolicy.check(url)<br/>for any tool that<br/>takes a URL"]
+    ARGS --> TOOL["the tool"]
+    TOOL -- "returns" --> EXT["untrusted content: web<br/>pages, documents,<br/>tickets, emails, messages<br/>from other agents"]
+    EXT -- "a tool result" --> SAN["sanitize_tool_output()<br/>removes control<br/>characters and<br/>instruction patterns"]
+    SAN --> WRAP["wrap_untrusted(): a<br/>Provenance tag with the<br/>source and the trust level,<br/>kept in the audit record"]
+    WRAP -- "data, never instructions" --> MODEL
+```
+
+*Untrusted text enters through the user's prompt and through each tool result, and each path has a check. Model Armor screens the prompt on the way in and the response on the way out. The plugin sanitizes each tool result and tags it with its provenance before the model reads it. Schemas and the egress allowlist constrain the arguments of each tool call.*
 
 ### 6.2 Code execution and sandboxes
 

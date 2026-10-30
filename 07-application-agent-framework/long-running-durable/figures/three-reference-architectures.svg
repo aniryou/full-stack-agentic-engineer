@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="512" viewBox="0 0 1000 512" role="img" aria-label="The three reference architectures as three panels, each read from the top: what wakes the run, who owns the orchestration, where the steps run, where the state lives and the main cost; A is a durable loop on Cloud Run, B is Cloud Workflows as the orchestrator, C is ADK 2 on Cloud Run with Cloud SQL sessions." style="color: #E4EAE7">
+  <title>The three reference architectures as three panels, each read from the top: what wakes the run, who owns the orchestration, where the steps run, where the state lives and the main cost; A is a durable loop on Cloud Run, B is Cloud Workflows as the orchestrator, C is ADK 2 on Cloud Run with Cloud SQL sessions.</title>
+  <rect x="0" y="0" width="1000" height="512" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <!-- panel A -->
+    <rect x="24" y="24" width="312" height="454" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="180" y="42" text-anchor="middle" font-size="11.5" font-weight="600" fill="#97A59F">A · a durable loop on Cloud Run</text>
+    <rect x="36" y="52" width="288" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="180" y="69" text-anchor="middle" font-weight="600">what wakes the run</text>
+    <g font-size="11" fill="#97A59F" text-anchor="middle">
+      <text x="180" y="84">Cloud Tasks: named tasks, OIDC</text>
+      <text x="180" y="98">Scheduler, Pub/Sub: /internal/scheduler/tick</text>
+      <text x="180" y="112">webhooks: /internal/callbacks</text>
+    </g>
+    <rect x="36" y="138" width="288" height="70" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="180" y="155" text-anchor="middle" font-weight="600">your durable loop (P1)</text>
+    <g font-size="11" fill="#7ADACF" text-anchor="middle">
+      <text x="180" y="170">Cloud Run (FastAPI) and Gemini</text>
+      <text x="180" y="184">one small stateless request for each step</text>
+      <text x="180" y="198">full control, the lowest cost at scale</text>
+    </g>
+    <rect x="36" y="224" width="288" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="180" y="241" text-anchor="middle" font-weight="600">where the steps run</text>
+    <g font-size="11" fill="#97A59F" text-anchor="middle">
+      <text x="180" y="256">the same Cloud Run service: HTTP handlers</text>
+      <text x="180" y="270">for steps, approvals, callbacks, the tick</text>
+      <text x="180" y="284">the tick: expiries, the heartbeat agents</text>
+    </g>
+    <rect x="36" y="310" width="288" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="180" y="327" text-anchor="middle" font-weight="600">where the state lives</text>
+    <g font-size="11" fill="#97A59F" text-anchor="middle">
+      <text x="180" y="342">Firestore: runs, keys</text>
+      <text x="180" y="356">the journal, the state, the lease, the version</text>
+      <text x="180" y="370">the journal is the audit trail (§9)</text>
+    </g>
+    <rect x="36" y="396" width="288" height="70" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="180" y="419" text-anchor="middle" font-weight="600">the main cost</text>
+    <g font-size="11" text-anchor="middle">
+      <text x="180" y="435">you own the orchestration bugs</text>
+      <text x="180" y="450">three services to make secure</text>
+    </g>
+
+    <!-- panel B -->
+    <rect x="344" y="24" width="312" height="454" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="500" y="42" text-anchor="middle" font-size="11.5" font-weight="600" fill="#97A59F">B · Cloud Workflows as the orchestrator</text>
+    <rect x="356" y="52" width="288" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="500" y="69" text-anchor="middle" font-weight="600">what wakes the run</text>
+    <g font-size="11" fill="#97A59F" text-anchor="middle">
+      <text x="500" y="84">await_callback for people</text>
+      <text x="500" y="98">sys.sleep for polls</text>
+      <text x="500" y="112">retry blocks, all in the YAML</text>
+    </g>
+    <rect x="356" y="138" width="288" height="70" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="500" y="155" text-anchor="middle" font-weight="600">the Workflows execution</text>
+    <g font-size="11" fill="#7ADACF" text-anchor="middle">
+      <text x="500" y="170">the YAML holds the graph</text>
+      <text x="500" y="184">durability, waits and retries: declarative</text>
+      <text x="500" y="198">an execution can wait up to a year</text>
+    </g>
+    <rect x="356" y="224" width="288" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="500" y="241" text-anchor="middle" font-weight="600">where the steps run</text>
+    <g font-size="11" fill="#97A59F" text-anchor="middle">
+      <text x="500" y="256">Cloud Run endpoints:</text>
+      <text x="500" y="270">/worker, /aggregate, /notify, /approve</text>
+      <text x="500" y="284">Cloud Run does the LLM steps (§5.1)</text>
+    </g>
+    <rect x="356" y="310" width="288" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="500" y="327" text-anchor="middle" font-weight="600">where the state lives</text>
+    <g font-size="11" fill="#97A59F" text-anchor="middle">
+      <text x="500" y="342">the execution, with shared variables</text>
+      <text x="500" y="356">across parallel branches (§5)</text>
+      <text x="500" y="370">the execution history is the audit log</text>
+    </g>
+    <rect x="356" y="396" width="288" height="70" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="500" y="413" text-anchor="middle" font-weight="600">the main cost</text>
+    <g font-size="11" text-anchor="middle">
+      <text x="500" y="428">static YAML: a dynamic control flow</text>
+      <text x="500" y="442">that the model selects is not easy</text>
+      <text x="500" y="456">per-step pricing: tight loops are high-cost</text>
+    </g>
+
+    <!-- panel C -->
+    <rect x="664" y="24" width="312" height="454" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="820" y="42" text-anchor="middle" font-size="11.5" font-weight="600" fill="#97A59F">C · ADK 2 on Cloud Run, Cloud SQL sessions</text>
+    <rect x="676" y="52" width="288" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="820" y="69" text-anchor="middle" font-weight="600">what wakes the run</text>
+    <g font-size="11" fill="#97A59F" text-anchor="middle">
+      <text x="820" y="84">Cloud Scheduler, Pub/Sub: /wake</text>
+      <text x="820" y="98">/wake resumes the session</text>
+      <text x="820" y="112">that already exists</text>
+    </g>
+    <rect x="676" y="138" width="288" height="70" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="820" y="155" text-anchor="middle" font-weight="600">the ADK 2 Workflow</text>
+    <g font-size="11" fill="#7ADACF" text-anchor="middle">
+      <text x="820" y="170">get_fast_api_app(...) in one container</text>
+      <text x="820" y="184">RequestInput interrupts, resume and</text>
+      <text x="820" y="198">compaction are native to the framework</text>
+    </g>
+    <rect x="676" y="224" width="288" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="820" y="241" text-anchor="middle" font-weight="600">where the steps run</text>
+    <g font-size="11" fill="#97A59F" text-anchor="middle">
+      <text x="820" y="256">the nodes of the Workflow graph</text>
+      <text x="820" y="270">the same agent code, byte for byte,</text>
+      <text x="820" y="284">on a laptop (adk web, SQLite) and Cloud Run</text>
+    </g>
+    <rect x="676" y="310" width="288" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="820" y="327" text-anchor="middle" font-weight="600">where the state lives</text>
+    <g font-size="11" fill="#97A59F" text-anchor="middle">
+      <text x="820" y="342">Cloud SQL sessions:</text>
+      <text x="820" y="356">session_service_uri=postgresql+asyncpg://…</text>
+      <text x="820" y="370">artifacts: artifact_service_uri=gs://…</text>
+    </g>
+    <rect x="676" y="396" width="288" height="70" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="820" y="419" text-anchor="middle" font-weight="600">the main cost</text>
+    <g font-size="11" text-anchor="middle">
+      <text x="820" y="435">resume is best-effort and at-least-once:</text>
+      <text x="820" y="450">the tools must be idempotent</text>
+    </g>
+
+    <!-- the arrows between the stages -->
+    <g stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)">
+      <path d="M180 122 L180 136"/>
+      <path d="M180 208 L180 222"/>
+      <path d="M180 294 L180 308"/>
+      <path d="M500 122 L500 136"/>
+      <path d="M500 208 L500 222"/>
+      <path d="M500 294 L500 308"/>
+      <path d="M820 122 L820 136"/>
+      <path d="M820 208 L820 222"/>
+      <path d="M820 294 L820 308"/>
+    </g>
+
+    <text x="500" y="498" text-anchor="middle" font-size="11" fill="#97A59F">D · the same ADK agent on Agent Runtime: replace the runner, keep the agent, send the wake-ups from outside (lra-gcp/examples/adk_agent_engine/)</text>
+  </g>
+</svg>
