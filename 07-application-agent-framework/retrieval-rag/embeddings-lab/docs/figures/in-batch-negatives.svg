@@ -90,6 +90,6 @@
     <rect x="412" y="332" width="464" height="64" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
     <text x="428" y="352" font-weight="600">directions</text>
     <text x="428" y="368" font-size="11" fill="#97A59F">retrieval: one direction, with a query-side prefix. STS and duplicates:</text>
-    <text x="428" y="384" font-size="11" fill="#97A59F">both directions. The lab's info_nce(Za, Zb, tau) uses both (rows and columns).</text>
+    <text x="428" y="384" font-size="11" fill="#97A59F">both directions.</text>
   </g>
 </svg>

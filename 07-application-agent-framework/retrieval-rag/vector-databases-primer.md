@@ -209,32 +209,6 @@ There are two lessons. First, dimensionality and precision dominate the bill. Se
 
 An ANN library (Faiss, hnswlib, USearch) gives you an in-memory index and a search call. A vector *database* must handle everything that occurs after the demo.
 
-```mermaid
-flowchart LR
-  U([upsert or delete]) --> L[("write-ahead log<br/>+ snapshots")]
-  L --> G["growing<br/>segment"]
-  G -->|seal| S["immutable indexed<br/>segments"]
-  L -->|delete| D["tombstone"]
-  D -.-> S
-  S -->|"merge in the<br/>background"| C["compaction<br/>and vacuum"]
-```
-
-*This figure shows the write path of a vector database (§8). A write goes through the log into a small mutable segment, which the engine seals and later merges. A delete leaves a tombstone, which the engine filters out at query time.*
-
-```mermaid
-flowchart LR
-  Q(["query vector<br/>+ filter"]) --> E{"estimated filter<br/>selectivity?"}
-  E -->|"small subset"| B["brute force over<br/>the permitted ids"]
-  E -->|"large subset"| T["in-traversal filtered<br/>graph search"]
-  E -->|"aligned with a<br/>partition key"| P["partition-scoped<br/>search"]
-  B --> F["fan out across<br/>the segments,<br/>merge the top-k"]
-  T --> F
-  P --> F
-  F --> O(["results<br/>+ payload"])
-```
-
-*This figure shows the read path of a vector database (§9). For each query, the engine selects a filter strategy from the estimated filter selectivity. Then it fans out across the segments, merges the per-segment top-k and drops the tombstones.*
-
 ### 8. What the database layer adds
 
 **Mutability.** An insert into HNSW is natural, because the build makes the graph with inserts. **A delete is not:** when you remove a node, graph paths break. Thus engines mark deletions with tombstones, filter them out at query time, and periodically rebuild or compact the index. A collection carrying 30% tombstones has worse recall and latency than its size suggests. Monitor the ratio and vacuum the collection.
@@ -244,6 +218,18 @@ An update is a delete plus an insert. IVF lists tolerate churn, but they drift a
 **Segments and compaction (the LSM pattern).** Most modern engines (Milvus, Qdrant, Weaviate, LanceDB, and the Lucene-based systems) write new vectors into a small mutable "growing" segment. They often search this segment by brute force. Then they seal it into an immutable indexed segment, and they merge segments in the background.
 
 Queries fan out across segments and merge the top-k. The LSM pattern gives fast writes, and immutable index files that are easy to replicate and back up. The cost is the query fan-out and the background CPU.
+
+```mermaid
+flowchart LR
+  U(["upsert<br/>or delete"]) --> L[("write-ahead<br/>log +<br/>snapshots")]
+  L --> G["growing<br/>segment"]
+  G -->|seal| S["immutable<br/>indexed<br/>segments"]
+  L -->|delete| D["tombstone"]
+  D -.-> S
+  S -->|"background<br/>merge"| C["compaction<br/>and vacuum"]
+```
+
+*A write goes through the write-ahead log into a small mutable segment, and the engine seals that segment into immutable indexed segments. A delete leaves a tombstone (the dotted edge), which the engine filters out at query time. The background merge does the compaction and vacuum.*
 
 **Freshness and consistency.** The question "Is my just-written vector searchable?" has a range of answers. They go from immediately (Postgres/pgvector, single-node Qdrant) to eventually (Pinecone serverless, Milvus at its default level, any sharded system with asynchronous replication). Some engines expose tunable levels (Milvus: Strong, Bounded, Session, Eventual). RAG usually tolerates seconds of lag. It is possible that fraud detection or within-session agent memory does not.
 
@@ -263,9 +249,35 @@ Almost every real query is "nearest neighbors *where* tenant = X *and* date > Y 
 
 Good engines select a strategy for each query from the **estimated filter selectivity**. If the subset is small, they scan it with brute force. If it is large, they use filtered-graph search. If the filter aligns with a partition key, they use partition-scoped search. This selection has a design implication. **If a filter is always present and highly selective (tenant, user, document set), make it a partition or namespace, not a filter.**
 
+```mermaid
+flowchart LR
+  Q(["query vector<br/>+ filter"]) --> E{"estimated<br/>selectivity?"}
+  E -->|"small"| B["brute force<br/>over the<br/>permitted ids"]
+  E -->|"large"| T["filtered-graph<br/>search"]
+  E -->|"partition<br/>key"| P["partition-scoped<br/>search"]
+  B --> F["fan out to<br/>the segments,<br/>merge top-k"]
+  T --> F
+  P --> F
+  F --> O(["results<br/>+ payload"])
+```
+
+*The diamond is the choice for each query: the estimated filter selectivity selects brute force, filtered-graph search or partition-scoped search. Each path then fans out across the segments, merges the per-segment top-k and drops the tombstones (§8).*
+
 ### 10. Hybrid search, multi-vector, and reranking
 
 Dense vectors are strong on semantics and weak on exact tokens: product codes, names, rare terms, numbers. Lexical search (BM25) is the reverse. Production retrieval combines them.
+
+```mermaid
+flowchart LR
+  Q([a query]) --> D["dense ANN:<br/>semantics"]
+  Q --> S["BM25 or<br/>learned sparse:<br/>exact tokens"]
+  D --> F["Reciprocal<br/>Rank Fusion"]
+  S --> F
+  F -->|"top 50–200"| R["cross-encoder<br/>rerank"]
+  R --> K(["the final k"])
+```
+
+*A hybrid query sends the same query to dense ANN and to sparse retrieval, because each side finds what the other side misses. Reciprocal Rank Fusion merges the two ranked lists, and then a cross-encoder reranks the candidates. §12 shows these steps in the full pipeline.*
 
 **Hybrid search** is dense ANN, plus sparse/lexical retrieval, plus fusion.
 
@@ -306,7 +318,7 @@ Dense vectors are strong on semantics and weak on exact tokens: product codes, n
 
 ![The retrieval pipeline of §12: the ingest path parses, chunks, embeds and upserts the source content into the vector database, and the query path embeds the query, retrieves candidates from the database, fuses the lists, reranks the candidates and logs the outcomes.](figures/retrieval-pipeline.svg)
 
-*This figure shows the pipeline of §12 end to end, and the typical p95 latency budget of three query steps. The ingest path keeps the raw source as the system of record and writes vectors with the name and version of the model. The query path embeds the query with the same model, retrieves candidates with filters, fuses the lists, reranks the candidates and logs the outcomes. The reranker usually dominates the latency.*
+*The top row is the ingest path. It keeps the raw source as the system of record and writes vectors with the model name and version. The bottom row is the query path, with the typical p95 latency budget of three steps. The warm rerank box marks the reranker, which usually dominates the latency, not the vector database.*
 
 **Ingest**
 

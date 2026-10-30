@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="390" viewBox="0 0 960 390" role="img" aria-label="Every classical method fills a co-occurrence matrix X of words by contexts and factorizes it into two low-rank matrices, W and C transposed, whose rows are the word and context vectors; LSA, PPMI with SVD, word2vec SGNS and GloVe differ only in the matrix and the fit." style="color: #E4EAE7">
+  <title>Every classical method fills a co-occurrence matrix X of words by contexts and factorizes it into two low-rank matrices, W and C transposed, whose rows are the word and context vectors; LSA, PPMI with SVD, word2vec SGNS and GloVe differ only in the matrix and the fit.</title>
+  <rect x="0" y="0" width="960" height="390" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="480" y="28" text-anchor="middle" font-size="11" fill="#7ADACF">every method: a co-occurrence matrix plus a low-rank factorization</text>
+    <rect x="24" y="80" width="140" height="64" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="94" y="106" text-anchor="middle" font-weight="600">corpus</text>
+    <text x="94" y="126" text-anchor="middle" font-size="11.5" fill="#97A59F">words in contexts</text>
+    <path d="M164 112 L210 112" fill="none" stroke="#97A59F" stroke-width="1.2" marker-end="url(#arr)"/>
+    <text x="187" y="102" text-anchor="middle" font-size="11" fill="#97A59F">count</text>
+    <rect x="216" y="72" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1"/>
+    <rect x="216" y="100" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1"/>
+    <rect x="216" y="128" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1"/>
+    <rect x="216" y="156" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1"/>
+    <rect x="216" y="184" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1"/>
+    <rect x="244" y="72" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1"/>
+    <rect x="244" y="100" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1"/>
+    <rect x="244" y="128" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1"/>
+    <rect x="244" y="156" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1"/>
+    <rect x="244" y="184" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1"/>
+    <rect x="272" y="72" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1"/>
+    <rect x="272" y="100" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1"/>
+    <rect x="272" y="128" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1"/>
+    <rect x="272" y="156" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1"/>
+    <rect x="272" y="184" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1"/>
+    <rect x="300" y="72" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1"/>
+    <rect x="300" y="100" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1"/>
+    <rect x="300" y="128" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1"/>
+    <rect x="300" y="156" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1"/>
+    <rect x="300" y="184" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1"/>
+    <rect x="328" y="72" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1"/>
+    <rect x="328" y="100" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1"/>
+    <rect x="328" y="128" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1"/>
+    <rect x="328" y="156" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1"/>
+    <rect x="328" y="184" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1"/>
+    <rect x="356" y="72" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1"/>
+    <rect x="356" y="100" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1"/>
+    <rect x="356" y="128" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1"/>
+    <rect x="356" y="156" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1"/>
+    <rect x="356" y="184" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1"/>
+    <text x="300" y="62" text-anchor="middle" font-weight="600">X</text>
+    <text x="208" y="176" text-anchor="end" font-size="11" fill="#97A59F">words</text>
+    <text x="300" y="230" text-anchor="middle" font-size="11" fill="#97A59F">contexts</text>
+    <text x="420" y="148" text-anchor="middle" font-size="18">≈</text>
+    <rect x="448" y="72" width="28" height="28" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="448" y="100" width="28" height="28" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="448" y="128" width="28" height="28" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="448" y="156" width="28" height="28" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="448" y="184" width="28" height="28" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="476" y="72" width="28" height="28" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="476" y="100" width="28" height="28" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="476" y="128" width="28" height="28" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="476" y="156" width="28" height="28" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="476" y="184" width="28" height="28" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="476" y="62" text-anchor="middle" font-weight="600" fill="#7ADACF">W</text>
+    <text x="476" y="230" text-anchor="middle" font-size="11" fill="#7ADACF">rank k</text>
+    <text x="530" y="148" text-anchor="middle" font-size="16">×</text>
+    <rect x="556" y="72" width="28" height="28" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="556" y="100" width="28" height="28" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="584" y="72" width="28" height="28" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="584" y="100" width="28" height="28" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="612" y="72" width="28" height="28" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="612" y="100" width="28" height="28" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="640" y="72" width="28" height="28" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="640" y="100" width="28" height="28" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="668" y="72" width="28" height="28" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="668" y="100" width="28" height="28" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="696" y="72" width="28" height="28" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <rect x="696" y="100" width="28" height="28" fill="#16302A" stroke="#4CC5B7" stroke-width="1.2"/>
+    <text x="640" y="62" text-anchor="middle" font-weight="600" fill="#7ADACF">C<tspan font-size="9" dy="-5">⊤</tspan></text>
+    <text x="640" y="146" text-anchor="middle" font-size="11" fill="#97A59F">context vectors</text>
+    <text x="556" y="176" font-size="11.5">the rows of W are the word embeddings</text>
+    <text x="556" y="196" font-size="11" fill="#97A59F">synonyms co-occur with the same contexts,</text>
+    <text x="556" y="212" font-size="11" fill="#97A59F">so their rows of W are near each other</text>
+    <path d="M552 172 L508 172" fill="none" stroke="#4CC5B7" stroke-width="1.2" marker-end="url(#arrA)"/>
+    <rect x="16" y="252" width="928" height="122" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="480" y="272" text-anchor="middle" fill="#97A59F" font-size="11.5">the methods differ only in the matrix that fills X and in the fit</text>
+    <path d="M300 252 L300 240" fill="none" stroke="#97A59F" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#arr)"/>
+    <rect x="32" y="286" width="212" height="76" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="138" y="308" text-anchor="middle" font-weight="600">LSA / LSI</text>
+    <text x="138" y="328" text-anchor="middle" font-size="11.5" fill="#97A59F">term–document counts</text>
+    <text x="138" y="347" text-anchor="middle" font-size="11.5" fill="#97A59F">fit: truncated SVD</text>
+    <rect x="260" y="286" width="212" height="76" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="366" y="308" text-anchor="middle" font-weight="600">PPMI + SVD</text>
+    <text x="366" y="328" text-anchor="middle" font-size="11.5" fill="#97A59F">PMI, negatives clipped to zero</text>
+    <text x="366" y="347" text-anchor="middle" font-size="11.5" fill="#97A59F">fit: SVD</text>
+    <rect x="488" y="286" width="212" height="76" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="594" y="308" text-anchor="middle" font-weight="600">word2vec (SGNS)</text>
+    <text x="594" y="328" text-anchor="middle" font-size="11.5" fill="#97A59F">shifted PMI, implicit</text>
+    <text x="594" y="347" text-anchor="middle" font-size="11.5" fill="#97A59F">fit: w · c = PMI(w,c) − log k</text>
+    <rect x="716" y="286" width="212" height="76" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="822" y="308" text-anchor="middle" font-weight="600">GloVe</text>
+    <text x="822" y="328" text-anchor="middle" font-size="11.5" fill="#97A59F">log counts, explicit</text>
+    <text x="822" y="347" text-anchor="middle" font-size="11.5" fill="#97A59F">fit: w<tspan font-size="8.5" dy="3">i</tspan><tspan dy="-3"> · c</tspan><tspan font-size="8.5" dy="3">j</tspan><tspan dy="-3"> + b</tspan><tspan font-size="8.5" dy="3">i</tspan><tspan dy="-3"> + b</tspan><tspan font-size="8.5" dy="3">j</tspan><tspan dy="-3"> ≈ log X</tspan><tspan font-size="8.5" dy="3">ij</tspan></text>
+  </g>
+</svg>
