@@ -138,7 +138,7 @@ async function main() {
     } else if (mode === 'check') {
       const outdir = src || null;
       if (outdir) fs.mkdirSync(outdir, { recursive: true });
-      const files = cp.execSync('git ls-files', { cwd: ROOT }).toString().split('\n').filter(Boolean);
+      const files = cp.execSync('git ls-files --cached --others --exclude-standard', { cwd: ROOT }).toString().split('\n').filter(Boolean);   // tracked and new files
       const page = await mermaidPage(browser);
       const rows = [];
       let bad = 0;

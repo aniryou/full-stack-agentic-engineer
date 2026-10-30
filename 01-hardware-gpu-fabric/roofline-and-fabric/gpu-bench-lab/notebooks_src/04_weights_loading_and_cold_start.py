@@ -16,7 +16,7 @@
 #
 # A replica cannot serve requests until its weights are in GPU memory. Thus a cold start is a bandwidth problem with a
 # constant-cost tail. The time is the bytes of the checkpoint divided by the **slowest tier** on the path, plus
-# provisioning, image pull and engine start-up. The path is object store, network, disk, page cache, host RAM, PCIe
+# provision, image pull and engine start-up. The path is object store, network, disk, page cache, host RAM, PCIe
 # and HBM, in that order.
 #
 # Measure each tier honestly: cold, not warm, and with sufficient requests in flight. Stream the tiers, so that the
@@ -123,7 +123,7 @@ print(f"✅ header parsed: {len(tensors)} tensors whose sizes add up to every da
 #   cold, and it lists the cold rows as skipped instead.
 # * **First-touch page faults.** A read into a newly allocated buffer pays a page fault for each 4 KB of
 #   destination. The measurement then counts that time as time of "the disk". The lab allocates the buffer and touches it one time,
-#   before the measurement. On a GPU host, that buffer is the pinned staging area.
+#   before the measurement. On a GPU host, that buffer is pinned, and the copy to the GPU starts from it.
 # * **One request at a time.** SSDs and network disks get to their rated throughput only with many requests in
 #   flight. This is Little's law again. `pread` × threads keeps several requests in flight.
 #
@@ -147,7 +147,7 @@ warm = [m for m in loads if m.params["cache"] == "warm"]
 #
 # * `"ram"` if the file is on `tmpfs` or `ramfs`. Each read is a memory copy.
 # * `"suspect"` if the cold read ran at 70% or more of the warm read. There are two possible causes. The first
-#   cause: the filesystem did not obey the eviction (some container and network filesystems ignore it). The second
+#   cause: the filesystem did not obey the eviction. Some container and network filesystems ignore it. The second
 #   cause: the device is as fast as memory copies (rare). Before you trust the number, do a check with `O_DIRECT` or
 #   with a file larger than RAM.
 # * `"disk"` in all other cases. This is the number for the plan of a cold start.
@@ -295,13 +295,13 @@ print(f"✅ this machine: {pick_loader(loads) or 'no cold rows — measure on a 
 #
 # A new replica pays for these stages, in this order (primer §6.2):
 #
-# 1. Provisioning (a VM or node).
+# 1. The provision of a VM or node.
 # 2. The pull of the container image.
 # 3. The load of the weights.
 # 4. Engine start-up: the allocation of the KV cache, the compilation or capture of CUDA graphs, and warm-up.
 #
 # roofline-core Ex 4.2 calculates this budget from datasheet rates. In this notebook, only the weights stage uses a
-# measurement (the disk tier of your loader). The other stages are **assumed round numbers**, and the table says so.
+# measurement (the disk tier of your loader). The other stages use **assumed round numbers**, and the table says so.
 
 # %%
 ASSUMED = {"provision_s": 60, "image_bytes": 10e9, "image_bps": 0.5e9, "init_s": 30}   # illustrative, not measured
@@ -333,14 +333,14 @@ shutil.rmtree(workdir, ignore_errors=True)       # the synthetic checkpoint is n
 #
 # "I measure with sufficient requests in flight (Little's law). I stream through the tiers, so that the slowest tier
 # sets the rate. The safetensors format makes that possible: offsets at the start, no unpickle step, zero-copy views. FP8 weights
-# also cut the largest term in half. The other part of the time is provisioning, image pull and engine init. Warm pools and
+# also cut the largest term in half. The other part of the time is provision, image pull and engine init. Warm pools and
 # image streaming decrease that part (layers 03 and 05)."
 #
 # **Drills**
 #
 # 1. *New replicas of our 70B model take nine minutes. Where do you look first?* Divide the time into stages.
 #    140 GB at ~260 MB/s is nine minutes alone, thus the weights path is the suspect. Measure the disk cold. Move the
-#    weights to a faster tier (local NVMe, a high-throughput volume, parallel range reads from the object store).
+#    weights to a faster tier: local NVMe, a high-throughput volume, or parallel range reads from the object store.
 #    Stream the weights, and do not stage them. Think about FP8.
 # 2. *Why does a safetensors checkpoint load faster than a pickled one?* There is no unpickle step and no object
 #    construction. The header gives the offset of each tensor. Thus the loader can mmap, read in parallel and copy

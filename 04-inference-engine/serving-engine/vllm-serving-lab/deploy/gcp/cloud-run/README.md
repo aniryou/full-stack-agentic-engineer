@@ -49,9 +49,9 @@ The first request after a scale to zero pays the **cold start**. The cold start 
 terms:
 
 * the instance start,
-* the image pull (the vLLM image is several GB),
-* the weights (a download or a GCS read),
-* the engine init (the profiling run, the KV allocation and the CUDA-graph capture).
+* the image pull (several GB for the vLLM image),
+* the weights, from a download or from a GCS read,
+* the engine init: the profiling run, the KV allocation and the CUDA-graph capture.
 
 Notebook 06 calculates each term in seconds from bytes and bandwidth. The startup log
 (`gcloud run services logs read vllm-l4`) shows the real values.
@@ -70,11 +70,11 @@ Notebook 06 calculates each term in seconds from bytes and bandwidth. The startu
 ## Cost and cleanup
 
 Cloud Run charges for GPU instances per second while they exist (with CPU always allocated). It
-charges nothing while the service is scaled to zero. The L4 rate is approximately the rate of a
+charges nothing while the service has zero instances. The L4 rate is approximately the rate of a
 `g2-standard` L4 hour (~$0.7/hr on Compute Engine on-demand, us-central1), plus vCPU and memory.
 Examine the Cloud Run pricing page (verify) and [`COMPUTE.md`](../../../../../../COMPUTE.md). An idle
-service with `min_instances = 0` costs nothing, except for the image in Artifact Registry (none
-here: the image comes from Docker Hub).
+service with `min_instances = 0` costs nothing, except for the image in Artifact Registry. This
+lab has no image there, because the image comes from Docker Hub.
 
 ```bash
 terraform destroy                                  # or:

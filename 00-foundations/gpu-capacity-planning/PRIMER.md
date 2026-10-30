@@ -110,18 +110,18 @@ maximum. The constraints are memory (sessions ÷ per-GPU), decode throughput and
 throughput. Last, apply utilisation headroom (~60–70%) and add **N+1** spares.
 
 ```mermaid
-flowchart TB
-  P["weights<br/>params × bytes/param<br/>weight_memory_gb()"]
-  K["KV per token<br/>2 × layers × kv_heads<br/>× head_dim × bytes<br/>kv_per_token_kb()"]
-  W(["the workload<br/>RPS, tokens in and out,<br/>TTFT and TPOT targets"])
-  S["spare after weights<br/>usable HBM − weights<br/>(the marketed size,<br/>less ~10%)<br/>usable_hbm_gb()"]
-  C["KV per session<br/>KV per token × context<br/>kv_per_session_gb()"]
-  L["concurrency<br/>RPS × request_duration<br/>request_duration ≈ TTFT<br/>+ output_tokens × TPOT<br/>concurrency()"]
-  N["sessions per GPU<br/>spare_HBM ÷ KV_per_session<br/>max_concurrent_sessions()"]
-  T["GPUs for decode,<br/>GPUs for prefill<br/>tok/s needed ÷<br/>tok/s per GPU<br/>decode_aggregate()<br/>prefill_tok_s()"]
-  M["GPUs for memory<br/>concurrency ÷<br/>sessions per GPU"]
-  X{"take the maximum"}
-  R["utilisation headroom:<br/>plan at ~60–70% util,<br/>then add N+1 spares<br/>provision()"]
+flowchart LR
+  P["weights"]
+  K["KV per<br/>token"]
+  W(["the workload"])
+  S["spare after<br/>weights"]
+  C["KV per<br/>session"]
+  L["concurrency"]
+  N["sessions<br/>per GPU"]
+  T["GPUs for<br/>decode and<br/>prefill"]
+  M["GPUs for<br/>memory"]
+  X{"take the<br/>maximum"}
+  R["headroom<br/>~60–70%, then<br/>N+1 spares"]
   P --> S
   K --> C
   S --> N
@@ -135,7 +135,7 @@ flowchart TB
   X --> R
 ```
 
-*The figure shows the formula chain of `capacity.py`. The weights and the KV cache set how many sessions one GPU holds. The workload gives the live sessions: concurrency = RPS × duration. Then each constraint gives a GPU count, you take the maximum, and you add headroom and spares.*
+*The figure shows the chain of steps in `capacity.py`. The weights (`weight_memory_gb()`, `usable_hbm_gb()`) and the KV cache (`kv_per_token_kb()`, `kv_per_session_gb()`) set the sessions per GPU (`max_concurrent_sessions()`). The workload gives the live sessions: concurrency = RPS × duration (`concurrency()`). Then each constraint gives a GPU count (`decode_aggregate()`, `prefill_tok_s()`), you take the maximum, and you add headroom and spares (`provision()`).*
 
 ---
 

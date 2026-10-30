@@ -65,8 +65,8 @@ for b in (1, 8, 32, 64, 128, 256):
 
 # %% [markdown]
 # From 1 to 64 sequences, the step becomes approximately 40% slower, but the total throughput increases by
-# more than 40x. The engine reads the weights one time in both cases (the numbers come from the simulated
-# profile in the previous cell). After that point, the KV reads of each sequence start to become the largest
+# more than 40x. The engine reads the weights one time in both cases. The numbers come from the simulated
+# profile in the previous cell. After that point, the KV reads of each sequence start to become the largest
 # term. For larger models or longer prompts, compute starts to become the largest term. This is the full economic case
 # for continuous batching.
 #
@@ -75,7 +75,7 @@ for b in (1, 8, 32, 64, 128, 256):
 # Write `decode_step_s(p, batch, context)` from the fields of the profile (`overhead_s`,
 # `active_params`, `flops`, `weight_bytes`, `kv_bytes_per_token`, `mem_bw`) with the roofline of the
 # previous worked example. Then write `max_batch_for_tpot(p, tpot_s, context)`. It returns the largest
-# batch (up to 4,096) with a decode step that stays within `tpot_s`.
+# batch (up to 4,096) with a decode step of at most `tpot_s`.
 
 # %% exercise
 def decode_step_s(p, batch: int, context: int) -> float:
@@ -251,14 +251,15 @@ print(f"✅ with --max-num-seqs 8 this engine sustains about {cap:.1f} req/s at 
 #
 # - It frees the blocks of the request.
 # - It puts the request back in the queue.
-# - Later, it recomputes the prompt (and the tokens that the request generated before).
+# - Later, it recomputes the prompt and the tokens that the request generated before.
 #
 # You can see this as `vllm:num_preemptions` and a long ITL gap.
 #
 # Write `blocks_needed(n_concurrent, prompt_len, max_tokens, block_size)`. It returns the blocks that $n$
-# requests need to *finish* together. The check runs 12 simultaneous requests with exactly that number of
+# requests need to *finish* together. The check runs 12 requests at the same time with exactly that number of
 # blocks (`--num-gpu-blocks-override`, the vLLM flag for this experiment). The check also runs them with a
-# third of that number (`--max-model-len 1024`, because vLLM does not start unless one full-length request fits).
+# third of that number. For that run, the check sets `--max-model-len 1024`, because vLLM does not start unless
+# one full-length request fits.
 #
 # The prompt lengths are exact only on the fake server. Its toy tokenizer makes one token for each
 # word. A real tokenizer makes ~1.1-1.5 tokens from each of the same words. Also, vLLM keeps one block
@@ -388,12 +389,12 @@ else:
 #
 # **Drill 1.** *Users complain about random pauses in the middle of an answer. The average ITL looks normal.*
 # Look at ITL p99/max and at the long prompts in the traffic. Large prefill chunks share steps with decodes.
-# Decrease `max-num-batched-tokens` (or set a cap with `long-prefill-token-threshold`), or separate the
+# Decrease `max-num-batched-tokens`, set a cap with `long-prefill-token-threshold`, or separate the
 # prefill (layer 05).
 #
 # **Drill 2.** *Why not set `max-num-seqs` to 1,024 everywhere?* After the point where KV reads or
 # compute become the largest term, each sequence that you add makes every step slower. TPOT rises. With too few KV
-# blocks, preemptions also start. The correct cap is the largest cap that keeps TPOT within the SLO.
+# blocks, preemptions also start. The correct cap is the largest cap at which TPOT still meets the SLO.
 #
 # **Drill 3.** *`vllm:num_preemptions_total` increases. What are three solutions?* More KV blocks (higher
 # `gpu-memory-utilization`, FP8 KV, smaller or quantized weights, TP), fewer concurrent sequences

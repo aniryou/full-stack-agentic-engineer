@@ -75,8 +75,8 @@ On a GPU VM (T1/T2), run `deploy/gpu-vm/up.sh` (see its README). Then the same p
 | Module | What it teaches |
 |---|---|
 | `k8sgpu/manifests.py` | typed builders that make YAML for Job, JobSet, LeaderWorkerSet, Kueue (Topology, ResourceFlavor, ClusterQueue, LocalQueue, WorkloadPriorityClass, AdmissionCheck, ProvisioningRequestConfig), DRA `ResourceClaimTemplate` (`resource.k8s.io/v1`) and GKE `ComputeClass` |
-| `k8sgpu/lint.py` | a GPU pod-spec linter. It examines request == integer limit, GPU taint toleration (the match rule of Kubernetes), the accelerator selector, and the startup probe against the load time. It also makes sure that sidecars have no GPU, and examines CPU/memory requests and **stranded GPUs** (it counts GKE's GCS FUSE sidecar). The last items are `/dev/shm` and its memory limit, the restart policy inside CRDs, and the rollout surge. |
-| `k8sgpu/machines.py` | what a GPU node gives a pod: the GKE allocatable formula (verify), the per-GPU share, stranded GPUs and time-shared allocatable. Stranded GPUs use one formula. It is primer §3.4's `free mod k` when only GPUs bind, and the CPU/memory bundle otherwise. |
+| `k8sgpu/lint.py` | a GPU pod-spec linter. It examines request == integer limit, GPU taint toleration (the match rule of Kubernetes), the accelerator selector, and the startup probe against the load time. It also makes sure that sidecars have no GPU, and examines CPU/memory requests and **stranded GPUs**. The stranded-GPU check counts GKE's GCS FUSE sidecar. The last items are `/dev/shm` and its memory limit, the restart policy inside CRDs, and the rollout surge. |
+| `k8sgpu/machines.py` | what a GPU node gives a pod: the GKE allocatable formula (verify), the per-GPU share, stranded GPUs and time-shared allocatable. Stranded GPUs use one formula. It is primer §3.4's `free mod k` when only GPUs bind. If not, it is the CPU/memory bundle. |
 | `k8sgpu/kindsim.py` | the **predictor**: Kueue quota/borrowing/classic preemption, TAS *BestFit* and *LeastFreeCapacity*, and the kube-scheduler's filters and its `0/N nodes are available` message |
 | `k8sgpu/scenarios.py` | the objects, steps and hand-written answer key of the kind lab (it renders `deploy/kind/`) |
 | `k8sgpu/kindlab.py` | operates a real kind cluster step by step (or as a dry run) and compares the observation with the prediction |
@@ -93,7 +93,7 @@ The solutions are in `solutions/`.
 1. **`01_manifests_and_the_linter`** (T0): what makes a pod a GPU pod, the API server's GPU rules, and how CRDs defer validation. Then how to set the size of a startup probe, and stranded GPUs. Then how to build a lint-clean 16-GPU gang, and how to repair a serving Deployment. Primer §1, §3, §4, §5, §8.
 2. **`02_kind_with_fake_gpus_and_kueue`** (T0, live with Docker): the fake-GPU patch, the admit/borrow/wait arithmetic and TAS BestFit. Then admission against placement and `waitForPodsReady`, Kueue's victim order, borrow against preempt, and scenarios s1-s6 and k1. Primer §4, §5, §6, §10.
 3. **`03_why_is_my_pod_pending`** (T0, live with Docker): the scheduler's histogram, and the difference between too large, fragmented and busy. Then what Kueue waits for, how to select the repair, and the s6 zoo with a live diagnosis. Primer §3, §6, §7, §8.
-4. **`04_gke_pools_dws_and_computeclasses`** (T3, and offline it plans and inspects): the price and the inventory of the Terraform. Then the CUDA of the image against the node driver. Then Spot's expected runtime and the checkpoint interval, a deadline as a probability, and how to select capacity. Then ComputeClass rungs, and DWS through Kueue (and why there is no TAS on L4). Last, time-sharing for one L4 and the cold-start budget. Primer §2, §7, §8, §9.
+4. **`04_gke_pools_dws_and_computeclasses`** (T3, and offline it plans and examines): the price and the inventory of the Terraform. Then the CUDA of the image against the node driver. Then Spot's expected runtime and the checkpoint interval, a deadline as a probability, and how to select capacity. Then ComputeClass rungs, and DWS through Kueue. The DWS part also shows why there is no TAS on L4. Last, time-sharing for one L4 and the cold-start budget. Primer §2, §7, §8, §9.
 
 ## The kind scenarios
 
@@ -146,7 +146,7 @@ The lab pins these releases. The check date is 2026-09-26:
 - busybox 1.38.0.
 - k3s channel v1.34.
 - NVIDIA device plugin chart 0.20.1.
-- vLLM v0.30.0 (the image uses CUDA 13.0.2, and thus needs driver >= 580).
+- vLLM v0.30.0. The image uses CUDA 13.0.2, and thus needs driver >= 580.
 
 Google-owned repositories agree with these items. But it is still good to look at them on your cluster:
 

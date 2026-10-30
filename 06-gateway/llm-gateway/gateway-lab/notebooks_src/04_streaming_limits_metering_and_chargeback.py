@@ -2,9 +2,9 @@
 # # 04 · Streaming limits, metering and chargeback: count tokens, not requests
 #
 # **Tier:** T0. Tenants send requests over localhost HTTP to fake providers, and each fake provider has its own
-# tokens-per-minute limit. The rate-limit "minute" is **compressed to 2 seconds**, so each run takes seconds. All
-# timings and token counts are **simulated**. T1: the lab reconciles the ledger with the `usage` and the `/metrics`
-# of a real vLLM.
+# tokens-per-minute limit. The lab **compresses** the rate-limit "minute" **to 2 seconds**, so each run takes
+# seconds. All timings and token counts are **simulated**. T1: the lab reconciles the ledger with the `usage` and
+# the `/metrics` of a real vLLM.
 #
 # ## The one-minute version
 #
@@ -74,9 +74,9 @@ print(f"a rate-limit minute here lasts {MINUTE} s; acme allows 3,000 tokens per 
 # bucket of the gateway holds a burst (its capacity) and refills continuously. Thus, over any window, the bucket
 # admits up to $\text{capacity} + \text{rate} \times \text{window}$.
 #
-# A bucket of 1,500 tokens per minute for the tenant keeps that inside the limit of the provider:
-# $1{,}500 + 750/\text{s} \times 2\,\text{s} = 3{,}000$. A bucket set to the full 3,000 of the provider can admit
-# up to 6,000 in the first window. This occurs because the burst is part of the budget.
+# A bucket of 1,500 tokens per minute for the tenant keeps this total inside the limit of the provider:
+# $1{,}500 + 750/\text{s} \times 2\,\text{s} = 3{,}000$. The burst is part of the budget. Thus a bucket set to the
+# full 3,000 of the provider can admit up to 6,000 in the first window.
 #
 # The `ReserveLimiter` of the core counts a sliding window instead. It admits a request only if
 # $\text{used} + \text{reserved} + \text{reserve} \le \text{limit}$ (PRIMER §4.2). By construction, this window
@@ -102,7 +102,7 @@ for mode in ("per_request", "reserve"):
 #
 # If the alias has a fallback chain, these requests go to a higher-cost provider at full traffic instead. The
 # bucket in `reserve` mode refuses at the door of the gateway. It sends a `Retry-After` header and `x-ratelimit-*`
-# headers, which tell which limit applies and when. The provider gets a load that it can carry.
+# headers. These headers tell which limit applies and when. The provider gets a load that it can carry.
 
 # %% [markdown]
 # ## Exercise 4.1 — the reservation
@@ -161,8 +161,9 @@ print("✅ the bucket admits", f"{pred:.1f}x", "the tokens it thinks it admits -
 # %% [markdown]
 # ## Worked example: the noisy neighbour
 #
-# Two tenants share a provider that permits 6,000 tokens per minute. The global bucket of the gateway has a size that
-# matches it: 3,000 per minute. Thus the burst plus the refill over one window equals 6,000.
+# Two tenants share a provider that permits 6,000 tokens per minute. The global bucket of the gateway has a size of
+# 3,000 per minute. Thus the burst plus the refill over one window equals 6,000, and the bucket matches the limit of
+# the provider.
 #
 # `team-a` sends a flood at several times its share. `team-b` sends a small, steady flow. With only the global
 # bucket, team-a empties it, and the gateway refuses the requests of team-b too. With a bucket for each tenant
@@ -181,9 +182,10 @@ for label, tenant_tpm in (("one shared bucket", 10**9), ("a bucket per tenant", 
 # %% [markdown]
 # ## Worked example: a stream cut short is still billed
 #
-# A client that walks away during the stream never receives the usage chunk (the spec of OpenAI says so). The
+# A client that walks away during the stream never gets the usage chunk. The spec of OpenAI says so. The
 # gateway stops the upstream and writes the row from what it relayed. It counts one token for each content chunk,
-# and it marks the row as an estimate. A bill of 0 for this row makes "disconnect just before the end" a free lunch.
+# and it marks the row as an estimate. A bill of 0 for this row makes "disconnect just before the end" a way to get
+# the tokens at no cost.
 
 # %%
 s_r = runs["reserve"][0]
@@ -207,7 +209,7 @@ print("rows billed from an estimate:", sum(r["usage_source"] == "estimate" for r
 # The check calculates the price of every row of the earlier runs with the model that served the row. It compares
 # each price with the ledger. Then it prices the §3.4 call of the scaling primer (5,000 in, 2,700 cached, 350 out on
 # `gemini-3.5-flash`: $0.007005). After that, it prices the §1.5 call of the primer. This is the same call plus
-# 1,200 thinking tokens, reported in the shape of Anthropic (normalise it first).
+# 1,200 thinking tokens, reported in the shape of Anthropic. Normalise this usage first.
 
 # %% exercise
 def price(row: dict, p) -> float:
@@ -257,8 +259,8 @@ for name, gpu_h, tps in (("H100 Spot, self-hosted", 3.7, 6846.5), ("L4, self-hos
 #
 # Write `chargeback(rows, total_usd, by, prefill_s, decode_s)`. It returns `{tenant: dollars}`. The argument `by` is
 # `"tokens"` or `"gpu_seconds"` ($\text{weight} = \text{prompt} \times \mathrm{prefill\_s} \:+$
-# $\text{completion} \times \mathrm{decode\_s}$). The check sends a RAG tenant (long prompts, short answers) and a
-# chat tenant (short prompts, long answers) through the gateway. Then it compares your result with
+# $\text{completion} \times \mathrm{decode\_s}$). The check sends the requests of a RAG tenant (long prompts, short
+# answers) and of a chat tenant (short prompts, long answers) through the gateway. Then it compares your result with
 # `metering.chargeback` of the lab.
 
 # %% exercise
@@ -294,13 +296,14 @@ s.stop()
 # %% [markdown]
 # ## Worked example: reconcile the ledger with the provider
 #
-# The provider keeps its own counters (the fakes use the names of vLLM). Compare them with the ledger. On the
-# per-request run, every served row carries the `usage` of the provider, and the two agree to the token.
+# The provider keeps its own counters. The fakes give these counters the names that vLLM uses. Compare the counters
+# with the ledger. On the per-request run, every served row carries the `usage` of the provider, and the two agree
+# to the token.
 #
 # On the reserve run, after the walk-away tenant, the gaps come only from the rows billed from an estimate. The
 # prompt count of these rows is the chars/4 estimate of the gateway, because no usage chunk arrived. Their
 # completion count is the number of relayed chunks. But the provider counted what it tokenized and generated before
-# it saw the disconnect. That gap is the reconciliation item that you examine each month. It is not a rounding
+# it saw the disconnect. This gap is the reconciliation item that you examine each month. It is not a rounding
 # error.
 
 # %%

@@ -17,7 +17,7 @@ such. Then you do it on real GPUs with vLLM:
 2. Open [`notebooks/01_a_tiny_moe_in_torch.ipynb`](notebooks/01_a_tiny_moe_in_torch.ipynb) (T0). A tiny MoE trains
    on your CPU in seconds (torch). Without torch, the notebook reads curves that this code recorded. You see the
    collapse, then two corrections.
-3. With any GPU (a free Colab T4 is sufficient), [`deploy/any-gpu/`](deploy/any-gpu/) starts vLLM with a small MoE.
+3. With any GPU, [`deploy/any-gpu/`](deploy/any-gpu/) starts vLLM with a small MoE. A free Colab T4 is sufficient.
    Set `MOELAB_URL`. Then notebooks 02, 03 and 05 measure that server and do not simulate it.
 
 ## What you get
@@ -80,7 +80,7 @@ without torch also uses this path.
 |---|---:|---|
 | `configs.py` | ~260 | Ten models as literal config fields (Mixtral, Qwen3-30B-A3B, OLMoE, granite-3.0 MoE ×2, Qwen1.5-MoE, gpt-oss ×2, two dense references). From these fields: total, active under three embedding conventions, KV per token, checkpoint bytes for fp16/fp8/INT4/INT4-experts/MXFP4. A table of GPU datasheets. The entry for a served model id. |
 | `stream.py` | ~290 | Experts touched (closed form, Zipf Monte Carlo, Gumbel top-k). Bytes and FLOPs of a decode step and the crossover batch (layer 01's `roofline.llm`, re-implemented and reproduced). vLLM's `moe_align_block_size` layout. Simulated ITL and its calibration. A closed-loop streaming client that measures ITL. |
-| `hooks.py` | ~300 | vLLM's `routed_experts` wire format. Utilisation / balancedness / hot experts / domain divergence. EP placement and per-rank load. `RouterRecorder` (forward hooks for the HF v5 router layouts). T1 capture through transformers or vLLM (the expert count from the catalogue entry of the served model, k from the data). |
+| `hooks.py` | ~300 | vLLM's `routed_experts` wire format. Utilisation / balancedness / hot experts / domain divergence. EP placement and per-rank load. `RouterRecorder` (forward hooks for the HF v5 router layouts). T1 capture through transformers or vLLM. In that capture, the expert count comes from the catalogue entry of the served model, and k comes from the data. |
 | `ep.py` | ~260 | The three two-GPU layouts and their vLLM flags. All-to-all bytes, alpha-beta collectives, per-GPU weights. A per-GPU per-layer step model (the slowest GPU of each layer). The `vllm bench serve` command and parser. |
 | `offload.py` | ~150 | What fits (KV room, sessions). Capability rules (bf16, FP8, MXFP4). The smallest `--cpu-offload-gb`. UVA toll against CPU experts. The start-up log parser. |
 | `tinymoe/` | ~470 | The toy task (numpy). `TinyTopKRouter`/`TinyMoE`/`TinyMoETransformer` (torch, HF-shaped). Switch loss, z-loss, the choose-only bias. A trainer that records load and specialisation. Statistics for the bundled curves. |
@@ -143,7 +143,7 @@ no other version, transformers `27166ea`, and the deepep, gpt-oss and olmoe repo
 
 * vLLM flags:
   * `--enable-expert-parallel`/`-ep`, `--data-parallel-size`.
-  * `--all2all-backend`: the default is `allgather_reducescatter`. `pplx`/`naive` are removed. There is no
+  * `--all2all-backend`: the default is `allgather_reducescatter`. vLLM removed `pplx`/`naive`. There is no
     `VLLM_ALL2ALL_BACKEND`.
   * `--expert-placement-strategy`: `linear` is the default. vLLM applies `round_robin` only to grouped models with
     no redundant experts and with EPLB off. This is true for v0.30.0 and for main `a4eb3f2`.
@@ -158,7 +158,7 @@ no other version, transformers `27166ea`, and the deepep, gpt-oss and olmoe repo
   tiles and the list of tuned config files (no T4/L4/A10) come from main `a4eb3f2`.
 * The result block and the flags of `vllm bench serve` (`benchmarks/serve.py`, `benchmarks/datasets/datasets.py`,
   v0.30.0). The words of the start-up log, as the check of layer 04's `servelab.sizing` found them.
-* `Mxfp4Config.get_min_capability()` = 80 with bf16 activations (gpt-oss does not run on a T4).
+* `Mxfp4Config.get_min_capability()` = 80 with bf16 activations. Thus, gpt-oss does not run on a T4.
 
 These items still need a check, and a check is not possible here:
 

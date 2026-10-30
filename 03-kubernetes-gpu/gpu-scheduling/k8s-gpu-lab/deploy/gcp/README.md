@@ -28,7 +28,7 @@ and each busy Spot L4 node adds ~$0.25/h (us-central1, Sep 2026, verify). The ta
 [Cost](#cost-us-central1-sep-2026---verify).
 
 **Clean up.** Run `deploy/gke/apply-examples.sh delete`. Then run `terraform destroy` in `deploy/gcp/terraform`.
-One pass removes everything, except the enabled APIs. They stay on (see [Clean up](#clean-up)).
+One pass removes everything, except the APIs that Terraform turned on. They stay on (see [Clean up](#clean-up)).
 
 | File | Contents |
 |---|---|
@@ -82,8 +82,8 @@ deploy/gke/apply-examples.sh delete     # optional: workloads first, so no node 
 cd deploy/gcp/terraform && terraform destroy
 ```
 
-With `deletion_protection = false` and `force_destroy = true` (bucket), `destroy` completes in one pass. The enabled
-APIs stay on (`disable_on_destroy = false`).
+With `deletion_protection = false` and `force_destroy = true` (bucket), `destroy` completes in one pass. The APIs that
+Terraform turned on stay on (`disable_on_destroy = false`).
 
 ## Verify list
 

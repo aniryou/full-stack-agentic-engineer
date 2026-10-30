@@ -35,9 +35,9 @@ aliases:
   chat: {policy: ordered, targets: [cloudrun/qwen, acme/fast]}
 ```
 
-The service of the 04 lab is private. From a laptop, `gcloud run services proxy` adds your identity to each request
-(the gateway then talks to `127.0.0.1`). The alternative for a gateway that runs on Google Cloud is a Google-signed
-ID token whose audience is the service URL (verify). The provider credential of this lab is a static key. Thus that
+The service of the 04 lab is private. From a laptop, `gcloud run services proxy` adds your identity to each request.
+If you use the proxy, the gateway talks to `127.0.0.1`. The alternative for a gateway that runs on Google Cloud is a Google-signed
+ID token whose audience is the service URL (verify). The provider credential of this lab is a static key. Thus the ID-token
 path is a follow-up, and the lab does not implement it.
 
 Keep `first_byte_timeout_s` above the cold start. The cold start is the image pull plus the weights plus the engine
@@ -71,21 +71,21 @@ gcloud run deploy gwlab-gateway --image "${IMAGE}" --region us-central1 --no-all
   --timeout 3600 --concurrency 250 --min-instances 0
 ```
 
-Know three things before you do this:
+Know three things before you deploy the gateway:
 
 - The ledger and keys are **sqlite in one process**. On Cloud Run, they go away when the instance stops, and
   the instances do not share them. Thus a real deployment moves them to a database, and the buckets to Redis (scaling
   primer §5.1, §5.9).
 - A streamed request counts against the request timeout (default 5 minutes, maximum 60, scaling primer §5.7).
 - Spans go to Cloud Trace over OTLP (`telemetry.googleapis.com`, scaling primer §9) when
-  `OTEL_EXPORTER_OTLP_ENDPOINT` has a value and the `otlp` extra is installed.
+  `OTEL_EXPORTER_OTLP_ENDPOINT` has a value and you install the `otlp` extra.
 
 ## Cost and cleanup
 
 The gateway on Cloud Run with `--min-instances 0` costs nothing when idle, and cents per hour of traffic (verify).
 Most of the cost comes from the GPU upstreams. An L4 on Cloud Run has per-second billing while an instance exists.
-The GKE stack of the 05 lab keeps one L4 Spot node up while it is installed (its README gives about $0.44/h,
-verify).
+The GKE stack of the 05 lab keeps one L4 Spot node up until you uninstall the stack. Its README gives about $0.44/h
+(verify).
 
 Clean up each upstream in its own way:
 

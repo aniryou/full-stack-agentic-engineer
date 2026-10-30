@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="520" viewBox="0 0 720 520" role="img" aria-label="The states of a turn and the transitions between them." style="color: #E4EAE7">
+  <title>The states of a turn and the transitions between them.</title>
+  <rect x="0" y="0" width="720" height="520" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <!-- start and end markers -->
+    <circle cx="320" cy="34" r="9" fill="currentColor"/>
+    <circle cx="335" cy="484" r="11" fill="none" stroke="currentColor" stroke-width="1.4"/>
+    <circle cx="335" cy="484" r="6" fill="currentColor"/>
+
+    <!-- states -->
+    <rect x="255" y="90" width="130" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="320" y="117" text-anchor="middle" font-weight="600">queued</text>
+    <rect x="540" y="90" width="150" height="44" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="615" y="117" text-anchor="middle" font-weight="600">dead_letter</text>
+    <rect x="255" y="250" width="130" height="44" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="320" y="277" text-anchor="middle" font-weight="600" fill="#7ADACF">running</text>
+    <rect x="120" y="390" width="140" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="190" y="417" text-anchor="middle" font-weight="600">completed</text>
+    <rect x="420" y="390" width="120" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="480" y="417" text-anchor="middle" font-weight="600">failed</text>
+
+    <!-- transitions -->
+    <g stroke="#97A59F" stroke-width="1.2" fill="none">
+      <path d="M320 43 L320 88" marker-end="url(#arr)"/>
+      <path d="M385 112 L538 112" marker-end="url(#arr)"/>
+      <path d="M295 134 L295 248" marker-end="url(#arr)"/>
+      <path d="M345 250 L345 136" marker-end="url(#arr)"/>
+      <path d="M255 262 C195 246, 195 300, 253 284" marker-end="url(#arr)"/>
+      <path d="M290 294 L202 388" marker-end="url(#arr)"/>
+      <path d="M350 294 L468 388" marker-end="url(#arr)"/>
+      <path d="M230 434 L323 478" marker-end="url(#arr)"/>
+      <path d="M450 434 L347 478" marker-end="url(#arr)"/>
+    </g>
+
+    <!-- transition labels -->
+    <g font-size="11" fill="#97A59F">
+      <text x="334" y="70">gateway admits, publishes</text>
+      <text x="461" y="104" text-anchor="middle">5 delivery attempts</text>
+      <text x="283" y="196" text-anchor="end">push delivered, lock taken</text>
+      <text x="357" y="186">RetryLater (overloaded,</text>
+      <text x="357" y="201">store unavailable) → redelivery</text>
+      <text x="196" y="268" text-anchor="end">model step / tool step</text>
+      <text x="196" y="283" text-anchor="end">checkpointed</text>
+      <text x="232" y="340" text-anchor="end">final answer</text>
+      <text x="440" y="331">budget exceeded / provider error</text>
+      <text x="440" y="346">(graceful message)</text>
+    </g>
+  </g>
+</svg>

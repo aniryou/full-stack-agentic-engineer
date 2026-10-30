@@ -73,7 +73,7 @@ To measure a real engine instead (T1/T3), start one. [`deploy/any-gpu/`](deploy/
 recipe. Then run `export SERVELAB_URL=http://127.0.0.1:8000`. Also set `SERVELAB_API_KEY`, or set
 `SERVELAB_BEARER=$(gcloud auth print-identity-token)` for a private Cloud Run service.
 
-The notebooks detect the engine and measure it. They identify a `servelab fake` server in `SERVELAB_URL` by its
+The notebooks find the engine and measure it. They identify a `servelab fake` server in `SERVELAB_URL` by its
 `/version`, and its numbers keep the label simulated. If you have a GPU, vLLM installed and `SERVELAB_START_VLLM=1`,
 the sweeps of notebook 03 restart a real `vllm serve` for each configuration.
 
@@ -157,7 +157,7 @@ make check                                              # all of the above + tes
 
 ## Caveats
 
-- **Simulated against measured.** The numbers of the fake server are simulated, and every report says so. The fake server
+- **Simulated against measured.** The fake server gives simulated numbers, and every report says so. The fake server
   also identifies itself as a fake on `/version`, even behind `SERVELAB_URL`. Only a real `vllm serve` gives
   measurements.
 - **Sizing is an estimate.** `sizing.size()` uses a model of the defaults of vLLM v0.30.0. It takes 0.92 of the
@@ -178,7 +178,7 @@ when you move the pin:
   prefill on. For `vllm serve`, `max_num_batched_tokens` / `max_num_seqs` are 2048 / 256 below 70 GiB or on A100.
   They are 8192 / 1024 on other GPUs from 70 GiB, and 16384 / 1024 from 160 GiB.
 * KV budget = `util × total − (weights + profiled activation peak + non-torch) − CUDA-graph
-  estimate` (CUDA-graph profiling is on by default since v0.21.0). vLLM keeps one block as the null block.
+  estimate`. From v0.21.0, CUDA-graph profiling is on by default. vLLM keeps one block as the null block.
 * `--enable-prompt-tokens-details` adds `usage.prompt_tokens_details.cached_tokens`. `--max-model-len -1` sets the
   maximum length automatically to a value that fits. `--attention-backend` replaces `VLLM_ATTENTION_BACKEND`, and
   `VLLM_USE_V1` no longer exists. `VLLM_BATCH_INVARIANT=1` sets batch-invariant mode on.
@@ -198,7 +198,7 @@ These items still need a check that the source here cannot give:
   built for CUDA 12.
 * On each GPU, how far the total memory that CUDA reports is below the total that nvidia-smi reports. On an
   L4, this difference changes the sizing by ~1 session.
-* Cloud Run GPU: L4 (24 GB, min 4 vCPU / 16 GiB), GA since June 2025. The flag names `--gpu`, `--gpu-type` and
+* Cloud Run GPU: L4 (24 GB, min 4 vCPU / 16 GiB), GA from June 2025. The flag names `--gpu`, `--gpu-type` and
   `--no-gpu-zonal-redundancy`. The regions, quota names, prices, CPU-always-allocated for GPU services, startup-probe
   limits, and if the probe starts after the image pull.
 * GKE: the GPU node taint `nvidia.com/gpu=present:NoSchedule`. `HF_XET_HIGH_PERFORMANCE` in the `huggingface_hub` of

@@ -52,8 +52,9 @@
     <text x="334" y="247" text-anchor="middle" font-size="11" fill="#97A59F">~3× faster at batch 1</text>
     <text x="334" y="293" text-anchor="middle" font-size="11.5" fill="#7ADACF">lever 3: the KV bytes</text>
     <text x="334" y="308" text-anchor="middle" font-size="11" fill="#97A59F">long context × large batch</text>
-    <text x="334" y="336" text-anchor="middle" font-size="11" fill="#97A59F">FP8 KV halves it and</text>
-    <text x="334" y="350" text-anchor="middle" font-size="11" fill="#97A59F">doubles the sessions per GPU</text>
+    <text x="334" y="332" text-anchor="middle" font-size="11" fill="#97A59F">FP8 KV halves it</text>
+    <text x="334" y="345" text-anchor="middle" font-size="11" fill="#97A59F">and doubles the</text>
+    <text x="334" y="358" text-anchor="middle" font-size="11" fill="#97A59F">sessions per GPU</text>
 
     <text x="24" y="386" font-size="11.5" fill="#97A59F">Native formats: FP8 W8A8 on Ada, Hopper and Blackwell · INT8 W8A8 on Turing to Hopper · FP4 W4A4 on Blackwell.</text>
   </g>

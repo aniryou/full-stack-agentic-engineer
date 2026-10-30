@@ -55,8 +55,8 @@ batching, chunked prefill, prefix caching, speculation, quantization). They are 
 
 The mini engine [`../serving-engine/mini-engine-core/`](../serving-engine/mini-engine-core/) builds the same
 scheduler and block cache from nothing (`minengine/kv.py`, `minengine/scheduler.py`, notebooks `01` to `03`). Primer
-§4.1 gives the vLLM name for each of its names. To see vLLM run, use
-[`../serving-engine/vllm-serving-lab/`](../serving-engine/vllm-serving-lab/). It serves a real model, scrapes
+§4.1 gives the vLLM name for each name of the mini engine. To see vLLM run, use
+[`../serving-engine/vllm-serving-lab/`](../serving-engine/vllm-serving-lab/). The serving lab serves a real model, scrapes
 `/metrics` and sweeps the flags of primer §11.
 
 For kernels, the FlashAttention [deep dive](../flash-attention/flash-attention-deep-dive.md) goes deeper than primer

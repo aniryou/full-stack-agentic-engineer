@@ -39,7 +39,7 @@ for label, (bm, bn) in [("naive (1x1)", (1, 1)), ("tile 32x32", (32, 32)), ("til
     print(f"{label:>18}  {t['bytes'] / 1e9:>11.2f} GB  {t['intensity']:>9.1f}  {t['bytes'] / 3.35e12 * 1e3:>25.2f} ms")
 
 # %% [markdown]
-# The $4096^3$ GEMM is 137 GFLOP. That is approximately 0.14 ms at ~990 TFLOP/s of dense BF16. If
+# The $4096^3$ GEMM is 137 GFLOP. The compute of the GEMM takes approximately 0.14 ms at ~990 TFLOP/s of dense BF16. If
 # the GEMM has no reuse, it streams 275 GB, which takes 82 ms at H100 bandwidth. A 128x128
 # shared-memory tile decreases global traffic by approximately 126x.
 #
@@ -83,7 +83,7 @@ print("✅ traffic = (M*K*ceil(N/BN) + K*N*ceil(M/BM) + M*N) x bytes, matching t
 
 # %% [markdown]
 # Look at the last shape, $M = 8$: a decode-sized GEMM with 8 tokens against a 4096x4096 weight.
-# Most of its traffic is one read of $B$ (the weights). That is the batch-1 decode problem
+# Most of its traffic is one read of $B$ (the weights). This traffic pattern is the batch-1 decode problem
 # in one line: no tile size can increase the intensity above the limit that $M$ sets.
 #
 # ## Tiles cost shared memory, and shared memory caps occupancy
@@ -171,7 +171,8 @@ for v in ("unfused", "fused", "online"):
 
 # %% [markdown]
 # Unfused, each step (max, subtract, exp, sum, divide) reads its input from HBM and writes its output
-# back. That is approximately 4x the traffic of a fused kernel, plus five launches and not one.
+# back. The unfused softmax moves approximately 4x the traffic of a fused kernel. It also needs five
+# launches and not one.
 #
 # When a row is too long to hold on chip, the **online** version streams the row one time. During
 # that pass, it keeps the current max $m$ and the current sum $s$. When the max increases, it
@@ -273,7 +274,7 @@ print("tail effect:", occ.waves(140, n_sms=132, blocks_per_sm=1), "<- 140 blocks
 # * several independent loads per thread (ILP)
 # * asynchronous copies (cp.async, TMA) that do not occupy threads at all
 #
-# That is why optimized GEMM and attention kernels run at *low* occupancy and still saturate the
+# These techniques are why optimized GEMM and attention kernels run at *low* occupancy and still saturate the
 # machine.
 #
 # ## In a design review

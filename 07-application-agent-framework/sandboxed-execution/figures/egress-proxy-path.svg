@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="896" height="372" viewBox="0 0 896 372" role="img" aria-label="The egress path: the sandboxed code goes through the network layer to the proxy check, then to a 403 or to the credential injection." style="color: #E4EAE7">
+  <title>The egress path: the sandboxed code goes through the network layer to the proxy check, then to a 403 or to the credential injection.</title>
+  <rect x="0" y="0" width="896" height="372" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <!-- row 0: the 403 outcome and the audit log -->
+    <rect x="451" y="24" width="200" height="72" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="551" y="48" text-anchor="middle" font-weight="600">403 to the caller</text>
+    <text x="551" y="66" text-anchor="middle" font-size="11.5" fill="#97A59F">before any request leaves,</text>
+    <text x="551" y="82" text-anchor="middle" font-size="11.5" fill="#97A59F">the attempt is logged</text>
+    <path d="M672 32 L672 96 A100 8 0 0 0 872 96 L872 32" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <ellipse cx="772" cy="32" rx="100" ry="8" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="772" y="58" text-anchor="middle" font-weight="600">audit log</text>
+    <text x="772" y="76" text-anchor="middle" font-size="11.5" fill="#97A59F">the name of the injected</text>
+    <text x="772" y="92" text-anchor="middle" font-size="11.5" fill="#97A59F">header, never its value</text>
+
+    <!-- row 1: the request path -->
+    <rect x="20" y="160" width="150" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="95" y="186" text-anchor="middle" font-weight="600">sandboxed code</text>
+    <text x="95" y="204" text-anchor="middle" font-size="11.5" fill="#97A59F">no network,</text>
+    <text x="95" y="220" text-anchor="middle" font-size="11.5" fill="#97A59F">no secrets</text>
+    <rect x="270" y="160" width="170" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="355" y="186" text-anchor="middle" font-weight="600">the network layer</text>
+    <text x="355" y="204" text-anchor="middle" font-size="11.5" fill="#97A59F">forces the path</text>
+    <text x="355" y="220" text-anchor="middle" font-size="11.5" fill="#97A59F">no DNS</text>
+    <path d="M466 195 L551 145 L636 195 L551 245 Z" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="551" y="191" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">ProxyPolicy</text>
+    <text x="551" y="207" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">.allows(host)?</text>
+    <rect x="672" y="158" width="200" height="74" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="772" y="181" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11.5" font-weight="600">ProxyPolicy.inject</text>
+    <text x="772" y="200" text-anchor="middle" font-size="11.5" fill="#7ADACF">drop the caller's headers,</text>
+    <text x="772" y="217" text-anchor="middle" font-size="11.5" fill="#7ADACF">then inject the credential</text>
+
+    <!-- row 2: the response path -->
+    <rect x="677" y="290" width="190" height="50" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="772" y="320" text-anchor="middle" font-weight="600">host on the allowlist</text>
+    <rect x="245" y="285" width="220" height="60" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="355" y="310" text-anchor="middle" font-weight="600">redact the injected value</text>
+    <text x="355" y="328" text-anchor="middle" font-size="11.5" fill="#97A59F">if the response echoes it</text>
+
+    <!-- edges: solid for the request and the response, dashed for the audit record -->
+    <g stroke="#97A59F" stroke-width="1.2" fill="none">
+      <path d="M170 195 L268 195" marker-end="url(#arr)"/>
+      <path d="M440 195 L464 195" marker-end="url(#arr)"/>
+      <path d="M636 195 L670 195" marker-end="url(#arr)"/>
+      <path d="M551 145 L551 98" marker-end="url(#arr)"/>
+      <path d="M772 158 L772 106" marker-end="url(#arr)" stroke-dasharray="4 3"/>
+      <path d="M772 232 L772 288" marker-end="url(#arr)"/>
+      <path d="M677 315 L467 315" marker-end="url(#arr)"/>
+      <path d="M245 315 L95 315 L95 232" marker-end="url(#arr)"/>
+    </g>
+    <g font-size="11" fill="#97A59F">
+      <text x="219" y="186" text-anchor="middle">plain HTTP only</text>
+      <text x="653" y="186" text-anchor="middle">yes</text>
+      <text x="560" y="128">no</text>
+      <text x="572" y="305" text-anchor="middle">a response, or a 3xx</text>
+      <text x="572" y="333" text-anchor="middle">that is not followed</text>
+      <text x="170" y="334" text-anchor="middle">back to the sandbox</text>
+    </g>
+  </g>
+</svg>

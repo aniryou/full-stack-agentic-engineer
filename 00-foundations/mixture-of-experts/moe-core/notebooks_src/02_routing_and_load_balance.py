@@ -84,7 +84,7 @@ print(f"dropless: {rr.idx.size} assignments padded to {padded} rows in {len(bloc
 # - four linear experts
 # - a linear top-1 router with Switch-style weights
 #
-# The hidden states share a large common direction (as transformer hidden states do). Thus at step 0, two experts are
+# The hidden states share a large common direction, as transformer hidden states do. Thus at step 0, two experts are
 # at the top for most tokens. Look at the share of tokens per expert.
 
 # %%
@@ -104,11 +104,11 @@ for b in ("none", "aux", "bias"):
 # approximately a quarter. Also, the task loss is three to five times lower.
 #
 # Look at the placements. The bias run gives each cluster its own expert, almost cleanly. The aux run also balances.
-# But its gradient demands equal counts, and the clusters are not equal (124, 117, 135, 136 tokens). Thus it
+# But its gradient pushes the counts to be equal, and the clusters are not equal (124, 117, 135, 136 tokens). Thus it
 # divides two clusters across experts. This is the quality cost of a balance that comes through the loss.
 #
-# This is a toy, so the numbers depend on the seed, but the direction does not. The pattern holds across ten task
-# seeds:
+# This experiment is a toy, so the numbers depend on the seed, but the direction does not. The pattern holds across ten
+# task seeds:
 
 # %%
 print(f"{'seed':>4s} | {'none: experts used, loss':>26s} | {'aux':>18s} | {'bias':>18s}")
@@ -267,4 +267,4 @@ print("✅ the batch-level loss says perfect (1.0), the sequence-level one says 
 #    not put a bias into the outputs.
 # 3. *Expert-choice routing is perfectly balanced. Why do decode engines not use it?* Each expert selects from the
 #    whole batch. Thus the experts of a token depend on the other tokens in the step. The token can then get
-#    zero experts. That is not causal and not deterministic per request.
+#    zero experts. This routing is not causal and not deterministic per request.

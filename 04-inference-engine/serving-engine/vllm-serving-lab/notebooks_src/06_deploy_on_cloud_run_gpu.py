@@ -13,13 +13,13 @@
 # Three settings decide the latency and the cost:
 #
 # * **`concurrency`**: the number of requests that Cloud Run sends to one instance. Set it equal to the
-#   batch that the engine can serve *within the SLO*. With a larger value, requests wait in a queue inside
+#   batch that the engine can serve *and still meet the SLO*. With a larger value, requests wait in a queue inside
 #   the engine, and TPOT and TTFT become worse. With a smaller value, Cloud Run scales out earlier than
 #   necessary, and the cost increases.
 # * **`min_instances`**: 0 means scale to zero. There is no cost while the service is idle. But the first
 #   request after an idle period gets a **cold start** (image pull, weights and engine init). 1 means that
 #   the instance is always warm and always billed.
-# * **`max_instances`**: a limit on the GPUs, on the bill, and on the load that you can absorb.
+# * **`max_instances`**: a limit on the GPUs, on the bill, and on the load that you can take.
 #
 # Concepts: PRIMER §12 "Engines and where to run them" ([`PRIMER.md`](../../PRIMER.md)). The deploy
 # assets are in [`deploy/gcp/cloud-run/`](../deploy/gcp/cloud-run/) (Terraform and `gcloud`). For the
@@ -72,7 +72,7 @@ print(plan.summary())
 #
 # - the image pull,
 # - the read of the weights,
-# - the init of the engine (the profile run, the KV allocation, the CUDA-graph capture).
+# - the init of the engine: the profile run, the KV allocation and the CUDA-graph capture.
 #
 # Write `cold_start_s(image_gb, pull_gb_s, weights_gb, weights_gb_s, init_s)`. Then compare two sources for
 # the weights. The inputs in the next cell are **assumptions**, not measurements. Replace them with your own
@@ -128,7 +128,7 @@ print(f"✅ cold start under these assumptions: {hf:.0f} s with Hugging Face, {g
 # %% [markdown]
 # ## Exercise 6.2 — choose Cloud Run `concurrency` from a measurement
 #
-# One instance is one engine. On the L4 profile, do a sweep of the number of simultaneous requests in the
+# One instance is one engine. On the L4 profile, do a sweep of the number of requests in flight per
 # instance (closed loop, with the users spread over one second). Keep the largest level at which at
 # least 90% of the requests meet the SLO. Write `pick_concurrency(summaries, min_attainment)` over a dict
 # `{concurrency: Summary}`.

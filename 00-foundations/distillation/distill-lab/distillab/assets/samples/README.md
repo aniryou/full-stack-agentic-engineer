@@ -1,8 +1,8 @@
 # Bundled samples — what each file is and where it came from
 
 Every file here is **illustrative**. It shows a format, and it lets the T0 paths run offline. No file is a
-measurement of a real model. Generate the files again with the code of this lab (the tests make sure that they are
-current).
+measurement of a real model. Generate the files again with the code of this lab. The tests make sure that the files
+are current.
 
 | File | Format | Made by | Used in |
 |---|---|---|---|

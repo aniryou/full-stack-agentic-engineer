@@ -21,7 +21,7 @@
 #   - An average of the loss **per sequence** under-weights long completions. It bends the update toward longer,
 #     truncated answers. This is the **length bias**. DAPO and Dr. GRPO remove it with a token-level or constant
 #     normaliser.
-#   - Division by the std up-weights nearly-solved prompts.
+#   - Division by the std up-weights almost-solved prompts.
 #   - The clip caps how fast rare tokens can increase.
 # - Also, the cost: an inference engine generates $G$ completions per prompt, and these completions dominate the
 #   step.
@@ -59,10 +59,10 @@ for r in ([1, 0, 0, 1], [1, 0, 0, 0], [1, 1, 1, 1], [1] * 7 + [0], [1] * 4 + [0]
     print(f"rewards {r!s:26} → advantages {grpo.group_advantages([r])[0].round(4).tolist()}")
 
 # %% [markdown]
-# Read the last two rows. The single miss on a prompt that the model nearly always solves gets −2.47. A miss on a
+# Read the last two rows. The single miss on a prompt that the model almost always solves gets −2.47. A miss on a
 # 50/50 prompt gets −0.94.
 #
-# Division by the std of the group up-weights prompts that are nearly solved or nearly
+# Division by the std of the group up-weights prompts that are almost solved or almost
 # hopeless. This is the "difficulty bias" of Dr. GRPO, and `scale_rewards="none"` removes it. The all-correct
 # group gets zero: no signal, independent of the number of tokens that it cost to generate.
 #
@@ -86,8 +86,8 @@ for p_old in (0.01, 0.5, 0.9):
 # clip drives the entropy down. The solution of DAPO is **clip-higher** ($\varepsilon_{\text{low}}$ 0.2,
 # $\varepsilon_{\text{high}}$ 0.28).
 #
-# Note the TRL default `num_iterations=1`. If you sample and update with the same weights, $\rho \equiv 1$ and the
-# clip is inert. The clip is important only with $\mu > 1$ or with stale (off-policy) rollouts.
+# The TRL default is `num_iterations=1`. If you sample and update with the same weights, $\rho \equiv 1$ and the
+# clip has no effect. The clip is important only with $\mu > 1$ or with stale (off-policy) rollouts.
 #
 # ## Worked example 3 — the KL estimator k3
 # GRPO puts the KL in the loss. It estimates the KL per token from samples of $\pi$:
@@ -105,8 +105,8 @@ print("k3 at log(π_ref/π) = 0.1, −0.1, 0.5:", [round(float(grpo.k3(0.0, d)),
 
 # %% [markdown]
 # Both are unbiased. $k_3$ is never negative and has a fraction of the spread. The low spread is important when
-# the loss sums $k_3$ over thousands of tokens. TRL's default is $\beta$ = 0: no reference model in memory at all
-# (DAPO also does not use the KL). The DeepSeek-R1 recipe used $\beta$ = 0.001 (per TRL's docs, verify).
+# the loss sums $k_3$ over thousands of tokens. TRL's default is $\beta$ = 0: no reference model in memory at all.
+# DAPO also does not use the KL. The DeepSeek-R1 recipe used $\beta$ = 0.001 (per TRL's docs, verify).
 #
 # ## Worked example 4 — GRPO on the bracket task
 # The run uses eight samples per prompt, two groups per step and $\mu$ = 4 gradient steps per batch. Thus the clip
@@ -127,10 +127,10 @@ for ec in (0.0, 0.05):                               # the other lever: pay for 
     print(f"REINFORCE, entropy bonus {ec}: P(correct) %.3f, %.1f effective correct answers" % diversity(p_ec))
 
 # %% [markdown]
-# The success rate goes to ~100% within a few dozen steps. After that, almost every group is all-correct, the
-# advantages are zero and the policy learns nothing more. Also, the policy has concentrated on a few of the 14
-# correct strings. RL sharpens: pass@1 goes up, and the diversity goes down. An entropy bonus buys the diversity
-# back at a small cost in accuracy.
+# The success rate goes to ~100% in not more than a few dozen steps. After that, almost every group is
+# all-correct, the advantages are zero and the policy learns nothing more. Also, the policy has concentrated on
+# a few of the 14 correct strings. RL sharpens: pass@1 goes up, and the diversity goes down. An entropy bonus buys
+# the diversity back at a small cost in accuracy.
 #
 # Here, the bonus is a sequence-level $-c \log \pi(y)$ that the code adds to the reward. Thus the baseline also
 # applies to the bonus, as to the reward. TRL's `entropy_coef` adds the mean per-token entropy to the loss
@@ -184,7 +184,7 @@ for lt in ("grpo", "dapo", "dr_grpo"):
 # (`mask_truncated_completions`) and shapes overlong ones.
 #
 # ## Worked example 6 — dynamic sampling: paying for groups that carry signal
-# A dataset has nine prompts. The model nearly always solves three, sometimes solves three, and rarely solves
+# A dataset has nine prompts. The model almost always solves three, sometimes solves three, and rarely solves
 # three. Each step trains on four prompts, sampled at random.
 
 # %%
@@ -222,7 +222,7 @@ print(f"generate {r['generate_s']:.0f} s, train {r['train_s']:.0f} s → rollout
       f"the generation batch is {r['batch_occupancy']:.0%} full on average (the long tail decodes almost alone)")
 
 # %% [markdown]
-# The model is optimistic (perfect overlap within each phase, 50% MFU on decode FLOPs, 40% on training). But it
+# The model is optimistic (perfect overlap in each phase, 50% MFU on decode FLOPs, 40% on training). But it
 # still puts half of the step into generation. Most of that half is a wait for a few long completions. verl
 # reports ~70% for rollouts in DAPO-32B training (primer §8, verify).
 #

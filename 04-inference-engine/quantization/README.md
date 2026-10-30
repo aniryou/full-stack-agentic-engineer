@@ -2,8 +2,8 @@
 
 After this topic, you can say what INT4, FP8, NVFP4 or an FP8 KV cache will give for a given model on a given
 GPU. The gain can be decode speed, prefill speed or concurrency. You can say what each format runs as on that GPU
-generation. You can also say how to use GPTQ, AWQ or SmoothQuant to make 4 bits accurate. Then you can produce,
-serve and evaluate a real quantized checkpoint.
+generation. You can also say how to use GPTQ, AWQ or SmoothQuant to make 4 bits accurate. Then you can produce
+and serve a real quantized checkpoint, and measure its accuracy.
 
 ## Start here
 
@@ -26,7 +26,7 @@ a multi-GPU box, rented for an hour. T3 is the Google Cloud deployment, and it i
 | Path | You will be able to… | Time | Tier |
 |---|---|---|---|
 | [`PRIMER.md`](PRIMER.md) | Explain quantization for inference in ten sections. The first three are §1 why quantize · §2 number formats · §3 granularity and the bits-per-weight budget. The next three are §4 weight-only PTQ (GPTQ, AWQ, kernels) · §5 weight-and-activation quantization · §6 KV-cache quantization. The last four are §7 QAT and QLoRA in brief · §8 measuring the accuracy you pay · §9 producing a checkpoint · §10 choosing a scheme. Each formula has a worked number and the core function that computes it. After the ten sections come "In a design review", a glossary, sources and a dated Verify list. | ~2 h. Read it together with the core. | — |
-| [`quant-core/`](quant-core/) | Implement it in `quantcore` (numpy, ~640 lines of code). It has FP8/FP4/MX/NV grids from their bits, scale granularity, GPTQ, AWQ and SmoothQuant. It also has W8A8 epilogues, FP8 and KIVI KV caches, and a small model with LLM-like outliers. It has an eval with error bars, and a per-GPU cost and decision model. There are five fill-in notebooks. | ~10 h with the primer | T0 |
+| [`quant-core/`](quant-core/) | Implement it in `quantcore` (numpy, ~640 lines of code). It has FP8/FP4/MX/NV grids from their bits, scale granularity, GPTQ, AWQ and SmoothQuant. It also has W8A8 epilogues, FP8 and KIVI KV caches, and a small model with LLM-like outliers. It has an eval with error bars, and a cost and decision model for each GPU. There are five fill-in notebooks. | ~10 h with the primer | T0 |
 | [`quant-lab/`](quant-lab/) | Produce real checkpoints with llm-compressor (FP8 dynamic, W4A16). Serve FP16, INT4 and FP8 in vLLM, and compare them. Measure the accuracy cost with lm-eval. Turn on an FP8 KV cache. Examine the NVFP4/MXFP4 layouts step by step. Every notebook has a T0 path: a bundled small model and a fake server, labelled simulated. | ~9 h | T0 to T1 (T3 optional) |
 
 ### Work it in this order
@@ -41,7 +41,7 @@ this topic is module 04.9. It comes after serving-engine (04.1–04.7).
 | 2. Granularity and outliers | §3 Granularity and the bits-per-weight budget | [`02_granularity_and_outliers`](quant-core/notebooks/02_granularity_and_outliers.ipynb) | [`01_quantize_a_checkpoint`](quant-lab/notebooks/01_quantize_a_checkpoint.ipynb) | T0 to T1 |
 | 3. Calibration algorithms | §4 Weight-only post-training quantization · §5 Weight-and-activation quantization | [`03_gptq_awq_and_smoothquant_from_scratch`](quant-core/notebooks/03_gptq_awq_and_smoothquant_from_scratch.ipynb) | [`01_quantize_a_checkpoint`](quant-lab/notebooks/01_quantize_a_checkpoint.ipynb) (RTN, GPTQ and AWQ compared), [`03_measure_the_accuracy_cost`](quant-lab/notebooks/03_measure_the_accuracy_cost.ipynb) | T0 to T1 |
 | 4. Activations and the KV cache | §5 · §6 KV-cache quantization | [`04_activation_and_kv_cache_quantization`](quant-core/notebooks/04_activation_and_kv_cache_quantization.ipynb) | [`04_kv_cache_quantization_in_vllm`](quant-lab/notebooks/04_kv_cache_quantization_in_vllm.ipynb) | T0 to T1 (Ada or newer) |
-| 5. Selection and release | §7 QAT and QLoRA · §8 Measuring the accuracy you pay · §9 Producing a checkpoint · §10 Choosing a scheme | [`05_choosing_a_scheme`](quant-core/notebooks/05_choosing_a_scheme.ipynb) | [`02_serve_and_compare_schemes`](quant-lab/notebooks/02_serve_and_compare_schemes.ipynb), [`03_measure_the_accuracy_cost`](quant-lab/notebooks/03_measure_the_accuracy_cost.ipynb), then [`05_fp4_and_the_blackwell_path`](quant-lab/notebooks/05_fp4_and_the_blackwell_path.ipynb) (its base is §5's W4A4 and SmoothQuant, and lab 02's GEMM roofline) | T0 to T1 (Blackwell for 05) |
+| 5. Selection and release | §7 QAT and QLoRA · §8 Measuring the accuracy you pay · §9 Producing a checkpoint · §10 Choosing a scheme | [`05_choosing_a_scheme`](quant-core/notebooks/05_choosing_a_scheme.ipynb) | [`02_serve_and_compare_schemes`](quant-lab/notebooks/02_serve_and_compare_schemes.ipynb), [`03_measure_the_accuracy_cost`](quant-lab/notebooks/03_measure_the_accuracy_cost.ipynb), then [`05_fp4_and_the_blackwell_path`](quant-lab/notebooks/05_fp4_and_the_blackwell_path.ipynb). The base of lab 05 is §5's W4A4 and SmoothQuant, and lab 02's GEMM roofline. | T0 to T1 (Blackwell for 05) |
 
 Each notebook ends with "In a design review". That section has the two-minute explanation and its drills. The
 primer has its own design-review section, and that section covers the whole topic.
@@ -89,7 +89,7 @@ For prices, free tiers and how to get GPUs on GCP and elsewhere, see [`COMPUTE.m
   assumed efficiencies. They have the label SIMULATED. Only the lab's T1 paths measure. The accuracy numbers in the
   core come from a small synthetic model. They show the mechanisms and their direction, not the losses of a real
   model.
-- **Kernel rules move fast.** What a scheme runs as on each GPU generation follows vLLM 0.30.0 and `main` as of
+- **Kernel rules move fast.** What a scheme runs as on each GPU generation comes from vLLM 0.30.0 and `main` as of
   September 2026. These rules cover FP8 below Ada, NVFP4 below Blackwell, INT8 W8A8 on Blackwell and FP8 KV on a T4.
   `--quantization fp8` on a BF16 checkpoint works at 0.30.0 and raises an exception at `main` (use
   `fp8_per_tensor`). Examine the `Selected <kernel>` log line on your version. The primer's

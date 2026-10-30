@@ -108,7 +108,7 @@ describe them. The durable job is as the
 | `memory.py` | ~215 | The write path: `WritePolicy` (kinds per source, confidence floor, screening, quarantine). Resolution ADD / NOOP / UPDATE / ADD_HISTORY / FLAG. Idempotency keys that are unique in each partition, and the refusal of a different write under a known key. The pinned profile, and audit. |
 | `service.py` | ~350 | The memory service (aiohttp): scope from a verified stand-in token, `Idempotency-Key`, forget by subject, review and promote, audit JSON lines. Its client and `RemoteMemory`. |
 | `agent.py`, `llm.py`, `extract.py` | ~815 | The 07.1 loop with memory as tools, implicit or pinned. Three prompt layouts, provenance by taint and a confirm-gated forget. An OpenAI-compatible chat client and the scripted model. The grammar of extraction and of the answers. |
-| `fakeserver.py`, `cachebench.py` | ~710 | A fake OpenAI-compatible server (chat with tool calls, embeddings, metrics with vLLM names, a block-hash prefix cache with `cache_salt`, the whole-cache reset of vLLM). The layout bench with the roofline TTFT and the price table (with the caching minimum of the provider). Each column has the label measured or modelled. |
+| `fakeserver.py`, `cachebench.py` | ~710 | A fake OpenAI-compatible server. It has chat with tool calls, embeddings, metrics with vLLM names, a block-hash prefix cache with `cache_salt` and the whole-cache reset of vLLM. The layout bench with the roofline TTFT and the price table (with the caching minimum of the provider). Each column has the label measured or modelled. |
 | `consolidate.py` | ~300 | Consolidation as a durable run: a weekly run id and window, lease, checkpoints, a crash hook, resolution, reflection, the TTL mark. Sharding, and the printed GCP commands (image, identities, Cloud SQL, schedule, cleanup). |
 | `harness.py`, `report.py` | ~420 | The planted-facts generator, the grader, Wilson intervals, the mode comparison, recall against budget and the knee. JSON and Markdown reports. |
 | `audit.py`, `embedders.py`, `env.py`, `__main__.py` | ~540 | The `AuditEvent` of the identity lab, with `memory.*` types and GenAI memory names. The hashing and HTTP embedders. Tier detection. The CLI. |
@@ -119,7 +119,7 @@ describe them. The durable job is as the
 
 - [`local/`](deploy/local/): compose with the service, the fake model server and an optional
   `pgvector/pgvector:0.8.6-pg17`. `up.sh` / `down.sh` accept `DRY_RUN=1`.
-- [`any-gpu/`](deploy/any-gpu/): the `serve.sh` of the 04 serving lab with tool calling,
+- [`any-gpu/`](deploy/any-gpu/): the `serve.sh` of the 04 serving lab with tool calls,
   `--enable-prompt-tokens-details` and a pooling-runner embedder.
 - [`gcp/`](deploy/gcp/): the consolidation job on Cloud Run jobs and Cloud Scheduler, and the model on the Cloud
   Run GPU of the serving lab. It also has a dated table of managed memory stores.
@@ -152,7 +152,7 @@ make check                                              # all of the above + tes
 
   The harness has other users, other questions and a 128-token budget. Thus its mode ranking is not the ranking of
   PRIMER §6. Also, its knee is relative: the smallest budget that gets 95% of the best recall
-  (`harness.knee(frac=0.95)`). But the knee of memory-core is absolute: within 2 points of the best. Neither harness is
+  (`harness.knee(frac=0.95)`). But the knee of memory-core is absolute: at most 2 points below the best. Neither harness is
   evidence about a real model, because both use a scripted answerer.
 - **The token is a stand-in.** It is HMAC-signed. It has the claims and the failure modes of a real verifier, but
   not its cryptography. In production, the service verifies RS256/ES256 tokens against your IdP (identity primer
@@ -166,7 +166,7 @@ make check                                              # all of the above + tes
   not, because its idempotency table is in SQLite SQL. Thus, if you want a Postgres deployment of the service, you
   must write that port yourself.
 - **SQLite features vary.** FTS5 `secure-delete` needs SQLite 3.42 or newer (verify: the SQLite of Colab can be
-  older). The store detects if the feature is available. If it is not available, the store uses `optimize`. The
+  older). The store does a check for the feature. If it is not available, the store uses `optimize`. The
   lab examines the deploy paths with `bash -n`, `DRY_RUN=1`, YAML checks and the parser of Postgres. It does not
   run them against real infrastructure here.
 
@@ -178,9 +178,9 @@ make check                                              # all of the above + tes
   block only. The default block size is 16. `/reset_prefix_cache` needs dev mode (`VLLM_SERVER_DEV_MODE=1`). It
   resets the whole cache, for every tenant, and answers `{"success": bool}`. There is no eviction by salt.
 - pgvector **0.8.6** (`pgvector/pgvector:0.8.6-pg17`): `vector` indexes up to 2,000 dimensions. HNSW `m = 16`,
-  `ef_construction = 64`, `hnsw.ef_search = 40`. `hnsw.iterative_scan` since 0.8.0. Filters apply after the index
+  `ef_construction = 64`, `hnsw.ef_search = 40`. `hnsw.iterative_scan` from 0.8.0. Filters apply after the index
   scan.
-- SQLite: FTS5 `secure-delete` since 3.42.0. `bm25()` k1 = 1.2, b = 0.75, with the IDF floor at 1e-6. `PRAGMA
+- SQLite: FTS5 `secure-delete` from 3.42.0. `bm25()` k1 = 1.2, b = 0.75, with the IDF floor at 1e-6. `PRAGMA
   secure_delete` is off by default, unless a compile-time option of the SQLite build sets it on.
 - Cloud Run jobs and Cloud Scheduler: the v2 `jobs/<job>:run` URI with OAuth. `--task-timeout`, `--set-secrets`,
   `--set-cloudsql-instances`, `--service-account` and `--command/--args` on `gcloud run jobs create`. The

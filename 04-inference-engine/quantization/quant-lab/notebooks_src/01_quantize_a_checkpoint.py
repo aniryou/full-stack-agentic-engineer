@@ -140,7 +140,7 @@ print(f"✅ predicted {predict_w4a16_bytes(model):,} B = written {actual:,} B; {
 # largest inputs.
 #
 # GPTQ quantizes one column at a time. It moves the rounding error of each column onto the columns that it did
-# not quantize yet. The inverse Hessian of the calibration inputs sets how much error each column receives.
+# not quantize yet. The inverse Hessian of the calibration inputs sets how much error each column gets.
 # Thus GPTQ compensates elsewhere for the error that goes to the large-input channels. The layer error in the
 # table of the next cell is $\lVert X\hat{W}^\top - XW^\top \rVert / \lVert XW^\top \rVert$ on calibration
 # inputs.
@@ -159,11 +159,11 @@ for k, q in runs.items():
 # %% [markdown]
 # Look at two things. First, per layer: on the projections whose inputs carry the outlier channels (q/k/v,
 # gate/up), g32 almost does not change the error of RTN. That error is 8-12% at either group size. A group is a run of *inputs
-# within one output row*. In every group, the two columns that the lab made smaller are 18-24x smaller than their
+# in one output row*. In every group, the two columns that the lab made smaller are 18-24x smaller than their
 # neighbours. Thus they round to zero at any group size.
 #
-# Second, end to end: g32 does even *worse* than g128 here. This is the opposite of the usual rule (finer groups
-# cost bits and give accuracy, PRIMER §3). The next cell finds the cause.
+# Second, end to end: g32 does even *worse* than g128 here. This is the opposite of the usual rule (PRIMER §3): finer groups
+# cost bits and give accuracy. The next cell finds the cause.
 #
 # ## Worked example: why finer groups lost accuracy on this model
 #
@@ -199,7 +199,7 @@ for key in ("W4A16 (rtn)", "W4A16-g32 (rtn)"):
 # channels of the residual stream from every attention and MLP input. Finer groups do decrease the error of the
 # ordinary columns (per layer, in the table of the round-to-nearest versus GPTQ example). But that was never the problem.
 #
-# At g32, a small number of the small weights are just above half a step of their (smaller) group scale. These
+# At g32, a few of the small weights are just above half a step of their (smaller) group scale. These
 # weights round *up* to one step instead of down to zero. Each of them is still ~90% incorrect, and now its sign
 # is opposite to the sign of the deleted weights around it. Each of them multiplies an input ~24x the typical one
 # inside q/k, and the error of q/k goes through the softmax. If you force those few codes back to zero, g32
@@ -212,7 +212,7 @@ for key in ("W4A16 (rtn)", "W4A16-g32 (rtn)"):
 # The lesson that transfers is this: when the damage is in a few input channels, group size is the incorrect
 # setting to adjust. The correction is per-*input-channel*. One correction is GPTQ (error compensation onto the
 # other columns). The other is AWQ (scale the salient columns up, round them, and fold the inverse into the norm).
-# Both get back nearly all of the loss at g128 (the table of the round-to-nearest versus GPTQ example).
+# Both get back almost all of the loss at g128 (the table of the round-to-nearest versus GPTQ example).
 #
 # ## Exercise 1.3 — the symmetric INT4 group quantizer
 #
@@ -337,8 +337,8 @@ else:
 # "For INT4 we use GPTQ with calibration data from our own traffic. The reason is that round-to-nearest loses
 # the weight columns that meet our largest activations. On the lab's model, RTN leaves 11% error on the q
 # projection, and GPTQ leaves under 2%. The LM head and the embeddings stay bf16. Thus the checkpoint is ~3x
-# smaller, not 4x. Before we start, we make sure that the input width of every projection divides the group
-# size."
+# smaller, not 4x. Before we start, we make sure that the group size divides the input width of every
+# projection."
 #
 # **Drill 1.** *Why does `FP8_DYNAMIC` need no calibration data but `W4A16` with GPTQ does?* FP8 dynamic
 # calculates the weight scales from the weights, and it calculates the activation scales per token at run time.

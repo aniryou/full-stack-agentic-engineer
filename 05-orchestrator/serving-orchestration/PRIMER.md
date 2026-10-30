@@ -268,19 +268,21 @@ with a max-score picker makes hot spots of popular prefixes. But a filter with a
 trade-off in one number, in TTFT seconds.
 
 ```mermaid
-flowchart TB
-    E(["endpoints of the InferencePool"]) --> A
-    E --> B
-    subgraph A["chart default: weighted scorers (verify)"]
-        direction TB
-        S1["scorers: weight × score in [0, 1]<br/>prefix-cache-scorer × 3<br/>queue-scorer × 2<br/>kv-cache-utilization-scorer × 2"] --> K1["max-score-picker<br/>ties at random"]
+flowchart LR
+    E(["endpoints of the<br/>InferencePool"]) --> SA & SB & SC
+    subgraph A["chart default (verify)"]
+        direction LR
+        SA["prefix-cache-<br/>scorer × 3"] --> K1["max-score-<br/>picker"]
+        SB["queue-scorer × 2"] --> K1
+        SC["kv-cache-utilization-<br/>scorer × 2"] --> K1
     end
-    subgraph B["optimized baseline: sticky until saturated"]
-        direction TB
-        F2["prefix-cache-affinity-filter<br/>keep endpoints with prefix score ≥ 0.80<br/>keep all when the TTFT penalty gate breaks"] --> S2["token-load-scorer<br/>uncached tokens in flight<br/>+ the uncached tokens of this request"] --> K2["max-score-picker<br/>ties at random"]
+    E --> F2
+    subgraph B["optimized baseline"]
+        direction LR
+        F2["prefix-cache-<br/>affinity-filter"] --> S2["token-load-<br/>scorer"] --> K2["max-score-<br/>picker"]
     end
-    A --> D["one endpoint"]
-    B --> D
+    K1 --> D["one endpoint"]
+    K2 --> D
 ```
 
 *Two compositions of the EPP scheduling profile (§2.4). The chart default adds the weighted scores and takes the maximum. The optimized baseline keeps the sticky endpoints, or all endpoints when the TTFT penalty gate breaks, and the token-load scorer decides among them.*
@@ -458,12 +460,12 @@ The first two rows absorb a burst in milliseconds. Autoscaling (§4) restores th
 ## 4. Autoscaling
 
 ```mermaid
-flowchart TB
-    M["metrics every 15 s<br/>engine /metrics or EPP<br/>per pod, or a pool total"] --> R["ratio = metric ÷ target<br/>10 % band: no change<br/>desired = ⌈current × ratio⌉<br/>the largest over metrics"]
-    R --> S["stabilization window<br/>scale-down: the maximum<br/>of the last 300 s"]
-    S --> P["policies, per 15 s<br/>scale-up: the larger of<br/>+4 pods and +100 %<br/>scale-down: −100 %<br/>then clamp to<br/>[minReplicas, maxReplicas]"]
-    P --> N["replica count"]
-    N -- "scale-up" --> K["cold start: node, image,<br/>weights, warm-up<br/>102 s in<br/>ColdStart.estimate()<br/>a Pending pod counts as 0<br/>on a scale-up"]
+flowchart LR
+    M["metrics<br/>every<br/>15 s"] --> R["ratio, band,<br/>largest of<br/>metrics"]
+    R --> S["stabilization<br/>window"]
+    S --> P["policies,<br/>then clamp"]
+    P --> N["replica<br/>count"]
+    N -- "scale-up" --> K["cold start:<br/>node, image,<br/>weights,<br/>warm-up"]
     K --> M
     N -- "scale-down" --> M
 ```

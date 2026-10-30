@@ -32,7 +32,7 @@ repository, modules 04.1–04.6).
 |---|---|---|---|---|
 | [`01_the_step_loop_and_continuous_batching`](notebooks/01_the_step_loop_and_continuous_batching.ipynb) | Take one step apart (the flat batch, slot mapping). Compare static and continuous batching. Count peak KV blocks per request, and calculate concurrency from KV blocks. Divide one MLP across two "GPUs" (tensor parallelism and its all-reduces). | §1, §2, §9 | ~2 h | T0 |
 | [`02_chunked_prefill_and_the_token_budget`](notebooks/02_chunked_prefill_and_the_token_budget.ipynb) | Find the knee of the step-time curve. Show prefill/decode interference and what chunked prefill does. Do a sweep of the token budget at moderate load and at saturation, with goodput (simulated). Select a budget for an ITL SLO. Size KV to prevent preemption. Show what the whole-prompt admission check gives. | §3, §4, §11 | ~2 h | T0 |
-| [`03_prefix_caching`](notebooks/03_prefix_caching.ipynb) | Name blocks by a chained hash, and say why the parent is in the name. Share a system prompt with refcounts, within one step. Evict by LRU. Predict a hit rate. Lay out an agent prompt for 80%+ hits. Compare a radix tree with block hashing. | §5 | ~2 h | T0 |
+| [`03_prefix_caching`](notebooks/03_prefix_caching.ipynb) | Name blocks by a chained hash, and say why the parent is in the name. Share a system prompt with refcounts, in one step. Evict by LRU. Predict a hit rate. Lay out an agent prompt for 80%+ hits. Compare a radix tree with block hashing. | §5 | ~2 h | T0 |
 | [`04_sampling_and_structured_output`](notebooks/04_sampling_and_structured_output.ipynb) | Write the code for temperature, top-k/p, min-p, penalties, seeds and raw logprobs. Force valid JSON with an FSM mask (syntax, not sense). Compile a JSON-schema automaton into per-state masks over multi-character tokens. | §6 | ~1.5 h | T0 |
 | [`05_speculative_decoding`](notebooks/05_speculative_decoding.ipynb) | Prove that the rejection rule is exact. Measure α and tokens per pass on a draft/target pair, and explain why the formula over-predicts deep k. Use prompt lookup for copy-heavy outputs. Say when speculation costs more time than it saves (simulated). | §7 | ~2 h | T0 |
 | [`06_quantization`](notebooks/06_quantization.ipynb) | Quantize to INT8/INT4/FP8 at each scale granularity. Handle outliers with SmoothQuant. Measure model-level damage. Say what each scheme and FP8 KV give for decode, prefill and concurrency on an L4 (simulated). | §8 | ~1.5 h | T0 |
@@ -75,7 +75,7 @@ Read the modules in this order. Each module starts with a docstring that states 
 | [`minengine/engine.py`](minengine/engine.py) | ~170 | The loop. It schedules, then builds the flat batch (tokens, positions, slot mapping, block tables). Then it does one forward pass, samples and updates. Also `add_request`, `step`, `generate` and traces. |
 | [`minengine/spec.py`](minengine/spec.py) | ~120 | Speculative decoding: exact accept/recover/bonus rejection sampling, α, expected tokens per pass, speed-up and best k, n-gram prompt lookup. |
 | [`minengine/quant.py`](minengine/quant.py) | ~80 | INT8 per-tensor/per-channel, INT4 group-wise, FP8-E4M3 emulation, SmoothQuant scales, error metrics, bits per weight. |
-| [`minengine/perf.py`](minengine/perf.py) | ~260 | `max(bytes/BW, FLOPs/peak) + overhead` per step for real GPUs and models (quantized weights keep a 16-bit embedding and LM head). Also KV capacity, the speculation cost model and `simulate()`. `simulate()` runs the scheduler of this package on a virtual clock under Poisson load. Every output has the label SIMULATED. |
+| [`minengine/perf.py`](minengine/perf.py) | ~260 | `max(bytes/BW, FLOPs/peak) + overhead` per step for real GPUs and models. For quantized weights, the model keeps a 16-bit embedding and LM head. Also KV capacity, the speculation cost model and `simulate()`. `simulate()` runs the scheduler of this package on a virtual clock under Poisson load. Every output has the label SIMULATED. |
 
 ## What the tests prove
 
@@ -84,7 +84,7 @@ Read the modules in this order. Each module starts with a docstring that states 
 - **Paged == dense.** `forward` over scattered block tables, random chunk sizes and several sequences per batch
   equals `forward_dense` to 1e-10. The greedy tokens of the engine equal `generate_dense`, also under preemption
   and with prefix-cache hits. Seeded sampled outputs also do not change under preemption. A burst of three requests
-  with a shared prefix hits within one step (`[0, 64, 64]`). In that burst, every logprob still equals the dense
+  with a shared prefix hits in one step (`[0, 64, 64]`). In that burst, every logprob still equals the dense
   reference to 1e-9 (`test_model.py`, `test_engine.py`, `test_scheduler.py`).
 - **The prefix cache never serves a block computed under a different prefix.** An oracle records the full token
   prefix behind every block. It examines every hit over hundreds of random prompts. The same harness shows that a
@@ -128,7 +128,7 @@ A check against the V1 source of vLLM (Sep 2026, see the Verify list of the prim
 - `max_cache_hit_length = num_tokens − 1`.
 - Chained block hashes with extra keys.
 - Blocks published at scheduling time. Thus requests that the engine admits in the same step share a prefix. The
-  core publishes the blocks of a running request when the running pass is final. Thus a request that the engine
+  core publishes the blocks of a running request when the pass over running requests is final. Thus a request that the engine
   preempts later in that pass never names blocks that it will not compute.
 - Blocks freed tail first into an LRU free queue, with lazy eviction.
 - Hits counted in tokens. The exported counters do not include preempted re-lookups.
@@ -137,7 +137,7 @@ A check against the V1 source of vLLM (Sep 2026, see the Verify list of the prim
 - The accepted/recovered/bonus rejection rule.
 - `RequestStatus`-style names.
 
-These parts are simplified:
+The core simplifies these parts:
 
 - One KV cache group (no hybrid or sliding-window models).
 - No async scheduling, CUDA graphs, tensor parallelism or LoRA. TP appears as a numpy exercise in notebook 01.
@@ -146,7 +146,7 @@ These parts are simplified:
 - The model is float64 numpy.
 
 Every latency and throughput that `minengine.perf` prints is **simulated**, and has a label that says so. A roofline
-model drives the real scheduler of this package on a virtual clock. The KV sizing of `minengine.perf` uses round
+model drives the real scheduler of this package on a virtual clock. `minengine.perf` sizes KV with round
 inputs (0.9 of the datasheet memory of the GPU minus a flat 1 GB). [`../PRIMER.md`](../PRIMER.md) §4 compares these
 inputs with the defaults of vLLM v0.30.0.
 

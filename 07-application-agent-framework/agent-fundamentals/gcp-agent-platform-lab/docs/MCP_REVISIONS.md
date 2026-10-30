@@ -14,7 +14,7 @@ revision that you target again.
 
 | Concern | 2025-03-26 | 2025-06-18 | 2025-11-25 | 2026-07-28 (what the lab models) |
 |---|---|---|---|---|
-| Connection set-up | `initialize` handshake + `notifications/initialized`. Streamable HTTP can assign `Mcp-Session-Id`. | same | same | No handshake and no sessions. Every request carries its protocol version and client capabilities in `params._meta`. `server/discover` announces versions, capabilities and identity. |
+| Connection set-up | `initialize` handshake + `notifications/initialized`. Streamable HTTP can assign `Mcp-Session-Id`. | same | same | No handshake and no sessions. Every request carries its protocol version and client capabilities in `params._meta`. `server/discover` gives the versions, capabilities and identity. |
 | Version negotiation | once, in `initialize` | once, then the `MCP-Protocol-Version` header on every later HTTP request | same as 2025-06-18 | Per request, in `_meta`. A mismatch is `UnsupportedProtocolVersion` (-32022). |
 | Headers an intermediary can route on | `Mcp-Session-Id` | + `MCP-Protocol-Version` | same | + `Mcp-Method` and `Mcp-Name`, necessary on POST. A header that disagrees with the body is `HeaderMismatch` (-32020). |
 | JSON-RPC batching | added | removed | — | Not supported. The lab also rejects batches. |

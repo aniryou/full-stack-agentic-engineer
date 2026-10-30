@@ -45,7 +45,7 @@ primer and does not repeat it.
 - **A container brings CUDA. The host brings the driver.** The NVIDIA Container Toolkit injects `/dev/nvidia*`,
   `libcuda` and NVML when the container starts. It uses an OCI hook or a CDI spec. Do not build `libcuda` into an
   image.
-- **Sharing:** MIG partitions the GPU (isolated, shapes that do not change). MPS overlaps processes (efficient, weakly
+- **Sharing:** MIG partitions the GPU (isolated, constant shapes). MPS overlaps processes (efficient, weakly
   isolated). Time-slicing takes turns (no isolation). For LLM serving, the batching in the engine is the best way
   to share a GPU.
 - **Health:** "GPU util" is the share of *time* when a kernel ran. It does not show how much of the GPU the kernel
@@ -114,7 +114,7 @@ driver **535.183.01**. That driver supports CUDA 12.2.
 Each NVIDIA GPU has a **compute capability** X.Y. `nvcc` compiles device code to **PTX** (a virtual ISA,
 `compute_XY`). Then it compiles the PTX to **SASS** (machine code, `sm_XY`). A fatbin can hold more than one of
 each (`-gencode
-arch=compute_90,code=[sm_90,compute_90]`). PyTorch writes this as `TORCH_CUDA_ARCH_LIST="8.0 8.6 9.0+PTX"`, and
+arch=compute_90,code=[sm_90,compute_90]`). PyTorch writes the targets as `TORCH_CUDA_ARCH_LIST="8.0 8.6 9.0+PTX"`, and
 `gpusim.compat.parse_targets()` parses it.
 
 At load time, the driver selects the SASS that matches best. If no SASS matches, the driver JIT-compiles the PTX.
@@ -158,7 +158,7 @@ with its own bundled `ptxas`, and then caches them (`~/.triton/cache`). For each
 **cuBLAS/cuBLASLt** select GEMM kernels. **NCCL** is the topic of §5. `torch.cuda.get_arch_list()` lists the
 SASS/PTX targets of your build.
 
-| Error | Code | Meaning | Usual fix |
+| Error | Code | What it means | Usual correction |
 |---|---|---|---|
 | CUDA driver version is insufficient for CUDA runtime version | 35 | The runtime is a newer major, or it is below the minor-compat floor. | Install a newer driver, use an older CUDA, or use `cuda-compat` (data center). |
 | API call is not supported in the installed CUDA driver | 36 | A minor-compat app called a newer API. | Install a newer driver. |
@@ -200,8 +200,8 @@ per-thread loop of L[t] iterations              each warp runs max(L) iterations
 The loop case is the case that causes problems for inference code. With one thread per sequence and long-tailed
 lengths, SIMT efficiency was **24%** in notebook 01, and **96%** after a sort by length. This is why kernels over
 ragged batches put the sequences into buckets by length. It is also why attention kernels divide the work into
-*tiles of tokens*, not threads per sequence. Since Volta, each thread has its own program counter, and thus divergent
-lanes can make independent progress. The cost model does not change.
+*tiles of tokens*, not threads per sequence. From Volta on, each thread has its own program counter, and thus
+divergent lanes can make independent progress. The cost model does not change.
 
 ### 2.3 Occupancy
 
@@ -230,7 +230,7 @@ $$
 
 An example on an **L4**: a block of 256 threads that uses 64 registers per thread gives 2,048 registers per warp.
 The 16,384 registers in each sub-partition hold 8 warps. Thus an SM holds 32 warps, which is **4 blocks and 67%
-occupancy**, and the registers set the limit. If you add 48 KB of shared memory per block, each block needs 49 KB.
+occupancy**. The registers set the limit. If you add 48 KB of shared memory per block, each block needs 49 KB.
 Then 2 blocks fit in 100 KB: **33%**.
 
 ![A grid of blocks of warps of threads, and one SM of an L4 whose four sub-partitions hold 8 warps each at 2,048 registers per warp: 32 of 48 warps resident, 4 blocks, 67% occupancy.](figures/launch-hierarchy-occupancy.svg)
@@ -280,9 +280,9 @@ capability 6.0+, a warp request costs one transaction per **distinct sector** th
 
 *The figure shows one warp request against global memory (`gpusim.simt.coalescing()`). The number of distinct sectors that the lanes touch is the number of transactions. A contiguous read takes 4, a read misaligned by 4 B takes 5, stride 2 takes 8, and a column walk takes 32.*
 
-This has two consequences for inference. **Layout is performance**: struct-of-arrays is faster than
+The coalescing rule has two consequences for inference. **Layout is performance**: struct-of-arrays is faster than
 array-of-structs. Matrices have a layout in which the index that changes fastest is the index that consecutive
-lanes walk. **Paged KV caches** stay coalesced, although their blocks are in different places in memory. Each block
+lanes walk. **Paged KV caches** stay coalesced, but their blocks are in different places in memory. Each block
 stores the keys and values of its tokens contiguously (kilobytes per block), and thus a warp still reads whole sectors.
 That is one reason why the blocks cannot be too small
 ([PagedAttention primer](../../04-inference-engine/paged-attention/paged-attention-primer.md)).
@@ -317,8 +317,8 @@ conflict-free. Notebook 01 calculates all three numbers. The lab's `01_kernels_i
 For $C[M,N] = A[M,K] \cdot B[K,N]$, a block that computes a $\mathit{BM} \times \mathit{BN}$ tile moves a
 $\mathit{BM} \times K$ panel of $A$ and a $K \times \mathit{BN}$ panel of $B$ through shared memory. Thus the
 kernel loads each $A$ element one time per *column* of tiles, and each $B$ element one time per *row*.
-`gpusim.tiling.gemm_traffic()` calculates this, and a comparison with the simulated kernel `tiled_matmul()` confirms
-it:
+`gpusim.tiling.gemm_traffic()` calculates this traffic, and a comparison with the simulated kernel `tiled_matmul()`
+confirms the result:
 
 $$
 \begin{aligned}
@@ -337,10 +337,10 @@ $$
 
 Tiles cost shared memory: $\text{stages} \times (\mathit{BM} \cdot \mathit{BK} + \mathit{BK} \cdot \mathit{BN}) \times \text{bytes}$ (`tile_smem_bytes()`).
 A 128×128×32 BF16 tile with 3 stages is 48 KB, which gives 2 blocks per SM on an L4 (§2.3). The last factor of
-approximately 20× to compulsory traffic comes from **L2**, where concurrent blocks share panels. Layer 01 puts these
-numbers on the roofline
+approximately 20× to compulsory traffic comes from **L2**, where blocks that run at the same time share panels.
+Layer 01 puts these numbers on the roofline
 ([§4.1](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md#4-the-memory-hierarchy-and-why-tilingfusion-win)).
-Note the decode case: with $M$ = 8 tokens, the traffic is one read of the weight matrix, and no tile size helps.
+In the decode case, with $M$ = 8 tokens, the traffic is one read of the weight matrix, and no tile size helps.
 
 ### 3.5 Fusion
 
@@ -354,8 +354,8 @@ Each kernel boundary is a round trip through HBM. Take a row-wise softmax of a 4
 | online (two passes, running max and sum) | 1 | 96 MiB (3RC) | 30 µs |
 
 When the max increases, the online variant rescales its running sum by $\exp(m_{\text{old}} - m_{\text{new}})$.
-This makes the result exact (`softmax_online()`). FlashAttention fuses the softmax *into* QKᵀ and PV. Thus the
-score matrix never gets to HBM
+This correction makes the result exact (`softmax_online()`). FlashAttention fuses the softmax *into* QKᵀ and PV.
+Thus the score matrix never gets to HBM
 ([FlashAttention primer §4–5](../../04-inference-engine/flash-attention/flash-attention-primer.md)). Elementwise
 chains fuse in the same way: $k$ unfused ops move $k$ times the bytes of one fused kernel (`elementwise_traffic()`).
 
@@ -480,17 +480,17 @@ $T = a \cdot \alpha + c \cdot S/B$ (`cost_terms()`, `model_time()`):
 | pipelined chain broadcast, $k$ chunks | ${p+k-2}$ | $(p+k-2)/k \to 1$ | |
 
 A pipeline trades $\alpha$ for $\beta$. If you divide a message into $k$ pieces, you add $k$ steps, but each step
-becomes smaller. The optimum is $k^{\ast} = \sqrt{S/(\alpha \cdot B)}$: 12 chunks for 128 MiB with the numbers in
-§5.4 (`optimal_chunks()`). `best_algorithm()`, `sweep()` and `tp_comm()` pipeline at $k^{\ast}$, unless you give a
-different value (`pipeline_chunks()`). In-switch reduction moves almost half the bytes of the ring ($S$ instead of
-$2(p-1)/p \cdot S$ per GPU). The reason is that each GPU sends its data **once** and receives the result once.
+becomes smaller. The best value is $k^{\ast} = \sqrt{S/(\alpha \cdot B)}$: 12 chunks for 128 MiB with the numbers in
+§5.4 (`optimal_chunks()`). `best_algorithm()`, `sweep()` and `tp_comm()` use a pipeline of $k^{\ast}$ chunks, unless you
+give a different value (`pipeline_chunks()`). In-switch reduction moves almost half the bytes of the ring ($S$ instead
+of $2(p-1)/p \cdot S$ per GPU). The reason is that each GPU sends its data **once** and gets the result once.
 
 ### 5.4 algbw and busbw
 
 nccl-tests reports two bandwidths ([PERFORMANCE.md](https://github.com/NVIDIA/nccl-tests/blob/master/doc/PERFORMANCE.md)).
 **$\text{algbw} = S/t$**, where $S$ is the full buffer (the gathered output for all-gather, the input for
 reduce-scatter). **$\text{busbw} = \text{algbw} \times \text{factor}$**. The factor is the bandwidth term of the
-optimal point-to-point algorithm. Thus busbw shows the **per-link** bandwidth for any value of $p$
+best point-to-point algorithm. Thus busbw shows the **per-link** bandwidth for any value of $p$
 (`gpusim.collectives.busbw()`):
 
 | all-reduce | reduce-scatter, all-gather, all-to-all | broadcast, reduce, send/recv |
@@ -502,7 +502,7 @@ $B$ = 450 GB/s**. A 1 GiB ring all-reduce takes **4.20 ms**: algbw 255 GB/s, **b
 compare with the 450 of the link is busbw.
 
 There are two warnings. First, with **NVLS** (1 GiB in $k^{\ast}$ = 35 chunks), the modelled busbw gets to
-744 GB/s (ceiling $2(p-1)/p \cdot B$ = 788). That is *above* the link rate, because the switch does the reduction
+744 GB/s (ceiling $2(p-1)/p \cdot B$ = 788). That busbw is *above* the link rate, because the switch does the reduction
 and the factor assumes that it did not. This is the expected result, not an error. What real NVLS reaches is a
 question for nccl-tests.
 
@@ -511,7 +511,7 @@ Second, busbw well below the link rate inside one node usually means that NCCL d
 ### 5.5 Latency-bound or bandwidth-bound
 
 The latency term and the bandwidth term are equal at **$S^{\ast} = a \cdot \alpha \cdot B / c$**
-(`crossover_bytes()`). For the ring, **$S^{\ast} = p \cdot \alpha \cdot B$ = 7.2 MB** on the 8 H100s of §5.4. That
+(`crossover_bytes()`). For the ring, **$S^{\ast} = p \cdot \alpha \cdot B$ = 7.2 MB** on the 8 H100s of §5.4. That size
 is approximately 440 tokens of an 8,192-wide BF16 activation. This is the ring sweep, simulated in the shape of
 nccl-tests (`sweep()`, `format_sweep()`):
 
@@ -534,7 +534,7 @@ algorithm that wins is the one with the fewest steps. At 512 KiB on 8 GPUs, the 
 30.0 µs.
 
 At 128 MiB, in-switch reduction wins (349 µs at $k^{\ast}$ = 12). Two-shot and ring come next (526 and 550 µs), and one-shot is
-2.1 ms (`best_algorithm()`). This is, on a small scale, what the tuner of NCCL decides for each call.
+2.1 ms (`best_algorithm()`). This selection is, on a small scale, what the tuner of NCCL decides for each call.
 
 ### 5.6 How inference uses collectives
 
@@ -556,26 +556,26 @@ this time, and a two-shot adds approximately 19%. That is why engines have **cus
 - NVLS where the switch supports it,
 - all-reduce fused with the next RMSNorm.
 
-The engines also capture all of it in the decode CUDA graph. *Sequence parallelism* replaces each all-reduce with a
-reduce-scatter and an all-gather (the same bytes), so that the norms run on ${1/p}$ of the tokens.
+The engines also capture these custom all-reduce kernels in the decode CUDA graph. *Sequence parallelism* replaces each
+all-reduce with a reduce-scatter and an all-gather (the same bytes), so that the norms run on ${1/p}$ of the tokens.
 
 **Expert parallelism** moves tokens, not partial sums. It does an all-to-all **dispatch** to the top-k experts of
 each token, and an all-to-all **combine** back. Each one is `tokens × top_k × hidden × bytes` per GPU. For a
-Mixtral-like layer (hidden 4,096, top-2) with 256 tokens per GPU, that is 4 MiB per direction. In the model, this
-takes 22 µs pairwise or 10 µs direct (`model_time("all_to_all", ...)`).
+Mixtral-like layer (hidden 4,096, top-2) with 256 tokens per GPU, that is 4 MiB per direction. In the model, each
+all-to-all takes 22 µs pairwise or 10 µs direct (`model_time("all_to_all", ...)`).
 
 Specialised kernels (DeepEP) have low-latency modes for decode and high-throughput modes for prefill.
 [MoE primer §6](../../00-foundations/mixture-of-experts/PRIMER.md#6-running-moe-on-gpus) is about the MoE side of
 the exchange: placement, the slowest rank, TP against EP, and wide-EP.
 
-**Pipeline parallelism** sends one activation per stage boundary (send/recv). That is sufficiently small to cross
-the scale-out network. **Data parallelism** (replicas) needs no collectives at inference. This gives the rule of the
-[deployment primer §4](../../01-hardware-gpu-fabric/gpu-deployment/gpu-deployment-primer.md#4-when-one-gpu-isnt-enough-the-parallelism-menu):
+**Pipeline parallelism** sends one activation per stage boundary (send/recv). That activation is sufficiently small to
+cross the scale-out network. **Data parallelism** (replicas) needs no collectives at inference. This gives the rule of
+the [deployment primer §4](../../01-hardware-gpu-fabric/gpu-deployment/gpu-deployment-primer.md#4-when-one-gpu-isnt-enough-the-parallelism-menu):
 TP and EP inside the NVLink domain, PP and DP across it.
 
 ### 5.7 NCCL in practice
 
-- **Init.** One rank creates a unique id. All ranks call `ncclCommInitRank`. Then NCCL **detects the topology**
+- **Init.** One rank creates a unique id. All ranks call `ncclCommInitRank`. Then NCCL **finds the topology**
   (GPUs, NVLink, PCIe switches, NICs, NUMA) from NVML and sysfs. It searches for the best rings and trees, and builds
   **channels**. Each channel is one ring or tree instance, and one CTA runs it. More channels give more bandwidth,
   and they also take more SMs from compute.
@@ -595,7 +595,7 @@ TP and EP inside the NVLink domain, PP and DP across it.
 | Variable | Use |
 |---|---|
 | `NCCL_DEBUG=INFO`, `NCCL_DEBUG_SUBSYS=INIT,GRAPH,NET` | print the topology, the rings and the transports ("via P2P/IPC", "via NET/IB/0/GDRDMA") |
-| `NCCL_TOPO_DUMP_FILE`, `NCCL_GRAPH_DUMP_FILE` | dump the detected topology and the selected graphs |
+| `NCCL_TOPO_DUMP_FILE`, `NCCL_GRAPH_DUMP_FILE` | dump the topology that NCCL found and the graphs that it selected |
 | `NCCL_SOCKET_IFNAME`, `NCCL_IB_HCA` | pin the bootstrap interface and the NICs |
 | `NCCL_P2P_DISABLE`, `NCCL_SHM_DISABLE`, `NCCL_IB_DISABLE`, `NCCL_NVLS_ENABLE` | switch transports off or on, to bisect a problem |
 | `NCCL_ALGO`, `NCCL_PROTO`, `NCCL_MIN_NCHANNELS` / `NCCL_MAX_NCHANNELS` | force choices for experiments. Do not deploy them without a test. |
@@ -710,7 +710,7 @@ memory. This gives hardware isolation of performance, memory and faults.
 The geometry has strict rules. There are 7 compute slices and 8 memory slices. A profile takes a constant number of
 each, and it can *start* only at listed slice indices (`nvidia-smi mig -lgipp`, `gpusim.sharing.MIG`, verify):
 
-| H100 80 GB profile | Compute | Memory slices | Allowed starts | Max |
+| H100 80 GB profile | Compute | Memory slices | Permitted starts | Max |
 |---|---|---|---|---|
 | 1g.10gb | 1/7 | 1 | 0–6 | 7 |
 | 1g.20gb | 1/7 | 2 | 0, 2, 4, 6 | 4 |
@@ -729,7 +729,7 @@ A100 80 GB has the same shapes. A100 40 GB has half the memory (1g.5gb ... 7g.40
 1g × 3, then 4g, created in arrival order at the first free slice   the 4g no longer fits (first_fit())
 ```
 
-Thus plan a layout for each node pool, and create the instances with explicit placements. Kubernetes exposes MIG
+Thus plan a layout for each node pool. Create the instances with explicit placements. Kubernetes exposes MIG
 in one of two ways. The first is plain `nvidia.com/gpu` with one profile per node ("single" strategy). The second is
 `nvidia.com/mig-1g.10gb`-style resources ("mixed").
 
@@ -741,7 +741,7 @@ Thus the 7g of an A100 has 98 of its 108 SMs (verify).
 ### 7.3 MPS: overlap
 
 The Multi-Process Service runs a server that merges the kernels of many client processes onto the GPU at the same
-time. Thus small kernels from different processes fill the SMs together, and do not take turns. Since Volta, each
+time. Thus small kernels from different processes fill the SMs together, and do not take turns. From Volta on, each
 client has its own address space. You can set limits on a client with `CUDA_MPS_ACTIVE_THREAD_PERCENTAGE` and
 `CUDA_MPS_PINNED_DEVICE_MEM_LIMIT`. Fault isolation is weaker: a fatal fault in one client can stop the other
 clients on that GPU (verify for your driver). MPS is applicable to cooperative workloads of one team.
@@ -753,10 +753,11 @@ runs one context at a time, round-robin. There is **no memory isolation**. Thus 
 other tenants. There is also no performance isolation.
 
 Take $N$ busy tenants and a request that needs $W$ of GPU time, in quanta $q$, with a switch cost $s$. At best, the
-request finishes after $W + (\lceil W/q \rceil - 1) \cdot ((N-1)(q+s) + s)$. That occurs when it arrives just as its
-turn starts (`gpusim.sharing.timeslice_latency()`). For example, 10 ms of work with 4 busy tenants, 2 ms quanta and
-50 µs switches takes **34.8 ms at best**. If the request arrives just after its turn, the late arrival adds one more
-round of the turns of the other tenants, 6.2 ms. That gives **41.0 ms at worst** and **37.9 ms on average**.
+request finishes after $W + (\lceil W/q \rceil - 1) \cdot ((N-1)(q+s) + s)$. The best case occurs when the request
+arrives just as its turn starts (`gpusim.sharing.timeslice_latency()`). For example, 10 ms of work with 4 busy tenants,
+2 ms quanta and 50 µs switches takes **34.8 ms at best**. If the request arrives just after its turn, the late
+arrival adds one more round of the turns of the other tenants, 6.2 ms. That gives **41.0 ms at worst** and
+**37.9 ms on average**.
 
 Idle tenants cost nothing. This is why time-slicing is good for notebooks and dev work that comes in bursts.
 
@@ -771,7 +772,7 @@ request fill. The time-slicing column is the mean over arrival times from §7.4 
 | small (util 0.2) | 10 ms | 37.9 ms | 10 ms | 14 ms |
 | fills the GPU (util 1.0) | 10 ms | 37.9 ms | 40 ms | 70 ms |
 
-| Need | Choose |
+| Need | Select |
 |---|---|
 | tenants who must not affect each other, SLOs, untrusted code | MIG |
 | many small cooperative processes, throughput first | MPS |
@@ -799,10 +800,10 @@ request fill. The time-slicing column is the mean over arrival times from §7.4 
 **DCGM** (the Data Center GPU Manager) samples the same counters across the fleet, and **dcgm-exporter** exposes
 them to Prometheus. The field that everyone puts on a graph is `DCGM_FI_DEV_GPU_UTIL` (nvidia-smi's "GPU-Util"). It
 is the **share of time when at least one kernel ran**. Take a kernel with 8 blocks on a 132-SM H100 that runs all
-the time. It reads **100%**, but only **6%** of the SMs do anything (`gpusim.health.util_counters()`). Read these
+the time. The field reads **100%**, but only **6%** of the SMs do anything (`gpusim.health.util_counters()`). Read these
 fields instead:
 
-| Field (dcgm-exporter) | Meaning | Reading it |
+| Field (dcgm-exporter) | What it means | How to read it |
 |---|---|---|
 | `DCGM_FI_PROF_SM_ACTIVE` | share of SM-cycles with at least one warp resident | the real "how much of the GPU" |
 | `DCGM_FI_PROF_SM_OCCUPANCY` | resident warps / maximum | headroom to hide latency (§2.3) |
@@ -827,9 +828,9 @@ The lab supplies a counters file that adds all three
 exporter are `gpurt.dcgm.EXPORTED_BY`. [`deploy/gke/README.md`](cuda-nccl-lab/deploy/gke/README.md) shows which
 alert rules can fire with each exporter.
 
-The DCGM field list of Google's managed Prometheus (its `nvidia-dcgm` example, which GKE's managed package is similar to)
-has SM active, occupancy and tensor active. But it has no XID or row-remap fields, and no clock-event or DRAM fields
-(verify). Thus, on GKE, the §8.3–8.4 signals need a self-managed exporter with that counters file.
+The DCGM field list of Google's managed Prometheus (its `nvidia-dcgm` example) has SM active, occupancy and tensor
+active. But the list has no XID or row-remap fields, and no clock-event or DRAM fields (verify). GKE's managed package
+is like that example. Thus, on GKE, the §8.3–8.4 signals need a self-managed exporter with that counters file.
 
 `gpusim.health.diagnose()` turns a sample into findings. Examples are *"busy but mostly empty"* (util high, SM
 active low: small batch, launch gaps, small grids) and *"memory-bandwidth-bound"*. Notebook 05 shows both.
@@ -856,7 +857,7 @@ A power cap under load is normal. Any `hw_*` reason or thermal slowdown is a tic
 XIDs are the error reports of the driver (in `dmesg` and DCGM). What is important is **who acts**
 (`gpusim.health.triage_xid()`). The catalogue is NVIDIA's XID documentation (verify):
 
-| XID | Meaning | Owner | Action |
+| XID | What it means | Owner | Action |
 |---|---|---|---|
 | 13, 31, 43 | graphics engine exception, GPU memory page fault, GPU stopped processing | app | Usually an out-of-bounds or illegal address in a kernel. Correct the kernel, then restart the app. |
 | 45 | preemptive cleanup | app | Secondary. Read the XID that came before it. |
@@ -867,7 +868,7 @@ XIDs are the error reports of the driver (in `dmesg` and DCGM). What is importan
 | 74, 79 | NVLink error, GPU fell off the bus | hardware | Drain, reboot, diagnose (PCIe, power, thermals). If it occurs again, send the GPU for RMA. |
 | 92, 119 | high single-bit ECC rate, GSP RPC timeout | node | Schedule diagnostics. Reset the GPU. Update the driver. |
 
-Since A100, the GPU **remaps rows** of HBM that show memory errors. It does not retire pages. The remap takes
+From A100 on, the GPU **remaps rows** of HBM that show memory errors. It does not retire pages. The remap takes
 effect at the next GPU reset. A remap *failure* means that you must replace the GPU. `gpusim.health.alerts()` maps
 all of this to severities: page, ticket, notify.
 
@@ -950,11 +951,11 @@ time-slicing. We alert on SM active and engine metrics, not GPU util. Hardware X
    our GPUs. Minor-version compatibility (driver >= 525.60.13) runs it. PTX-only kernels fail with 222. APIs newer
    than 12.2 fail with 36. A driver upgrade is the clean solution. A CUDA 13 image needs a driver upgrade, or
    `cuda-compat` on data-center GPUs.
-2. *TP=8 decode spends 40% of the step in all-reduce, yet NVLink is nearly idle. Why?* The messages are hundreds of
+2. *TP=8 decode spends 40% of the step in all-reduce, but NVLink is almost idle. Why?* The messages are hundreds of
    KB. Thus the 14 $\alpha$-steps of a ring are the largest cost. The all-reduce is latency-bound, not
    bandwidth-bound. Use fewer steps (two-shot or one-shot custom all-reduce, NVLS). Capture them in CUDA graphs.
    Fuse them with the norm. As an alternative, decrease the TP degree for this model.
-3. *nccl-tests on one 8×H100 node shows all-reduce busbw of 100 GB/s. What do you check?* First, make sure that NCCL
+3. *nccl-tests on one 8×H100 node shows all-reduce busbw of 100 GB/s. What do you examine?* First, make sure that NCCL
    uses NVLink at all. The `NCCL_DEBUG=INFO` log must show P2P or NVLS, not SHM or NET. Then examine the
    fabric manager status and `nvidia-smi topo -m`. Look for `NCCL_P2P_DISABLE` left set, and for containers without
    shared IPC. On NVLink 4, the expected busbw is a few hundred GB/s, near the link rate, not 100.
@@ -974,7 +975,7 @@ time-slicing. We alert on SM active and engine metrics, not GPU util. Hardware X
 
 ## Glossary
 
-| Term | Meaning |
+| Term | What it means |
 |---|---|
 | SM | streaming multiprocessor: 4 sub-partitions, each with a warp scheduler and a register-file slice |
 | warp | 32 threads issued together, the unit of scheduling |
@@ -990,7 +991,7 @@ time-slicing. We alert on SM active and engine metrics, not GPU util. Hardware X
 | stream | an in-order queue of GPU work (different streams can overlap) |
 | CUDA Graph | a captured sequence of GPU work replayed with one launch |
 | collective | communication operation defined over all ranks of a communicator |
-| $\alpha$, $B$ | per-step latency, per-direction link bandwidth (layer 01 writes $B$ as $\beta$) |
+| $\alpha$, $B$ | per-step latency, per-direction link bandwidth. Layer 01 writes $B$ as $\beta$. |
 | algbw, busbw | nccl-tests' ${S/t}$, and ${S/t}$ × a per-collective factor comparable with link bandwidth |
 | channel | one NCCL ring or tree instance, run by one CTA |
 | LL, LL128, Simple | NCCL protocols: lowest latency, near-full bandwidth, full bandwidth |
@@ -1054,7 +1055,7 @@ The date of this list is 2026-09-26. Each fact in it can change. Do a check of e
 | MIG profiles and placements for A100, H100, H200. A30 and B200 profiles are different. | `sharing.MIG` | verify with `nvidia-smi mig -lgipp` |
 | SMs available to a 7g MIG instance (A100: 98 of 108) | primer §7.2 | verify |
 | MPS fault-isolation behaviour on current drivers | `sharing.TRAITS` | verify |
-| Latest NCCL 2.32.3 (PyPI `nvidia-nccl-cu12/cu13`, 2026-09-22). NVLS since 2.17, PAT since 2.23, RAS since 2.24. | primer §5.7 | version checked on PyPI, feature versions verify |
+| Latest NCCL 2.32.3 (PyPI `nvidia-nccl-cu12/cu13`, 2026-09-22). NVLS from 2.17, PAT from 2.23, RAS from 2.24. | primer §5.7 | version checked on PyPI, feature versions verify |
 | NCCL and PyTorch environment-variable names (`TORCH_NCCL_*`) | primer §5.7–5.8 | verify for your versions |
 | DCGM field names. `CLOCK_THROTTLE_REASONS` has the new name `CLOCKS_EVENT_REASONS`. | `health` | verify |
 | XID meanings and recommended actions | `health.XIDS` | verify |

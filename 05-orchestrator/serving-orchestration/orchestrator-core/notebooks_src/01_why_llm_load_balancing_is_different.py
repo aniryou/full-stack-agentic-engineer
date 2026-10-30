@@ -6,9 +6,9 @@
 # on a GPU.
 #
 # ## The one-minute version
-# A web load balancer assumes three things about requests: they are small, they are similar and they have no state.
-# Under these assumptions, when it divides them equally *by count*, it also divides the *work* equally. LLM requests
-# break all three assumptions:
+# A web load balancer assumes three things about requests: they are small, they are almost the same, and they have
+# no state. Under these assumptions, when it divides them equally *by count*, it also divides the *work* equally.
+# LLM requests break all three assumptions:
 #
 # 1. **The cost of requests is different by one to two orders of magnitude, and nobody knows it at the start.** A
 #    6,000-token RAG prompt has five times the prefill of a chat turn. Nobody knows the output length until the
@@ -16,7 +16,7 @@
 # 2. **Capacity is KV-cache memory and step time, not CPU.** A replica is "full" when its KV blocks are full.
 #    Overload shows as a queue and as preemption long before anything looks like a CPU alarm.
 # 3. **Replicas are caches.** The replica that already holds the prefix of a prompt serves it for a fraction of the
-#    cost. Notebook 02 is about that.
+#    cost. Notebook 02 is about these caches.
 #
 # After this notebook, you can explain these points with numbers:
 #
@@ -49,8 +49,8 @@ print(table(rows, title="simulated step times, 8B bf16 on one L4"))
 # %% [markdown]
 # Read the table as a roofline. A decode step costs about the same with 1 request or 16 requests, because the engine
 # reads the weights one time in each case. Thus batching adds throughput at almost no cost. A prefill chunk is
-# compute-bound and ten times longer. Each request that decodes in the same batch waits for it (notebook 04 is about
-# that stall).
+# compute-bound and ten times longer. Each request that decodes in the same batch waits for the chunk. Notebook 04 is
+# about that stall.
 #
 # ## Exercise 1.1 — how different are two requests?
 # A request uses a replica in three currencies:
@@ -122,7 +122,7 @@ print(table([{"router": k, **{c: v[c] for c in cols}} for k, v in results.items(
 #
 # ## Exercise 1.2 — power of two choices
 # Write `p2c(loads, rng)`. Sample **two different** indices uniformly at random (`rng.sample`). Return the index
-# with the lower load. If the two loads are equal, return the first index that you sampled. This is the full
+# with the lower load. If the two loads are equal, return the first index that you sampled. These steps are the full
 # algorithm. It needs no global scan and no coordination.
 
 # %% exercise
@@ -182,7 +182,7 @@ print("✅ stale data makes argmin herd; p2c and the router's own counters do no
 # ## Exercise 1.3 — predict the herd
 # A router holds the stale snapshot `loads = [3, 1, 4, 2]` for a full burst of 8 requests. The router counts nothing
 # itself. Write `herd(loads, burst, picker, rng)`. It applies `picker(loads, rng)` to each request of the burst,
-# **and it does not update `loads`**. It returns the number of requests that each replica received. Then predict:
+# **and it does not update `loads`**. It returns the number of requests that each replica got. Then predict:
 # how many of the 8 go to replica 1 with an argmin picker, and how many (on average) with `p2c`?
 
 # %% exercise
@@ -247,7 +247,7 @@ print("✅ right signal for each situation")
 # The **flow control** of llm-d holds the requests in the router instead. It dispatches a request only to an
 # endpoint that is below a per-endpoint cap on requests in flight (its `concurrency-detector`, `maxConcurrency`). It
 # dispatches the highest priority first (`InferenceObjective.priority`). In one priority, it dispatches in FCFS order.
-# `fleetsim.FlowControl` models exactly that, and also a TTL and a queue bound that shed requests.
+# `fleetsim.FlowControl` models exactly this dispatch rule, and also a TTL and a queue bound that shed requests.
 #
 # Two flows share four L4 replicas: an **interactive** chat (1 req/s, priority 1) and a **batch** job with RAG
 # traffic (priority 0). The batch traffic increases from 0.2 to 1.6 req/s for two minutes in a burst. The burst
@@ -283,7 +283,8 @@ print(table(flow_rows, title="simulated: interactive chat + a batch RAG burst on
 # the queues of the engines behind batch prompts, and the KV cache runs out (preemptions).
 #
 # A cap of 4 per endpoint **starves the GPUs**. The fleet can complete at most
-# $\text{cap} \times \text{replicas} / (\text{time in system})$ requests per second, and that is fewer than arrive.
+# $\text{cap} \times \text{replicas} / (\text{time in system})$ requests per second, and this rate is less than the
+# arrival rate.
 # Thus the router queue grows to more than a hundred, and the batch flow waits for minutes. Priority keeps the
 # interactive flow in motion. The cap removes preemption, because at most 4 requests hold KV per replica. But
 # capacity stays idle.
@@ -351,14 +352,14 @@ print(f"✅ λ = {lam:.2f}/s x W = {w:.1f} s = {lam * w:.0f} in flight (the simu
 #
 # **Drills**
 # 1. *Why does least-connections work for web servers but not here?* A connection is a proxy for work only when the
-#    requests are similar. Here, a streaming connection can be 0.3 s or 30 s of engine time, and 80 or 800 KV
+#    requests are almost the same. Here, a streaming connection can be 0.3 s or 30 s of engine time, and 80 or 800 KV
 #    blocks.
 # 2. *Our router scrapes vLLM every 15 s through Prometheus. What breaks?* Argmin routing causes a herd on the stale
 #    minimum. Use the in-flight counts of the router itself, or scrape the engines directly at sub-second intervals,
 #    or use power-of-two.
 # 3. *What does Little's law tell you about a 20-replica fleet at 50 req/s with a 12 s mean E2E?* 600 requests in
-#    flight. That is approximately 30 per replica. You compare this number with the KV capacity and the
-#    `max_num_seqs` of each replica. The number 30 is also the lowest value of a flow-control `maxConcurrency`
+#    flight. Thus each replica has approximately 30 requests in flight. You compare this number with the KV capacity
+#    and the `max_num_seqs` of each replica. The number 30 is also the lowest value of a flow-control `maxConcurrency`
 #    that does not starve the GPUs.
 # 4. *Why put requests in a queue in the router at all?* When a request is in the queue of an engine, the router has
 #    committed it to that replica. A request in the router can still go to the replica that becomes free first. The

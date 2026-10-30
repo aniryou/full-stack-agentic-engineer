@@ -44,26 +44,26 @@ For tile sizes, $B_r$ is the rows of Q per thread block (the kernels call it `kB
 - A server adds paging (block tables into the kernel), ragged batches, and a scheduler that selects a backend for each GPU generation. In vLLM on CUDA, that backend is FlashAttention (FA2 on Ampere, Ada and SM 12.x Blackwell, FA3 on Hopper), with two exceptions. If the GPU is SM 10.x datacenter Blackwell (B200, GB200), FlashInfer goes first for causal attention. If the KV cache is FP8 on a GPU without FA3 or FA4, vLLM uses FlashInfer instead.
 
 ```mermaid
-flowchart TB
-  N["Naive attention: three kernels<br/>S and P go through HBM · 64 FLOP/B, below every ridge"]
-  M["The (m, l, o) state<br/>any two partial results merge exactly"]
-  FA1["FA1: tiling and recomputation<br/>K/V tiles through SRAM, the backward recomputes P"]
-  FA2["FA2: work partitioning<br/>one CTA per Q block, split-Q warps, O in registers"]
-  FA3["FA3: asynchrony on Hopper<br/>TMA, WGMMA, producer and consumer warpgroups, ping-pong"]
-  FA4["FA4 on Blackwell<br/>exp2 emulation on the FMA pipe, conditional rescaling"]
-  D["Decode: one query row, no reuse<br/>split-KV across CTAs, GQA packing"]
-  S["Serving: a block table, varlen batches,<br/>a backend per GPU generation"]
-  N -->|"HBM traffic"| FA1
-  FA1 -->|"O round trips through HBM,<br/>parallelism over batch and heads only (verify)"| FA2
-  FA2 -->|"EX2 at 50% of the MMA time"| FA3
-  FA3 -->|"EX2 at 100%"| FA4
-  M -.->|"the inner loop"| FA1
-  M -.->|"the split-KV combine"| D
-  M -.->|"cascade, context parallelism"| S
+flowchart LR
+  N["Naive<br/>attention"]
+  FA1["FA1<br/>tiling and<br/>recomputation"]
+  FA2["FA2<br/>work<br/>partitioning"]
+  FA3["FA3 on<br/>Hopper"]
+  FA4["FA4 on<br/>Blackwell"]
+  M["The (m, l, o)<br/>state"]
+  D["Decode<br/>split-KV,<br/>GQA<br/>packing"]
+  S["Serving<br/>block table,<br/>varlen"]
+  N -->|"HBM<br/>traffic"| FA1
+  FA1 -->|"O round<br/>trips"| FA2
+  FA2 -->|"EX2<br/>at 50%"| FA3
+  FA3 -->|"EX2<br/>at 100%"| FA4
+  M -.->|"inner<br/>loop"| FA1
+  M -.->|"split-KV<br/>combine"| D
+  M -.->|"cascade,<br/>context<br/>parallelism"| S
   D --> S
 ```
 
-*Each generation removed the bottleneck of the one before it, and the merge of the ${(m, l, o)}$ state is under all of them. The solid chain is the prefill kernel. The dashed edges show where the merge of §2.3 applies: FA1's tiles, the decode splits, cascade attention and context parallelism.*
+*The solid chain is the prefill kernel, and each label names the bottleneck that the next generation removed. These are HBM traffic, the round trip of $O$ through HBM, and EX2 at 50% and 100% of the MMA time (§4.3). The dashed edges show where the merge of the ${(m, l, o)}$ state (§2.3) applies: FA1's tiles, the decode splits, cascade attention and context parallelism.*
 
 ---
 
@@ -1035,6 +1035,21 @@ PyTorch reported approximately 90% of FlashAttention-2's performance in the forw
 
 The tensor cores take bf16 or fp16 operands and accumulate in fp32. Thus $S$ and the output accumulator are fp32 in registers (or TMEM). Two roundings to the input dtype occur. The kernel converts $P$ before each $P \cdot V$ multiply (`convert_type<Element>(acc_s)` in FA2), and $O$ once at the end. The first rounding is the main source of error.
 
+```mermaid
+flowchart LR
+  I["Q, K, V<br/>bf16 or fp16"]
+  S["S<br/>fp32 in<br/>registers"]
+  RP["convert P<br/>to the<br/>input dtype"]
+  O["O<br/>accumulator<br/>fp32"]
+  RO["convert O<br/>once at<br/>the end"]
+  I -->|"QKᵀ"| S
+  S -->|"softmax"| RP
+  RP -->|"each P · V"| O
+  O --> RO
+```
+
+*Only the two convert steps round to the input dtype, and $S$ and the output accumulator stay in fp32. The convert of $P$ is the main source of error.*
+
 bf16 keeps 8 significant bits, a unit roundoff of $2^{-8}$ ≈ 0.39% per probability. fp16 keeps 11 bits, $2^{-11}$ ≈ 0.05%. For attention, fp16 is the more accurate input format when its range is sufficient.
 
 Thus a kernel cannot agree with an fp32 reference bit for bit. Do not expect it to agree with another kernel either, because different tile sizes add in different orders. Use FlashAttention's own test criterion. Compare the kernel and a plain PyTorch implementation *in the same dtype* against an fp32 reference. The maximum error of the kernel must be at most two times the error of the baseline. The README says: "the maximum numerical error of FlashAttention is at most twice the numerical error of a baseline implementation in Pytorch".
@@ -1086,6 +1101,19 @@ Two review points follow. First, "FP8 attention" can mean an FP8 KV cache with b
 ### 10.2 Which side of the roofline to report
 
 A prefill kernel is on the compute side. Thus the honest figure is TFLOP/s as a fraction of the dtype's dense peak (989 bf16 on an H100, not the 1,979 sparse headline). An MHA or GQA decode kernel is on the bandwidth side. Thus the figure is GB/s as a fraction of HBM bandwidth (absorbed MLA decode, at the ridge, gets both).
+
+```mermaid
+flowchart LR
+  K{"Which<br/>kernel?"}
+  C["compute side<br/>TFLOP/s against<br/>the dense peak"]
+  B["bandwidth side<br/>GB/s against<br/>HBM bandwidth"]
+  R["at the ridge<br/>both axes"]
+  K -->|"prefill"| C
+  K -->|"MHA or GQA decode<br/>1 to 8 FLOP/B"| B
+  K -->|"absorbed MLA decode<br/>242 to 484 FLOP/B"| R
+```
+
+*Find the side of the roofline from the kernel. Report TFLOP/s against the dense peak for prefill, GB/s against HBM bandwidth for MHA or GQA decode, and both for absorbed MLA decode.*
 
 For split-KV and paged kernels, report two byte counts. One is the bytes that the kernel had to read. The other is the bytes that it did read (partials, block tables, padding).
 

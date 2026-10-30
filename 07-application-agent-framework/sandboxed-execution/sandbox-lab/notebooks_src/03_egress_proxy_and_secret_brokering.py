@@ -48,7 +48,7 @@ print("credential written to a file the proxy will read; the sandbox will never 
 #
 # `StubAPI` takes the place of the third-party API. It has three endpoints:
 #
-# - `/whoami` says if the expected bearer token arrived (and never echoes it),
+# - `/whoami` says if the expected bearer token arrived, and never echoes the token,
 # - `/data` returns a document,
 # - `/echo` reflects every request header back, and is the reflection channel that an attacker can use to
 #   read an injected credential.
@@ -68,7 +68,7 @@ print("the upstream reflected:", echoed["headers"].get("Authorization"), "| raw 
 # %% [markdown]
 # ## Worked example: a network-less sandbox reaching the API through the socket
 #
-# The process sandbox runs in an empty network namespace (when this machine permits it). The socket path of
+# When this machine permits it, the process sandbox runs in an empty network namespace. The socket path of
 # the proxy is in `SANDBOX_PROXY_URL`. `SANDBOX_CLIENT` is a stdlib snippet that the runtime puts before the
 # code, thus the code can call `proxy_get`. The code fetches the forecast. Then it makes sure that its own
 # environment holds no key.
@@ -116,10 +116,10 @@ print("✅ exact names and *.suffix (subdomains only); the apex and look-alikes 
 # %% [markdown]
 # ## Exercise 3.2 — the credential never reaches the sandbox
 #
-# Fetch `/weather/echo` through the proxy (the endpoint that reflects headers). Make sure that the injected
-# token is **redacted** in the response, and that the raw token appears nowhere. Then fetch with a forged
-# `Authorization` header. Make sure that the upstream still sees the *real* header (the proxy stripped the
-# header of the caller and replaced it).
+# Fetch `/weather/echo` through the proxy (the endpoint that reflects headers). Make sure that the proxy
+# **redacts** the injected token in the response, and that the raw token appears nowhere. Then fetch with a forged
+# `Authorization` header. Make sure that the upstream still sees the *real* header. The proxy stripped the
+# header of the caller and replaced it.
 
 # %% exercise
 def brokering_holds() -> bool:
@@ -198,7 +198,7 @@ import shutil; shutil.rmtree(STATE, ignore_errors=True)
 # the API authenticates the code, and the code never holds the key.
 #
 # "The proxy keeps an allowlist of destinations by route or host. It refuses `CONNECT`, because a TLS tunnel hides
-# the request from it. It guards against SSRF: it refuses hosts that resolve to private or link-local
+# the request from the proxy. It guards against SSRF: it refuses hosts that resolve to private or link-local
 # addresses. It redacts the injected secret from responses, thus an endpoint that reflects headers cannot
 # give the secret back. Every decision is one audit line, thus a denied egress or a reflected credential
 # becomes an alert.

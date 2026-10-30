@@ -8,11 +8,11 @@ This folder holds:
 
 It is the companion to `docs/transformer-primer.md`.
 
-This is the core concept, in one line: **attention moves information between positions. The MLP processes it within a
+This is the core concept, in one line: **attention moves information between positions. The MLP processes the information in a
 position. A Transformer is that pair, stacked.** Each file that this README lists shows one part of that sentence in
 printed numbers.
 
-**Time and tier:** ~5 h with the primer. This folder is module 00.1 in [`CURRICULUM.md`](../../CURRICULUM.md). T0 is a laptop or Colab CPU, at no cost. Lessons 1–2 and the practice notebook need only numpy. Lesson 3 and the two `notebooks/0*_transformer_*` notebooks need CPU PyTorch (T0 + torch, and Colab has it). You need no GPU and no key.
+**Time and tier:** ~5 h with the primer. This folder is module 00.1 in [`CURRICULUM.md`](../../CURRICULUM.md). T0 is a laptop or Colab CPU, at no cost. Lessons 1–2 and the practice notebook need only numpy. Lesson 3 and the two `notebooks/0*_transformer_*` notebooks need CPU PyTorch (T0 + torch), which Colab has. You need no GPU and no key.
 
 ## Setup
 

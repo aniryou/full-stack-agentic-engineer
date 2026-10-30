@@ -238,7 +238,7 @@ print("   nothing in the image may pretend to be the driver")
 # ## In a design review
 #
 # **The two-minute version.** "We pin a driver branch per node pool. We build images against a CUDA
-# version at or below the version that this driver supports. Or we build within its major, if a
+# version at or below the version that this driver supports. Or we build against a version of the same major, if a
 # check showed that each kernel ships SASS for our GPUs.
 #
 # "Images carry only userland: CUDA runtime, libraries, framework. The NVIDIA Container Toolkit

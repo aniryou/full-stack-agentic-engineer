@@ -57,8 +57,8 @@ print("gateway:", stack.url, "| providers:", {n: f.url for n, f in stack.fakes.i
 # ## Worked example: a virtual key, and what the gateway stores
 #
 # An operator issues keys through the admin API. The admin API returns the secret **once**. The gateway stores the
-# SHA-256 of the secret (as LiteLLM's `hash_token` does) and a display prefix. Each key belongs to one tenant. A caller
-# can put any value in a header, but the gateway bills and limits the tenant of the key.
+# SHA-256 of the secret and a display prefix. LiteLLM's `hash_token` calculates the same hash. Each key belongs to one
+# tenant. A caller can put any value in a header, but the gateway bills and limits the tenant of the key.
 
 # %%
 key_a = stack.issue_key("team-a")
@@ -74,8 +74,8 @@ print("secret stored anywhere?", any(key_a in json.dumps(r) for r in rows),
 #
 # The client gives an **alias** (`chat`), not a model. The gateway resolves the alias to a chain (`acme/fast`, then
 # `bolt/haiku`). It calls the first target with the provider key of *that* target. It answers with headers that tell
-# which target served the request. The `model` in the body is the upstream model that answered the request (OpenAI does
-# the same for an alias).
+# which target served the request. The `model` in the body is the upstream model that answered the request. OpenAI does
+# the same for an alias.
 
 # %%
 r = stack.chat(key_a, "What does a gateway own?")
@@ -126,9 +126,11 @@ print("served by", via.header("x-gwlab-target"))
 # counts arrive in pieces, and the pieces are the trap.
 #
 # Anthropic's `message_start` has `message.usage` with the input side and an `output_tokens` of 1. The input side is
-# `input_tokens` (which **excludes** the cache), `cache_read_input_tokens` and `cache_creation_input_tokens`. The final
-# `message_delta` has `usage` again, **cumulative**. It has the full `output_tokens` and, when the API sends it,
-# `output_tokens_details.thinking_tokens`. A later value replaces an earlier value. No count is a sum across events.
+# `input_tokens`, `cache_read_input_tokens` and `cache_creation_input_tokens`. The value of `input_tokens` **excludes**
+# the cache.
+#
+# The final `message_delta` has `usage` again, **cumulative**. It has the full `output_tokens` and, when the API sends
+# it, `output_tokens_details.thinking_tokens`. A later value replaces an earlier value. No count is a sum across events.
 #
 # Write `usage_from_events(events)`. Its input is a list of `(event_name, data_dict)` pairs that you read from the
 # wire. Return the canonical `{"prompt_tokens", "completion_tokens", "cached_tokens", "reasoning_tokens"}`. The prompt
@@ -447,7 +449,7 @@ stack.stop()
 # it on the upstream request anyway, and it removes the usage chunk from the response. If the stream stops before that
 # chunk, the gateway bills the row from the chunks that it relayed and marks the row as an estimate. The row is never 0.
 #
-# **Drill 3.** *Anthropic reports 2,300 input tokens and 2,700 cache reads; what goes in `prompt_tokens`?* The answer
+# **Drill 3.** *If Anthropic reports 2,300 input tokens and 2,700 cache reads, what goes in `prompt_tokens`?* The answer
 # is 5,000. Anthropic's `input_tokens` excludes the cache. Thus the canonical prompt count (and OTel's
 # `gen_ai.usage.input_tokens`) is the sum. If you bill 2,300 as input and then give a discount for the cache again, you
 # charge less than the correct price.

@@ -91,7 +91,7 @@ tracer.print_tree()
 # %% [markdown]
 # Read the attributes of one model span: the model, the tokens (with the cached share), the finish reason,
 # and the latency that the model reported. The second model call of `conv-2` shows `cached_tokens > 0`. The
-# system prefix was identical to the prefix of the first call. Thus the simulated context cache served it.
+# system prefix was identical to the prefix of the first call. Thus the simulated context cache served the prefix.
 
 # %%
 conv2 = tracer.traces()[1]
@@ -101,7 +101,7 @@ for s in conv2.by_kind("model"):
 # %% [markdown]
 # ## 2. Cost per conversation
 #
-# `TraceSummary` reduces a trace to the numbers that the operator monitors. The price table puts a separate
+# `TraceSummary` makes a summary of a trace: the numbers that the operator monitors. The price table puts a separate
 # price on uncached input, on cached input and on output. The default table is **illustrative**. **Make sure
 # that it agrees with the official pricing page.**
 
@@ -128,8 +128,8 @@ for label, usage, model in (("flash, nothing cached", turn, "gemini-3-flash"), (
 print("\nbreakdown of 'flash, 75% cached':", {k: round(v, 6) for k, v in DEFAULT_PRICES.breakdown(cached_turn, 'gemini-3-flash').items()})
 
 # %% [markdown]
-# Real traces show the same thing. The identical conversation on a pro-tier model (same prompts, same cache
-# warm-up) costs a multiple of its cost on flash, before any scale. The multiple is the ratio of the price
+# Real traces show the same thing. The identical conversation (same prompts, same cache warm-up) costs more
+# on a pro-tier model than on flash, by a factor, before any scale. The factor is the ratio of the price
 # rows. The weight of each row is the share of the tokens that went to it.
 
 # %%
@@ -173,7 +173,7 @@ print("✅ cost formula matches the price table on every traced conversation")
 #
 # This section calculates the percentiles for each **span kind**. It does so because the "p95 latency" of a
 # turn mixes model calls, tool calls and orchestration into one number. Nobody can act on that number.
-# `FakeLLM` does not really sleep. Thus the notebook reads the latency that it *reports* (`model.latency_ms`).
+# `FakeLLM` does not really sleep. Thus the notebook reads the latency that `FakeLLM` *reports* (`model.latency_ms`).
 # In production, the span duration is the truth.
 
 # %%
@@ -188,7 +188,7 @@ print(f"longest span in it (wall time): {span_name} {span_ms:.1f} ms")
 # %% [markdown]
 # ### Exercise 3.1 — nearest-rank percentile
 #
-# `my_percentile(values, p)` returns the smallest observed value below which `p` percent of the sample lies.
+# `my_percentile(values, p)` returns the smallest measured value below which `p` percent of the sample lies.
 # Use **no interpolation**. Sort the values. Take the rank $\lceil p/100 \times n \rceil$ (at least 1).
 # Return the value at that rank.
 #
@@ -310,7 +310,7 @@ print("✅ card numbers redacted, everything else untouched")
 # divided by all calls.
 #
 # These two numbers are worth an alert, together with the p95 model latency. `agent_metrics` calculates them
-# from a tracer and the session logs. Note that caching makes the cost drift smaller, because the repeated
+# from a tracer and the session logs. Caching makes the cost drift smaller, because the repeated
 # prompt prefix is low-cost. But the steps and the wrong-tool rate both double in full.
 
 # %%
@@ -369,7 +369,7 @@ print("✅", fired)
 # Write `retention_explanation`: two or three sentences that a reviewer can accept. They must tell:
 # * *what* is in a trace that makes it sensitive,
 # * *why* a trace that you keep forever is a liability and not an asset,
-# * *what* the rule is (a time limit, and what stays after it).
+# * *what* the rule is: a time limit, and what stays after it.
 
 # %% exercise
 ### BEGIN SOLUTION

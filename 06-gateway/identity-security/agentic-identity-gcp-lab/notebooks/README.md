@@ -7,7 +7,7 @@ of the practice notebook.
 Everything runs offline against the local twins in `src/agentsec/`. These twins are `LocalRuntimeCA`,
 `TokenIssuer`, `LocalAuthManager`, `LocalScreener`, the tickets MCP server in a background thread and
 the ADK loop that `ScriptedLlm` drives. A Google Cloud project is not necessary, and an API key is not
-necessary. Every notebook ends with a "In one sentence" line. This line is the 30-second version of
+necessary. Every notebook ends with an "In one sentence" line. This line is the 30-second version of
 the idea that the notebook shows.
 
 ## Map: notebook → primer section

@@ -53,12 +53,12 @@ for key in ("olmoe-1b-7b", "qwen1.5-moe-a2.7b", "gpt-oss-20b", "qwen3-30b-a3b", 
 
 # %% [markdown]
 # The 65.2 GB of gpt-oss-120b is why it fits one 80 GB GPU. The 13.8 GB of gpt-oss-20b is why it fits 16 GB, but
-# only on paper. The MXFP4 path of vLLM needs compute capability 8.0 and bf16. Thus the path does not run on a T4 (the
-# fact sheet has the details).
+# only on paper. The MXFP4 path of vLLM needs compute capability 8.0 and bf16. Thus the path does not run on a T4. The
+# fact sheet has the details.
 #
 # ## Worked example 2 — the capacity primer's Mistral Large 3, reproduced
 # The model has 675B total and 41B active parameters. These numbers come from `00-foundations/gpu-capacity-planning`,
-# not from a config. In FP8, that is ~675 GB of weights. When you add the KV, the weights and the KV are more than
+# not from a config. In FP8, the 675B parameters are ~675 GB of weights. When you add the KV, the weights and the KV are more than
 # the usable HBM of 8×H100.
 #
 # At large batch, every step streams every expert. Thus 675 GB ÷ (8 × 4.8 TB/s) is the floor across 8 H200s.
@@ -254,7 +254,7 @@ print(f"✅ at batch 64 the MoE is {cost_ratio:.1f}x cheaper per token than the 
 # **Drill questions**
 # 1. *'It's only 3B active, it'll run on my 24 GB card.' Answer in numbers.* 30.5B total = 61 GB bf16, 30.5 GB FP8.
 #    With 4-bit experts, it is only ~18.5 GB. That leaves ~2 GiB of KV at the defaults of vLLM: five 4K sequences.
-# 2. *Why does the plan's step exceed the all-experts floor?* The causes are the KV reads, the replicated attention
+# 2. *Why is the plan's step more than the all-experts floor?* The causes are the KV reads, the replicated attention
 #    weights per rank (DP attention), and two all-to-alls per MoE layer.
 # 3. *When does a dense model win?* A dense model wins with low, bursty traffic (small batches), one small GPU,
 #    memory-bound long-context workloads, or a slow interconnect between the expert GPUs.

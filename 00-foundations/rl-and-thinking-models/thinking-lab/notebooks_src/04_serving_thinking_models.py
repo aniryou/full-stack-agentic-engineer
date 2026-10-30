@@ -67,7 +67,7 @@ print(histogram([c.completion_tokens for c in comps["on"]], bins=8, log=True, la
 # %% [markdown]
 # ## Exercise 4.1 — KV × time from the measured lengths: the tail pays
 #
-# A request with prompt $P$ that emits $L$ tokens holds ${P + t}$ tokens of KV at decode step $t$. Thus, during its
+# A request with prompt $P$ that generates $L$ tokens holds ${P + t}$ tokens of KV at decode step $t$. Thus, during its
 # life, it costs `kv_token_steps(P, L) = P·L + L(L + 1)/2` token-steps. The derivation is in rl-core notebook 05,
 # exercise 5.1, and this notebook imports the function. The formula is convex in $L$. Thus a heavy tail costs more
 # than you expect from its mean.
@@ -123,10 +123,11 @@ print(f"memory: {views[1][1]['gpus_for_memory'] / views[0][1]['gpus_for_memory']
 # Ten times the output needs about 18 times the GPUs for KV. The duration increases 10×, so the concurrency
 # increases 10×. Also, the average context of each session almost doubles (from 1,650 to 3,000 tokens).
 #
-# These formulas charge every token at the 40 ms of the SLO. This gives a GPU count that is too high (6 here). It
-# also makes a looser SLO seem to cost more. PRIMER §7 "What thinking does to serving" applies Little's law at the
-# step at which the fleet really runs (`rlcore.workload.plan_steady`: 3 GPUs). It still finds 18× the GPUs for KV
-# (2.75 against 0.15). `derive_shape` (in the check of Exercise 4.2) works the same way: it uses the ITL at the batch.
+# These formulas charge every token at the 40 ms of the SLO. This method gives a GPU count that is too high (6 here).
+# The method also makes a looser SLO seem to cost more. PRIMER §7 "What thinking does to serving" applies Little's
+# law at the step at which the fleet really runs (`rlcore.workload.plan_steady`: 3 GPUs). It still finds 18× the GPUs
+# for KV (2.75 against 0.15). `derive_shape` (in the check of Exercise 4.2) works the same way: it uses the ITL at the
+# batch.
 #
 # One warning from the primer also applies here: its `decode_aggregate` has no memory cap. At 1,000 concurrent
 # sessions × 0.246 GB, the KV alone is 246 GB. That is more than the memory of three H100s. Thus the KV pool must
@@ -181,7 +182,7 @@ for rate in (2.0, 4.0):
 # Thinking multiplies ITL several times. Also, the answer starts seconds after the request, not milliseconds.
 #
 # With no limit, thinking is already at saturation at 2/s. It asks for about 2 × 1,184 ≈ 2,400 output tokens a second.
-# This is near the steady-state throughput of the thinking shape in the table of Exercise 4.2. Thus the peak of the
+# This rate is near the steady-state throughput of the thinking shape in the table of Exercise 4.2. Thus the peak of the
 # KV pool is near 0.9, and the E2E p99 is minutes. At 4/s, the pool is full (peak 1.0). New requests wait for
 # blocks, the engine preempts and recomputes the requests that run, and the tail grows more.
 #

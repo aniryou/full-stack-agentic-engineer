@@ -32,7 +32,7 @@ the primer, the work takes about 11 hours in all.
 
 | Notebook | You will be able to… | Primer | Time | Tier |
 |---|---|---|---|---|
-| [`01_soft_targets_and_temperature`](notebooks/01_soft_targets_and_temperature.ipynb) | Calculate soft targets at a temperature. Derive the KD gradient T·(q_T − p_T), and why T² is there. Find the logit-matching limit. Show that soft targets do better than hard labels at two examples per context (0.876 against 0.678). See the capacity gap. Prune a teacher by activation importance, and repair it by distillation. Over five seeds, see that pruning gives a head start in steps, not a better student. | §1, §2, §6 | ~1.5 h | T0 |
+| [`01_soft_targets_and_temperature`](notebooks/01_soft_targets_and_temperature.ipynb) | Calculate soft targets at a temperature. Derive the KD gradient T·(q_T − p_T), and why T² is there. Find the logit-matching limit. Show that soft targets do better than hard labels at two examples per context (0.876 against 0.678). See the capacity gap. Prune a teacher by activation importance, and repair it by distillation. Over five seeds, see that a pruned student gets a head start in steps but is not a better student. | §1, §2, §6 | ~1.5 h | T0 |
 | [`02_forward_reverse_kl_and_on_policy_distillation`](notebooks/02_forward_reverse_kl_and_on_policy_distillation.ipynb) | Fit a one-mode student to a two-mode teacher under forward KL, reverse KL and JSD(β). Calculate the cost of a SeqKD pipeline in teacher tokens. Measure exposure bias: 1.000 on the prefixes of the teacher, and 0.788 on the prefixes of the student per position. Only 0.190 of the outputs of the student are correct through position 12. Remove the exposure bias with GKD. See reverse KL converge slowly from every start. The cause is that reverse KL increases the probability of a token by only a small quantity when the student gives it a low probability. Show that on-policy distillation is exactly REINFORCE with a dense reward, and find what it costs per token against GRPO. | §2, §3, §4 | ~2 h | T0 |
 | [`03_distilling_reasoning_traces`](notebooks/03_distilling_reasoning_traces.ipynb) | Distil an RL-trained thinker from its traces by maximum likelihood in closed form. See the student take the thinking-length distribution of the thinker. Exchange accuracy for tokens with trace filters. On the student, get better results than RL at equal samples (0.892 against 0.445). Show why knowledge does not transfer. | §3, §5 | ~1.5 h | T0 |
 | [`04_a_distilled_draft_for_speculative_decoding`](notebooks/04_a_distilled_draft_for_speculative_decoding.ipynb) | Calculate acceptance, tokens per pass and speedup. Show that a draft distilled from a fine-tuned target does better than an off-the-shelf one (α 0.988 against 0.890). See how the top-token probability of the target sets a limit on greedy acceptance. Select a draft size. Read the counters of vLLM. | §7 | ~1.5 h | T0 |
@@ -72,7 +72,7 @@ Read the modules in this order. Each module opens with a docstring that states t
 | File | Lines | What it teaches |
 |------|------:|-----------------|
 | [`distillcore/tasks.py`](distillcore/tasks.py) | ~110 | `ModLang`: a next-token language with a known true distribution, a verifier, the cycles of its rule and enumerable continuations (and a fine-tuned "dialect"). `ThinkToy`: the ThinkTask formula of rlcore, 1 − e0·(1 − q)^L. |
-| [`distillcore/losses.py`](distillcore/losses.py) | ~100 | Every loss as (loss, dlogits): hard CE, soft-target CE, T²·KL and its gradient T·(q_T − p_T), and Hinton's α-mix. Also logit MSE (the limit when T goes to ∞), the label noise 1 − Σp², and TRL's generalised JSD(β) with its closed-form gradient. |
+| [`distillcore/losses.py`](distillcore/losses.py) | ~100 | Every loss as (loss, dlogits): hard CE, soft-target CE, T²·KL and its gradient T·(q_T − p_T), and Hinton's α-mix. Also logit MSE, the label noise 1 − Σp², and TRL's generalised JSD(β) with its closed-form gradient. Logit MSE is the limit when T goes to ∞. |
 | [`distillcore/tinylm.py`](distillcore/tinylm.py) | ~145 | A model with manual backprop: a context embedding, then tanh, then logits. Also Adam, sampling with temperature, per-token log-probs and ∇ of weighted log-probs, Minitron-style width pruning, and `fit_language` for teachers. |
 | [`distillcore/divergences.py`](distillcore/divergences.py) | ~70 | Forward and reverse KL, JSD(β) and TV. A one-bump student fitted to a two-bump teacher under each divergence: mass between the modes against a dropped mode. |
 | [`distillcore/seqkd.py`](distillcore/seqkd.py) | ~85 | Generate, then verify, then deduplicate, with the token bill. SFT on teacher text. Exposure bias as accuracy on the prefixes of the teacher against the prefixes of the student, per position and per output. |
@@ -133,10 +133,10 @@ that carry the correctness claims are these:
   (`test_primer_numbers.py`). The exact numbers must appear verbatim. They include closed forms on given logits,
   enumerations, parameter counts, roofline costs and Wilson intervals of given counts.
 
-  A number from a trained or sampled toy model is one seeded run on one CPU. This is important because the matmul
-  kernels of OpenBLAS and the SIMD loops of numpy round differently in the last bit on each CPU family. Training
-  makes that difference larger. Most such numbers move in the third digit (an AVX2-only AMD runner gets α = 0.889
-  where the primer says 0.890). A few chaotic ones move by 0.1–0.2 (the on-policy student on rare inputs, the 4- and
+  A number from a trained or sampled toy model is one seeded run on one CPU. The CPU is important because the matmul
+  kernels of OpenBLAS and the SIMD loops of numpy round differently in the last bit per CPU family. Training
+  makes that difference larger. Most such numbers move in the third digit. For example, an AVX2-only AMD runner gets α = 0.889
+  where the primer says 0.890. A few chaotic ones move by 0.1–0.2 (the on-policy student on rare inputs, the 4- and
   8-unit drafts).
 
   The tests compare those numbers, here and in the other test files, with a tolerance. The tolerance is about three
@@ -147,8 +147,8 @@ that carry the correctness claims are these:
 ## Caveats: what the toys are and are not
 
 `ModLang` is a lookup table in the form of a language. Its rule has no smooth structure. Thus width is a clean
-capacity knob, and you know the truth exactly. But `ModLang` is not text. Its greedy continuations stay on the
-cycles of the rule, and this makes exposure bias visible here. In real text, the same mechanism spreads over far
+capacity knob, and you know the truth exactly. But `ModLang` is not text. Because its greedy continuations stay on the
+cycles of the rule, exposure bias is visible here. In real text, the same mechanism spreads over far
 more states.
 
 Reverse KL is slow here from every start that the tests tried (KD, SFT, fresh). The cause is that reverse KL increases
@@ -157,7 +157,7 @@ table, students are often confidently incorrect. The recipes start on-policy dis
 because on a real model that checkpoint already writes in the format of the teacher. The toy does not show if this
 reason is true or false.
 
-The teacher of the reasoning toy is narrow (RL made it on one task). It is not heavy-tailed like a real thinking
+The teacher of the reasoning toy is narrow: RL made this teacher on one task. The teacher is not heavy-tailed like a real thinking
 model. Every serving cost is an ideal roofline bound with list prices marked (verify), not a measurement. The lab
 measures real engines.
 

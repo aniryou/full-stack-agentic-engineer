@@ -12,14 +12,14 @@
 #
 # The KV cache costs $2 \times \mathrm{layers} \times \mathrm{kv\_heads} \times \mathrm{head\_dim} \times \mathrm{bytes}$ per token. vLLM turns
 # every byte that stays after the weights and overheads into blocks of KV cache. Each decode step reads all of
-# the KV cache of every sequence that runs. `--kv-cache-dtype fp8` stores K and V in one byte. This gives:
+# the KV cache of every sequence that runs. `--kv-cache-dtype fp8` stores K and V in one byte. The flag gives:
 #
 # * **about 2x the tokens** in the same memory (Llama-3.1-8B on an L4: from 2,363 to 4,727 blocks). This is
 #   independent of how you quantize the weights, and the two multiply.
 # * a **lower-cost decode step at long context**, where the KV read comes near the weight read.
-# * **conditions**: you need a backend that reads FP8 KV on your GPU. A T4 has none. An A100 or L4 uses
-#   FlashInfer (FlashAttention 2 has no FP8 KV, so the flag *changes the attention backend*). An H100 uses
-#   FlashAttention 3 (which also quantizes Q). A B200 uses FlashInfer. The default scales are **1.0**, unless the
+# * **conditions**: you need a backend that reads FP8 KV on your GPU. A T4 has none. On an A100 or L4, the flag
+#   *changes the attention backend* to FlashInfer, because FlashAttention 2 has no FP8 KV. An H100 uses
+#   FlashAttention 3, which also quantizes Q. A B200 uses FlashInfer. The default scales are **1.0**, unless the
 #   checkpoint carries calibrated `k_scale` / `v_scale`.
 #
 # Concepts: PRIMER §6 "KV-cache quantization" ([`PRIMER.md`](../../PRIMER.md)). The backend rules are in
@@ -52,7 +52,7 @@ print(kv.table("qwen2.5-1.5b-instruct", "T4"))
 # 2 \times \mathrm{num\_hidden\_layers} \times \mathrm{num\_key\_value\_heads} \times \mathrm{head\_dim} \times \mathrm{dtype\_bytes}.
 # $$
 #
-# Use the `head_dim` of the config when it has one. The `head_dim` of Qwen3-0.6B is 128, although
+# Use the `head_dim` of the config when it has one. The `head_dim` of Qwen3-0.6B is 128, but
 # $\mathrm{hidden\_size}/\mathrm{num\_attention\_heads}$ is 64.
 
 # %% exercise
@@ -213,7 +213,7 @@ print(E.table(rows))
 # range. A scale 100x too small saturates everything at $448 \times \mathrm{scale}$ (accuracy 0). A scale of
 # 1,000 pushes typical values into the subnormals, where the precision runs out.
 #
-# Integer KV formats are the opposite. Their error depends on the scale everywhere. That is why they use dynamic
+# Integer KV formats are the opposite. Their error depends on the scale everywhere. Thus they use dynamic
 # per-token-head scales.
 #
 # ## Exercise 4.5 — is this FP8 scale safe?

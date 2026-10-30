@@ -64,7 +64,7 @@ print(stats["visited"], stats["masked"], stats["grid"])      # 20 8 32, as fa_ca
 
 The kv-cache notebooks are `.ipynb` files written by hand and kept in [`../kv-cache/`](../kv-cache/). No
 percent-format source generates them. Their first cell is the Colab setup cell of the repo. The next cell puts this
-folder on `sys.path`, thus they need no install on Colab.
+folder on `sys.path`, thus the notebooks need no install on Colab.
 
 `make notebooks` runs the worked notebook again and saves its outputs. `tests/test_notebooks.py` makes sure of three
 things:
@@ -94,7 +94,7 @@ pieces run inside an engine:
 
 ## Caveats
 
-- Everything is float64 numpy. "IDENTICAL" means the same token ids, and the logits of every step within 1e-9.
+- Everything is float64 numpy. "IDENTICAL" means the same token ids, and the logits of every step the same to 1e-9.
   The two paths multiply matrices of different shapes, thus the last bits can be different. Tiled and paged
   attention match the exact result to 1e-12.
 - The core counts the costs. It does not measure them. It counts the multiply-adds in the small decoder. It also

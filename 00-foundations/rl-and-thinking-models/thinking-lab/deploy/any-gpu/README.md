@@ -59,11 +59,11 @@ see [`COMPUTE.md`](../../../../../COMPUTE.md)).
 | `--reasoning-parser qwen3` / `deepseek_r1` | It divides the output into `message.reasoning` and `message.content`. It fills `usage.completion_tokens_details.reasoning_tokens`. | `--enable-reasoning` no longer exists. vLLM names use underscores, and SGLang names use hyphens. |
 | `chat_template_kwargs: {"enable_thinking": false}` | The hard switch of Qwen3. `--default-chat-template-kwargs` sets the server default. | The request-level value has priority over the server default. |
 | `reasoning_effort` | `"none"` turns thinking off. Any other value turns it on. | For Qwen3, it does not change *how much* the model thinks. |
-| `thinking_token_budget: N` (`-1` = unlimited) | At N reasoning tokens, vLLM forces `reasoning_end_str` (you set it with `--reasoning-config`), and the answer starts. | It needs the reasoning parser. |
+| `thinking_token_budget: N` (`-1` = unlimited) | At N reasoning tokens, vLLM forces `reasoning_end_str`, and the answer starts. You set `reasoning_end_str` with `--reasoning-config`. | It needs the reasoning parser. |
 | `max_tokens` | It sets the limit for the reasoning **plus** the answer. | A value that is too small stops the output inside the thinking: `content: null`, `finish_reason: "length"`. |
 | `include_reasoning: false` | It still generates the reasoning, but it does not put the reasoning in the response. | You still pay for the tokens. |
 | `--enable-prompt-tokens-details` | It adds `usage.prompt_tokens_details.cached_tokens`. | Notebook 04's multi-turn prefix-cache cell needs it. |
-| sampling | Thinking: temperature 0.6, top-p 0.95, top-k 20. Non-thinking: 0.7 / 0.8 / 20. | Never use greedy decoding (the result is endless repetition). |
+| sampling | Thinking: temperature 0.6, top-p 0.95, top-k 20. Non-thinking: 0.7 / 0.8 / 20. | Never use greedy decoding. The result is endless repetition. |
 
 The response field is `reasoning`. Its old name is `reasoning_content`, and SGLang and the DeepSeek API still use that
 name. `thinklab` reads both.
@@ -79,7 +79,7 @@ state) and gradient checkpointing. Thus both fit a 15 GB T4 (verify).
 
 The step reports the rollout seconds against the training seconds, and the mean reward. It also reports the share of
 zero-variance groups and the gap between the log-probs of vLLM and the log-probs of the trainer. The step does not
-push the new weights back into vLLM. TRL's colocate mode does that at each step.
+push the new weights back into vLLM. TRL's colocate mode pushes the new weights into vLLM at each step.
 
 For a full TRL run, start from `thinklab.rollout.trl_grpo_config("T4")`. It sets these values (TRL 1.14.0 names):
 
@@ -95,7 +95,7 @@ The `[vllm]` extra of TRL 1.14.0 pins `vllm>=0.20.0,<=0.30.0`.
 * **RunPod / Vast.ai** give you a container. Select the `vllm/vllm-openai:v0.30.0` image. Put
   `Qwen/Qwen3-4B --reasoning-parser qwen3 --max-model-len 16384` in the container arguments. Expose port 8000. Set
   `--api-key`, because the endpoint is public. A 24 GB RTX 4090 costs approximately $0.3-0.4/hr (verify in
-  [`COMPUTE.md`](../../../../../COMPUTE.md)). Per-second billing makes the cost of an hour's session cents.
+  [`COMPUTE.md`](../../../../../COMPUTE.md)). With per-second billing, a session of one hour costs cents.
 * **Lambda** (and GCP Compute Engine) give you a VM. Install Docker and the NVIDIA Container Toolkit (layer 02), or
   run `pip install vllm`. Then run `./serve.sh`.
 * If you do not want the network in your latencies, run the notebooks **on the same machine**

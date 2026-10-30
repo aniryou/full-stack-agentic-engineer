@@ -27,7 +27,8 @@ MERMAID = re.compile(r"^[ \t]{0,3}```mermaid[^\n]*\n(.*?)^[ \t]{0,3}```[ \t]*$",
 
 
 def tracked(suffix: str) -> list[pathlib.Path]:
-    out = subprocess.run(["git", "ls-files", "--", f"*{suffix}"], cwd=ROOT, check=True, capture_output=True, text=True).stdout
+    out = subprocess.run(["git", "ls-files", "--cached", "--others", "--exclude-standard", "--", f"*{suffix}"], cwd=ROOT, check=True,
+                         capture_output=True, text=True).stdout   # tracked and new files
     return [ROOT / p for p in out.split("\n") if p]
 
 

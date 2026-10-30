@@ -36,7 +36,7 @@ print(f"questions: mean chance an attempt is on a workable approach {qs['a'].mea
 
 # %% [markdown]
 # ## Worked example 1 — estimating pass@k without fooling yourself
-# Draw $n$ = 10 samples per question. Count the $c$ correct samples. The obvious estimate of pass@5 is
+# Draw $n$ = 10 samples per question. Count the $c$ correct samples. The simple estimate of pass@5 is
 # $1 - (1 - c/n)^5$. Its expectation over the binomial draw is *below* the truth. The expectation of the unbiased
 # estimator *is* the truth.
 
@@ -53,7 +53,7 @@ print("n=16, c=4, k=4: pass@4", round(ttc.pass_at_k(16, 4, 4), 6), " pass^4", ro
 # where pass@k is of most interest. Estimate pass@k from $n \ge k$ samples with the product form that HumanEval's
 # code uses.
 #
-# Also note the pair in the last line. A model that solves a task 1 time in 4 has pass@4 = 0.73, but
+# Also, look at the pair in the last line. A model that solves a task 1 time in 4 has pass@4 = 0.73, but
 # pass^4 = 0.0005. For an agent that must succeed every time a user asks, the measure is pass^k (τ-bench). More
 # samples at test time do nothing for it.
 #
@@ -150,8 +150,10 @@ for method in ("verifier", "vote"):
 # %% [markdown]
 # With a verifier, the small model wins at equal compute. Its many low-cost samples cover the dead ends. With only
 # a vote, the large model wins. Its single samples are correct sufficiently often, but the samples of the small model
-# are not. The result for "a smaller model with more samples" is a property of the task *and* of the presence of
-# a checker. Measure it on your own evals (the 07.2 evals notebook has the intervals that such comparisons need).
+# are not.
+#
+# The result for "a smaller model with more samples" is a property of the task *and* of the presence of a checker.
+# Measure it on your own evals. The 07.2 evals notebook has the intervals that such comparisons need.
 #
 # ## Exercise 4.1 — the unbiased pass@k
 # Write $1 - \binom{n-c}{k}/\binom{n}{k}$ in the stable product form
@@ -195,7 +197,7 @@ print(f"✅ 75% per try: pass@5 = {any_success:.0%} but pass^5 = {reliability:.1
 
 # %% [markdown]
 # ## Exercise 4.3 — majority of n between two answers
-# A sample is correct with $p$. Otherwise, it gives the *same* incorrect answer. For odd $n$,
+# A sample is correct with $p$. If not, it gives the *same* incorrect answer. For odd $n$,
 # $P(\text{majority right})$ is the binomial tail ${P(X > n/2)}$. Write it. Compare it with the exact
 # multi-answer function.
 
@@ -259,7 +261,7 @@ print(f"✅ with a verifier: {best[0]} samples of {best[1]} tokens ({best[2]:.3f
 # spends $\mathbb{E}[\min(L_{\text{crack}}, L)] = (1 - (1 - q)^L)/q$ (and the full $L$ when it never cracks it).
 # For the questions in `qs`, calculate `waste`. This is the fraction of an $L$ = 4,000 thinking budget that the
 # model spends *after* it already cracked the question. Calculate it as an average over the
-# questions, weighted by $a$ (the chance that the attempt was on a workable approach).
+# questions, weighted by $a$, the chance that the attempt was on a workable approach.
 
 # %% exercise
 L_fixed = 4000

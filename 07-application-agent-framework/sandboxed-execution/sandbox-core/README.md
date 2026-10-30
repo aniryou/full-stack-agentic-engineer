@@ -7,7 +7,7 @@ After this core, you can explain every part of a safe `run_code` tool. You also 
 - The execution contract with budgets and exit reasons.
 - An egress proxy that has an allowlist and injects a credential that the code never holds.
 - The policy that renders to Kubernetes.
-- The warm-pool arithmetic that calculates its size and its price.
+- The warm-pool arithmetic that calculates the size and the price of the pool.
 
 The core uses only the standard library. Only the manifest tests also use PyYAML and kubernetes-validate. The core
 has about 2,000 lines that you can read in an afternoon. It also has five notebooks with blanks to fill in.
@@ -93,11 +93,11 @@ Read the modules in this order. Each module starts with a docstring that states 
   - A clean environment hides a planted secret.
   - A wall-clock kill stops a sleeper and its grandchild.
   - A `setsid()` escapee cannot hold the call open, and the sandbox sweeps it by UID.
-  - A flood ends as `output_limit` within wall_s + 1 s, and the memory of the parent does not grow.
+  - A flood ends as `output_limit` in at most wall_s + 1 s, and the memory of the parent does not grow.
   - A key opens by absolute path unless the UID is different.
   - The workspace is 0700.
   - A forged `MemoryError` gets the label `reason_source: code`.
-  - The sandbox measures CPU and peak memory per execution. It uses `wait4`, so it does not lose them when a
+  - The sandbox measures CPU and peak memory per execution. It uses `wait4`, so it does not lose these measurements when a
     child exits while the parent still reads.
 
   Without a UID switch, the `pids` budget is the run's own process tree. The other threads of a busy user do not
@@ -118,8 +118,8 @@ Read the modules in this order. Each module starts with a docstring that states 
   - Sized emptyDirs.
   - Egress to the proxy only, with no DNS (hostAliases to a pinned ClusterIP).
   - An admission policy with `validationActions: [Deny]`.
-- **The pool arithmetic** (`test_pool.py`). Little's law gives 25 slots on average, and Erlang C shows that this
-  pool is unstable. The tests also show these results:
+- **The pool arithmetic** (`test_pool.py`). Little's law gives 25 slots on average, and Erlang C shows that a pool of 25
+  slots is unstable. The tests also show these results:
   - 31 slots for P(wait) ≤ 0.2 (the §6 table).
   - 34 at the scaling primer's 5.42/s.
   - A simulator that agrees in all three modes. The tests pin the simulated figures of the primer.
@@ -150,7 +150,7 @@ under shared load. Notebook 05 measures them again on your host. The container/g
 A process sandbox is **not** a boundary against a kernel exploit or the network. Real isolation is a container,
 then gVisor, then a microVM, and these are in the lab ([`../sandbox-lab`](../sandbox-lab/)).
 
-Also, three of its controls need root to switch each execution to its own UID. The three controls and their
+Also, three controls of the process sandbox need root to switch each execution to its own UID. The three controls and their
 limits are these:
 
 - `RLIMIT_NPROC` does nothing as root, and as a user your own processes share it.

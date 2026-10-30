@@ -1,6 +1,6 @@
 # gateway-core — build an LLM gateway's decisions in one sitting, with standard library and numpy
 
-After this, you can explain every decision that a gateway makes for one request:
+After this core, you can explain every decision that a gateway makes for one request:
 
 - Which tenant the request comes from.
 - If it can run.
@@ -39,7 +39,7 @@ curriculum of the repository). The notebooks of the core take approximately 8 ho
 | [`02_routing_and_fallback_chains`](notebooks/02_routing_and_fallback_chains.ipynb) | Filter and order a chain. Say which failures go to the next target (408 and 529 included). Calculate the availability, the expected latency and the expected cost of a chain. Predict how many concurrent requests get to a dead target before its breaker opens. Apply the first-byte rule. Select a first-byte deadline from a budget. Show why a timeout for the whole response cannot be that deadline. | §2 | ~1.5 h | T0 |
 | [`03_exact_and_semantic_caching`](notebooks/03_exact_and_semantic_caching.ipynb) | Build a safe exact key. Extract what an entity guard compares. Select a threshold under a false-hit budget on labelled traffic. Give the cost of a false hit. Decide what a namespace must hold for shared classes and for per-user classes. Compare with the prompt cache of the provider. | §3, §6.4 | ~1.5 h | T0 |
 | [`04_token_limits_metering_and_chargeback`](notebooks/04_token_limits_metering_and_chargeback.ipynb) | Predict how much a per-request bucket over-admits. Build the sequence reserve, then stream, then reconcile. Calculate the size of a reservation by simulation. Bill a thinking call from raw usage. Charge back a pool by GPU-seconds. Find ledger drift, and predict it from the cut streams. | §4, §5 | ~2 h | T0 |
-| [`05_guardrails_keys_and_mcp_authorization`](notebooks/05_guardrails_keys_and_mcp_authorization.ipynb) | Calculate the `cache_salt` of a tenant. Put a held-back window under a TTFT budget. Set a false-positive budget. Build the MCP discovery URLs. Calculate PKCE. Find refresh-token reuse. | §6, §7, §8 (for §9, you only read the text) | ~1.5 h | T0 |
+| [`05_guardrails_keys_and_mcp_authorization`](notebooks/05_guardrails_keys_and_mcp_authorization.ipynb) | Calculate the `cache_salt` of a tenant. Put a held-back window under a TTFT budget. Set a false-positive budget. Build the MCP discovery URLs. Calculate PKCE. Find refresh-token reuse. | §6, §7, §8. For §9, you only read the text. | ~1.5 h | T0 |
 
 ## Run it
 
@@ -82,7 +82,7 @@ Read the modules in this order. Each module starts with a docstring that states 
 | [`gwcore/keys.py`](gwcore/keys.py) | ~140 | Virtual keys (hashed, scoped, budgeted, revocable). Provider keys rotated with an overlap. The per-tenant `cache_salt`. SVID rotation at half-life ± 10 %, with a new random value on every check (as SPIRE does). A fake Workload API stream. |
 | [`gwcore/guardrails.py`](gwcore/guardrails.py) | ~80 | Hooks and placements. The TTFT and the end-to-end latency that each placement adds. Exposure. Dollars per 1,000 checks. False blocks that compound over a conversation. A labelled regex stand-in. |
 | [`gwcore/mcp_authz.py`](gwcore/mcp_authz.py) | ~335 | The MCP client flow against a fake authorization server and MCP server. It covers discovery URLs, CIMD validation, PKCE S256 and `resource` (another server refuses a token for one server). It also covers `iss`, refresh rotation with reuse detection and step-up. It also covers DPoP proofs, examined for `htm`, `htu`, `iat` and `jti` replay, and nonces. The DPoP proofs go through a pluggable signer (an HMAC stand-in). |
-| [`gwcore/gateway.py`](gwcore/gateway.py) | ~185 | The §1 pipeline that connects them: key, then screen, then cache, then reserve, then chain, then relay and meter, then reconcile, then record. Only the health of a provider trips its breaker. A 401 from a provider is our 502. Residency comes from the key. |
+| [`gwcore/gateway.py`](gwcore/gateway.py) | ~185 | The §1 pipeline that connects the modules: key, then screen, then cache, then reserve, then chain, then relay and meter, then reconcile, then record. Only the health of a provider trips its breaker. A 401 from a provider is our 502. Residency comes from the key. |
 
 The data files are [`gwcore/data/payloads.json`](gwcore/data/payloads.json) and
 [`gwcore/data/traffic.json`](gwcore/data/traffic.json). The first has one call in four dialects, as sample output in
@@ -107,7 +107,7 @@ checks skips for percent-source labs. The tests run offline in ~16 s. The tests 
   - The embedder equals `ragkit.embed.HashingEmbedder` vector for vector.
 - **Every number the primer quotes**: the test calculates it again, and the number must appear verbatim in the primer
   (`test_primer_numbers.py`).
-- **The reserve invariant**: `used in window + reserved` never exceeds the limit on random traffic. Thus a provider
+- **The reserve invariant**: `used in window + reserved` is never more than the limit on random traffic. Thus a provider
   that counts the same tokens never sees more (`test_ratelimit.py`).
 - **The first-byte rule**: an error before the first chunk goes to the next target. After the first chunk, the client
   gets an error chunk, and the gateway calls no second model. The ledger bills the relayed deltas as an estimate

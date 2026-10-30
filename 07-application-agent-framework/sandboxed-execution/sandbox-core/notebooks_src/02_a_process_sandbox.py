@@ -11,7 +11,7 @@
 # A process sandbox does six things:
 #
 # 1. A **clean environment**, so no credentials come with the code.
-# 2. An **ephemeral workspace** (mode 0700, deleted after the call).
+# 2. An **ephemeral workspace** (mode 0700) that the sandbox deletes after the call.
 # 3. **POSIX resource limits** in the child: CPU seconds, address space, processes, file size, open files.
 # 4. A **wall-clock deadline**, and a kill of the full process group.
 # 5. Output **read as it streams**. The sandbox keeps the first `output_bytes` and stops the run past
@@ -33,10 +33,10 @@ for k, v in sb.isolation_report().items():
 
 # %% [markdown]
 # ## Worked example 1 — a clean environment, and why `HOME` is not a boundary
-# The child cannot see the environment of the parent. We put a token in *our* environment, and it comes back
-# absent. `HOME` points at the workspace, so `~/.ssh` is empty. But that is a convenience, not isolation: the real
-# home is one `pwd` lookup away. Only a **different UID** turns "you can find it" into "you cannot open it". Compare
-# the per-execution UID with `drop_to_uid=None` (what a non-root laptop gets).
+# The child cannot see the environment of the parent. We put a token in *our* environment, and it comes back absent.
+# `HOME` points at the workspace, so `~/.ssh` is empty. But this redirection is a convenience, not isolation: the real
+# home is one `pwd` lookup away. Only a **different UID** turns "you can find it" into "you cannot open it". Compare the
+# per-execution UID with `drop_to_uid=None` (what a non-root laptop gets).
 
 # %%
 import os

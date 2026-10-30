@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="560" viewBox="0 0 920 560" role="img" aria-label="One tool call goes through Model Armor, the decision of SecurityPlugin, the broker, Agent Gateway and VPC-SC, and the resource server." style="color: #E4EAE7">
+  <title>One tool call goes through Model Armor, the decision of SecurityPlugin, the broker, Agent Gateway and VPC-SC, and the resource server.</title>
+  <rect x="0" y="0" width="920" height="560" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <rect x="300" y="16" width="320" height="52" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="460" y="38" text-anchor="middle" font-weight="600">the model call</text>
+    <text x="460" y="56" text-anchor="middle" font-size="11.5" fill="#97A59F">Model Armor floor settings</text>
+
+    <rect x="270" y="96" width="380" height="72" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="460" y="118" text-anchor="middle" font-weight="600">SecurityPlugin</text>
+    <text x="460" y="138" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" fill="#7ADACF">before_tool_callback</text>
+    <text x="460" y="156" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" fill="#7ADACF">PolicyEngine.evaluate()</text>
+
+    <path d="M460 190 L526 220 L460 250 L394 220 Z" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="460" y="224" text-anchor="middle">decision</text>
+
+    <rect x="40" y="304" width="260" height="52" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="170" y="326" text-anchor="middle" font-weight="600">DENY</text>
+    <text x="170" y="344" text-anchor="middle" font-size="11.5" fill="#97A59F">the runtime skips the tool</text>
+
+    <rect x="412" y="304" width="96" height="52" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="460" y="334" text-anchor="middle" font-weight="600">ALLOW</text>
+
+    <rect x="630" y="304" width="260" height="52" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="760" y="326" text-anchor="middle" font-weight="600">CONFIRM</text>
+    <text x="760" y="344" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" fill="#97A59F">adk_request_confirmation</text>
+
+    <rect x="280" y="384" width="360" height="56" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="460" y="406" text-anchor="middle" font-weight="600">the broker: Auth Manager or the STS</text>
+    <text x="460" y="424" text-anchor="middle" font-size="11.5" fill="#97A59F">a credential for this tool only</text>
+
+    <rect x="312" y="454" width="594" height="98" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="768" y="472" text-anchor="middle" font-size="11.5" fill="#97A59F">the network and resource layers</text>
+
+    <rect x="330" y="484" width="260" height="56" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="460" y="506" text-anchor="middle" font-weight="600">Agent Gateway and VPC-SC</text>
+    <text x="460" y="524" text-anchor="middle" font-size="11.5" fill="#97A59F">IAP per SPIFFE ID</text>
+
+    <rect x="640" y="484" width="250" height="56" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="765" y="506" text-anchor="middle" font-weight="600">the resource server</text>
+    <text x="765" y="524" text-anchor="middle" font-size="11.5" fill="#97A59F">IAM decides last</text>
+
+    <g stroke="#97A59F" stroke-width="1.2" fill="none">
+      <path d="M460 68 L460 94" marker-end="url(#arr)"/>
+      <path d="M460 168 L460 188" marker-end="url(#arr)"/>
+      <path d="M394 220 L170 220 L170 302" marker-end="url(#arr)"/>
+      <path d="M526 220 L760 220 L760 302" marker-end="url(#arr)"/>
+      <path d="M460 250 L460 302" marker-end="url(#arr)"/>
+      <path d="M630 330 L510 330" marker-end="url(#arr)"/>
+      <path d="M460 356 L460 382" marker-end="url(#arr)"/>
+      <path d="M460 440 L460 482" marker-end="url(#arr)"/>
+      <path d="M590 512 L638 512" marker-end="url(#arr)"/>
+    </g>
+    <g font-size="11" fill="#97A59F">
+      <text x="472" y="86">a tool call</text>
+      <text x="282" y="212" text-anchor="middle">deny</text>
+      <text x="643" y="196" text-anchor="middle">DESTRUCTIVE or EXTERNAL,</text>
+      <text x="643" y="210" text-anchor="middle">outside the envelope</text>
+      <text x="448" y="268" text-anchor="end">READ by default,</text>
+      <text x="448" y="281" text-anchor="end">WRITE on the allowlist,</text>
+      <text x="448" y="294" text-anchor="end">or inside the envelope</text>
+      <text x="569" y="308" text-anchor="middle" font-family="JetBrains Mono, monospace">ToolConfirmation</text>
+      <text x="569" y="322" text-anchor="middle" font-family="JetBrains Mono, monospace">(confirmed=True)</text>
+      <text x="569" y="346" text-anchor="middle">logged with</text>
+      <text x="569" y="359" text-anchor="middle">the approver</text>
+    </g>
+  </g>
+</svg>

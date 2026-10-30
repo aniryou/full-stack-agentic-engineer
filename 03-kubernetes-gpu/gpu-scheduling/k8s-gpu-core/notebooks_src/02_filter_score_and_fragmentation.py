@@ -14,7 +14,7 @@
 #
 # The score step decides GPU **fragmentation**. The default `NodeResourcesFit` strategy is
 # `LeastAllocated` over **cpu and memory**. It spreads pods and never looks at GPUs. Thus a stream of
-# 1-GPU pods lands one per node. Then an 8-GPU pod fits nowhere, although half the GPUs are free.
+# 1-GPU pods lands one per node. Then an 8-GPU pod fits nowhere, but half the GPUs are free.
 # `MostAllocated` with a GPU weight packs the pods instead.
 #
 # After this notebook, you can read a FailedScheduling message and calculate a node score by hand. You
@@ -291,7 +291,7 @@ assert len(x.nodes["x"].pods) == 3                                             #
 print("✅ victims:", [v.name for v in got], "- reprieve in order of importance, evict what does not fit back")
 
 # %% [markdown]
-# Note what preemption does *not* do:
+# Preemption does *not* do these things:
 #
 # * It never evicts a higher-priority pod.
 # * It never moves pods to collect free GPUs together (no defragmentation).
@@ -303,7 +303,7 @@ print("✅ victims:", [v.name for v in got], "- reprieve in order of importance,
 # ## In a design review
 #
 # **Two-minute version.** "The scheduler does the filter, score and bind steps for one pod at a time.
-# For GPUs, the default score is incorrect for us. It is LeastAllocated over cpu and memory. Thus it
+# For GPUs, the default score is incorrect for us. The default is LeastAllocated over cpu and memory. Thus it
 # spreads 1-GPU pods across every node. It leaves GPUs stranded in pieces too small for our 8-GPU jobs.
 #
 # "For GPU node pools, we run a bin-packing profile: MostAllocated with a weight on the GPU. Where
@@ -311,7 +311,7 @@ print("✅ victims:", [v.name for v in got], "- reprieve in order of importance,
 # monitor stranded GPUs per pod shape as a capacity metric, next to utilisation.
 #
 # "Priority classes put serving above batch. Preemption evicts the fewest and least important pods. But
-# it never does a defragmentation, and it does not understand jobs that have many pods. Gang scheduling
+# it never does a defragmentation, and it does not know about jobs that have many pods. Gang scheduling
 # and Kueue are for that problem."
 #
 # **Drill questions.**
@@ -320,7 +320,7 @@ print("✅ victims:", [v.name for v in got], "- reprieve in order of importance,
 #    Fragmentation. The free GPUs are spread across nodes in pieces smaller than 8. A pod cannot use
 #    more than one node. Pack the pods (MostAllocated + GPU weight), use a dedicated pool for 8-GPU
 #    shapes, or preempt.
-# 2. *Does the default scheduler consider GPUs when scoring?* No. By default, NodeResourcesFit uses cpu
+# 2. *Does the default scheduler look at GPUs in the score step?* No. By default, NodeResourcesFit uses cpu
 #    and memory for the score. GPUs are important only in the filter (the integer must fit).
 # 3. *Why can bin-packing hurt an inference service?* Replicas collect on few nodes. Thus one node
 #    failure or GPU failure removes several replicas. Balance the placement with topology spread

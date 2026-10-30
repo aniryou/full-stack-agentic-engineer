@@ -17,7 +17,7 @@ You can defend these numbers in a design review.
    Then open [`01_the_moe_layer`](moe-core/notebooks/01_the_moe_layer.ipynb).
 3. If torch is installed, train a small MoE in the lab, [`moe-lab/`](moe-lab/README.md). A CPU is sufficient for
    this step. Use the notebook [`01_a_tiny_moe_in_torch`](moe-lab/notebooks/01_a_tiny_moe_in_torch.ipynb). If you have
-   a GPU of any type, run [`02_watch_the_router`](moe-lab/notebooks/02_watch_the_router.ipynb). It records the
+   a GPU of any type, run [`02_watch_the_router`](moe-lab/notebooks/02_watch_the_router.ipynb). This notebook records the
    choices of a real router.
 
 The fastest result needs only numpy:

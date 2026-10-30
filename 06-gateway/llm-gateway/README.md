@@ -33,7 +33,7 @@ paths add approximately 2 GPU-hours.
 
 | Path | You will be able to… | Time | Tier |
 |---|---|---|---|
-| [PRIMER.md](PRIMER.md) | Explain the decisions of the gateway and their costs, §1–§9. The primer has a walkthrough for a design review and six drills. | ~2.5 h | reading |
+| [PRIMER.md](PRIMER.md) | Explain the decisions of the gateway and their costs, §1–§9. The primer has a walkthrough for a design review and six drills. | ~2.5 h | read |
 | [`gateway-core/`](gateway-core/) (package `gwcore`, standard library + numpy) | Build each decision in process on a virtual clock. You build adapters, chains and breakers, exact and semantic caches, and the sequence reserve, then stream, then reconcile. You also build the ledger and chargeback, virtual keys and `cache_salt`, guardrail placement, the MCP client flow and GenAI spans. | ~8 h, 5 notebooks | T0 |
 | [`gateway-lab/`](gateway-lab/) (package `gwlab`) | Run the same gateway over HTTP in front of fake providers or a real vLLM. See what a client sees for each fault. Put a semantic cache on declared classes. Compare it live with its sweep. See the prefix-cache timing attack that `cache_salt` closes. Reconcile a ledger with the `usage` and `/metrics` of vLLM. See key rotation under load and MCP authorization over HTTP. | ~6 h, 5 notebooks | T0, T0 + Docker, T1 |
 
@@ -69,7 +69,7 @@ are:
 Read two primers first. The [scaling primer](../scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md)
 (06.1–06.3) covers the cost per conversation, the token bucket, retries and breakers, and admission. The
 [identity primer](../identity-security/agentic-identity-gcp-lab/docs/primer.md) (06.6) covers agent identity,
-delegation, secrets, screening, and the MCP server as a resource server. This topic applies them at the one service
+delegation, secrets, screening, and the MCP server as a resource server. This topic applies the two primers at the one service
 that holds every key.
 
 Below this topic, the [05 orchestration primer](../../05-orchestrator/serving-orchestration/PRIMER.md) explains how

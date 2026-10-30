@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="530" viewBox="0 0 1000 530" role="img" aria-label="The system overview: the edge, the three Cloud Run services, Pub/Sub, the two stores and the Gemini endpoint." style="color: #E4EAE7">
+  <title>The system overview: the edge, the three Cloud Run services, Pub/Sub, the two stores and the Gemini endpoint.</title>
+  <rect x="0" y="0" width="1000" height="530" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <!-- groups -->
+    <rect x="310" y="24" width="430" height="116" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="525" y="42" text-anchor="middle" font-size="11.5" fill="#97A59F">Async</text>
+    <rect x="760" y="24" width="220" height="116" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="870" y="42" text-anchor="middle" font-size="11" fill="#97A59F">Gemini Enterprise Agent Platform</text>
+    <rect x="96" y="168" width="190" height="136" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="191" y="186" text-anchor="middle" font-size="11.5" fill="#97A59F">Edge</text>
+    <rect x="310" y="170" width="670" height="152" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="966" y="188" text-anchor="end" font-size="11.5" fill="#97A59F">Cloud Run (region)</text>
+    <rect x="370" y="360" width="380" height="110" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="386" y="378" font-size="11.5" fill="#97A59F">State</text>
+
+    <!-- client -->
+    <circle cx="49" cy="244" r="35" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="49" y="248" text-anchor="middle" font-size="11">App / web</text>
+
+    <!-- edge -->
+    <rect x="110" y="200" width="162" height="76" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="191" y="224" text-anchor="middle" font-weight="600">Global external ALB</text>
+    <text x="191" y="243" text-anchor="middle" font-size="11.5" fill="#97A59F">managed cert</text>
+    <text x="191" y="261" text-anchor="middle" font-size="11.5" fill="#97A59F">Cloud Armor · IAP</text>
+
+    <!-- async -->
+    <rect x="330" y="58" width="130" height="60" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="395" y="83" text-anchor="middle" font-weight="600">Pub/Sub</text>
+    <text x="395" y="103" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">agent-turns</text>
+    <rect x="590" y="58" width="130" height="60" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="655" y="92" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" font-weight="600">agent-turns-dlq</text>
+
+    <!-- model -->
+    <rect x="795" y="58" width="150" height="60" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="870" y="83" text-anchor="middle" font-weight="600">Gemini</text>
+    <text x="870" y="103" text-anchor="middle" font-size="11.5" fill="#97A59F">global endpoint</text>
+
+    <!-- cloud run services -->
+    <rect x="330" y="214" width="130" height="60" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="395" y="239" text-anchor="middle" font-weight="600">gateway</text>
+    <text x="395" y="259" text-anchor="middle" font-size="11.5" fill="#97A59F">request-based</text>
+    <rect x="530" y="214" width="140" height="60" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="600" y="239" text-anchor="middle" font-weight="600">orchestrator</text>
+    <text x="600" y="259" text-anchor="middle" font-size="11.5" fill="#7ADACF">instance-based</text>
+    <rect x="770" y="202" width="140" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="840" y="228" text-anchor="middle" font-weight="600">tools</text>
+    <rect x="770" y="262" width="140" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="840" y="288" text-anchor="middle" font-weight="600">mcp (optional)</text>
+
+    <!-- state -->
+    <rect x="390" y="398" width="140" height="56" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="460" y="422" text-anchor="middle" font-weight="600">Firestore</text>
+    <text x="460" y="441" text-anchor="middle" font-size="11.5" fill="#97A59F">sessions · turns</text>
+    <rect x="580" y="398" width="150" height="56" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="655" y="422" text-anchor="middle" font-weight="600">Memorystore</text>
+    <text x="655" y="441" text-anchor="middle" font-size="11.5" fill="#97A59F">Valkey/Redis</text>
+
+    <!-- observability -->
+    <rect x="100" y="420" width="190" height="60" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="195" y="445" text-anchor="middle" font-weight="600">Cloud Trace</text>
+    <text x="195" y="465" text-anchor="middle" font-size="11.5" fill="#97A59F">Monitoring · Logging</text>
+
+    <!-- edges -->
+    <g stroke="#97A59F" stroke-width="1.2" fill="none">
+      <path d="M84 244 L108 244" marker-end="url(#arr)"/>
+      <path d="M272 244 L328 244" marker-end="url(#arr)"/>
+      <path d="M395 214 L395 120" marker-end="url(#arr)"/>
+      <path d="M440 118 L598 212" marker-end="url(#arr)"/>
+      <path d="M460 88 L588 88" marker-end="url(#arr)" stroke-dasharray="4 3"/>
+      <path d="M650 214 L838 120" marker-end="url(#arr)"/>
+      <path d="M670 234 L768 224" marker-end="url(#arr)"/>
+      <path d="M670 256 L768 284" marker-end="url(#arr)" stroke-dasharray="4 3"/>
+      <path d="M420 274 L440 396" marker-end="url(#arr)"/>
+      <path d="M450 274 L610 396" marker-start="url(#arr)" marker-end="url(#arr)"/>
+      <path d="M560 274 L500 396" marker-start="url(#arr)" marker-end="url(#arr)"/>
+      <path d="M630 274 L660 396" marker-start="url(#arr)" marker-end="url(#arr)"/>
+      <path d="M290 440 L345 440 L345 276" stroke-dasharray="4 3"/>
+      <path d="M195 480 L195 505 L790 505 L790 340 L662 340 L662 276" stroke-dasharray="4 3"/>
+    </g>
+    <g font-size="11" fill="#97A59F">
+      <text x="403" y="162">publish</text>
+      <text x="530" y="162">push</text>
+      <text x="524" y="80" text-anchor="middle">after 5 attempts</text>
+      <text x="719" y="222" text-anchor="middle">ID token</text>
+      <text x="714" y="290" text-anchor="middle">optional</text>
+    </g>
+  </g>
+</svg>

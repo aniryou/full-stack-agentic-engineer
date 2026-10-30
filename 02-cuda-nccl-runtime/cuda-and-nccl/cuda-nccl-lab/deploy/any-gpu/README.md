@@ -34,7 +34,7 @@ python -m gpurt.kernels.bench --quick --json out/kernels.json   # notebook 02 pr
 ```
 
 `gpurt.kernels.bench` measures the time of real kernels. Thus it must have the GPU and `numba-cuda`. Without
-them, it stops with one line and exit status 2 (`python -m gpurt.env` tells you why). On a laptop, the T0
+them, it stops with one line and exit status 2. `python -m gpurt.env` tells you why. On a laptop, the T0
 path of notebook 02 is the equivalent.
 
 With two or more GPUs and a CUDA build of PyTorch (T2):

@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="452" viewBox="0 0 1000 452" role="img" aria-label="The admission loop of §5.3: three questions, the admit and shed outcomes, and the signals that set the degrade level." style="color: #E4EAE7">
+  <title>The admission loop of §5.3: three questions, the admit and shed outcomes, and the signals that set the degrade level.</title>
+  <rect x="0" y="0" width="1000" height="452" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <!-- the turn arrives -->
+    <rect x="20" y="138" width="176" height="88" rx="30" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="108" y="166" text-anchor="middle" font-weight="600">a turn arrives at</text>
+    <text x="108" y="186" text-anchor="middle" font-size="11.5" fill="#97A59F">the gateway, before</text>
+    <text x="108" y="203" text-anchor="middle" font-size="11.5" fill="#97A59F">it has cost anything</text>
+    <!-- 1. tenant bucket -->
+    <rect x="232" y="136" width="180" height="92" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="322" y="160" text-anchor="middle" font-weight="600">1. the token bucket</text>
+    <text x="322" y="177" text-anchor="middle" font-weight="600">of the tenant</text>
+    <text x="322" y="198" text-anchor="middle" font-size="11.5" fill="#97A59F">a noisy brand cannot</text>
+    <text x="322" y="215" text-anchor="middle" font-size="11.5" fill="#97A59F">take all of the pool</text>
+    <!-- 2. degrade level -->
+    <rect x="446" y="136" width="172" height="92" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="532" y="160" text-anchor="middle" font-weight="600">2. the degrade level</text>
+    <text x="532" y="177" text-anchor="middle" font-weight="600">of the system</text>
+    <text x="532" y="200" text-anchor="middle" font-size="11.5" fill="#97A59F">from Redis</text>
+    <!-- 3. above the cap? -->
+    <path d="M644 182 L724 126 L804 182 L724 238 Z" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="724" y="178" text-anchor="middle" font-weight="600" fill="#7ADACF">3. above</text>
+    <text x="724" y="195" text-anchor="middle" font-weight="600" fill="#7ADACF">the cap?</text>
+    <text x="820" y="178" font-size="11" fill="#97A59F">level 3: in-flight ≥ cap</text>
+    <text x="820" y="194" font-size="11" fill="#97A59F">or queue age ≥ 30 s</text>
+    <!-- shed -->
+    <rect x="614" y="14" width="220" height="72" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="724" y="38" text-anchor="middle" font-weight="600">shed: 503</text>
+    <text x="724" y="56" text-anchor="middle" font-size="11.5">with a Retry-After that</text>
+    <text x="724" y="73" text-anchor="middle" font-size="11.5">grows with the level</text>
+    <!-- admit -->
+    <rect x="798" y="300" width="182" height="132" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="889" y="323" text-anchor="middle" font-weight="600">admit</text>
+    <text x="889" y="343" text-anchor="middle" font-size="11">the turn runs at</text>
+    <text x="889" y="359" text-anchor="middle" font-size="11">the level, 0 to 2:</text>
+    <text x="889" y="377" text-anchor="middle" font-size="11" fill="#97A59F">the model, the</text>
+    <text x="889" y="393" text-anchor="middle" font-size="11" fill="#97A59F">thinking level, the</text>
+    <text x="889" y="409" text-anchor="middle" font-size="11" fill="#97A59F">tools and the output cap</text>
+    <!-- signals -->
+    <rect x="556" y="300" width="206" height="132" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="659" y="323" text-anchor="middle" font-weight="600">the signals</text>
+    <text x="659" y="341" text-anchor="middle" font-size="11" fill="#97A59F">that every instance publishes</text>
+    <text x="659" y="362" text-anchor="middle" font-size="11.5">in-flight turns</text>
+    <text x="659" y="379" text-anchor="middle" font-size="11.5">queue age</text>
+    <text x="659" y="396" text-anchor="middle" font-size="11.5">429 ratio, last minute</text>
+    <text x="659" y="413" text-anchor="middle" font-size="11.5">an open breaker</text>
+    <!-- compute_level -->
+    <rect x="140" y="300" width="380" height="132" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="330" y="324" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">AdmissionController.compute_level()</text>
+    <text x="330" y="346" text-anchor="middle" font-size="11.5">level 1: in-flight ≥ 80 % of cap,</text>
+    <text x="330" y="363" text-anchor="middle" font-size="11.5">queue age ≥ 10 s or 429 ratio ≥ 5 %</text>
+    <text x="330" y="384" text-anchor="middle" font-size="11.5">level 2: a breaker open, or 429 ratio ≥ 15 %</text>
+    <text x="330" y="405" text-anchor="middle" font-size="11.5" fill="#97A59F">a raised level is held ten to fifteen</text>
+    <text x="330" y="421" text-anchor="middle" font-size="11.5" fill="#97A59F">seconds before it goes down</text>
+    <!-- main path -->
+    <g stroke="#97A59F" stroke-width="1.2" fill="none">
+      <path d="M196 182 L230 182" marker-end="url(#arr)"/>
+      <path d="M412 182 L444 182" marker-end="url(#arr)"/>
+      <path d="M618 182 L642 182" marker-end="url(#arr)"/>
+      <path d="M724 126 L724 88" marker-end="url(#arr)"/>
+      <path d="M724 238 L724 266 L889 266 L889 298" marker-end="url(#arr)"/>
+      <path d="M614 50 L108 50 L108 136" marker-end="url(#arr)" stroke-dasharray="4 3"/>
+      <path d="M798 366 L764 366" marker-end="url(#arr)"/>
+      <path d="M556 366 L522 366" marker-end="url(#arr)"/>
+    </g>
+    <path d="M500 300 L500 230" fill="none" stroke="#4CC5B7" stroke-width="1.2" marker-end="url(#arrA)"/>
+    <!-- edge labels -->
+    <g font-size="11" fill="#97A59F">
+      <text x="734" y="112">yes, and below priority 2</text>
+      <text x="744" y="258">no, or a priority class</text>
+      <text x="360" y="70" text-anchor="middle">the client adds jitter, then comes back</text>
+    </g>
+    <g font-size="11" fill="#7ADACF" text-anchor="end">
+      <text x="490" y="256">written to Redis:</text>
+      <text x="490" y="271">every instance</text>
+      <text x="490" y="286">degrades together</text>
+    </g>
+  </g>
+</svg>

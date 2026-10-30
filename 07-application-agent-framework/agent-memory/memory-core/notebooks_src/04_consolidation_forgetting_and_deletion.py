@@ -8,7 +8,7 @@
 #
 # ## The one-minute version
 # Raw episodes are low-cost to write and high-cost to read. They are long and repetitive, and they are full of values
-# that changed since then.
+# that changed after the agent wrote the episodes.
 #
 # **Consolidation** changes a window of episodes into facts. It runs on a schedule, and it uses rules, not a summary:
 #
@@ -101,7 +101,7 @@ for r in store.records(ALICE, status=None):
 #
 # Windows do not always run in order. Two examples are a backfill and a re-run after an outage. The store already
 # has a fact on file. That fact joins the statements of the window at its own `valid_from`. Thus an older statement
-# becomes closed history in front of it:
+# becomes closed history before that fact:
 
 # %%
 store = MemoryStore()
@@ -152,11 +152,11 @@ print("the same crash with random fact ids:", len(random_ids.store.records(ALICE
 #
 # The resumed run skipped the one slot with a checkpoint, and it applied `home_city` again. The job derives the id of
 # each fact from (run id, slot, position). Thus the re-applied facts overwrote the half-applied facts. The result was
-# five facts, as in a clean run. With random ids, the same crash leaves seven. On GCP, this is a Cloud Run job that
+# five facts, as in a clean run. With random ids, the same crash leaves seven. On GCP, the job is a Cloud Run job that
 # Cloud Scheduler starts (the lab's `deploy/gcp/`).
 #
 # A lease covers a worker that stopped. A **slow** worker is worse, for example a worker with a long GC pause or a model
-# call that hangs for minutes. It is worse because it still runs when its lease expires and another worker takes over.
+# call that hangs for minutes. A slow worker is worse because it still runs when its lease expires and another worker takes over.
 # Thus the job renews its lease before every slot (a heartbeat). Before it writes, it makes sure that it still holds the
 # lease (a fence). If it does not hold the lease, it stops:
 
@@ -264,7 +264,7 @@ print(rep.checklist())
 #
 # The deletion matches values on word boundaries (`memcore.forget.mentions`). Thus, when you forget a pet "cat", the
 # deletion never deletes a record about "education" or "Catalyst". But a content match finds only verbatim copies. A
-# paraphrase goes past it. The review list is for that case.
+# paraphrase goes past the content match. The review list is for that case.
 
 # %%
 store = MemoryStore()

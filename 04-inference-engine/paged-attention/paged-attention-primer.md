@@ -4,11 +4,11 @@
 
 To first order, the throughput of an engine that serves autoregressive LLMs is a batching problem. Decode is memory-bandwidth-bound, because each step reads all the weights and every cached K and V to make one token per sequence. Thus the tensor cores are idle most of the time, unless many sequences share each forward pass. The constraint that sets the limit on batch size is memory.
 
-The weights are static and the activations are small. Thus the KV cache is the dynamic user of memory. During decode, each new token attends over the keys and values of every token before it. If the engine calculates those projections again at each step, generation becomes quadratic in sequence length. Thus the engines that serve LLMs cache them.
+The weights are static and the activations are small. Thus the KV cache is the dynamic user of memory. During decode, each new token attends over the keys and values of every token before it. If the engine calculates those projections again at each step, generation becomes quadratic in sequence length. Thus the engines that serve LLMs cache those keys and values.
 
 At each step, the cache increases by the K and V of one token, per layer. The cache stays for the full request. Its final size is unknown at the start, because you do not know how many tokens the model will generate.
 
-The footprint is large. Per token, the cache costs `2 × n_layers × n_kv_heads × d_head × bytes_per_element` (the 2 is for K and V). LLaMA-13B in FP16 has 40 layers and 40 heads of dimension 128. For this model, the formula works out to 800 KiB per token. Thus a single 2,048-token sequence occupies about 1.56 GiB (1.68 GB).
+The footprint is large. Per token, the cache costs `2 × n_layers × n_kv_heads × d_head × bytes_per_element`. The factor 2 is for K and V. LLaMA-13B in FP16 has 40 layers and 40 heads of dimension 128. For this model, the formula works out to 800 KiB per token. Thus a single 2,048-token sequence occupies about 1.56 GiB (1.68 GB).
 
 On a 40 GB A100, the FP16 weights already take 26 GB, leaving room for only a handful of max-length sequences. This count applies if each sequence gets a full reservation. It is exactly this arithmetic that sets the limit on batch size, and thus on throughput.
 
@@ -72,7 +72,7 @@ Three workloads get a benefit.
 
 - In parallel sampling ($n$ completions from one prompt), all samples share the blocks of the prompt. The samples are different only in their generated suffixes. Thus the engine copies, at most, the last block of the prompt. The savings are small, because the samples share only the prompt. The paper gives approximately 6–10%.
 - In beam search, beams fork from shared ancestors all the time. Thus the beams share large fractions of the cache, and these fractions change dynamically. The paper measured up to ~55% memory savings at wide beam widths. With contiguous allocation, it is almost impossible to implement this pattern of shared blocks.
-- Across requests, identical prefixes (system prompts, few-shot exemplars) can map to the same physical blocks. This is the mechanism under prefix caching. Later, SGLang's RadixAttention made this mechanism more general. RadixAttention keeps cached prefixes in a radix tree over the paged pool. The prompt-caching products that frontier-lab APIs now supply are the commercial form of the same block-reuse idea.
+- Across requests, identical prefixes (system prompts, few-shot exemplars) can map to the same physical blocks. This mapping is the mechanism under prefix caching. Later, SGLang's RadixAttention made this mechanism more general. RadixAttention keeps cached prefixes in a radix tree over the paged pool. The prompt-caching products that frontier-lab APIs now supply are the commercial form of the same block-reuse idea.
 
 ## Scheduling: continuous batching and preemption
 
@@ -80,7 +80,7 @@ The engine allocates memory block by block as sequences grow. Thus the scheduler
 
 Paging combines with continuous (iteration-level) batching from Orca. In continuous batching, finished sequences leave the batch immediately, and sequences that wait can join at any step. Together, the two increase the effective batch size by a large factor. For example, vLLM reported 2–4× throughput over FasterTransformer and Orca at equivalent latency. The gains were larger for long sequences, large models and complex decoding.
 
-A design question of interest is this: what occurs when no free blocks stay in the pool while requests are in progress? The engine promised the blocks optimistically, so this can occur. vLLM preempts victim sequences with one of two mechanisms.
+A design question of interest is this: what occurs when no free blocks stay in the pool while requests are in progress? The engine promised the blocks optimistically, so this situation can occur. vLLM preempts victim sequences with one of two mechanisms.
 
 Swapping copies the blocks of a sequence out to CPU RAM, and later back. PCIe bandwidth sets the limit on its speed. Recomputation frees the blocks. When the scheduler schedules the sequence again, the engine replays its full prompt-plus-generated-so-far as a single prefill. Recomputation often takes less time than swapping. The reason is that prefill is one large parallel pass, but swapping moves many small blocks over a slow bus.
 
@@ -110,7 +110,7 @@ Remember these numbers:
 
 The primary source is Kwon et al., "Efficient Memory Management for Large Language Model Serving with PagedAttention," SOSP 2023 (arXiv:2309.06180). It is unusually easy to read. For continuous batching, read Yu et al., "Orca," OSDI 2022. For RadixAttention, read Zheng et al., "SGLang" (arXiv:2312.07104). For the counter-argument, read Prabhu et al., "vAttention" (arXiv:2405.04437). For the complement on the compute side, read Dao et al., FlashAttention 1/2.
 
-**Code and tests.** [`kernel-core`](../kernel-core/README.md) puts [`paged_attention_minimal.py`](paged_attention_minimal.py) in a package as `kerncore.paged` (a pool object with refcounts, copy-on-write and the blockwise online softmax). The test file `kernel-core/tests/test_paged.py` makes sure that the two agree. The test file `kernel-core/tests/test_primer_numbers.py` calculates the per-token and per-sequence sizes of this page again. Both run in about a second on any CPU.
+**Code and tests.** [`kernel-core`](../kernel-core/README.md) puts [`paged_attention_minimal.py`](paged_attention_minimal.py) in a package as `kerncore.paged`. The package has a pool object with refcounts, copy-on-write and the blockwise online softmax. The test file `kernel-core/tests/test_paged.py` makes sure that the two implementations agree. The test file `kernel-core/tests/test_primer_numbers.py` calculates the per-token and per-sequence sizes of this page again. Both run in about a second on any CPU.
 
 ## Verify list (dated 2026-09-26)
 
@@ -121,7 +121,7 @@ This table lists the paper and product facts that this primer states. This prime
 | LLaMA-13B shape and memory | The model has 40 layers and 40 heads of dimension 128. The FP16 KV is 800 KiB per token. The FP16 weights are 26 GB on a 40 GB A100. | model config and the paper's setup |
 | KV utilization before and after paging | 20–40% of KV memory held token state before. Waste was 60–80% before and under 4% with paging. | PagedAttention paper (Kwon et al., SOSP 2023) |
 | Kernel overhead | 20–26% extra attention-kernel latency, relative to a contiguous layout | paper microbenchmark, on the paper's GPUs and kernel |
-| Sharing savings | ~6–10% for parallel sampling, up to ~55% for wide beam search | paper figures |
+| Savings from shared blocks | ~6–10% for parallel sampling, up to ~55% for wide beam search | paper figures |
 | Throughput | 2–4× over FasterTransformer and Orca at matched latency | paper figure, and engines have changed a lot since then |
 | Default block size | 16 tokens in vLLM | engine default, and attention backends can select another size |
 | Adoption | TensorRT-LLM, HF TGI, SGLang and LMDeploy use paged KV caches. FlashAttention-2/3 and FlashInfer accept paged layouts. | project docs at the release in use |

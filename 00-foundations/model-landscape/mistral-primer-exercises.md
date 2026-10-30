@@ -29,7 +29,7 @@ In mid-2025, a team built its system on **Magistral Medium 1.2** (reasoning), **
 
 - (a) What is the migration path today?
 - (b) What do they gain?
-- (c) Name two things that are not obvious: things that break, or things that need more work.
+- (c) Name two things that are not clear at first: things that break, or things that need more work.
 
 ### 4. Licensing triage
 For each use case, say if the licence permits it, and on which model:
@@ -66,7 +66,7 @@ Use five sentences and no notes. Why is Agentic Search better than one-shot RAG?
 | Large 3 | 400 × $0.50 = $200 | 40 × $1.50 = $60 | **$260** |
 | Medium 3.5 | 400 × $1.50 = $600 | 40 × $7.50 = $300 | **$900** |
 
-**(b) With 60% cached input** (the price of cached input is 10% of the standard price):
+**(b) With 60% cached input** (cached input at 10% of the standard price):
 
 | Model | Uncached in | Cached in | Output | **Total/mo** |
 |---|---|---|---|---|
@@ -86,8 +86,8 @@ The point of the exercise: **the high-cost model is rarely the answer, and the l
 - **Extraction:** OCR 4.1. Its 170 languages include the six languages. It returns bounding boxes, typed block classification and per-page/per-word confidence.
 - **Indexing:** Mistral Search Toolkit over the policy corpus. The OCR 4 output goes directly into the ingestion pipeline as citation-ready structured blocks.
 - **Validation:** Agentic Search against that index. One-shot RAG fails on exactly this case, because the answer is in a specific clause or table, not in a top-$k$ chunk.
-- **Adjudication draft:** Small 4, with `reasoning_effort` set to match the complexity of the claim. Use Medium 3.5 only if the workflow calls multiple tools over a long horizon.
-- **Safety:** Use Shieldstral if the outputs go to end users and the deployment is isolated. Use Moderation 2 if the API is acceptable (it is free).
+- **Adjudication draft:** Small 4, with `reasoning_effort` set to match the complexity of the claim. Use Medium 3.5 only if the workflow calls more than one tool over a long horizon.
+- **Safety:** Use Shieldstral if the outputs go to end users and the deployment is isolated. Use Moderation 2 if the API is acceptable. Moderation 2 is free.
 
 **The signal that routes to a person is OCR 4's confidence score**, per page and per word, together with the block type. This signal is better for routing than a request to the model for its own uncertainty. The calibrated per-word scores of OCR 4 make that request unnecessary.
 
@@ -100,7 +100,7 @@ The point of the exercise: **the high-cost model is rarely the answer, and the l
 - One deployment instead of three.
 - One set of weights for version control and evaluation.
 - Fewer GPUs that stay warm.
-- No routing logic to maintain, and no errors in routing logic.
+- No routing logic to keep up to date, and no errors in routing logic.
 - Reasoning becomes a per-request parameter, not a model choice.
 
 **(c) Two breaks that are not obvious:**
@@ -114,7 +114,7 @@ The point of the exercise: **the high-cost model is rarely the answer, and the l
 |---|---|
 | a | **No** on open weights. Voxtral TTS is CC BY-NC 4.0. Commercial use needs a separate agreement. |
 | b | **Yes** on Apache 2.0: Large 3, Small 4, Ministral 3. Medium 3.5 is Modified MIT. The licence probably permits it, but your legal team must read the modification before you decide. |
-| c | **Yes**: Shieldstral, Apache 2.0 and self-hostable. Moderation 2 is Premier and API-only. Thus it fails the air-gap test, although it is free. |
+| c | **Yes**: Shieldstral, Apache 2.0 and self-hostable. Moderation 2 is Premier and API-only. Thus Moderation 2 fails the air-gap test, but it is free. |
 | d | **Not straightforwardly.** Codestral is Premier. To self-host it, you need a negotiated agreement. Small 4 under Apache 2.0 is the alternative with no friction, but it does not have dedicated FIM tuning. |
 | e | **Yes**: Ministral 3 3B, Apache 2.0, multimodal, and made for low-resource environments. |
 
@@ -144,6 +144,6 @@ Before you approve the design, examine these items:
 
 ### 6. Explain-it drill
 
-The index only finds candidate documents, and the model decides what to examine inside them. Iteration lets the model recover from a weak first retrieval, and thus the model is not stuck with bad chunks. Targeted navigation is better than repeated broad search: it adds accuracy and *decreases* tokens, because precision replaces retries. As a result, retrieval quality scales with model capability, and your chunking strategy does not set a limit on it. Also, the method is model-agnostic, and thus it improves when models improve, with no infrastructure changes.
+The index only finds candidate documents, and the model decides what to examine inside them. Iteration lets the model recover from a weak first retrieval, and thus the model is not stuck with bad chunks. Targeted navigation is better than repeated broad search: it adds accuracy and *decreases* tokens, because precision replaces retries. Thus, retrieval quality scales with model capability, and your chunking strategy does not set a limit on it. Also, the method is model-agnostic, and thus it improves when models improve, with no infrastructure changes.
 
 Tools: **search, open, navigate, read, grep.**

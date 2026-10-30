@@ -12,7 +12,7 @@
 # the tokens per minute of the provider. Charge **tokens**:
 #
 # - **reserve** the prompt + an output bound at admission,
-# - **debit** the tokens as the stream delivers them,
+# - **debit** the tokens as the stream sends them,
 # - **reconcile** with `usage` at the end.
 #
 # Then **meter**:
@@ -70,7 +70,7 @@ print("(arrivals stop at t = 600 s; each run goes on until its admitted streams 
 # and it still meets the tail.
 #
 # If you reserve the cap, the result is exact, but it wastes three quarters of the budget. If you reserve an estimate and
-# reconcile, the limiter serves 70 % with no second over the limit *in this run*. All of it models a provider that
+# reconcile, the limiter serves 70 % with no second over the limit *in this run*. The full experiment models a provider that
 # counts tokens when it processes them. A hosted API that charges the requested `max_tokens` at admission needs a
 # reservation that matches what the gateway sends upstream (PRIMER §4.2, verify).
 #
@@ -94,7 +94,7 @@ print(f"self-hosted H100 Spot, 6,846.5 tok/s: ${metering.self_hosted_per_million
 # The prompts of a route are 800 tokens. The outputs of today are lognormal, median 200, $\sigma = 1.2$, and they set
 # the size of the constant estimate that the bucket charges. The outputs of a new model are lognormal with median 2,000
 # and $\sigma = 1.2$. When the bucket binds, it lets through more tokens than the
-# estimate it was sized for. Set `ratio` to the tokens that it lets through, divided by the tokens that it was sized for.
+# estimate that sets the size of the bucket. Set `ratio` to the tokens that it lets through, divided by the tokens of that estimate.
 # Use the lognormal mean $\text{median} \cdot \exp(\sigma^2/2)$.
 
 # %% exercise
@@ -118,8 +118,8 @@ print(f"✅ x{ratio:.2f}: the output mean grew 10x, but the prompt dilutes it --
 #   reservation of the request (never below zero).
 # * `finish(rid)`: release all that the request still holds.
 #
-# `used(now)` is the tokens debited in the last `window` seconds (an event at time $t$ leaves the window at
-# $t + \text{window}$).
+# `used(now)` is the tokens debited in the last `window` seconds. An event at time $t$ leaves the window at
+# $t + \text{window}$.
 
 # %% exercise
 from collections import deque
@@ -259,7 +259,7 @@ print("✅ token-proportional chargeback makes the prompt-heavy tenant pay for t
 #
 # Then explain the number before anyone opens a ticket. Of the 400 requests of the day, 40 had a cut in the middle of
 # the stream (there were no retries). The gateway billed each cut stream on the 90 tokens that it relayed, and it marked
-# the rows estimated. The logs of the provider show that it generated 150 tokens on each cut stream before it detected
+# the rows estimated. The logs of the provider show that it generated 150 tokens on each cut stream before it found
 # the disconnect. For every other request, the provider generated 300 tokens and the gateway billed 300. Set
 # `predicted_drift` to the completion-token difference ($\text{provider} - \text{ledger}$) that you expect from that
 # cause alone.
@@ -291,7 +291,7 @@ print(f"✅ ledger {d['ledger']:,} vs provider {d['provider']:,} completion toke
 # %% [markdown]
 # ## In a design review
 # **The two-minute version.** "Limits are in tokens, because the cost of a request is unknown at admission and
-# heavy-tailed. We reserve the prompt plus an output bound, debit tokens as the stream delivers them, and reconcile with
+# heavy-tailed. We reserve the prompt plus an output bound, debit tokens as the stream sends them, and reconcile with
 # usage at the end. Used plus reserved never passes the limit, so the provider never sees more. On the day that thinking
 # went into service, a per-request bucket let through 1.97× the tokens per minute of the provider. And the bucket
 # cannot even see the change.
@@ -311,7 +311,7 @@ print(f"✅ ledger {d['ledger']:,} vs provider {d['provider']:,} completion toke
 # 1. *After a thinking-model rollout the provider returns 429s, but our request limit never tripped. Why?* It charged
 #    per request. The outputs grew by an order of magnitude, with a heavy tail. Thus the same request rate carried ~2×
 #    the tokens. Reserve, debit and reconcile in tokens. Apply TPM next to RPM for each tenant. Put a budget on thinking.
-# 2. *Why not simply reserve `max_tokens` for every request?* It is exact, but it holds budget for the life of every
+# 2. *Why not reserve `max_tokens` for every request?* It is exact, but it holds budget for the life of every
 #    stream. At a 16K cap, the key served 26.5 % of its limit. Reserve an estimate, debit as the stream goes, and keep a
 #    margin. Reserve the cap only where a 429 from the provider is unacceptable.
 # 3. *The ledger and the invoice disagree by 3 % on output tokens. Where do you look?* Look at four causes. The first is

@@ -25,7 +25,7 @@
 #   7. It calculates the loss.
 #   8. It does the update.
 #   9. It **pushes the weights back** to the engine.
-# * Two systems costs come from this. First, a synchronous rollout batch waits for its longest completion. Thus
+# * Two systems costs come from this loop. First, a synchronous rollout batch waits for its longest completion. Thus
 #   heavy-tailed thinking lengths leave GPUs idle. This is why one-step-off RL and fully async RL exist. Second, the
 #   weight sync sends every parameter in every step, unless the trainer sends only deltas.
 
@@ -92,7 +92,8 @@ print(f"✅ {len(kept)} of {len(groups)} groups carry signal (frac_reward_zero_s
 # ## Exercise 5.2 — the train–inference mismatch, and TRL's default correction
 #
 # The engine reports the log-probability of each token that it sampled (`sampler_logps`). The trainer recomputes
-# them with its own weights and kernels (`trainer_logps`). You expect them to be equal, but they are not.
+# these log-probabilities with its own weights and kernels (`trainer_logps`). You expect the two values to be equal,
+# but they are not.
 #
 # Implement the default correction of TRL, `vllm_importance_sampling_mode="sequence_mask"`. It calculates one ratio per
 # sequence, `exp(Σ (trainer − sampler))`. If the ratio is in `[c_min, c_max]`, it keeps the ratio. If not, it sets
@@ -136,7 +137,7 @@ print(f"✅ [{LABEL.split(':')[0]}] mean |log p_trainer - log p_sampler| = {stat
 # ## Worked example: the rollout phase is a serving problem with a straggler
 #
 # A synchronous GRPO step generates the full batch, and then trains. The batch gets smaller as completions finish.
-# The phase ends only when the *longest* completion finishes. With thinking-length tails, this leaves most sequence
+# The phase ends only when the *longest* completion finishes. With thinking-length tails, this wait leaves most sequence
 # slots idle at the end. The next cell takes 512 rollouts (64 prompts × $G$ = 8), with lengths from the simulated
 # thinking model. It decodes them on the Qwen3-0.6B/T4 step model of the engine emulator, at the size of the batch
 # that still runs (**simulated**).
@@ -161,8 +162,9 @@ print(table([{"rollouts": len(lens), "mean tokens": round(ph["mean"]), "longest"
 #
 # A lower `max_completion_length` cuts the straggler tail of the worked example. But DAPO has a soft overlong
 # penalty (rl-core notebook 03, exercise 3.5, and `soft_overlong` here). It charges the completions in the last
-# `cache` tokens before the cap. It gives −1 to the completions after the cap. This includes completions that get to a
-# correct answer when they have sufficient room. The cap is a reward-shaping decision, not only a systems decision.
+# `cache` tokens before the cap. It gives −1 to the completions after the cap. The completions with a penalty include
+# completions that get to a correct answer when they have sufficient room. The cap is a reward-shaping decision, not
+# only a systems decision.
 #
 # Use the proportions of DAPO: cache = cap / 5, as 4,096 of 20,480. For each cap in `CAPS`, `overlong_view` returns
 # two shares:
@@ -269,7 +271,7 @@ print(f"✅ 0.5B: {c['full_bytes'] / 1e9:.2f} GB per step ({c['full_s']:.3f} s) 
 # 7. It takes one SGD step.
 #
 # It reports rollout seconds against training seconds, the reward, the zero-std share and the sampler/trainer
-# log-prob gap. It does not push the weights back into vLLM. The colocate mode of TRL does that in every step. The
+# log-prob gap. It does not push the weights back into vLLM. The colocate mode of TRL does this push in every step. The
 # configuration in the next cell is where you start with TRL on a T4.
 
 # %%
@@ -293,7 +295,7 @@ else:
 #
 # "Rollouts are most of the step time. A synchronous batch waits for its longest completion. Thus, with
 # thinking-length tails, most slots are idle at the end. Budgets, overlong penalties and one-step-off rollouts
-# attack that.
+# attack these idle slots.
 #
 # "The new weights go back to the engine in every step. A full copy is the size of the model. Delta sync sends ~50×
 # fewer bytes when 2% of the weights change (Exercise 5.5). But verl measured 1.3–21× less wall time. This is because

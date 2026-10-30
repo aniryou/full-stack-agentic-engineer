@@ -38,7 +38,7 @@
 
     <!-- row 2: pack into the budget -->
     <rect x="368" y="176" width="332" height="136" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    <text x="534" y="196" text-anchor="middle" font-weight="600">pack(): take each record that fits, in rank order</text>
+    <text x="534" y="196" text-anchor="middle" font-weight="600">pack(): take each record that fits</text>
     <text x="384" y="216" font-size="11" fill="#97A59F">ranked list:</text>
     <g font-size="11">
       <rect x="384" y="224" width="44" height="20" rx="4" fill="none" stroke="currentColor" stroke-width="1"/><text x="406" y="238" text-anchor="middle">fact</text>

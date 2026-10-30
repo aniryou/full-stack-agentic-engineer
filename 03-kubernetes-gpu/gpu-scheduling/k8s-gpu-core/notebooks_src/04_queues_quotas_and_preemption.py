@@ -107,7 +107,7 @@ print(kueue.explain(a1))
 
 # %% [markdown]
 # Nothing occurs. With the default `reclaimWithinCohort: Never`, **nominal quota is not a guarantee**.
-# Team A waits until the job of team B that borrowed GPUs finishes by itself, for as long as that takes:
+# Team A waits until the job of team B that borrowed GPUs finishes by itself, for all the time that this job needs:
 
 # %%
 kueue.finish("b3")
@@ -133,8 +133,8 @@ print(kueue.table())
 # of the ClusterQueues in the cohort that *borrow*, if `reclaimWithinCohort` permits their
 # preemption. Then Kueue removes the candidates in this order until the preemptor fits:
 # **other ClusterQueues first**, then **lowest priority**, then **most recently admitted**. Write the
-# sort. Each candidate is a dict with `cq`, `priority` and `admitted` (the admission order, where a
-# larger value is more recent).
+# sort. Each candidate is a dict with `cq`, `priority` and `admitted` (the admission order, larger for
+# a more recent admission).
 
 # %% exercise
 def preemption_order(candidates: list, my_cq: str) -> list:
@@ -149,7 +149,7 @@ assert [c["name"] for c in preemption_order(cands, "a")] == ["b-new", "b-old", "
 print("✅ reclaim from borrowers first, cheapest first, newest first (it has done the least work)")
 
 # %% [markdown]
-# Then Kueue *minimises* the list. It goes through the selected targets in reverse order and gives back
+# Then Kueue makes the list *as small as possible*. It goes through the selected targets in reverse order and gives back
 # each target that it did not need to remove. Kueue takes a candidate from another ClusterQueue only
 # while that queue still borrows. When team B is back at its nominal quota, the jobs that team B still
 # has are safe.
@@ -309,6 +309,6 @@ print("✅ reclaim takes only from borrowers, cheapest first, then gives back wh
 #    a `lendingLimit`.
 # 2. *What is the difference between `borrowingLimit` and `lendingLimit`?* The borrowing limit sets the
 #    maximum that a queue can take above its nominal quota. The lending limit sets the maximum that it
-#    gives away (the rest is reserved).
-# 3. *Does Kueue place pods on nodes?* No. It admits whole workloads against quota (and, with TAS, it
-#    assigns topology domains). kube-scheduler still binds each pod.
+#    gives away. The queue never lends the rest.
+# 3. *Does Kueue place pods on nodes?* No. It admits whole workloads against quota. With TAS, it also
+#    assigns topology domains. kube-scheduler still binds each pod.

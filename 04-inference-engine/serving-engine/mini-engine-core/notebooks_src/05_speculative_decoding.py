@@ -50,11 +50,11 @@ print("emitted frequencies:", (emitted / n).round(3), "vs p", p, "| accepted", a
 # %% [markdown]
 # The draft proposes token 3 much too often (0.4 against 0.05). The verification rejects most of those proposals.
 # The residual then moves the mass to tokens 0 and 1, which the draft proposed less often than the target. The
-# emitted distribution is $p$.
+# output distribution is $p$.
 #
 # ## Worked example 2 — a real draft/target pair
 # The target is `TinyLM()`. The draft is a model that is ten times smaller. It has the same tokenizer (a requirement)
-# and similar "training data".
+# and "training data" like that of the target.
 
 # %%
 target, draft = TinyLM(), TinyLM(SMALL, seed=1)
@@ -75,11 +75,11 @@ print("greedy speculation == greedy decoding:", out == target.generate_dense(pro
 # %% [markdown]
 # Look at two things.
 #
-# First, the measured tokens per pass agree with the formula at $k = 1$ and 2, within the noise of ~50 passes. But at
+# First, the measured tokens per pass agree with the formula at $k = 1$ and 2, in the noise of ~50 passes. But at
 # $k = 4$, they are less than the formula. This is not only noise.
 #
 # The formula $(1 - \alpha^{k+1})/(1 - \alpha)$ assumes that the target accepts each position independently, with
-# the same $\alpha$. But the real acceptance changes with the position (p10 to p90 in the printed output), and it is
+# the same $\alpha$. But the real acceptance changes with the position (p10 to p90 in the printed output), and the acceptance is
 # correlated. A part of the text that is hard for the draft gets early and frequent rejections. Thus the formula
 # predicts too much for deep speculation.
 #
@@ -162,14 +162,14 @@ print(f"an EAGLE-like head with c = 0.05 would give {spec.speedup(0.7, 4, 0.05):
 # overhead before you quote a number.
 #
 # Draft heads that use the hidden states of the target itself (EAGLE, MTP) cost a few percent of a target step. With
-# $c = 0.05$, the same $\alpha$ and $k$ give the 2.31× that the cell printed. This is why these heads, not separate
+# $c = 0.05$, the same $\alpha$ and $k$ give the 2.31× that the cell printed. This low cost is why these heads, not separate
 # draft models, dominate in practice.
 #
 # The conclusion that is least sensitive to the assumptions is the shape. At short contexts, the verify pass
 # ($B \times 5$ tokens) crosses the compute knee when the batch increases. Past ~100–250 requests (the point depends
 # on the overhead), speculation becomes a **slow-down**: the "free" positions are no longer free. At long contexts,
 # decode stays memory-bound on the KV read. Thus speculation continues to give a gain, and memory caps the batch before
-# compute does. That is why, in production, you usually adjust speculation for each workload, or turn it off above
+# compute does. This shape is why, in production, you usually adjust speculation for each workload, or turn it off above
 # a load threshold.
 #
 # ## Exercise 5.1 — one position of verification
@@ -199,7 +199,7 @@ print(f"✅ emitted tokens follow p (chi2 = {chi2:.1f}); acceptance {acc / 20000
 # %% [markdown]
 # ## Exercise 5.2 — expected tokens per target pass
 # The target accepts each draft token independently, with probability $\alpha$. The first rejection ends the round.
-# The round still emits one token (recovered or bonus). Write `expected_tokens(alpha, k)`. Make sure that it also
+# The round still gives one token (recovered or bonus). Write `expected_tokens(alpha, k)`. Make sure that it also
 # handles `alpha == 1`.
 
 # %% exercise
@@ -218,7 +218,7 @@ print(f"✅ alpha 0.8, k 4: {expected_tokens(0.8, 4):.4f} tokens per pass (simul
 
 # %% [markdown]
 # ## Exercise 5.3 — choose k
-# If one draft step costs $c$ target steps, a round costs $k\,c + 1$ and emits `expected_tokens(α, k)`. Write
+# If one draft step costs $c$ target steps, a round costs $k\,c + 1$ and gives `expected_tokens(α, k)` tokens. Write
 # `best_k(alpha, c)` (search $k = 1, \ldots, 16$). Then set `k_answer` for $\alpha = 0.6$, $c = 0.05$.
 
 # %% exercise
@@ -297,7 +297,7 @@ print("✅ 'the cat sat. the cat' ->", repr(decode(lookup(encode("the cat sat. t
 #
 # **Drill questions**
 # 1. *Does speculative decoding change the output distribution?* No. Accept with $\min(1, p/q)$, and resample
-#    rejections from $\operatorname{norm}(\max(0, p - q))$. The emitted token has exactly the distribution $p$.
+#    rejections from $\operatorname{norm}(\max(0, p - q))$. The output token has exactly the distribution $p$.
 # 2. *$\alpha = 0.8$, $k = 4$: tokens per target pass?* (1 − 0.8⁵)/(1 − 0.8) = 3.36.
 # 3. *Why can speculation make a busy server slower?* At large batch, the verify pass is compute-bound. Thus the $k$
 #    extra positions per request cost real FLOPs, and the rejected positions are a waste.

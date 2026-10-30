@@ -108,7 +108,7 @@ print("turn-2 match per endpoint:", idx.match(h2), f"-> prefix score on a = {idx
 # %% [markdown]
 # The *last* block of turn 1 was partial (fewer than 64 tokens). In turn 2, the conversation
 # continues, so that block has different content and a different hash. The router can count only
-# the agreement of full blocks. That is one of the reasons why the index is *approximate*.
+# the agreement of full blocks. This limit is one of the reasons why the index is *approximate*.
 #
 # ## Exercise 1.1 — the prefix-cache score
 #
@@ -150,7 +150,7 @@ print("✅ prefix_score matches the prefix-cache-scorer formula")
 # endpoints have the same queue, they all get the neutral score **1.0**.
 #
 # One detail causes problems in production. The scorer reads the *current* metrics of each endpoint,
-# and it does not examine their freshness (llm-d-router v0.10.0 does the same). An endpoint that the
+# and it does not examine their freshness. The scorer of llm-d-router v0.10.0 does the same. An endpoint that the
 # router has never scraped has all-zero metrics. An example of such an endpoint is a pod that became
 # ready a moment ago (`None` here).
 #
@@ -332,8 +332,8 @@ print("✅ decisive_scorer explains a decision")
 # last sent each block to and changes this information into a prefix score per replica.
 #
 # "It also scrapes the vLLM metrics of every replica every 50 ms (the wait queue and the KV-cache
-# usage) and changes them into scores too. The total is a weighted sum (the llm-d default is prefix
-# 3, queue 2, KV 2), and the highest total wins. The picker breaks ties at random. We stream the
+# usage) and changes them into scores too. The total is a weighted sum, and the highest total wins.
+# The llm-d default weights are prefix 3, queue 2, KV 2. The picker breaks ties at random. We stream the
 # bytes back unchanged.
 #
 # "On a multi-turn agent workload, this routing keeps each session on the replica that holds its history.
@@ -345,7 +345,7 @@ print("✅ decisive_scorer explains a decision")
 # 1. *Round-robin caches the system prompt on every replica after some time. Why does it still lose?*
 #    The history of each session increases. Only the replica that ran the last turn of the session
 #    has that history in its cache. Round-robin sends the next turn to a different replica ⅔ of the time and prefills the
-#    history again. It also keeps every prefix on every replica. This divides the effective cache
+#    history again. It also keeps every prefix on every replica. These copies divide the effective cache
 #    capacity by the number of replicas.
 # 2. *Name three ways in which the prefix index can be incorrect.* The router writes the index at
 #    routing time, before the engine caches anything. The engines evict blocks that the index still

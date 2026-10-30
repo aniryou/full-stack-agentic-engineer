@@ -93,7 +93,7 @@ On Colab, the first cell of each notebook clones the repo and installs its lab. 
 
 ## Going further / caveats
 
-- **Simulated against measured.** Everything in `cuda-nccl-core` is simulated. It is a model of documented NVIDIA
+- **Simulated against measured.** Everything in `cuda-nccl-core` is a simulation. It is a model of documented NVIDIA
   behaviour, not a measurement. The lab labels its T0 model output as predictions. Its pipes and gloo sweeps are
   real timings of a CPU backend, not of a GPU fabric. Its bundled nccl-tests, probe and DCGM outputs are illustrative
   samples in the documented formats of the tools.
@@ -105,5 +105,5 @@ On Colab, the first cell of each notebook clones the repo and installs its lab. 
   a few dollars a day (verify). The GPU pools cost nothing until a pod asks for a GPU. The MIG pool (A100) is off by
   default, and it needs quota. Run `terraform destroy` after each session
   ([`deploy/gcp`](cuda-nccl-lab/deploy/gcp/README.md)).
-- **Dated facts.** The driver tables, MIG profiles, DCGM field lists, NCCL versions, image tags and prices are dated
-  2026-09-26, and they have the (verify) tag. The [Verify list](PRIMER.md#verify-list) of the primer collects them.
+- **Dated facts.** The driver tables, MIG profiles, DCGM field lists, NCCL versions, image tags and prices have the
+  date 2026-09-26 and the (verify) tag. The [Verify list](PRIMER.md#verify-list) of the primer collects them.

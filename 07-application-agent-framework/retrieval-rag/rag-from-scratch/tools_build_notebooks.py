@@ -97,7 +97,7 @@ except ImportError as e:
 ## The corpus
 
 The corpus has nine short Markdown docs for a fictional SaaS company, "Meridian".
-Each doc has `##` sections (that structure is important in notebook 02). A small
+Each doc has `##` sections. That structure is important in notebook 02. A small
 labelled question set (`qrels`) lets us *measure* retrieval in notebook 05.
 """),
     code("""
@@ -118,8 +118,8 @@ for kind in ("lexical", "semantic", "multihop"):
     md("""
 ## The one idea behind dense retrieval
 
-An **embedding model** maps text to a vector, so that *texts with similar meanings
-get vectors that are near each other*. Thus "retrieval" is only two steps: embed
+An **embedding model** maps text to a vector, so that *the nearer the meanings of two texts are,
+the nearer their vectors are*. Thus "retrieval" is only two steps: embed
 the query, then find the nearest document vectors. The next cell shows this
 directly.
 """),
@@ -684,7 +684,7 @@ NB04 = [
 First-stage retrievers (dense, BM25) are *low-cost* by design, and they give
 priority to recall. Their job is to get the correct chunk somewhere in the top
 20–100. Then a **cross-encoder** reads each `(query, chunk)` pair *together*. It
-gives a relevance score that is far more accurate. It is too slow to run over the
+gives a relevance score that is far more accurate. The cross-encoder is too slow to run over the
 whole corpus, but it is perfect over a shortlist.
 
 ```
@@ -753,7 +753,7 @@ print("reranked top-3:", [c.chunk_id for c in top])
 
 Compare the rank of the truly-relevant chunk before and after reranking. The
 cross-encoder usually moves the exact-answer chunk up. First-stage cosine search
-put that chunk below its topically-similar neighbours.
+put that chunk below its neighbours on a related topic.
 """),
     code("""
 def dense_order(query, n=10):
@@ -768,7 +768,7 @@ def first_hit(order):
 print("rank of incident-response chunk  before:", first_hit(before), " after:", first_hit(after))
 """),
     md("""
-Reranking is usually the single best precision improvement after hybrid retrieval.
+Reranking is usually the single best improvement of precision after hybrid retrieval.
 It is also a drop-in step: retrieve many candidates, rerank them, keep a few.
 """),
 ]
@@ -785,19 +785,19 @@ You cannot improve what you do not measure. A statement such as "the demo looked
 good" is not a measurement. With the labelled `qrels`, we can give each retriever
 a score with two standard metrics:
 
-* **Hit@k**: is *any* gold document in the top $k$? (Did we get something useful?)
-* **Recall@k**: are *all* the gold documents in the top $k$? (Did we get everything
-  that the answer needs?) On a one-gold question, the two metrics agree. On a
+* **Hit@k**: is *any* gold document in the top $k$? Did we get something useful?
+* **Recall@k**: are *all* the gold documents in the top $k$? Did we get everything
+  that the answer needs? On a one-gold question, the two metrics agree. On a
   two-gold (multihop) question, hit@k can show 1.0 while the results do not have
   half of the answer.
-* **MRR**: 1/rank of the first gold hit. (How high was its rank?)
+* **MRR**: 1/rank of the first gold hit. How high was the rank of that hit?
 """),
     SETUP,
     md("""
 ### Exercise 1 — the metrics
 
-Write both metrics over **document-level** ranked lists (the gold labels are per
-document). `recall_at_k(..., require_all=False)` is hit@k. With
+Write both metrics over **document-level** ranked lists, because the gold labels are per
+document. `recall_at_k(..., require_all=False)` is hit@k. With
 `require_all=True`, it is recall@k. These are pure functions. The asserts compare
 the results against the exact maths.
 """),
@@ -1005,7 +1005,7 @@ The solution is a loop:
 1. Retrieve.
 2. Decide what information you do not have yet.
 3. Retrieve again.
-4. Stop when you have sufficient information (or when you reach a budget).
+4. Stop when you have sufficient information, or when you reach a budget.
 """),
     SETUP,
     code("""
@@ -1137,8 +1137,8 @@ Where to go next:
 
 - Fine-tune the retriever/reranker on query logs.
 - Add a router that sends simple questions down the low-cost single-shot path.
-- Do an eval of whole *trajectories* (did it find both docs? in how many steps?),
-  not only of final answers.
+- Do an eval of whole *trajectories*, not only of final answers. Did the loop
+  find both docs? How many steps did the loop use?
 
 Part III and Part IV of the primer describe the rest.
 """),

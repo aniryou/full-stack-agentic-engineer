@@ -54,7 +54,7 @@ print("assistant tool call becomes:", json.dumps(converted[1]["tool_calls"][0], 
 # ## 3. Mistral's reply → our `Response`
 # A Mistral reply is `response.choices[0].message`, with `.content` and `.tool_calls`.
 # Each `tool_call` has `.id` and `.function.name` / `.function.arguments`. The adapter
-# changes that reply back into the `Response` that the loop understands.
+# changes that reply back into the `Response` that the loop uses.
 
 # %%
 fake_reply = {"choices": [{"message": {"content": "", "tool_calls": [

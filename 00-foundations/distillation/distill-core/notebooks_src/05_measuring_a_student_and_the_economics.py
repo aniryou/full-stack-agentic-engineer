@@ -105,7 +105,7 @@ for name, m in (("weak teacher", weak), ("student, verified samples", filt), ("s
     print(f"{name:26s} rule accuracy {E.vs_truth(m, lang)['rule_acc']:.3f}{agree}")
 
 # %% [markdown]
-# The verifier kept the correct answers of the teacher and removed its mistakes. Thus that student is correct on 97.5%
+# The verifier kept the correct answers of the teacher and removed its mistakes. Thus the filtered student is correct on 97.5%
 # of the contexts, which is more than its teacher. But it agrees with the teacher *less* (KL 1.59 against 0.16). If the
 # release gate is "agree with the teacher", the worse student passes the gate.
 #
@@ -133,7 +133,7 @@ for key in ("qwen2.5-32b", "qwen2.5-32b-tp2"):
 print(f"at a 10 ms ITL the 32B cannot serve on one H100: batch 1 takes {K.decode_step(K.SHAPES['qwen2.5-32b'], H100, 1, 2048) * 1e3:.1f} ms")
 
 # %% [markdown]
-# On one GPU the teacher runs 12 sequences, and the student looks 96× lower in cost. But that compares the student with
+# On one GPU the teacher runs 12 sequences, and the student looks 96× lower in cost. But this ratio compares the student with
 # a deployment that nobody selects. On two GPUs the teacher runs 146, and the ratio is 16×. This is the number to carry.
 # All the cells after this one use the cost of the teacher on two H100s.
 
@@ -156,12 +156,12 @@ fixed = K.fixed_cost(100_000, 1, 2000, T_PER_M, K.SHAPES["qwen2.5-1.5b"].params(
 
 # %% [markdown]
 # The teacher's tokens are 93% of the bill when self-hosted and 99% through the API. The training of the student is an
-# hour of one GPU. That is why the data budget (§3) is the number to argue about. The data budget is prompts × samples ×
+# hour of one GPU. Thus the data budget (§3) is the number to argue about. The data budget is prompts × samples ×
 # tokens, and the number of samples that the verifier discards.
 #
-# With self-hosted data, break-even comes at roughly the volume that the teacher wrote for the student (2 × 10⁸ tokens
+# With self-hosted data, break-even comes at approximately the volume that the teacher wrote for the student (2 × 10⁸ tokens
 # here). This is true at any cost of the teacher. API-bought data takes ten times longer. Also, the break-even omits the
-# work of the engineers, the evals and the continuous cost to maintain a second model.
+# work of the engineers, the evals and the continuous cost to keep a second model current.
 #
 # ## Worked example 6 — the cascade
 # Route by difficulty instead of a replacement of the teacher. Each request has 500 output tokens at the costs of worked
@@ -272,7 +272,7 @@ print(f"✅ {days:.1f} days at 20M tokens/day — before the cost of evals, of a
 # ## Exercise 5.5 — choose the gate
 # Use a student-first cascade with the costs and accuracies of worked example 6. Each gate in `gates` is a pair: the
 # catch rate on hard requests and the false-alarm rate on easy requests. Set `best_gate` to the gate with the lowest
-# cost per correct answer. Select only from the gates whose overall accuracy is at least 0.90.
+# cost per correct answer. Select only from the gates whose accuracy over all requests is at least 0.90.
 
 # %% exercise
 gates = [(0.6, 0.05), (0.8, 0.1), (0.9, 0.2), (0.95, 0.4), (1.0, 1.0)]
@@ -306,7 +306,7 @@ print(f"✅ gate {best_gate}: accuracy {res[best_gate]['accuracy']:.3f} at ${res
 #
 # **Drill questions**
 # 1. *The student agrees with the teacher on 99% of tokens. Ship it?* Not on that alone. The agreement is an average
-#    over common positions. Examine the task accuracy with intervals on the rare and long slices. That is where it fails.
+#    over common positions. Examine the task accuracy with intervals on the rare and long slices. The student fails on those slices.
 # 2. *Where does a distillation budget go?* To the teacher's tokens (here \$178 of \$192 self-hosted, \$1,800 of
 #    \$1,814 through an API). The training of the student was 1.3 GPU-hours. Before you generate more samples, remove
 #    the samples that the verifier will reject.

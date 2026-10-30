@@ -11,8 +11,8 @@
 #   overcommits it, thus request == limit (primer §1 *What Kubernetes sees*).
 # * a **toleration** for the `nvidia.com/gpu` taint and a **selector** for the accelerator model.
 # * **CPU/memory requests sized to the per-GPU share** of the node. If not, the other GPUs of the node become
-#   stranded (primer §3.4 *Fragmentation, measured*, which the section *Stranded GPUs* in this notebook makes
-#   more general).
+#   stranded (primer §3.4 *Fragmentation, measured*). The section *Stranded GPUs* in this notebook makes
+#   primer §3.4 more general.
 # * a **startup probe** that lasts longer than the weight load (primer §8 *Startup latency*).
 # * for gangs, a **queue label** and a **topology annotation**. Kueue reads them (primer §4 *Gangs*,
 #   §5 *Topology-aware placement*).
@@ -69,7 +69,7 @@ print(lint.format_findings(lint.lint(lws)))
 # ## Exercise 1.1 — the API server's GPU rules
 #
 # Write `gpu_resources_ok(resources)` for the `resources` dict of one container. It returns a list of
-# problems (an empty list means accepted). Apply the three rules for `nvidia.com/gpu`:
+# problems. An empty list means that there is no problem. Apply the three rules for `nvidia.com/gpu`:
 # 1. a quantity must be a whole number (`"500m"` and `0.5` are not).
 # 2. a request must have a limit.
 # 3. if both are present, they must be equal.
@@ -141,8 +141,8 @@ print(f"✅ load {load_s:.0f} s -> failureThreshold {threshold} x 10 s = {thresh
 # stranded GPUs are the free GPUs minus $k$ × that number:
 #
 # * **GPU-count fragmentation**: only the GPUs run out. Stranded = $\mathit{free} \bmod k$ per node. This
-#   is the count that primer §3.4 *Fragmentation, measured* records (a 3-GPU pod shape leaves 2 of 8 GPUs
-#   idle).
+#   is the count that primer §3.4 *Fragmentation, measured* records. A 3-GPU pod shape leaves 2 of 8 GPUs
+#   idle.
 # * **Resource-bundle stranding**: CPU or memory runs out first. A node is a bundle. `g2-standard-48` has
 #   4 L4s and 48 vCPUs. After GKE's reservations, approximately 47.8 vCPUs and 181 GiB are allocatable
 #   (`k8sgpu.machines.allocatable`, formula marked *verify*). If each 1-GPU pod asks for 16 vCPUs, only two
@@ -208,8 +208,8 @@ print("levels, coarse to fine:", m.GKE_TOPOLOGY_LEVELS)
 # ## Exercise 1.4 — build a 2-host tensor-parallel gang
 #
 # Build `gang`. It is a JobSet with the name `tp16` in namespace `team-a`, in the LocalQueue `gpu-queue`.
-# It has one replicated job `workers` of **2 pods × 8 GPUs** (think of one model sharded over 16 GPUs on
-# two 8-GPU hosts). The pods of this job must share a **subblock**. Each pod has 8 GPUs, 32 vCPUs, 256Gi
+# It has one replicated job `workers` of **2 pods × 8 GPUs**, for example one model sharded over 16 GPUs on
+# two 8-GPU hosts. The pods of this job must share a **subblock**. Each pod has 8 GPUs, 32 vCPUs, 256Gi
 # memory, a memory-backed `/dev/shm` of 16Gi and the accelerator `nvidia-h100-80gb`.
 # Use `m.GPUContainer`, `m.pod_spec(..., accelerator=..., shm_size=...)`,
 # `m.topology_annotations`, `m.pod_template`, `m.replicated_job` and `m.jobset`.
@@ -237,13 +237,13 @@ print(m.to_yaml(gang)[:600], "...")
 # ## Exercise 1.5 — make a serving Deployment lint-clean
 #
 # The Deployment in the exercise cell serves a model on a `g2-standard-8` (1 L4, 8 vCPUs, 32 GB). Its
-# weights take approximately 240 s to load. Edit `broken` **in place** (it is a plain dict). Continue until
+# weights take approximately 240 s to load. Edit `broken` **in place**. `broken` is a plain dict. Continue until
 # `lint.lint(broken, machine="g2-standard-8", expected_load_s=240)` returns no errors and no
 # warnings. Every finding tells you its repair.
 #
 # One of the findings is a trade-off, not a bug. By default, a rolling update starts one more GPU pod (a
 # surge). With `maxSurge: 0, maxUnavailable: 1`, you do not need a spare GPU. But with one replica, every
-# rollout is an outage for the full time of a cold start. That is acceptable for a lab. A production
+# rollout is an outage for the full time of a cold start. This outage is acceptable for a lab. A production
 # deployment runs at least two replicas (on on-demand capacity first) or keeps headroom for a surge.
 
 # %%

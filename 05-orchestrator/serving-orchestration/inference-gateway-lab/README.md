@@ -29,9 +29,9 @@ a laptop with Docker, also at no cost.
 |---|---|---|---|---|
 | [`01_router_in_process`](notebooks/01_router_in_process.ipynb) | Prefix hashing and the index, queue/KV scores, the weighted selection. Why round-robin loses on agent traffic (measured). | ~1.5 h | T0 | §1 Why a layer above the engine, §2 Routing signals and algorithms |
 | [`02_scorer_weights_and_hot_prefixes`](notebooks/02_scorer_weights_and_hot_prefixes.ipynb) | The trade-off between locality and load, in numbers. Hot prefixes, the scrape-lag herd, how to select an affinity threshold, shedding at saturation. | ~1.5 h | T0 | §2, §3 Flow control and priorities |
-| [`03_autoscaling_recommender`](notebooks/03_autoscaling_recommender.ipynb) | The HPA controller where the basic rule is not sufficient (missing pods and pods that start, legacy against `behavior`, live scrapes). Which vLLM signals to scale on, why queue alone collapses, and targets that come from batch slots and Little's law. | ~1.5 h | T0 | §4 Autoscaling |
+| [`03_autoscaling_recommender`](notebooks/03_autoscaling_recommender.ipynb) | The HPA controller where the basic rule is not sufficient: missing pods and pods that start, legacy against `behavior`, live scrapes. Which vLLM signals to scale on, why queue alone collapses, and targets that come from batch slots and Little's law. | ~1.5 h | T0 | §4 Autoscaling |
 | [`04_local_stack_with_llm_d`](notebooks/04_local_stack_with_llm_d.ipynb) | InferencePool semantics and the standalone mode of the llm-d Router. What the EPP reads and the lab router does not read, and the latency model of the simulator. The notebook measures a stack that runs, or the lab router in front of real vLLM. | ~1.5 h | T0 walkthrough, T0 + Docker (compose or kind), **T1/T2** with a GPU (real vLLM, `deploy/any-gpu`) | §9 The Kubernetes-native stack, September 2026, §10 Where to run it |
-| [`05_gke_inference_gateway`](notebooks/05_gke_inference_gateway.ipynb) | The object graph of GKE Inference Gateway, CRD validation, the metrics path from GMP to the HPA, the cost of an hour. | ~2 h | T3 (the offline plan and inspection are T0) | §9, §10 |
+| [`05_gke_inference_gateway`](notebooks/05_gke_inference_gateway.ipynb) | The object graph of GKE Inference Gateway, CRD validation, the metrics path from GMP to the HPA, the cost of an hour. | ~2 h | T3. The offline plan and the inspection are T0. | §9, §10 |
 
 The times are approximate. The curriculum of the repo ([`CURRICULUM.md`](../../../CURRICULUM.md)) gives about 6 hours to
 notebooks 01–04 and 2 to 05. Each notebook starts with "The one-minute version" and then gives worked examples. It has
@@ -126,7 +126,7 @@ The lab has deliberate differences from upstream. The module that implements eac
   a random order, so its ties are uniformly random. On main, after v0.10.0, the picker rotates over a
   map-ordered list.
 - **Tail-first prefix insertion.** The lab inserts the block hashes of a prompt tail-first. Thus the
-  index evicts the head of a prompt last, and the greedy match never counts too few blocks. This is
+  index evicts the head of a prompt last, and the greedy match never counts too few blocks. Tail-first insertion is
   the behavior of llm-d-router *main* after v0.10.0. v0.10.0 inserts head-first. Under LRU pressure,
   it evicts heads first, and its greedy scan can report 0 for an endpoint that holds most of the
   prompt. `PrefixIndex(head_first=True)` reproduces the head-first behavior of v0.10.0, and `tests/test_prefix_and_tokens.py` pins both.
@@ -164,7 +164,7 @@ The router metrics (`GET /metrics`) have an `igw_` prefix. These metrics are equ
   `kubernetes-validate --strict -k 1.34.0` for core kinds, and CRD-schema checks for the rest
   (`tests/test_manifests.py`). The T1 cells of notebook 04 use the same router and bench code that the T0 tests use.
   In those cells, the code sends its requests to the servers in `IGW_BACKENDS`.
-- **Versions move.** Everything in "Reference" is pinned as of September 2026 and has the mark verify. The GKE costs
+- **Versions move.** Everything in "Reference" is pinned as of September 2026 and has the mark (verify). The GKE costs
   use assumed us-central1 prices.
 
 ## Reference
@@ -182,7 +182,7 @@ The router metrics (`GET /metrics`) have an `igw_` prefix. These metrics are equ
 | `router/server.py` | ~280 | The proxy: admission (at saturation, shed the requests with priority < 0), dispatch, streaming, metrics. |
 | `fakebackend.py` | ~560 | A replica is a cache with a queue: TTFT = queue time + prefill of *uncached* tokens. |
 | `autoscale.py` | ~470 | The HPA, exactly, as a proportional controller with guard rails. A queue target from Little's law. |
-| `bench.py` | ~340 | Agent traffic is prefix-heavy. Measure TTFT, hit rate (or `n/a` when the engine does not report it) and the per-replica split. |
+| `bench.py` | ~340 | Agent traffic is prefix-heavy. Measure TTFT, hit rate and the per-replica split. The hit rate is `n/a` when the engine does not report it. |
 | `k8s.py` | ~210 | The Gateway-mode object graph, validated offline against upstream CRD schemas. |
 | `stack.py` | ~140 | Backends + router in one process on free ports. Or the router alone, in front of servers that you already run (T1: real vLLM). |
 | `promtext.py` | ~310 | Prometheus text, counters against gauges, `histogram_quantile`. |
@@ -191,7 +191,7 @@ The router metrics (`GET /metrics`) have an `igw_` prefix. These metrics are equ
 
 | Component | Pin | Where |
 |---|---|---|
-| llm-d-router (EPP image, charts, InferenceObjective CRD) | v0.10.0 (charts `--version v0.10.0`, the guides use the floating `v0`) | kind/gke values and scripts |
+| llm-d-router (EPP image, charts, InferenceObjective CRD) | v0.10.0 (charts `--version v0.10.0`). The guides use the floating `v0`. | kind/gke values and scripts |
 | Gateway API Inference Extension (InferencePool v1 CRD) | v1.6.2 | kind/gke scripts. GKE ≥ 1.34.0-gke.1626000 manages it. |
 | Gateway API (Gateway, HTTPRoute schemas) | v1.6.2 standard | `igwlab/crds/` |
 | llm-d-inference-sim | v0.11.2 | compose, kind |
@@ -200,7 +200,7 @@ The router metrics (`GET /metrics`) have an `igw_` prefix. These metrics are equ
 | kind node image | `kindest/node:v1.34.0` | kind-config.yaml |
 | Terraform / google provider | ≥ 1.9 / ≥ 8.0 (validated with 8.4.0) | gcp/terraform |
 | GKE Gateway classes | `gke-l7-regional-external-managed` (internal: `gke-l7-rilb`) | gke/gateway.yaml |
-| HPA metric names via the Custom Metrics Stackdriver Adapter | `prometheus.googleapis.com\|vllm:num_requests_waiting\|gauge`, `…\|vllm:num_requests_running\|gauge` | gke/hpa.yaml |
+| HPA metric names through the Custom Metrics Stackdriver Adapter | `prometheus.googleapis.com\|vllm:num_requests_waiting\|gauge`, `…\|vllm:num_requests_running\|gauge` | gke/hpa.yaml |
 | Custom Metrics Stackdriver Adapter manifest | k8s-stackdriver commit `9500033f` (master, 2026-09-26, image v0.16.11-gke.0) | gke/install.sh, uninstall.sh |
 
 ### Regenerating notebooks and snapshots

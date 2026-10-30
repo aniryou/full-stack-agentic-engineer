@@ -6,7 +6,7 @@
 #
 # ## The one-minute version
 # A GPU datasheet is a small set of numbers. Two of them decide almost everything:
-# **peak FLOP/s** (for the precision that you actually run, *dense*) and **memory bandwidth**.
+# the *dense* **peak FLOP/s** for the precision that you actually run, and the **memory bandwidth**.
 # Their ratio is the **ridge point**. It is the arithmetic intensity (FLOPs per byte moved) that a
 # kernel needs before the math units, not memory, become the limit. After this notebook, you can do three things:
 #
@@ -123,12 +123,13 @@ print("✅ ridge and attainable match the library for all", len(specs.DEVICES), 
 # The next cell has a datasheet for an imaginary part. It has the form that vendors use for their datasheets.
 # Fill in `read_sheet`. It must return the numbers that you actually plan with:
 #
-# - the **dense** tensor peaks (the footnote tells you which lines are sparse),
+# - the **dense** tensor peaks,
 # - the memory in GB and TB/s,
 # - the scale-up link **per direction**,
-# - the network in **GB/s** (the datasheet gives it in gigabits),
+# - the network in **GB/s**,
 # - the bf16 ridge.
 #
+# The footnote tells you which lines are sparse. The datasheet gives the network in gigabits.
 # `num()` gets the number from a string for you.
 
 # %%

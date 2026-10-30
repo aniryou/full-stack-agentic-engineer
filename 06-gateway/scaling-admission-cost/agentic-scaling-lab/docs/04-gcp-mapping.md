@@ -9,7 +9,7 @@ gives the one setting that matters most for each mechanism. Date of the fact che
 | `model.py` (`SharedPool`) | the shared pool that answers 429 under contention | The pay-as-you-go pool of the model family. `usage_metadata.traffic_type` tells which pool served a call. | request headers `X-Vertex-AI-LLM-Request-Type: dedicated \| shared` and `X-Vertex-AI-LLM-Shared-Request-Type: priority \| flex` |
 | `model.py` (prefix cache) | cached input at 10 % | Implicit prefix caching (≥ 4,096 tokens on Gemini 3.x, 6,144 on 3.7/3.8 Flash and 3.1 Pro). Explicit caches with a TTL (`client.caches.create`). | Put the stable prefix first. Put the prompt version in the cache key. |
 | `resilience.py` (`TokenBucket`) | a smooth request rate on the client side | A bucket per model in Memorystore (Lua script). All orchestrator instances share it. | Rate = your share of the tier baseline. Burst ≈ 6 s of refill. |
-| `resilience.py` (`backoff`, `call_with_retries`) | retries with jitter within the deadline | In your model gateway. The `google-genai` SDK retries are off by default. Keep them off, so that one place decides. | Never retry after the turn deadline. Obey `Retry-After` and add jitter to it. |
+| `resilience.py` (`backoff`, `call_with_retries`) | retries with jitter before the deadline | In your model gateway. The `google-genai` SDK retries are off by default. Keep them off, so that one place decides. | Never retry after the turn deadline. Obey `Retry-After` and add jitter to it. |
 | `resilience.py` (`CircuitBreaker`) | fail fast, send a probe, use the fallback | One breaker per model. The fallback is a different Flash model of the same family, with its own pool. Keep the model ids in configuration (3.6/3.7/3.8 Flash retire 45 days after a successor). | Cooldown 15 s. The order of the fallback models. |
 | `admission.py` | degrade levels, an in-flight cap, the rejection of excess requests | The gateway Cloud Run service. The level and the in-flight gauge are in Memorystore, so that every instance agrees. Cloud Armor rate limits per caller are in front. | `max_inflight` comes from the token budget, adjusted from load tests. Hysteresis 15 s. |
 | `loop.py` (budget) | steps / tokens / cost / deadline | The orchestrator Cloud Run service. It uses instance-based billing, so that checkpoints and compaction finish after the response. | Deadline 45 s, much less than the Pub/Sub ack deadline (600 s). |
@@ -29,7 +29,7 @@ gives the one setting that matters most for each mechanism. Date of the fact che
 | Timeout | 600 s | 600 s | SSE streams are requests (60-minute ceiling). The value is equal to the Pub/Sub ack deadline. |
 | Ingress | internal + load balancer | internal only | No request can go around Cloud Armor. Pub/Sub push counts as internal. |
 | Autoscaling | 60 % CPU over 1 min or 60 % of max concurrency | same | scale-out waits max(10 s, 3.5× predicted cold start) |
-| Shutdown | SIGTERM + 10 s | same | Write the checkpoint early. The queue delivers the message again. |
+| Shutdown | SIGTERM + 10 s | same | Write the checkpoint early. The queue sends the message again. |
 
 ## The estate, in one line
 

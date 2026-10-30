@@ -74,7 +74,7 @@ print(audit.timeline())
 # ## Exercise 2.1 — scope from claims, never from the body
 #
 # Write `resolve_scope(claims, body)`. Return `(tenant, user)` from the verified claims (`tenant`, `sub`). If
-# the body has any of `tenant`, `user`, `user_id`, `sub` or `agent`, raise `PermissionError`. Do not ignore it
+# the body has any of `tenant`, `user`, `user_id`, `sub` or `agent`, raise `PermissionError`. Do not ignore that field
 # silently. A request that tries this is a signal, and that signal is worth an error and a log line.
 
 # %% exercise
@@ -102,8 +102,8 @@ print("✅ the partition is the token's; a body that names one is refused (the s
 # %% [markdown]
 # ## Exercise 2.2 — a retried turn writes once
 #
-# The server can receive the memory write of a turn two times. For example, a timeout occurs after the server
-# committed, or the queue delivers a message again. Write `turn_key(session, turn, slot, value)`. It returns a
+# The server can get the memory write of a turn two times. For example, a timeout occurs after the server
+# committed, or the queue sends a message again. Write `turn_key(session, turn, slot, value)`. It returns a
 # deterministic key to send as `Idempotency-Key`. The same inputs give the same string, and different inputs
 # give a different string. Then the check sends the same write two times, and a *different* write with the
 # same key.
@@ -129,7 +129,7 @@ print(f"✅ one row for two POSTs (the second replayed {b1['id']}); the same key
 # %% [markdown]
 # ## Worked example: an agent with memory, three ways
 #
-# `MemoryAgent` is the 07.1 loop (the model, then tool calls, then results, then the model again). It has
+# `MemoryAgent` is the 07.1 loop: the model, then tool calls, then results, then the model again. It has
 # memory in one of three modes (PRIMER §6 "Memory as tools, or memory before every turn"):
 #
 # * **tools** (`remember` / `recall` / `forget`)
@@ -273,7 +273,7 @@ print("✅ the page's forget was declined; the user's own request went through:"
 # ## What the audit log holds
 #
 # The log has one JSON line per memory read, write and forget. Each line has both identities, the decision
-# and **hashes** of the arguments. It never has the memory text, thus the log is not one more copy that a
+# and **hashes** of the arguments. A line never has the memory text, thus the log is not one more copy that a
 # forget must reach (notebook 05).
 
 # %%
@@ -286,7 +286,7 @@ assert not any("Lisbon" in json.dumps(l) for l in lines)
 # ## T1: the same agent with a real model
 #
 # When `MEMLAB_LLM_URL` points to an OpenAI-compatible server with tool calling, this cell runs the
-# tools-mode agent against it. A real model extracts more facts (and sometimes invents facts). It writes
+# tools-mode agent against it. A real model extracts more facts and sometimes invents facts. It writes
 # `recall` queries in its own way. It is possible that it obeys the injected instruction, and it is possible
 # that it does not. Thus the controls in the earlier sections of this notebook are in the loop and the
 # service, not in the prompt.
@@ -336,6 +336,7 @@ shutil.rmtree(WORK, ignore_errors=True)       # the databases and the audit log 
 # `memory.review` promotes one. The sentence of the model is not a policy decision.
 #
 # **Drill 3.** *Can the agent just label everything `source="user"`?* The service trusts the workload for
-# `source`. Thus the label is only as good as the loop that sets it. The gateway can compare the label with
-# the trace of the turn (a tool result came before the write). This is why the audit event carries
-# provenance.
+# `source`. Thus the label is only as good as the loop that sets it.
+#
+# The gateway can compare the label with the trace of the turn. The trace shows if a tool result came before
+# the write. For this reason, the audit event carries provenance.

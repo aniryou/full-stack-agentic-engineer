@@ -48,7 +48,7 @@ deploy/kind/down.sh
 | Real on kind | Not real on kind |
 |---|---|
 | Pod Security Admission, the ValidatingAdmissionPolicies, RuntimeClass scheduling merge | **gVisor or any VM isolation**: every sandbox pod runs under runc on your host kernel |
-| NetworkPolicy. kindnetd enforces it through kube-network-policies. Its `main.go` at kind v0.33.0 builds that controller. The `main.go` of v0.23.0 did not. That your node image contains this kindnetd is `(verify)`. Thus step 6 of `run-examples.sh` proves it on your cluster. | NetworkPolicy *as a security boundary*: the policy dataplane of kindnetd fails **open**. If its controller cannot start, kindnetd logs the failure and continues. Then every policy here has no effect, and nothing tells you. |
+| NetworkPolicy. kindnetd enforces it through kube-network-policies. The `main.go` of kindnetd at kind v0.33.0 builds that controller. The `main.go` of v0.23.0 did not. That your node image contains this kindnetd is `(verify)`. Thus step 6 of `run-examples.sh` proves it on your cluster. | NetworkPolicy *as a security boundary*: the policy dataplane of kindnetd fails **open**. If its controller cannot start, kindnetd logs the failure and continues. Then every policy here has no effect, and nothing tells you. |
 | Jobs, deadlines, TTLs, quotas, `podPidsLimit`, emptyDir `sizeLimit` eviction | node pools, autoscaling from zero, Spot, the GKE metadata server |
 | the egress proxy, hostAliases instead of DNS, credential injection | private nodes and the absence of a route to the internet |
 

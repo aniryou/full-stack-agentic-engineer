@@ -57,18 +57,18 @@ many things, and **RL** changes which of these things it actually does.
   - The metric is **cost per correct answer**.
 
 ```mermaid
-flowchart LR
+flowchart TB
   subgraph train ["training (§1 to §5)"]
-    direction TB
+    direction LR
     P["Pretraining:<br/>what text looks like"] --> S["SFT: a format,<br/>by imitation"]
-    S --> R["RL: sample, score,<br/>reweight, near<br/>the SFT model"]
-    R --> T["a thinking model:<br/>long chains of thought<br/>grew because they<br/>increased the reward"]
+    S --> R["RL: sample,<br/>score, reweight"]
+    R --> T["a thinking model"]
   end
   subgraph serve ["serving (§7)"]
-    direction TB
-    D["decode-heavy,<br/>heavy-tailed traffic"] --> C["concurrency and KV<br/>per session grow<br/>with the output"]
-    C --> G["memory and the ITL SLO<br/>set the GPU count"]
-    G --> M["the metric:<br/>cost per correct answer"]
+    direction LR
+    D["decode-heavy,<br/>heavy-tailed traffic"] --> C["concurrency and KV<br/>grow with the output"]
+    C --> G["memory and ITL SLO<br/>set the GPU count"]
+    G --> M["cost per<br/>correct answer"]
   end
   train -->|"a thinking token is<br/>an output token"| serve
 ```
@@ -286,12 +286,12 @@ remove part of this cost.
 flowchart LR
   P[("comparisons:<br/>chosen y+,<br/>rejected y−")]
   subgraph rlhf ["RLHF with PPO: four networks in memory"]
-    direction TB
-    ENG["sample completions<br/>from the policy"]
-    RM["reward model r:<br/>logistic regression<br/>on (chosen − rejected)"]
-    SC["score: r on the last token,<br/>−β log(π/π_ref)<br/>on every token"]
-    V["value model V(s):<br/>per-token baselines<br/>(GAE)"]
-    PPO[["PPO step:<br/>the clipped ratio<br/>ρ = π/π_old"]]
+    direction LR
+    ENG["sample<br/>completions"]
+    RM["reward model r"]
+    SC["score: r and<br/>−β log(π/π_ref)"]
+    V["value model V(s)"]
+    PPO[["PPO step:<br/>the clipped ratio"]]
     ENG --> SC
     RM --> SC
     SC --> PPO
@@ -299,8 +299,8 @@ flowchart LR
     PPO -.->|"new weights"| ENG
   end
   subgraph dpo ["DPO: no reward model, no sampling"]
-    direction TB
-    L["a classification loss<br/>on the policy's own<br/>log-ratios<br/>log π − log π_ref,<br/>for y+ and for y−"]
+    direction LR
+    L["classification loss<br/>on log-ratios"]
     IR["the implicit reward<br/>β log(π/π_ref)"]
     L --> IR
   end
@@ -661,14 +661,14 @@ open-ended answers with no lucky guesses.
 helps questions where an attempt can come to a dead end, *if* something can select the correct sample.
 
 ```mermaid
-flowchart TB
+flowchart LR
   B{"a budget per question:<br/>n · (L + 50) ≤ B"}
-  B -->|"sequential"| L["think longer: one attempt<br/>of L tokens, and each<br/>token cracks the problem<br/>with probability q"]
-  B -->|"parallel"| N["sample more: n attempts,<br/>and each starts on<br/>a workable approach<br/>with probability a"]
+  B -->|"sequential"| L["think longer:<br/>one attempt<br/>of L tokens"]
+  B -->|"parallel"| N["sample more:<br/>n attempts"]
   N --> PK{"what selects<br/>the sample?"}
   PK -->|"a verifier"| V["best-of-n:<br/>1 − (1 − p)^n"]
-  PK -->|"a reward model"| RM["best-of-n through noise:<br/>a biased scorer<br/>selects for its bias"]
-  PK -->|"a majority vote"| MV["self-consistency:<br/>the correct answer must be<br/>the most common answer"]
+  PK -->|"a reward model"| RM["best-of-n<br/>through noise"]
+  PK -->|"a majority vote"| MV["self-consistency"]
 ```
 
 *Test-time compute as `rlcore.ttc` models it: `ttc.allocate()` divides one budget per question between a longer think and more samples. A longer think helps a question that is slow to crack. More samples help a question where an attempt can come to a dead end. But only a verifier or a vote turns the samples into accuracy, and a reward model sees correctness through noise.*

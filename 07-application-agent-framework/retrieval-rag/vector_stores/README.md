@@ -53,8 +53,8 @@ where the real FAISS uses a performance technique, a `# PERF:` comment in the so
 
 > **The library** (`minifaiss/`) uses only the standard library and numpy. It does not use `faiss`, `scipy`,
 > `sklearn` or `torch`. The optional demo on real data also uses `nltk`, only to download the public-domain Project
-> Gutenberg corpus. It also uses a small TF-IDF vectorizer that we wrote by hand. These two are not part of the
-> library.
+> Gutenberg corpus. It also uses a small TF-IDF vectorizer that we wrote by hand. `nltk` and the vectorizer are not part of
+> the library.
 
 ---
 
@@ -62,7 +62,7 @@ where the real FAISS uses a performance technique, a `# PERF:` comment in the so
 
 FAISS is a C++/CUDA library for similarity search over dense vectors. For a query vector, it finds the nearest
 neighbours among millions or billions of stored vectors. The search is exact or approximate. Its speed comes from
-BLAS, SIMD, multiple threads, GPUs and compact codes for the vectors.
+BLAS, SIMD, many threads, GPUs and compact codes for the vectors.
 
 minifaiss keeps the *concepts*, but not the speed. Each class matches a real FAISS class:
 

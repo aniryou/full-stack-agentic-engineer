@@ -200,7 +200,7 @@ print("✅ parallel groups overlap; the turn is 4.7 s sequential, 4.3 s parallel
 # ## 6. Sizing a vector store
 #
 # 5 M chunks × 768 dimensions × 4 bytes = **15.36 GB** of raw vectors. An HNSW index and metadata add
-# approximately 50%. Say the raw number first, then the overhead. This shows that you know where the bytes
+# approximately 50%. Say the raw number first, then the overhead. This order shows that you know where the bytes
 # come from.
 
 # %% [markdown]

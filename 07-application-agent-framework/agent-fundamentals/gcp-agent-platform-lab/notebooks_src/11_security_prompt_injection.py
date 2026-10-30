@@ -75,7 +75,7 @@ print("\nGUARDED"); trail(demo.guarded)
 # ## 3. Data blocks: provenance, and why delimiters must be escaped
 #
 # Untrusted text goes into the prompt as *data*, between delimiters that carry provenance. A permanent
-# instruction says that data is never instructions. That works only if the content cannot close the block
+# instruction says that data is never instructions. The delimiters work only if the content cannot close the block
 # itself.
 
 # %%
@@ -89,7 +89,7 @@ print("\nWHAT THE PROMPT RECEIVES (instruction + blocks):\n" + render_context([D
 # ### Exercise 3.1 — implement the escaping
 #
 # Write `my_escape(text)`. The text that it returns must contain **no** `<<<` and **no** `>>>` sequence. It
-# must also stay readable, because the model must still understand the document. Any injective rewrite works.
+# must also stay readable, because the model must still know what the document says. Any injective rewrite works.
 # The library uses `&lt;&lt;&lt;` / `&gt;&gt;&gt;`. Use the same strings, so that the check can compare
 # exactly.
 
@@ -113,8 +113,8 @@ print("✅ content can no longer close or reopen a block")
 # ## 4. Screening: injection phrases, secrets, PII
 #
 # `screen(text)` runs regex heuristics. It returns findings with a category, the rule name, a snippet and a
-# severity. Heuristics do not make anything *safe*. They make an attack more difficult, they block the obvious
-# attacks in tool arguments, and they give an audit signal. Note the Luhn check: a 16-digit number is a card
+# severity. Heuristics do not make anything *safe*. They make an attack more difficult, they block the attacks
+# that are easy to see in tool arguments, and they give an audit signal. Note the Luhn check: a 16-digit number is a card
 # only if the checksum passes.
 
 # %%
@@ -231,7 +231,7 @@ print("payments agent, privileged token →", "ok" if r3.ok else r3.error.type, 
 # %% [markdown]
 # There is also a third layer. With `confirm_irreversible=True` (the default), the guard sets
 # `requires_confirmation` on again. Thus the loop pauses for a person, even if the author of the tool turned
-# it off. The agent-loop notebook shows the pause/resume.
+# the flag off. The agent-loop notebook shows the pause/resume.
 
 # %%
 strict = GuardedTool(issue_refund, ActionPolicy({"payments": {"issue_refund"}}), "payments")
@@ -377,7 +377,7 @@ print("✅ boundary statement:", BOUNDARY_STATEMENT[:110] + "…")
 # 1. **Name the class**: indirect prompt injection. The model cannot reliably tell data from instructions.
 #    Thus the design must not depend on that ability.
 # 2. **Data, labelled**: untrusted content goes into the context as provenance-tagged data blocks with
-#    escaped delimiters, under a permanent instruction. This decreases the hit rate, but it is not the control.
+#    escaped delimiters, under a permanent instruction. These blocks and the instruction decrease the hit rate, but they are not the control.
 # 3. **The controls**: per-agent tool allowlists (a triage agent *cannot* refund) and argument and result
 #    screening. They also include identity scopes on the *user's* token that goes downstream, and
 #    confirmation for irreversible actions. All of them are in the tool layer and the loop, and all of them make audit events.

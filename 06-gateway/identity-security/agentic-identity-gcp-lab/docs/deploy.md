@@ -269,4 +269,4 @@ gcloud artifacts docker images list $REGION-docker.pkg.dev/$PROJECT_ID/agentsec 
 ```
 
 The Model Armor floor setting is a singleton. Thus `destroy` resets it and does not delete it.
-Terraform removes the data-access audit-log configuration together with the project IAM audit config resource.
+Terraform removes the data-access audit-log configuration together with the resource for the IAM audit config of the project.

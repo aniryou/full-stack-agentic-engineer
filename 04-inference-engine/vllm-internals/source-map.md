@@ -145,16 +145,16 @@ files completely or in the sections that the primer cites.
 
 ## How to read the code: four sittings of about two hours
 
-Keep the primer open beside the code. Each block names the primer section that goes with it. Read with a question
+Keep the primer open beside the code. Each slot names the primer section that goes with it. Read with a question
 in mind, not from top to bottom.
 
 The pace: you read dense engine code at approximately 8–12 lines a minute when you trace it with the primer open.
 Thus each slot in the tables of the four sittings names line ranges (at `5840d95`) and the branches to step over on
 a first read. Each slot also gives the number of lines that stay after you step over those branches. No slot asks for more
-than 12 lines a minute. Most of the 960 lines of `Scheduler.schedule` are conditional blocks for connectors,
+than 12 lines a minute. Most of the 960 lines of `Scheduler.schedule` are conditional branches for connectors,
 encoders, Mamba and data parallelism.
 
-The runner slots read **Model Runner V2**, the default (primer 1.4). MRV1 is an optional contrast at the end. The
+In the slots for the model runner, you read **Model Runner V2**, the default (primer 1.4). MRV1 is an optional contrast at the end. The
 total time to read is about 8 h 35 min. The notebook adds about 1.5 h.
 
 ### Sitting 1: the engine loop and the scheduler (2 h 10 min)

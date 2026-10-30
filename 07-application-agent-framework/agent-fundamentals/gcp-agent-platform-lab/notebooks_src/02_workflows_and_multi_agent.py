@@ -1,8 +1,8 @@
 # %% [markdown]
 # # 02 · Workflows and multi-agent systems
 #
-# When you have one reliable loop, the next question is how to compose several loops. The rule is: **use code where the
-# control flow is known, and use the model where judgement is necessary.** Workflow agents (`Sequential`, `Parallel`, `Loop`) are
+# When you have one reliable loop, the next question is how to compose several loops. The rule is: **use code where you
+# know the control flow, and use the model where judgement is necessary.** Workflow agents (`Sequential`, `Parallel`, `Loop`) are
 # code. In a delegation (`AgentTool`), a model decides to call another agent. Both multiply cost and failure.
 # Thus this notebook also makes you *measure* the cost of one more agent before you add it.
 #
@@ -200,12 +200,12 @@ for n in (1, 2, 3, 5, 8):
 # Before you add a second LLM agent, examine the list. If no item applies, the extra agent is cost and failure surface with no
 # return:
 #
-# - [ ] **The control flow is already known.** Then it is a workflow (`Sequential`, `Parallel` or `Loop`), not a second agent.
+# - [ ] **You already know the control flow.** Then it is a workflow (`Sequential`, `Parallel` or `Loop`), not a second agent.
 # - [ ] **It is really a tool.** A deterministic function with a schema costs less, and you can test it. It cannot invent an answer.
 # - [ ] **The sub-task fits in the parent's context.** A split of the context is worth its cost only when the window of the parent is the constraint.
 # - [ ] **Same tools, same permissions.** A specialist that shares the tool set and the identity of the parent isolates nothing.
 # - [ ] **Latency budget is tight.** Each hop adds a model call. Hand-offs occur one after the other, unless the work is truly parallel.
-# - [ ] **You cannot evaluate the parts separately.** If there is no golden set for each agent, you cannot tell which agent broke.
+# - [ ] **You cannot test the parts separately.** If there is no golden set for each agent, you cannot tell which agent broke.
 #
 # These things *do* justify an agent:
 # - A really different context (long documents, noisy tool output).
@@ -486,7 +486,7 @@ print("✅ conditions cover:", ", ".join(hits))
 # ## The one-minute version
 #
 # Start from the single agent and justify every addition. *"I start with one agent and a small tool set.
-# As soon as the control flow is known, I move that control flow into a workflow agent, so that the sequence is code, not prompt.
+# As soon as I know the control flow, I move that control flow into a workflow agent, so that the sequence is code, not prompt.
 # Examples of a known control flow are: classify then draft, run three checks at once, or revise until a checker passes.*
 #
 # *"I add a second LLM agent only when a sub-task needs its own context, its own permissions, or really parallel work.

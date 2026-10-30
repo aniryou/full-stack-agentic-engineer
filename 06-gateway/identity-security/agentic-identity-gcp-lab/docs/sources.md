@@ -52,7 +52,7 @@
     - ADK: `CredentialManager.register_auth_provider(GcpAuthProvider())`, `GcpAuthProviderScheme(name=..., scopes=[...], continue_uri=...)`, `McpToolset(connection_params=StreamableHTTPConnectionParams(url=...), auth_scheme=scheme)`.
       Also `AuthenticatedFunctionTool(func=..., auth_config=AuthConfig(auth_scheme=GcpAuthProviderScheme(...)))` with a `credential: AuthCredential` param. The token is in `credential.http.credentials.token`.
     - The consent flow:
-        1. The agent emits an `adk_request_credential` function call with `authorization_uri` and `consent_nonce`.
+        1. The agent sends an `adk_request_credential` function call with `authorization_uri` and `consent_nonce`.
         2. The frontend does a redirect.
         3. The `/validateUserId` endpoint finalizes the consent.
         4. Resume with a FunctionResponse named `adk_request_credential`.
@@ -60,7 +60,7 @@
         1. The direct ADK path: the token goes back to the agent process.
         2. The Agent Gateway path: the auth manager encrypts the end-user creds, and only the gateway decrypts them. The agent never sees the raw credential.
     - Source: https://docs.cloud.google.com/iam/docs/auth-with-3lo-v2
-- ADK 2.8.0 internals (verified from the installed source):
+- ADK 2.8.0 internals, as the installed source shows them:
     - `google.adk.integrations.agent_identity.GcpAuthProvider` uses `google.cloud.agentidentitycredentials_v1.AuthProviderCredentialsServiceClient.retrieve_credentials(RetrieveCredentialsRequest(auth_provider, user_id, scopes, continue_uri))`.
     - The response oneof: success{header, token} | pending | uri_consent_required{authorization_uri, consent_nonce} | consent_rejected. The env var `AGENT_IDENTITY_CREDENTIALS_TARGET_HOST` overrides the endpoint.
     - `BaseAuthProvider.get_auth_credential(auth_config, context)`, `CredentialManager.register_auth_provider(provider)`. The experimental feature flags are PLUGGABLE_AUTH and AUTHENTICATED_FUNCTION_TOOL.
@@ -90,11 +90,11 @@
     - The precedence: request template > floor > Gemini built-in safety.
     - A limitation: Model Armor does not sanitize file/PDF prompts. The docs list a limited set of regions for the integration (europe-west1/2/3, asia-southeast1, asia-south1).
     - Source: https://docs.cloud.google.com/model-armor/model-armor-vertex-integration
-- IAP for agents: you bind IAM allow/deny policies on Agent Registry service instances (MCP servers, destination agents, endpoints). Agent Gateway enforces them.
+- IAP for agents: you bind IAM allow/deny policies on service instances in Agent Registry (MCP servers, destination agents, endpoints). Agent Gateway enforces them.
   Source: https://docs.cloud.google.com/iap/docs/agent-overview
 
 ## Standards
-- **MCP authorization** (spec rev 2025-11-25, with the changes of the 2026-07-28 revision noted):
+- **MCP authorization** (spec rev 2025-11-25). These notes also record the changes of the 2026-07-28 revision:
     - It uses OAuth 2.1 (draft-ietf-oauth-v2-1-13). The MCP server is the resource server.
     - The server MUST implement Protected Resource Metadata (RFC 9728). The server MUST advertise the metadata through `WWW-Authenticate: Bearer resource_metadata="..."` on 401 and/or `/.well-known/oauth-protected-resource[/path]`.
     - Clients MUST use PRM for AS discovery. AS metadata discovery uses RFC 8414 or OIDC discovery.

@@ -2,7 +2,7 @@
 
 | Target | Tier | What runs | Cost | Cleanup |
 |---|---|---|---|---|
-| [`local/`](local/README.md) | T0 + Docker | the gateway and two fake providers (one fails 30 % of requests) in Docker Compose | free | `./down.sh` |
+| [`local/`](local/README.md) | T0 + Docker | the gateway and two fake providers in Docker Compose. One provider fails 30 % of requests. | free | `./down.sh` |
 | [`any-gpu/`](any-gpu/README.md) | T1 | one real `vllm serve` (Qwen2.5-0.5B as `lab/llm`) behind the gateway, and a fake fallback | free on Colab/Kaggle, ~$0.3–0.7/h rented (verify) | `./down.sh`, then terminate the machine |
 | [`gcp/`](gcp/README.md) | T3 | a README. It shows how to use the 04 lab's Cloud Run or GKE vLLM and the 05 lab's GKE Inference Gateway as upstreams. There is no new Terraform. | the upstreams' GPU hours (verify) | the upstreams' own teardown |
 

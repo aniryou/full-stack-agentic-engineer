@@ -442,6 +442,45 @@ find . -maxdepth 5 -name '*.ipynb' ! -path '*/.ipynb_checkpoints/*' | wc -l
   pins (TRL 1.14.0, vLLM 0.30.0): the T1 paths were not re-run on a GPU. Google's price page was not reachable from
   the session (aggregator pages were), so the price lines keep `(verify)`. **Baseline unchanged: 385 notebooks.**
 
+- **2026-10-30 — accessible language and one-screen figures, part 1 (PR #53).** Two passes over the whole repository,
+  both driven by tooling that landed first. **Figures.** Measured with headless Chromium, all 109 SVG figures fit a
+  laptop screen but 57 of the 61 Mermaid diagrams did not (52 taller than 600 px when shown in the site's column, 6
+  scaled below 0.7 of their size, labels of 6 to 9 lines), and one diagram in the scaling lab's reference architecture
+  did not parse. The rule is now in `tools/orchestration/FIGURE-STYLE.md` §3: shown in an 800 px column, a figure is
+  at most 600 px tall and scaled down by no more than 0.7; labels name the part in two or three short lines; `LR` for
+  chains and decision trees, `TB` for at most four levels; a bigger mechanism is split or drawn as an SVG.
+  `render_figures.js` gives every figure that verdict and has a `check` mode that measures every figure of the
+  repository (tracked and new files) into `tools/orchestration/figures-manifest.tsv`; `tools/ci/tests/test_figures_fit.py`
+  reads the manifest (the sha1 of each Mermaid source) and the SVG sizes in CI, so a tall diagram can no longer land
+  silently. `figure_fit_workflow.js` ran over the 27 documents with a failing block or a long section without a
+  figure (98 agents, 2.6 hours): a reshaper per document, an adversarial verifier that rendered and read every figure
+  against `git show HEAD:`, a fixer and a re-check. All 27 pass: 59 blocks reshaped (terse labels, `LR`, splits into
+  two figures, nine redrawn as house-style SVGs), 18 figures added where a long section explained a mechanism with
+  none (the GKD loop in two parts, the agent overload feedback loop, the H100 replica's memory, spill-over, the
+  attention-kernel measurement decision, the identity model's two authorities, fan-out/fan-in, the retrieval
+  pipeline) and 17 named sections left without one, with the reason (catalogues, tables, drills); round 1 raised 17
+  blocking, 44 major and 130 minor findings (a lost "otherwise" edge, a filter's four outcomes merged into one, a part
+  that pointed at the wrong receiver), 145 fixes, none open. 204 figures now, 73 Mermaid and 131 SVG, every one within
+  the limits; the nearest are 592 px tall or shown at 0.70. **The STE second pass.** `ste_lint.py` gained about 120
+  dictionary-level words the standard replaces (`consider`, `reduce`, `receive`, `within`, `although`, `since`,
+  `similar`, `evaluate`, `maintain`, `optimal`, `typically`, `significant`, ...), a `paren-clause` rule for a clause
+  with a verb inside parentheses in the middle of a sentence, and a long-word share; `STE100-STYLE.md` §3.1 lists the
+  words in a second table and the rule on parentheses. On the unique prose files the extended linter found 1,745
+  word-level items and 499 parenthetical clauses on top of the first pass. `ste_pass2_workflow.js` ran one layer at a
+  time (the same disjoint file groups as the first pass, 121 items, 360 agents, about 7.5 hours of wall clock across
+  parallel runs): an agent applies the findings and reads once for plain language (noun clusters, unclear pronouns, two
+  ideas in one sentence, cause before result), an adversarial verifier reads every diff hunk against the original and
+  samples the sentences left alone, a fixer repairs, a re-check follows. 120 of 121 items passed (the two findings
+  left on the MoE lab's notebook 04, "very large" turned into "the largest", were applied by hand); 1,410 hunks read
+  in round 1, 475 words replaced, 314 parentheticals made sentences of their own, 594 other plain-language edits, 270
+  fixes, 2 rejected; 916 warnings kept with a written reason (technical names: a fixed cost, an all-reduce, a verified
+  reward, Little's law, GKE's time-sharing, Kueue's borrowing; quotations; the `(verify)` tag). Linter totals over the
+  eight layers (unique prose files, this commit): `word` 1,579 → 955, `paren-clause` 440 → 200, `passive` 342 → 300, `ing` 1,378 → 1,333, `semicolon` 64 → 61, errors 237 → 237 (every one a fragment a test pins or a quotation); with the generated notebooks counted, warnings 6,381 → 4,345. Not in this commit: the second pass over the body text
+  of the 27 primers and primer-like documents and over the long-running-durable topic's READMEs and notebooks, which
+  ran against a baseline that already held the reshaped figures and lands in the next commit once its verifiers report.
+  The figure check and its test see new files too (`git ls-files --others`), after the first run of the check missed
+  the 19 SVGs the agents had just drawn. **Baseline unchanged: 385 notebooks.**
+
 ## Housekeeping
 - Deduped 2026-09-26: `07-.../long-running-durable/PRIMER.md` is the only copy of the durable-execution primer, and
   `long-running-durable/lra-gcp/docs/primer.md` the only lra primer (the byte-identical twins were removed).

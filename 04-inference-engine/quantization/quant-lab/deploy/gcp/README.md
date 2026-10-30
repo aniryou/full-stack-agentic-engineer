@@ -40,8 +40,8 @@ memory model. They are an estimate until the startup log confirms them:
 | KV blocks (16 tokens each) | 39,751 | 43,980 | 42,607 |
 | concurrent 2,000-token sessions | 318 | 352 | 341 |
 
-Smaller weights make the weight-download part of a Cloud Run cold start shorter (the serving lab's
-notebook 06 changes bytes into seconds). They also leave more of the L4 for KV blocks. FP8 W8A8 also
+Smaller weights make the weight-download part of a Cloud Run cold start shorter. The serving lab's
+notebook 06 changes bytes into seconds. Smaller weights also leave more of the L4 for KV blocks. FP8 W8A8 also
 decreases the prefill FLOP time on the L4 by half. The accuracy gate comes from notebook 03, on your
 own eval set.
 

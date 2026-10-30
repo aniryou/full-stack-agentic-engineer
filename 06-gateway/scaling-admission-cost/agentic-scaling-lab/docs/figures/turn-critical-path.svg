@@ -49,7 +49,7 @@
       <text x="425" y="198" font-weight="600">2 · tools, in parallel</text>
       <text x="425" y="214" font-size="11" fill="#97A59F">the tool time is the max, not the sum</text>
       <text x="680" y="198" font-weight="600">3 · answer call</text>
-      <text x="680" y="214" font-size="11" fill="#97A59F">to the first token</text>
+      <text x="668" y="214" font-size="11" fill="#97A59F">to the first token</text>
       <text x="808" y="198" font-weight="600">4 · streaming</text>
       <text x="808" y="214" font-size="11" fill="#97A59F">output ÷ tokens per second</text>
     </g>
@@ -57,9 +57,9 @@
     <rect x="24" y="240" width="22" height="12" rx="2" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
     <text x="54" y="250" font-size="11" fill="#97A59F">time-to-first-token, thinking included</text>
     <rect x="276" y="240" width="22" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    <text x="306" y="250" font-size="11" fill="#97A59F">output tokens, at the tokens per second of the model</text>
-    <rect x="600" y="240" width="22" height="12" rx="2" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
-    <text x="630" y="250" font-size="11" fill="#97A59F">a tool call</text>
+    <text x="306" y="250" font-size="11" fill="#97A59F">output tokens, at tokens per second</text>
+    <rect x="550" y="240" width="22" height="12" rx="2" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="580" y="250" font-size="11" fill="#97A59F">a tool call</text>
     <rect x="712" y="240" width="22" height="12" rx="2" fill="none" stroke="#97A59F" stroke-width="1.2" stroke-dasharray="3 2"/>
     <text x="742" y="250" font-size="11" fill="#97A59F">tokens stream to the user</text>
   </g>

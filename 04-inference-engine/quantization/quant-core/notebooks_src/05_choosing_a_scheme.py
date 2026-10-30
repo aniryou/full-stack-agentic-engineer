@@ -59,12 +59,12 @@ show(C.table(L4, m8, schemes=["bf16", "w8a16-fp8", "w4a16", "w8a8-fp8"]))
 # Read each column of the table by its bound. Decode at batch 1 is the weight read. Weights of 16.1, 9.1 and 5.7 GB give 65, 36 and
 # 22 ms. The decrease is not 3.9×, because the 16-bit LM head, the KV read and the step overhead do not decrease.
 # Prefill is compute: only FP8 W8A8 halves it. The number of sessions depends on the bytes that stay for KV: FP8 KV
-# doubles it at any weight format.
+# doubles that number at any weight format.
 #
 # ## Worked example 2 — one GEMM on the roofline: where W4A16 stops paying
 # vllm-internals §8.1 calculates the time of Llama-3.1-8B's `down_proj` ($K = 14{,}336$, $N = 4{,}096$) on an L4 for
-# $M$ tokens in the step. `cost.gemm_time` gives the same result (W4A16 at 4.16 bits per weight, as that table
-# counts).
+# $M$ tokens in the step. `cost.gemm_time` gives the same result. The cell counts W4A16 at 4.16 bits per weight, as
+# that table does.
 
 # %%
 for M in (1, 16, 64, 128, 256, 400, 462, 2048):
@@ -96,7 +96,7 @@ for g in C.GPUS.values():
 
 # %% [markdown]
 # Read down the FP8 W8A8 column. An FP8 checkpoint loads on all GPUs from Turing up. But below Ada, it is a
-# weight-only model (Marlin FP8) with BF16 math. This gives a gain in memory only. NVFP4 is W4A4 only on Blackwell
+# weight-only model (Marlin FP8) with BF16 math. Thus the gain is in memory only. NVFP4 is W4A4 only on Blackwell
 # (SM100/SM120, CUDA ≥ 12.8). On other GPUs, it runs as weight-only 4-bit.
 #
 # INT8 W8A8 is the Turing/Ampere way to make prefill faster. From compute capability 10.0, vLLM does not support INT8
@@ -142,7 +142,7 @@ for g, price in ((L4, 0.70), (H100, 11.0)):
 
 # %% [markdown]
 # Quantization decreases cost in two ways. It gives fewer bytes per step. It also gives more sessions, thus a larger
-# batch shares each step. On the L4, KV memory sets the maximum batch (17 sessions in bf16). That is why FP8 weights
+# batch shares each step. On the L4, KV memory sets the maximum batch (17 sessions in bf16). Thus FP8 weights
 # and FP8 KV together cut the cost per token ~6× there, not 2×. The reason is that the batch is 5× larger, in a step that is not longer.
 #
 # On the H100, BF16 fits 209 sessions, and FP8 gets to the 256 cap that this notebook uses. There, FP8 cuts the cost
@@ -150,7 +150,7 @@ for g, price in ((L4, 0.70), (H100, 11.0)):
 #
 # ## Worked example 6 — the accuracy gate
 # The eval decides which rows it permits at all. Here, the model is the tiny model of notebook 03. The budget has two
-# limits: $\mathrm{KL} \le 0.05$ nats, and an accuracy drop within two standard errors of the difference
+# limits: $\mathrm{KL} \le 0.05$ nats, and an accuracy drop of not more than two standard errors of the difference
 # (`E.diff_stderr`, unpaired). The paired McNemar z on the flips, `E.paired_z`, is the sharper test (primer §8). The
 # next cell applies the budget:
 
