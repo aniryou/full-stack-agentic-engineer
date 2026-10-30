@@ -501,6 +501,54 @@ find . -maxdepth 5 -name '*.ipynb' ! -path '*/.ipynb_checkpoints/*' | wc -l
   done, as before: docstrings and code comments, the root documents, and a check against the STE dictionary proper.
   **Baseline unchanged: 385 notebooks.**
 
+- **2026-10-30 — figures, round 3: charts the cores compute, every figure judged as a reader, more figures.**
+  Three things, built on the one-screen rule of the previous round and merged through its own PR. **Charts computed by the cores.** The primers
+  state relationships between quantities (a decode step against the batch, the KV cache against the context, an
+  all-reduce against its message size, a student's cost against the tokens it serves) and the cores compute them;
+  until now a figure of such a relationship was a hand-drawn copy of two or three pinned numbers. `tools/orchestration/svgchart.py`
+  (standard library) renders a spec (axes, series, marks, a note naming the function) as an SVG in the house style
+  and stores the spec in the file's `<desc>`; a core's `tools/make_figures.py` computes every value with the core's
+  own functions from the inputs the primer names and writes the charts into the topic's `figures/`, and its
+  `tests/test_figures.py` calls `svgchart.check_figure()` with the same builders, so a chart fails CI when the core
+  computes other values or when the file is not what the renderer makes of its own spec. 17 generators and 17 tests
+  landed (the twelve cores, `capacity.py`, `fa_calculators.py`, `servelab` for the vLLM internals primer, `scalelab`,
+  and `kerncore` for the kv-cache primer); they draw 55 charts, 10 of them regenerated under the name of a
+  hand-drawn figure that copied the pinned numbers (the roofline itself, now the H100 and the L4 with the §2 kernels
+  and the Llama-3.1-8B steps on the lines; the decode step's weights against its KV read; the break-even of a
+  student; the experts a batch touches; the KV tokens of a thinking request). The marks are the primer's pinned
+  numbers, labelled as the primer prints them; a quantity that depends on a trained model is never charted
+  (distill-core's students and drafts; see 2026-09-27), and a seeded simulation is charted only where the primer
+  already labels the number "simulated". FIGURE-STYLE.md §7 is the rule. **Every figure judged as a reader.** An
+  agent per document read every figure against a checklist (legible at the shown scale, one subject, one reading
+  direction, the prose's names, a caption that says what to see, consistency within the document, no redundancy,
+  nothing the prose does not say, colour never the only carrier) and repaired what failed: of 256 figures judged,
+  141 were improved (shorter labels and two-row chains for the Mermaid blocks shown below 0.8, the accent moved to
+  the subject, captions that tell the reader where to look, labels aligned with the prose), one removed (a flowchart
+  that restated a list), and 37 added where a mechanism was explained at length without one (the preemption
+  example of the GPU-scheduling primer, kernel fusion in the roofline primer, the vLLM backend selection, the
+  HNSW layers, the saga and the suspend/resume of the durable primers, COMPUTE.md's GPU decision tree and its
+  billing sequence). **Process:** `figure_improve_workflow.js`, run as four parallel workflows (the per-workflow agent
+  cap is two on this container) over the 35 documents with figures plus COMPUTE.md: per topic with a core, a chart
+  agent, an adversarial verifier (every series traced to a call into the core, every mark found verbatim in the prose,
+  the generator run twice and compared, the tests run) and a fixer, up to two rounds; then per document an improve
+  agent that snapshots the document first, a verifier that reads every figure against the snapshot and the prose, and
+  a fixer. 188 agents in about 2.5 hours of wall clock. Round-1 findings: the chart stage 4 blocking, 18 major and 104
+  minor (a speedup labelled where the prose prints a byte ratio, a p95 curve that was seed noise between the pinned
+  points, a test that CI never ran); the improve stage 11 blocking, 31 major and 158 minor (a figure claiming a
+  call path the prose does not describe, numbers the prose never prints, an STE word in an unapproved meaning);
+  239 fixes applied, 29 rejected with a reason, nothing open after at most three rounds. Two defects of the chart
+  helper itself showed up in the first charts (a long note colliding with the axis label, a line label hidden under
+  the legend) and were fixed in the helper, after which every chart was regenerated. **Checks:** `tools/ci/tests/test_svgchart.py`
+  (the helper), `test_figure_links.py` (every absolute figure URL names a file in the tree, no SVG left
+  unreferenced), the chart tests in every lab's CI command (the capacity-planning entry of `labs.json` now names
+  `test_figures.py`), the manifest regenerated (283 figures, every one within the one-screen limits), the STE
+  linter unchanged over the layers (234 errors before and after, every one a pinned fragment or a quotation; warnings 3,804 → 3,803), and the full validation on the exact tree (every lab's tests, the builders and the injector as no-ops,
+  the Colab index, the link check, the site generator, the strict site build). **Figures: 204 → 282** in 35 documents
+  (99 Mermaid, 183 SVG, 55 of them computed charts). `figure_notebooks_workflow.js` and FIGURE-STYLE.md §8 (a notebook
+  embeds a primer's figure by its absolute URL on `main`, which Colab renders; one per notebook) are in the tree for
+  the next step, the notebooks. Not done, as before: docstrings and code comments in STE, and a check against the STE
+  dictionary proper. **Baseline unchanged: 385 notebooks.**
+
 ## Housekeeping
 - Deduped 2026-09-26: `07-.../long-running-durable/PRIMER.md` is the only copy of the durable-execution primer, and
   `long-running-durable/lra-gcp/docs/primer.md` the only lra primer (the byte-identical twins were removed).
