@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="960" height="390" viewBox="0 0 960 390" role="img" aria-label="Every classical method fills a co-occurrence matrix X of words by contexts and factorizes it into two low-rank matrices, W and C transposed, whose rows are the word and context vectors; LSA, PPMI with SVD, word2vec SGNS and GloVe differ only in the matrix and the fit." style="color: #E4EAE7">
-  <title>Every classical method fills a co-occurrence matrix X of words by contexts and factorizes it into two low-rank matrices, W and C transposed, whose rows are the word and context vectors; LSA, PPMI with SVD, word2vec SGNS and GloVe differ only in the matrix and the fit.</title>
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="390" viewBox="0 0 960 390" role="img" aria-label="The corpus fills a co-occurrence matrix X of words by contexts, a low-rank factorization makes W and C transposed, and LSA, PPMI with SVD, word2vec and GloVe differ only in the matrix and the fit." style="color: #E4EAE7">
+  <title>The corpus fills a co-occurrence matrix X of words by contexts, a low-rank factorization makes W and C transposed, and LSA, PPMI with SVD, word2vec and GloVe differ only in the matrix and the fit.</title>
   <rect x="0" y="0" width="960" height="390" rx="8" fill="#161E1C"/>
   <defs>
     <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>

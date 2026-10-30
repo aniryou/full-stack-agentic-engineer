@@ -229,7 +229,7 @@ flowchart LR
   S -->|"background<br/>merge"| C["compaction<br/>and vacuum"]
 ```
 
-*A write goes through the write-ahead log into a small mutable segment, and the engine seals that segment into immutable indexed segments. A delete leaves a tombstone (the dotted edge), which the engine filters out at query time. The background merge does the compaction and vacuum.*
+*A write goes through the write-ahead log into a small mutable segment, and the engine seals that segment into immutable indexed segments. A delete leaves a tombstone that marks rows in the segments (the dotted edge), and the engine filters out these rows at query time. The background merge does the compaction and vacuum.*
 
 **Freshness and consistency.** The question "Is my just-written vector searchable?" has a range of answers. They go from immediately (Postgres/pgvector, single-node Qdrant) to eventually (Pinecone serverless, Milvus at its default level, any sharded system with asynchronous replication). Some engines expose tunable levels (Milvus: Strong, Bounded, Session, Eventual). RAG usually tolerates seconds of lag. It is possible that fraud detection or within-session agent memory does not.
 
@@ -251,10 +251,10 @@ Good engines select a strategy for each query from the **estimated filter select
 
 ```mermaid
 flowchart LR
-  Q(["query vector<br/>+ filter"]) --> E{"estimated<br/>selectivity?"}
+  Q(["query vector<br/>+ filter"]) --> E{"estimated<br/>filter<br/>selectivity?"}
   E -->|"small"| B["brute force<br/>over the<br/>permitted ids"]
   E -->|"large"| T["filtered-graph<br/>search"]
-  E -->|"partition<br/>key"| P["partition-scoped<br/>search"]
+  E -->|"on a<br/>partition<br/>key"| P["partition-scoped<br/>search"]
   B --> F["fan out to<br/>the segments,<br/>merge top-k"]
   T --> F
   P --> F
@@ -277,7 +277,7 @@ flowchart LR
   R --> K(["the final k"])
 ```
 
-*A hybrid query sends the same query to dense ANN and to sparse retrieval, because each side finds what the other side misses. Reciprocal Rank Fusion merges the two ranked lists, and then a cross-encoder reranks the candidates. §12 shows these steps in the full pipeline.*
+*A hybrid query sends the same query to dense ANN and to sparse retrieval, because each side finds what the other side misses. Reciprocal Rank Fusion merges the two ranked lists, and then a cross-encoder reranks the candidates. The full pipeline in §12 also shows the fusion and the rerank.*
 
 **Hybrid search** is dense ANN, plus sparse/lexical retrieval, plus fusion.
 
@@ -318,7 +318,7 @@ flowchart LR
 
 ![The retrieval pipeline of §12: the ingest path parses, chunks, embeds and upserts the source content into the vector database, and the query path embeds the query, retrieves candidates from the database, fuses the lists, reranks the candidates and logs the outcomes.](figures/retrieval-pipeline.svg)
 
-*The top row is the ingest path. It keeps the raw source as the system of record and writes vectors with the model name and version. The bottom row is the query path, with the typical p95 latency budget of three steps. The warm rerank box marks the reranker, which usually dominates the latency, not the vector database.*
+*The top row, the ingest path, keeps the raw source as the system of record and writes vectors with the model name and version. The bottom row is the query path, with the typical p95 latency budget of three steps. The warm rerank box marks the reranker, which usually dominates the latency, not the vector database.*
 
 **Ingest**
 
