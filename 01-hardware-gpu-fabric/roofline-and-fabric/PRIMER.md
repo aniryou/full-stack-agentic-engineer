@@ -157,9 +157,9 @@ operand one time and writes each result one time. A perfectly fused and tiled ke
 | GEMM 64 × 4096 × 4096 | 2mnk | (mk + kn + mn) × 2 | 62 | 208 TFLOP/s, memory-bound |
 | GEMM 4096 × 4096 × 4096 | 2n³ | 3n² × 2 | 1,365 | 989 TFLOP/s, compute-bound |
 
-![The H100 roofline in dense bf16 on log axes, with the kernels of the table and the decode and prefill steps of section 3 at their intensities.](figures/roofline-h100-bf16.svg)
+![The roofline of the H100 and the L4 in dense bf16 on log axes: attainable TFLOP/s against arithmetic intensity, with the kernels of the table and the decode and prefill steps of section 3 on the H100.](figures/roofline-h100-bf16.svg)
 
-*The chart shows the attainable TFLOP/s against the arithmetic intensity on log axes, for the H100 and the L4 in dense bf16. The kernels of the table sit on the H100 line, and teal marks the decode and prefill steps of §3. The core computes each line with `roofline.roofline.attainable()`, and `tests/test_figures.py` pins the chart.*
+*The chart shows the attainable TFLOP/s against the arithmetic intensity on log axes, for the H100 and the L4 in dense bf16. The kernels of the table sit on the H100 line as white points, and the teal points are the decode and prefill steps of §3. The core computes each line with `roofline.roofline.attainable()` and the steps with `roofline.llm.decode()` and `prefill()`, and `tests/test_figures.py` pins the chart.*
 
 Remember the GEMM formula:
 
@@ -255,7 +255,7 @@ each sequence also reads its own KV cache:
 | 128 | 41.7 | 14.74 ms | 8,682 | 68 | 70% |
 | 208 (HBM limit) | 47.2 | 21.16 ms | 9,832 | 47 | 79% |
 
-![One decode step per batch row: the weight stream takes the same time in every row and the KV read grows with the batch.](figures/decode-step-weights-vs-kv.svg)
+![One decode step of Llama-3.1-8B on an H100 in bf16 at 2K context against the batch: the weight stream takes the same time at every batch, and the KV read grows with the batch up to the HBM limit.](figures/decode-step-weights-vs-kv.svg)
 
 *The chart shows the time of one decode step against the batch, up to the HBM limit, and the two parts of that time. The weight stream (dashed) takes the same time at every batch, but the KV read (orange) grows with each sequence. The core computes the curves with `roofline.llm.decode()` and `decode_split()`, and `tests/test_figures.py` pins the chart.*
 
@@ -498,7 +498,7 @@ Take 8 H100s over NVLink 4 as a worked example. The two terms of the ring meet a
 
 ![All-reduce time over 8 GPUs against the message size on log axes: a ring and recursive doubling over NVLink 4, and a ring through 400 Gb/s NICs.](figures/allreduce-time-vs-message-size.svg)
 
-*The chart shows the all-reduce time over 8 GPUs against the message size, with the 70B decode and prefill messages of §5.3. The decode message is latency-bound, the prefill message is bandwidth-bound, and at large sizes the NIC ring is about 9× slower than NVLink. The core computes the curves with `roofline.fabric.ring_allreduce_time()` and `recursive_doubling_allreduce_time()`, and `tests/test_figures.py` pins the chart.*
+*The chart shows the all-reduce time over 8 GPUs against the message size, with the 70B decode and prefill messages of §5.3. Each point marks the size where the latency term and the bandwidth term of a ring are equal. The decode message is latency-bound, and the prefill message is bandwidth-bound. The core computes the curves with `roofline.fabric.ring_allreduce_time()` and `recursive_doubling_allreduce_time()`, and `tests/test_figures.py` pins the chart.*
 
 ### 5.3 Tensor parallelism: the collective inside every layer
 
@@ -746,9 +746,9 @@ adds $R/{M}$ on top, and it does not move $\tau^{*}$. At this failure rate, a 10
 costs more than everything a 10 s checkpoint wastes (4.2%). Thus fast restart is a lever next to fast
 checkpoints: hot spare nodes, checkpoints replicated in peer memory, pre-initialised jobs.
 
-![The share of wall-clock time that a 16,384-GPU job loses against its checkpoint interval, for a 60 s and a 10 s checkpoint and for a 60 s checkpoint with a 10-minute restart.](figures/checkpoint-waste-vs-interval.svg)
+![The share of wall-clock time that a 16,384-GPU job loses at each checkpoint interval, for a 60 s and a 10 s checkpoint and for a 60 s checkpoint with a 10-minute restart.](figures/checkpoint-waste-vs-interval.svg)
 
-*The chart shows the share of wall-clock time that the 16,384-GPU job loses against its checkpoint interval. Each curve has its least value at its $\tau^{*}$, and the restart $R$ moves the curve up, not to the side. The core computes the curves with `roofline.reliability.wasted_fraction()` and `young_daly_interval()`, and `tests/test_figures.py` pins the chart.*
+*For each checkpoint interval, the chart shows the share of wall-clock time that the 16,384-GPU job loses. Each curve has its least value at its $\tau^{*}$, and the restart $R$ moves the curve up, not to the side. The core computes the curves with `roofline.reliability.wasted_fraction()` and `young_daly_interval()`, and `tests/test_figures.py` pins the chart.*
 
 ### 7.3 Inference: replicas are failure domains
 

@@ -116,6 +116,10 @@ The loop has these steps:
 5. More turns in flight cause more memory, more queued model calls and more retries.
 6. These cause more 429s.
 
+![The six steps of the feedback loop of §1.6 make a cycle that starts and ends with more 429s.](figures/overload-feedback-loop.svg)
+
+*The feedback loop of §1.6. Each step causes the next step, and the last step causes more 429s again. Little's law connects the longer turns to more turns in flight.*
+
 Without a circuit breaker on the loop, an agent system under overload does not fail fast. It slows down for everyone until the turn deadlines expire and the users go away. By then, the users have already used the tokens.
 
 The load generator in the lab shows this feedback loop in a few seconds (notebook 04). It puts 120 virtual users against a simulated 3 M TPM pool:
@@ -457,15 +461,16 @@ sequenceDiagram
     O->>F: checkpoint of the model call
     O->>T: open a ticket, with its key
     T-->>O: the ticket, stored under the key
-    Note over O,T: the process stops before the checkpoint
+    Note over O,T: the process stops before<br/>the checkpoint of the ticket
     P->>O: redelivery, because<br/>no 2xx came back
-    O->>F: load the checkpoints,<br/>skip the completed steps
+    O->>F: load the checkpoints
+    Note over O: skip the completed steps
     O->>T: the same write, the same key
     T-->>O: the same ticket
     O-->>P: 200 for the terminal outcome
 ```
 
-*A crash after a write and before its checkpoint, and the redelivery of §5.4. Read from the top. On the second delivery, the orchestrator skips the steps with a checkpoint, and the key gives the stored ticket back, not a second ticket.*
+*The case of §1.5: the process stops after the ticket write and before its checkpoint. On redelivery, the orchestrator skips the steps with a checkpoint. The key gives the stored ticket back, not a second ticket.*
 
 The queue contract is the other half. Pub/Sub push acknowledges on any 2xx. On any other response, it sends the message again, with a push backoff that grows from 100 ms to 60 s. The retry policy of the subscription adds a 10–600 s exponential backoff. After five attempts, the message goes to a dead-letter topic that has its own alert.
 
@@ -645,12 +650,12 @@ The order of adoption is important. Add durability (checkpoints, idempotency) be
 
 ```mermaid
 flowchart LR
-    P["Pilot<br/>≤ 1,000"] -- "p95 in the<br/>peak hour<br/>crosses the<br/>budget: add<br/>the queue" --> V1["Production v1<br/>1,000–20,000"]
-    V1 -- "durability<br/>before<br/>admission<br/>control" --> S["Scale<br/>20,000–<br/>200,000"]
-    S -- "PT before<br/>multi-region:<br/>a residency or<br/>availability<br/>requirement" --> E["Enterprise<br/>> 200,000,<br/>multi-brand"]
+    P["Pilot<br/>≤ 1,000"] -- "p95 crosses<br/>the budget:<br/>add the queue" --> V1["Production v1<br/>1,000–20,000"]
+    V1 -- "durability<br/>before admission<br/>control" --> S["Scale<br/>20,000–<br/>200,000"]
+    S -- "PT before<br/>multi-region" --> E["Enterprise<br/>> 200,000,<br/>multi-brand"]
 ```
 
-*The growth path of §7 as the order of adoption: durability before admission control, admission control before PT, and PT before multi-region. The numbers are conversations a day. Each edge names the rule of order or the measurement that starts the next stage.*
+*The growth path of §7. The numbers are conversations a day. Each edge names the rule of order or the measurement that starts the next stage.*
 
 ---
 
