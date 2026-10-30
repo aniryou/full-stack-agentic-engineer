@@ -1,21 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="960" height="440" viewBox="0 0 960 440" role="img" aria-label="HNSW is a multi-layer graph that a greedy search goes down from a sparse top layer to the bottom layer that holds every point, and IVF-PQ scans only the n_probe nearest of the n_list lists and stores one byte per sub-vector." style="color: #E4EAE7">
-  <title>HNSW is a multi-layer graph that a greedy search goes down from a sparse top layer to the bottom layer that holds every point, and IVF-PQ scans only the n_probe nearest of the n_list lists and stores one byte per sub-vector.</title>
-  <rect x="0" y="0" width="960" height="440" rx="8" fill="#161E1C"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="424" viewBox="0 0 960 424" role="img" aria-label="HNSW is a multi-layer graph that a greedy search goes down from the sparse upper layers to the dense bottom layer that holds every point, and IVF-PQ scans only the n_probe nearest of the n_list lists and stores one byte per sub-vector." style="color: #E4EAE7">
+  <title>HNSW is a multi-layer graph that a greedy search goes down from the sparse upper layers to the dense bottom layer that holds every point, and IVF-PQ scans only the n_probe nearest of the n_list lists and stores one byte per sub-vector.</title>
+  <rect x="0" y="0" width="960" height="424" rx="8" fill="#161E1C"/>
   <defs>
     <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
     <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
   </defs>
   <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
-    <rect x="16" y="16" width="456" height="408" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <rect x="16" y="16" width="456" height="392" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
     <text x="244" y="40" text-anchor="middle" font-weight="600">graph-based: HNSW</text>
-    <rect x="488" y="16" width="456" height="408" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <rect x="488" y="16" width="456" height="392" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
     <text x="716" y="40" text-anchor="middle" font-weight="600">clustering and quantization: IVF-PQ</text>
     <rect x="32" y="56" width="424" height="64" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-opacity="0.7"/>
-    <text x="44" y="73" font-size="11" fill="#97A59F">layer 2: sparse, the express lanes</text>
+    <text x="44" y="73" font-size="11" fill="#97A59F">upper layer: sparse, the express lanes</text>
     <rect x="32" y="132" width="424" height="64" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-opacity="0.7"/>
-    <text x="44" y="149" font-size="11" fill="#97A59F">layer 1</text>
+    <text x="44" y="149" font-size="11" fill="#97A59F">upper layer</text>
     <rect x="32" y="208" width="424" height="64" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-opacity="0.7"/>
-    <text x="44" y="225" font-size="11" fill="#97A59F">layer 0: every point</text>
+    <text x="44" y="225" font-size="11" fill="#97A59F">bottom layer: every point</text>
     <path d="M208 105 L208 171" stroke="#97A59F" stroke-width="1" stroke-dasharray="2 3"/>
     <path d="M336 105 L336 171" stroke="#97A59F" stroke-width="1" stroke-dasharray="2 3"/>
     <path d="M208 181 L208 251" stroke="#97A59F" stroke-width="1" stroke-dasharray="2 3"/>
@@ -55,14 +55,10 @@
     <circle cx="336" cy="100" r="4" fill="currentColor"/>
     <circle cx="432" cy="246" r="7" fill="none" stroke="#4CC5B7" stroke-width="1.4"/>
     <circle cx="208" cy="100" r="7" fill="none" stroke="#4CC5B7" stroke-width="1.4"/>
-    <text x="196" y="104" text-anchor="end" font-size="11" fill="#7ADACF">entry point</text>
-    <text x="444" y="288" text-anchor="end" font-size="11" fill="#7ADACF">nearest to q</text>
-    <text x="32" y="308" font-size="11.5" fill="#7ADACF">the search is greedy best-first, and it goes down the layers</text>
-    <text x="32" y="328" font-size="11" fill="#97A59F"><tspan font-family="JetBrains Mono, monospace">M</tspan>: edges per node, memory ∝ N · M</text>
-    <text x="32" y="346" font-size="11" fill="#97A59F"><tspan font-family="JetBrains Mono, monospace">efConstruction</tspan>: build quality</text>
-    <text x="32" y="364" font-size="11" fill="#97A59F"><tspan font-family="JetBrains Mono, monospace">efSearch</tspan>: the query-time beam width, the recall/latency knob</text>
-    <rect x="32" y="376" width="424" height="34" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
-    <text x="244" y="397" text-anchor="middle" font-size="11.5">RAM-resident: 10M × 1024-d is ~40 GB of raw vectors alone</text>
+    <text x="444" y="288" text-anchor="end" font-size="11" fill="#7ADACF">the result</text>
+    <text x="32" y="316" font-size="11.5" fill="#7ADACF">the search is greedy best-first, and it goes down the layers</text>
+    <rect x="32" y="360" width="424" height="34" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="244" y="381" text-anchor="middle" font-size="11.5">RAM-resident: 10M × 1024-d is ~40 GB of raw vectors alone</text>
     <text x="504" y="70" font-size="11" fill="#97A59F">IVF: k-means puts the vectors into <tspan font-family="JetBrains Mono, monospace">n_list</tspan> centroids</text>
     <rect x="508" y="82" width="62" height="58" rx="6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-opacity="0.55" stroke-dasharray="3 3"/>
     <path d="M534.0 106.0 L544.0 116.0 M534.0 116.0 L544.0 106.0" stroke="#97A59F" stroke-width="1.6"/>
@@ -109,6 +105,7 @@
     <text x="716" y="160" text-anchor="middle" font-size="11.5" fill="#7ADACF">the query scans only the <tspan font-family="JetBrains Mono, monospace">n_probe</tspan> nearest lists</text>
     <text x="504" y="196" font-size="11" fill="#97A59F">PQ: divide d into m sub-vectors, k-means on each into 256 centroids</text>
     <text x="588" y="227" text-anchor="end" font-size="11" fill="#97A59F">4 KB fp32</text>
+    <text x="744.4" y="227" text-anchor="middle" font-size="12.5">…</text>
     <rect x="600" y="210" width="330" height="26" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
     <path d="M641.2 210 L641.2 236" stroke="currentColor" stroke-width="1"/>
     <path d="M682.5 210 L682.5 236" stroke="currentColor" stroke-width="1"/>
@@ -117,15 +114,15 @@
     <path d="M806.2 210 L806.2 236" stroke="currentColor" stroke-width="1"/>
     <path d="M847.5 210 L847.5 236" stroke="currentColor" stroke-width="1"/>
     <path d="M888.8 210 L888.8 236" stroke="currentColor" stroke-width="1"/>
-    <text x="588" y="285" text-anchor="end" font-size="11" fill="#97A59F">64–128 bytes</text>
+    <text x="588" y="279" text-anchor="end" font-size="11" fill="#97A59F">m sub-vectors:</text>
+    <text x="588" y="293" text-anchor="end" font-size="11" fill="#97A59F">64–128 bytes</text>
     <path d="M620.6 238 L620.6 266" stroke="#97A59F" stroke-width="1.1" marker-end="url(#arr)"/>
     <rect x="609.6" y="270" width="22" height="22" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
     <path d="M661.9 238 L661.9 266" stroke="#97A59F" stroke-width="1.1" marker-end="url(#arr)"/>
     <rect x="650.9" y="270" width="22" height="22" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
     <path d="M703.1 238 L703.1 266" stroke="#97A59F" stroke-width="1.1" marker-end="url(#arr)"/>
     <rect x="692.1" y="270" width="22" height="22" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    <path d="M744.4 238 L744.4 266" stroke="#97A59F" stroke-width="1.1" marker-end="url(#arr)"/>
-    <rect x="733.4" y="270" width="22" height="22" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="744.4" y="285" text-anchor="middle" font-size="12.5">…</text>
     <path d="M785.6 238 L785.6 266" stroke="#97A59F" stroke-width="1.1" marker-end="url(#arr)"/>
     <rect x="774.6" y="270" width="22" height="22" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
     <path d="M826.9 238 L826.9 266" stroke="#97A59F" stroke-width="1.1" marker-end="url(#arr)"/>
@@ -135,9 +132,9 @@
     <path d="M909.4 238 L909.4 266" stroke="#97A59F" stroke-width="1.1" marker-end="url(#arr)"/>
     <rect x="898.4" y="270" width="22" height="22" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
     <text x="765" y="312" text-anchor="middle" font-size="11.5">one byte per sub-vector</text>
-    <text x="504" y="352" font-size="11" fill="#97A59F">the distances come from lookup tables</text>
-    <text x="504" y="370" font-size="11" fill="#97A59F">(asymmetric distance computation)</text>
-    <rect x="504" y="384" width="424" height="26" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    <text x="716" y="401" text-anchor="middle" font-size="11.5">then rerank by full vectors</text>
+    <text x="504" y="340" font-size="11" fill="#97A59F">the distances come from lookup tables</text>
+    <text x="504" y="356" font-size="11" fill="#97A59F">(asymmetric distance computation)</text>
+    <rect x="504" y="368" width="424" height="26" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="716" y="385" text-anchor="middle" font-size="11.5">then rerank by full vectors</text>
   </g>
 </svg>

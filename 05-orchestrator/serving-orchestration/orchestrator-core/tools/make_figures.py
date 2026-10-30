@@ -3,7 +3,7 @@
 
 Each ``spec_<name>()`` computes its values with fleetsim's own functions, from the inputs the primer and its notebooks
 name (the ``L4_8B`` and ``H100_8B`` engine profiles, the 131,072 B/token KV of an 8B model, the workloads and seeds of
-notebooks 02 to 05, the SLOs of the primer's tables, the tier bandwidths that §6 assumes), and returns a chart spec for
+notebooks 03 to 05, the SLOs of the primer's tables, the tier bandwidths that §6 assumes), and returns a chart spec for
 tools/orchestration/svgchart.py. The marks are the primer's numbers, labelled as the primer prints them.
 ``tests/test_figures.py`` pins every chart with ``svgchart.check_figure``. The fleet numbers are SIMULATED (a model of
 an engine, under fixed seeds), never a measurement; the §6.2 chart is closed-form arithmetic.
@@ -29,8 +29,8 @@ else:
     sys.modules["svgchart"] = svgchart
     _spec.loader.exec_module(svgchart)
 
-from fleetsim import (H100_8B, L4_8B, LLAMA_8B_KV, Fleet, PowerOfTwo, Tier, agentic, breakeven_gb_s,  # noqa: E402
-                      chat, epp, onload_s, pd_plan, rag, recompute_s, search_pd)
+from fleetsim import (H100_8B, L4_8B, LLAMA_8B_KV, Fleet, PowerOfTwo, Tier, breakeven_gb_s, chat,  # noqa: E402
+                      onload_s, pd_plan, rag, recompute_s, search_pd)
 
 FIGURES_DIR = LAB.parent / "figures"
 
@@ -41,57 +41,12 @@ def _r(v: float, nd: int = 4) -> float:
 
 
 def _as_table(v: float) -> str:
-    """A value as the §4.2 table prints it: notebook 03's three significant digits, then two decimals (0.995 -> 1.00)."""
+    """A value as the §4.2 table prints it: notebook 03's three significant digits, then two decimals (0.995 -> 1.00).
+
+    The label follows the table, not the plotted value: the "GPU util" at 0.5 req/s is 0.995, so its point sits just
+    under 1 while its label reads 1.00, as the table and the prose print it.
+    """
     return str(Decimal(f"{v:.3g}").quantize(Decimal("0.01"), ROUND_HALF_UP))
-
-
-# ------------------------------------------------------------------ §2.5: the locality-vs-load knob
-
-PREFIX_WEIGHTS = [0, 1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 30]      # the primer's 0, 3 and 30, and the curve between
-
-
-def _agents(zipf=1.0, rate=0.6, seed=3):
-    """Notebook 02's workload: six agents with 2,000-token system prompts (Zipf-popular), each turn re-sends history."""
-    return agentic(rate, 240, seed=seed, groups=6, zipf=zipf, system=2000, tool=500, output=100, turns=(4, 10),
-                   think=(1, 4))
-
-
-def spec_ttft_vs_prefix_weight() -> dict:
-    """§2.5: the TTFT p95 of the EPP (queue and KV weights at 2) against the prefix-cache weight, two workloads."""
-    ttft = {}
-    for zipf in (1.0, 2.0):
-        ttft[zipf] = [_r(Fleet(L4_8B, 4, epp((w, 2, 2))).run(_agents(zipf=zipf))
-                         .summary(ttft_slo=1.0, tpot_slo=0.15)["ttft_p95"]) for w in PREFIX_WEIGHTS]
-    at = {zipf: dict(zip(PREFIX_WEIGHTS, ys)) for zipf, ys in ttft.items()}
-    return {
-        "kind": "line",
-        "title": ("The simulated TTFT p95 of the EPP on four L4 replicas against the prefix-cache weight, "
-                  "for two agent workloads."),
-        "height": 420,
-        "x": {"label": "prefix-cache-scorer weight (queue and KV weights at 2)", "min": 0, "max": 30,
-              "ticks": [0, 3, 5, 10, 15, 20, 25, 30]},
-        "y": {"label": "TTFT p95 (s)", "scale": "log", "min": 0.15, "max": 60,
-              "ticks": [0.2, 0.5, 1, 2, 5, 10, 20, 50]},
-        "series": [                                                       # the table's workload last, on top
-            {"name": "a hotter prefix (Zipf 2.0)", "x": PREFIX_WEIGHTS, "y": ttft[2.0], "style": "warm",
-             "markers": True},
-            {"name": "the table: top agent ~40 % of sessions", "x": PREFIX_WEIGHTS, "y": ttft[1.0],
-             "style": "accent", "markers": True},
-        ],
-        "marks": [
-            {"kind": "hline", "y": 1.0, "label": "SLO: TTFT ≤ 1 s", "style": "muted"},
-            {"kind": "point", "x": 0, "y": at[1.0][0], "label": f"weight 0: {at[1.0][0]:.1f} s", "style": "accent",
-             "anchor": "start", "dy": -10},
-            {"kind": "point", "x": 3, "y": at[1.0][3], "label": f"weight 3: {at[1.0][3]:.2f} s", "style": "accent",
-             "anchor": "start", "dy": 18},
-            {"kind": "point", "x": 3, "y": at[2.0][3], "label": f"Zipf 2.0, weight 3: {at[2.0][3]:.2f} s",
-             "style": "warm", "anchor": "start", "dy": 46},                # under the label of the table's point
-            {"kind": "point", "x": 30, "y": at[1.0][30], "label": f"weight 30: {at[1.0][30]:.1f} s",
-             "style": "accent", "anchor": "end", "dy": 18},
-        ],
-        "legend": "top-left",
-        "note": "SIMULATED (seed 3): computed by fleetsim.sim.Fleet with fleetsim.routers.epp((w, 2, 2)), notebook 02",
-    }
 
 
 # ------------------------------------------------------------------ §4.2: which signal
@@ -176,10 +131,12 @@ def spec_pd_split_slo() -> dict:
              "anchor": "end"},
             {"kind": "point", "x": 3, "y": att[2], "label": f"3P5D: {att[2]:.2f}", "style": "accent",
              "anchor": "start", "dy": -10},
-            {"kind": "point", "x": 1, "y": att[0], "label": f"1P7D: {one['ttft_p95']:.0f} s TTFT p95",
+            {"kind": "point", "x": 1, "y": att[0], "label": f"1P7D collapses: {one['ttft_p95']:.0f} s TTFT p95",
              "style": "warm", "anchor": "start", "dy": 3},
-            {"kind": "point", "x": 7, "y": att[-1], "label": f"7P1D: {seven['tpot_p95']:.1f} s TPOT p95",
-             "style": "warm", "anchor": "end", "dy": -24},
+            {"kind": "point", "x": 7, "y": att[-1], "style": "warm"},     # its label in two lines, clear of 6P2D
+            {"kind": "text", "x": 7, "y": att[-1] + 0.11, "text": "7P1D collapses:", "style": "warm", "anchor": "end"},
+            {"kind": "text", "x": 7, "y": att[-1] + 0.06, "text": f"{seven['tpot_p95']:.1f} s TPOT p95", "style": "warm",
+             "anchor": "end"},
         ],
         "legend": "none",
         "note": "SIMULATED (seed 11): computed by fleetsim.disagg.search_pd and pd_plan, 100 Gb/s link, notebook 04",
@@ -211,7 +168,7 @@ def spec_fetch_or_recompute() -> dict:
         "y": {"label": "time for ten thousand tokens (ms)", "scale": "log", "min": 10, "max": 20000,
               "ticks": [10, 100, 1000, 10000]},
         "series": [
-            {"name": "fetch: tokens × KV bytes/token ÷ bandwidth", "x": BANDWIDTHS, "y": fetch, "style": "accent"},
+            {"name": "fetch, no latency: tokens × KV bytes/token ÷ bandwidth", "x": BANDWIDTHS, "y": fetch, "style": "accent"},
         ],
         "marks": [                                                   # a fetch wins to the right of each crossing
             {"kind": "hline", "y": l4, "label": "recompute on an L4", "style": "violet"},
@@ -231,7 +188,6 @@ def spec_fetch_or_recompute() -> dict:
 
 
 FIGURES = {
-    "ttft-vs-prefix-weight.svg": spec_ttft_vs_prefix_weight,
     "signals-vs-load.svg": spec_signals_vs_load,
     "pd-split-slo-attainment.svg": spec_pd_split_slo,
     "fetch-or-recompute-vs-bandwidth.svg": spec_fetch_or_recompute,

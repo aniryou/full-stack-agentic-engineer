@@ -251,7 +251,7 @@ Good engines select a strategy for each query from the **estimated filter select
 
 ```mermaid
 flowchart LR
-  Q(["query vector<br/>+ filter"]) --> E{"estimated<br/>filter<br/>selectivity?"}
+  Q(["query<br/>+ filter"]) --> E{"estimated<br/>filter<br/>selectivity?"}
   E -->|"small"| B["brute force<br/>over the<br/>permitted ids"]
   E -->|"large"| T["filtered-graph<br/>search"]
   E -->|"on a<br/>partition<br/>key"| P["partition-scoped<br/>search"]

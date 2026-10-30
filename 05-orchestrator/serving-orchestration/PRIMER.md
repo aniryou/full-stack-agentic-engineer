@@ -331,10 +331,6 @@ agent sends two thirds of the sessions. With that prefix, the p95 of pure prefix
 affinity filter: 1.37 s). The best value of the knob depends on the workload. Thus adjust the knob on a replay of
 real traffic, and monitor the hit rate *and* the per-replica load.
 
-![The simulated TTFT p95 of the EPP on four L4 replicas against the prefix-cache weight, for two agent workloads.](figures/ttft-vs-prefix-weight.svg)
-
-*At weight 0, the router ignores the prefix cache, and at a large weight, it overloads the replicas of the hot prefixes (simulated). With a hotter prefix (Zipf 2.0), fewer weights keep the TTFT p95 under the 1 s SLO. `fleetsim.sim.Fleet` with `fleetsim.routers.epp` computes the TTFT p95 for each weight, and `tests/test_figures.py` pins the chart.*
-
 On this workload, the optimized-baseline rows are behind the 3:2:2 chart default. The reason is what their gate can
 see. With the upstream 18 s penalty and with 2 s, the gate broke stickiness **0 times in 710** routing decisions
 with a sticky endpoint. The hot replicas here become slow because of KV pressure and decode residency
@@ -555,7 +551,7 @@ runs a step while any request is in flight. Layer 02 §8 has the DCGM fields tha
 
 ![The simulated GPU utilisation and KV usage of one L4 replica against the offered chat load.](figures/signals-vs-load.svg)
 
-*From 0.5 req/s, the "GPU util" of one L4 replica stays at 1.00, but the KV usage increases with the load (simulated). Of these two signals, only the KV usage grows in proportion to the load, as the HPA rule assumes. `fleetsim.sim.Fleet` computes both signals as averages from 60 s to 300 s, and `tests/test_figures.py` pins the chart.*
+*From 0.5 req/s, the "GPU util" of one L4 replica stays at 1.00, but the KV usage increases with the load (simulated). Of these two signals, only the KV usage grows in proportion to the load, but it has a cap at 1.0. `fleetsim.sim.Fleet` computes both signals as averages from 60 s to 300 s, and `tests/test_figures.py` pins the chart.*
 
 The next table shows a step from 1.5 to 7.5 req/s, with each HPA on one signal. The HPAs have min 1, max 8 and a
 30 s cold start (simulated, notebook 03):
@@ -735,7 +731,7 @@ Unbalanced splits collapsed: 1P7D to a 106 s TTFT p95, and 7P1D to a 2.4 s TPOT 
 
 ![The simulated SLO attainment of every xPyD split of eight L4 replicas, against aggregated serving and the analytic plan.](figures/pd-split-slo-attainment.svg)
 
-*The SLO attainment is highest at 3P5D, near the 2.75 prefill replicas of the analytic plan, and only 3P5D is above aggregated serving (simulated). Splits with fewer prefill replicas miss the TTFT SLO, and splits with fewer decode replicas miss the TPOT SLO. `fleetsim.disagg.search_pd` and `pd_plan` compute the values, and `tests/test_figures.py` pins the chart.*
+*The SLO attainment is highest at 3P5D, near the 2.75 prefill replicas of the analytic plan, and aggregated serving reaches 0.68 (simulated). The unbalanced splits collapse: 1P7D on TTFT, 7P1D on TPOT. `fleetsim.disagg.search_pd` and `pd_plan` compute the values, and `tests/test_figures.py` pins the chart.*
 
 The decode batch is the number to calculate by hand (the exercise of notebook 04). The KV pool sets a cap of
 2,193 ÷ 387 = 5 on it. But if only the ITL SLO sets the limit, the batch can be 8.
@@ -803,7 +799,7 @@ A fetch wins when $\text{tier bandwidth} > \text{KV bytes/token} \times \text{pr
 
 ![The time to get the KV of ten thousand tokens: a fetch against the tier bandwidth, and a recompute on an L4 and on an H100.](figures/fetch-or-recompute-vs-bandwidth.svg)
 
-*A fetch of the KV is faster than a recompute above the break-even bandwidth: 0.50 GB/s on an L4, 4.05 GB/s on an H100. For ten thousand tokens on the H100, a fetch over 25 GbE is slower than the recompute, and a fetch from host DRAM is faster. `fleetsim.kvtier.onload_s`, `recompute_s` and `breakeven_gb_s` compute the lines, and `tests/test_figures.py` pins the chart.*
+*A fetch is faster than a recompute to the right of each break-even point: 0.50 GB/s on an L4, 4.05 GB/s on an H100. For ten thousand tokens on the H100, a fetch over 25 GbE is slower than the recompute, and a fetch from host DRAM is faster. `fleetsim.kvtier.onload_s`, `recompute_s` and `breakeven_gb_s` compute the lines, and `tests/test_figures.py` pins the chart.*
 
 The break-even is the rate at which prefill *produces* KV. It is **0.50 GB/s** for the 8B model on an L4, and
 **4.05 GB/s** on an H100 (`breakeven_gb_s()`). For ten thousand tokens on the H100:

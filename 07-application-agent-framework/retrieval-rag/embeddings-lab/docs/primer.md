@@ -62,9 +62,9 @@ Also, "similarity" is a design decision. Similarity for legal search, similarity
 
 Synonyms co-occur with the same documents. Thus their vectors collapse into directions that are near each other. LSA is the prototype of every embedding method: **an implicit co-occurrence matrix plus a low-rank factorization.**
 
-![The corpus fills a co-occurrence matrix X of words by contexts, a low-rank factorization makes W and C transposed, and LSA, PPMI with SVD, word2vec and GloVe differ only in the matrix and the fit.](figures/cooccurrence-factorization.svg)
+![The corpus fills a co-occurrence matrix X of words by contexts, a low-rank factorization makes the word vectors w and the context vectors c, and LSA, PPMI with SVD, word2vec and GloVe differ only in the matrix and the fit.](figures/cooccurrence-factorization.svg)
 
-*Start at the corpus on the left. The counts fill the co-occurrence matrix X. A low-rank factorization then makes W and $C^{\top}$, and the rows of W are the word embeddings. The four methods below use different matrices and different fits, but they all use this recipe (section 2).*
+*Start at the corpus on the left. The counts fill the co-occurrence matrix $X$. A low-rank factorization then makes the word vectors $w$ and the context vectors $c$. The word vectors are the embeddings. The four methods below use different matrices and different fits, but they all use this recipe.*
 
 **PMI and PPMI.** Frequency dominates the raw counts. Pointwise mutual information, $\operatorname{PMI}(w,c) = \log P(w,c) / (P(w)P(c))$, measures the association above chance. PPMI clips the negative values to zero. The SVD of a PPMI matrix (Bullinaria and Levy, 2007) gives strong word vectors.
 
@@ -380,9 +380,9 @@ HNSW gives a Recall@10 of 0.95–0.99 at ~1 ms over millions of vectors in RAM. 
 
 IVF-PQ with reranking by full vectors is the classical FAISS configuration at billion scale. OPQ rotates the space first, for lower distortion.
 
-![HNSW is a multi-layer graph that a greedy search goes down from a sparse top layer to the bottom layer that holds every point, and IVF-PQ scans only the n_probe nearest of the n_list lists and stores one byte per sub-vector.](figures/ann-index-families.svg)
+![HNSW is a multi-layer graph that a greedy search goes down from the sparse upper layers to the dense bottom layer that holds every point, and IVF-PQ scans only the n_probe nearest of the n_list lists and stores one byte per sub-vector.](figures/ann-index-families.svg)
 
-*Compare the two index families of section 13. On the left, the greedy search of HNSW enters at the top layer and goes down the layers to the point nearest to q. On the right, IVF scans only the `n_probe` nearest lists, and PQ keeps one byte per sub-vector. The warm box shows the memory cost of HNSW.*
+*Compare the two index families. On the left, the greedy search of HNSW starts in a sparse upper layer and goes down the layers. On the right, IVF scans only the `n_probe` nearest lists, and PQ keeps one byte per sub-vector. The warm box shows the memory cost of HNSW.*
 
 **ScaNN** (Guo et al., 2020) uses *anisotropic* quantization. It penalizes the error in the direction parallel to the vector, because that component of the error changes the inner products. ScaNN is the reference design for MIPS at scale. **Scalar quantization** (int8, binary) is the simpler cousin. It is now standard in most vector stores, usually with a rescore of the top-k′ by full-precision vectors.
 
