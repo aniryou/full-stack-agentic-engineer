@@ -231,7 +231,7 @@ print("✅ the same routing costs more as EP grows: fewer experts per GPU averag
 # %% [markdown]
 # EPLB (`--enable-eplb`, and at large scale optionally `--eplb-config '{"num_redundant_experts": 32}'`) places
 # the experts again every `step_interval` steps. It uses the load that it measured over `window_size` steps.
-# In v0.30.0, the default of `step_interval` is 3000 and the default of `window_size` is 1000. It can also
+# In v0.30.0, the default of `step_interval` is 3000 and the default of `window_size` is 1000. EPLB can also
 # keep extra copies of hot experts. Each copy costs HBM on its rank (PRIMER §6.3: ~2.4 GiB per redundant
 # expert per rank for DeepSeek-V3 in FP8).
 #

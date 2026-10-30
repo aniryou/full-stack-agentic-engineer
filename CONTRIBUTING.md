@@ -102,7 +102,9 @@ SPEC below is [`tools/orchestration/SPEC.md`](tools/orchestration/SPEC.md), the 
 - The prose of every layer (`00-foundations` to `07-application-agent-framework`: primers, READMEs, docs and the
   Markdown cells of the notebooks) is in ASD-STE100 (Simplified Technical English), with
   [`tools/orchestration/STE100-STYLE.md`](tools/orchestration/STE100-STYLE.md) as the brief and
-  `tools/orchestration/ste_lint.py` as the checker (one topic on 2026-10-03, the rest on 2026-10-04). A change
+  `tools/orchestration/ste_lint.py` as the checker (one topic on 2026-10-03, the rest on 2026-10-04; a second pass
+  on 2026-10-30 applied the dictionary-level words of the brief's §3.1 second table and moved a clause with a verb
+  out of parentheses into its own sentence, which the linter reports as `word` and `paren-clause`). A change
   there keeps that style; the root documents (this file, `README.md`, `CURRICULUM.md`, `COMPUTE.md`, `COLAB.md`)
   keep the rules above.
 - Figures: a mechanism the prose explains over several paragraphs gets a diagram, by
@@ -111,8 +113,12 @@ SPEC below is [`tools/orchestration/SPEC.md`](tools/orchestration/SPEC.md), the 
   SVG in the house style (a dark card, one teal accent) in `figures/` beside the document (layouts, timelines, memory
   and bit layouts, charts). A figure is an insertion with an italic caption (in STE in the layers), states no fact the
   prose does not, and carries a number only verbatim from the document; the ASCII sketches in code fences stay.
-  `node tools/orchestration/render_figures.js md <doc> <outdir>` renders every Mermaid block and SVG to PNG to look at
-  (its header names the prerequisites; CI does not run it).
+  Every figure fits one screen: shown in an 800 px column, at most 600 px tall and scaled down by no more than 0.7
+  (short labels, `LR` for chains and decision trees, a split or an SVG beyond that; FIGURE-STYLE.md §3).
+  `node tools/orchestration/render_figures.js md <doc> <outdir>` renders every Mermaid block to PNG with that verdict
+  (its header names the prerequisites), and `... check` measures every figure of the repository into
+  `tools/orchestration/figures-manifest.tsv`, which `tools/ci/tests/test_figures_fit.py` reads in CI together with
+  the SVG sizes: after a change to a Mermaid block, run the check and commit the manifest with the document.
 
 ### Run tiers
 

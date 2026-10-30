@@ -218,8 +218,8 @@ print("✅ uniform -> k (HF normalisation), full collapse -> E; Megatron's versi
 #
 # Every token embedding shares one large direction (`TrainConfig.common = 12`), as the hidden states of a real
 # transformer do. Thus, at step 0, the router gives almost the same scores to every token. With torch, this
-# cell trains the model here. Each run takes approximately 5 s on one CPU thread. Without torch, it reads the
-# runs that this code recorded.
+# cell trains the model here. Each run takes approximately 5 s on one CPU thread. Without torch, the cell reads
+# the runs that this code recorded.
 
 # %%
 if HAS_TORCH:

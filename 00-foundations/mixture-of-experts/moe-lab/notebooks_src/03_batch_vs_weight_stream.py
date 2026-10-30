@@ -208,7 +208,8 @@ for i, b in enumerate(BATCHES):
           f"  {stream.experts_touched(MOE.n_experts, MOE.top_k, b):8.1f} / {MOE.n_experts}  {s.kv_bytes / s.bytes:7.0%}")
 
 # %% [markdown]
-# The MoE starts near the dense model (almost the same active size). It increases until its full expert set streams.
+# The MoE starts near the dense model (almost the same active size). The step time of the MoE increases until its
+# full expert set streams.
 # Then both curves become flat until the KV reads and the compute become the most important costs.
 #
 # For both models, the throughput still increases with batch. For the MoE, this is because the cost per token
