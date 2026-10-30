@@ -66,6 +66,7 @@ def spec_majority_vote_vs_n() -> dict:
         ("two equal incorrect answers (0.3 / 0.3)", [0.3, 0.3], "plain", True, 151),
         ("four scattered incorrect answers (0.15 each)", [0.15] * 4, "violet", False, 45),
     ]
+    short = {0: "dominant", 1: "narrow", 2: "two equal", 3: "four scattered"}   # a mark names its line, not its colour
     acc = lambda wrong, n: _sig(ttc.majority_accuracy(P_VOTE, wrong, n))
     series = []
     for name, wrong, style, dash, n_max in rows:
@@ -81,11 +82,12 @@ def spec_majority_vote_vs_n() -> dict:
         {"kind": "point", "x": 15, "y": acc(narrow, 15), "style": "accent", "anchor": "middle", "dy": -10,
          "label": f"{ttc.majority_accuracy(P_VOTE, narrow, 15):.3f} at 15"},
         {"kind": "point", "x": cross, "y": acc(narrow, cross), "style": "accent", "anchor": "end", "dy": 18,
-         "label": f"below one sample ({single:.3f}) past about 130"},
+         "label": f"{short[1]}: below one sample ({single:.3f}) past about 130"},
     ]
-    for (_, wrong, style, _, _), anchor in zip((rows[0], rows[2], rows[3]), ("end", "start", "start")):  # n = 31
+    for i, anchor in zip((0, 2, 3), ("end", "start", "start")):  # n = 31
+        _, wrong, style, _, _ = rows[i]
         marks.append({"kind": "point", "x": 31, "y": acc(wrong, 31), "style": style, "anchor": anchor, "dy": 16,
-                      "label": f"{ttc.majority_accuracy(P_VOTE, wrong, 31):.3f} at 31"})
+                      "label": f"{short[i]}: {ttc.majority_accuracy(P_VOTE, wrong, 31):.3f} at 31"})
     return {
         "kind": "line",
         "title": "The accuracy of a majority vote against the number of samples, for one question where a sample "
@@ -187,8 +189,8 @@ def spec_max_tokens_vs_budget() -> dict:
     limits = sorted({round(2 ** (10 + i / 8)) for i in range(41)} | {2048, 4096, 8192, 16384, max_tokens})
     cut = lambda c: w.budget_outcome(MEDIAN, SIGMA, ANSWER, E0, max_tokens=c)
     forced = lambda c: w.budget_outcome(MEDIAN, SIGMA, ANSWER, E0, budget=c - ANSWER)
-    pt = lambda y, st, anchor, dy: {"kind": "point", "x": 4096, "y": _sig(y), "style": st, "anchor": anchor, "dy": dy,
-                                    "label": f"{y:.3f}"}
+    pt = lambda y, st, anchor, dy, name="": {"kind": "point", "x": 4096, "y": _sig(y), "style": st, "anchor": anchor,
+                                             "dy": dy, "label": f"{name}{y:.3f}"}
     return {
         "kind": "line",
         "title": "Accuracy against the output limit when max_tokens truncates and when a thinking budget forces "
@@ -208,8 +210,8 @@ def spec_max_tokens_vs_budget() -> dict:
         "marks": [
             {"kind": "vline", "x": max_tokens, "label": f"max_tokens = {max_tokens:,}", "style": "muted",
              "anchor": "end", "label_pos": "top"},
-            pt(forced(4096)["accuracy"], "accent", "end", -9),
-            pt(cut(4096)["accuracy"], "plain", "start", 16),
+            pt(forced(4096)["accuracy"], "accent", "end", -9, "thinking budget: "),   # the two solid lines, named
+            pt(cut(4096)["accuracy"], "plain", "start", 16, "max_tokens: "),
             pt(cut(4096)["truncated"], "warm", "end", 16),
         ],
         "legend": "top-left",

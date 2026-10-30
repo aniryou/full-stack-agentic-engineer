@@ -63,7 +63,7 @@ flowchart LR
   D --> S
 ```
 
-*The solid chain is the prefill kernel, and each label names the bottleneck that the next generation removed. These are HBM traffic, the round trip of $O$ through HBM, and EX2 at 50% and 100% of the MMA time (§4.3). The dashed edges show where the merge of the ${(m, l, o)}$ state (§2.3) applies: FA1's tiles, the decode splits, cascade attention and context parallelism.*
+*The solid chain is the prefill kernel, and each edge label names the bottleneck that made the next generation necessary. These are HBM traffic, the round trip of $O$ through HBM, and EX2 at 50% and 100% of the MMA time (§4.3). The dashed edges show where the merge of the ${(m, l, o)}$ state (§2.3) applies: FA1's tiles, the decode splits, cascade attention and context parallelism.*
 
 ---
 
@@ -848,7 +848,7 @@ K tile pointer     = k_ptr + block_table[block_table_idx] * k_batch_stride + blo
 
 The page size puts limits on the load path. In FA2's public `flash_attn_with_kvcache`, `page_block_size` must be a multiple of 256, thus a K/V tile never goes across two pages. FA3 accepts any page size ("page_block_size can be arbitrary (e.g, 1, 2, 3, 64, etc.)"). But with small pages, the TMA's rectangular tile loads do not work. Thus FA3 changes to per-row asynchronous copies (`paged_kv_non_TMA`), which also make the tile smaller (section 5.5). The FlashAttention backend of vLLM accepts block sizes that are multiples of 16, through its own build of the kernels (`vllm.vllm_flash_attn`).
 
-![A paged KV cache gives the kernel one pool per layer and a block table per sequence; the kernel translates each K/V tile through the table, inside one page in FA2 and across small pages in FA3.](figures/deep-dive-paged-kv-gather.svg)
+![A paged KV cache gives the kernel one pool per layer and a block table per sequence, and the kernel translates each K/V tile through the table, inside one page in FA2 and across small pages in FA3.](figures/deep-dive-paged-kv-gather.svg)
 
 *The kernel sees one pool per layer and a block table per sequence, and it translates each K/V tile through the table. In FA2's `flash_attn_with_kvcache`, a tile stays inside one page, because a page holds a multiple of 256 tokens. FA3 accepts 16-token pages, and its per-row copies load a tile across several pages.*
 
@@ -924,6 +924,22 @@ The KV-cache dtype changes this result. vLLM's FA2 path has no FP8 KV cache. Thu
 | `scheduler_metadata` | FA3 only: schedule precomputed ahead of time (`aot_schedule`) with `get_scheduler_metadata` | `scheduler_metadata` |
 | `max_num_splits` | set only when the step runs under a full CUDA graph | `num_splits` |
 | `use_cascade`, `common_prefix_len`, ... | a prefix shared by every request in the batch | two kernel calls + merge |
+
+```mermaid
+flowchart LR
+  B(["scheduler's<br/>batch"])
+  MB["FlashAttention<br/>MetadataBuilder<br/>.build()"]
+  subgraph L["per layer"]
+    W[["reshape_and_<br/>cache_flash"]]
+    A[["flash_attn_<br/>varlen_func"]]
+  end
+  B -->|"once per<br/>engine step"| MB
+  MB -->|"slot_mapping"| W
+  MB -->|"block_table,<br/>query_start_loc,<br/>seq_lens"| A
+  W -->|"new K/V<br/>in pages"| A
+```
+
+*Once per engine step, `FlashAttentionMetadataBuilder.build()` changes the scheduler's batch into metadata. In each layer, `reshape_and_cache_flash` first writes the new K/V rows to their pages with `slot_mapping`. Then one `flash_attn_varlen_func` call reads the pages through `block_table` for the whole mixed batch.*
 
 Two details from the source are useful to quote in a review. On splits, the source says: "Setting num_splits > 1 may increase the memory usage, because the intermediate buffers of size [num_splits, num_heads, num_tokens, head_size] are allocated. Therefore, we only set num_splits when using cuda graphs." Also, if you set `VLLM_BATCH_INVARIANT`, then `max_num_splits = 1` (section 9.3).
 
@@ -1045,14 +1061,14 @@ The tensor cores take bf16 or fp16 operands and accumulate in fp32. Thus $S$ and
 
 ```mermaid
 flowchart LR
-  I["Q, K, V<br/>bf16 or fp16"]
+  I["Q, K, V<br/>bf16 or<br/>fp16"]
   S["S<br/>fp32 in<br/>registers"]
   RP["convert P<br/>to the<br/>input dtype"]
   O["O<br/>accumulator<br/>fp32"]
   RO["convert O<br/>once at<br/>the end"]
   I -->|"QKᵀ"| S
   S -->|"softmax"| RP
-  RP -->|"each P · V"| O
+  RP -->|"each<br/>P · V"| O
   O --> RO
 ```
 
@@ -1289,7 +1305,7 @@ def flash_attention(q, k, v, causal=True, block_m=128, block_n=64, num_stages=2)
     return o, lse
 ```
 
-![The Triton forward launches one program per Q block and (batch, head) pair; each program loads its Q block once, walks the K/V tiles up to hi, and stores one O block and one LSE row.](figures/deep-dive-triton-program-grid.svg)
+![The Triton forward launches one program per Q block and (batch, head) pair, and each program loads its Q block once, walks the K/V tiles up to hi, and stores one O block and one LSE row.](figures/deep-dive-triton-program-grid.svg)
 
 *The launch makes one program per Q block and (batch, head) pair, which is the FA2 grid of §4.1. Each program loads its Q block once and keeps `m_i`, `l_i` and `acc` in fp32. It walks the K/V tiles up to `hi` and stores one O block and one LSE row.*
 

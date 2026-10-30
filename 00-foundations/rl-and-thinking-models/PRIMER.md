@@ -60,20 +60,20 @@ many things, and **RL** changes which of these things it actually does.
 flowchart TB
   subgraph train ["training (§1 to §5)"]
     direction LR
-    P["Pretraining:<br/>what text looks like"] --> S["SFT: a format,<br/>by imitation"]
+    P["Pretraining:<br/>what text<br/>looks like"] --> S["SFT: a format,<br/>by imitation"]
     S --> R["RL: sample,<br/>score, reweight"]
-    R --> T["a thinking model"]
+    R --> T["a thinking<br/>model"]
   end
   subgraph serve ["serving (§7)"]
     direction LR
-    D["decode-heavy,<br/>heavy-tailed traffic"] --> C["concurrency and KV<br/>grow with the output"]
-    C --> G["memory and ITL SLO<br/>set the GPU count"]
+    D["decode-heavy,<br/>heavy-tailed<br/>traffic"] --> C["concurrency<br/>and KV grow<br/>with the output"]
+    C --> G["memory and<br/>ITL SLO set<br/>the GPU count"]
     G --> M["cost per<br/>correct answer"]
   end
   train -->|"a thinking token is<br/>an output token"| serve
 ```
 
-*The map of this primer: post-training changes the signal, not the network (§1), and RL reweights what the SFT model already samples. Models that got this training on math and code learned to think (§2 to §5). A thinking token is an output token. Thus the traffic is decode-heavy and heavy-tailed, and memory and the ITL SLO set the GPU count (§7).*
+*The map of this primer. The top row is training (§1 to §5): RL reweights what the SFT model already samples, and the result is a thinking model. The edge to serving (§7) is the link: a thinking token is an output token, so memory and the ITL SLO set the GPU count.*
 
 ---
 
@@ -141,7 +141,7 @@ everything before that position. A completion $y$ is a trajectory, and $\log \pi
 This is the sum of the per-token log-probabilities that an engine returns as `logprobs` (`Policy.token_logprobs()`,
 `Policy.seq_logprob()`).
 
-![A completion is a trajectory of tokens, each sampled from the policy given everything before it; the reward arrives at the end, and one gradient step pushes every token by the same advantage.](figures/policy-gradient-trajectory.svg)
+![A completion as a trajectory of tokens that the policy samples one at a time, with the reward at the end and one gradient step that pushes every token by the same advantage.](figures/policy-gradient-trajectory.svg)
 
 *One completion of the bracket task as a trajectory. The policy samples each token from its state, everything before that position, and the verifier scores the whole string at the end. The advantage $R - b$ then gives every token of the completion the same weight in the gradient step (`pg.reinforce_grad()`).*
 
@@ -308,7 +308,7 @@ flowchart LR
   P --> dpo
 ```
 
-*Two paths from the same comparisons. RLHF fits a reward model on the pairs. Then PPO samples completions and scores them with that reward model and a per-token KL penalty, with per-token baselines from a value model. DPO trains the policy on the pairs directly, as a classification loss on its own log-ratios, with no reward model and no sampling (`pref.dpo_loss()`).*
+*Two paths from the same comparisons: RLHF fits a reward model on the pairs, and DPO trains the policy on them directly. In the RLHF group, the reward model and a per-token KL penalty score the sampled completions, and a value model gives PPO per-token baselines. The DPO loss is a classification loss on the policy's own log-ratios, with no reward model and no sampling (`pref.dpo_loss()`).*
 
 **DPO: the closed form, as a classification loss.** You can invert the optimum of §2 (`pref.dpo_loss()`):
 
@@ -622,7 +622,7 @@ the server (verify). The same templates drop the thinking of earlier turns from 
 
 ![Where three controls cut the output of a thinking model: max_tokens cuts inside the think block and leaves no answer, a thinking budget forces the end of the think block and then the model answers, and the two-call recipe continues in a second request.](figures/thinking-budget-cuts.svg)
 
-*Where three controls cut the output of a thinking model. `max_tokens` counts reasoning and answer together, so a request that still thinks at the cap returns empty content with `finish_reason="length"`. A thinking budget forces the end of the think block, and then the model answers. The two-call recipe gets the same effect with a second request, which does the prefill again.*
+*Where three controls cut the output of a thinking model. `max_tokens` counts reasoning and answer together, so a request that still thinks at the cap returns empty content with `finish_reason="length"`. A thinking budget or the two-call recipe forces the end of the think block and the model answers, but the recipe does a second prefill.*
 
 **The provider bills a thinking token as an output token.** `completion_tokens` counts reasoning plus answer. vLLM fills
 `usage.completion_tokens_details.reasoning_tokens` when a reasoning parser is on. `include_reasoning: false` hides
@@ -662,16 +662,16 @@ helps questions where an attempt can come to a dead end, *if* something can sele
 
 ```mermaid
 flowchart LR
-  B{"a budget per question:<br/>n · (L + 50) ≤ B"}
+  B{"a budget<br/>per question:<br/>n · (L + 50) ≤ B"}
   B -->|"sequential"| L["think longer:<br/>one attempt<br/>of L tokens"]
   B -->|"parallel"| N["sample more:<br/>n attempts"]
   N --> PK{"what selects<br/>the sample?"}
   PK -->|"a verifier"| V["best-of-n:<br/>1 − (1 − p)^n"]
-  PK -->|"a reward model"| RM["best-of-n<br/>through noise"]
-  PK -->|"a majority vote"| MV["self-consistency"]
+  PK -->|"a reward<br/>model"| RM["best-of-n<br/>through noise"]
+  PK -->|"a majority<br/>vote"| MV["self-<br/>consistency"]
 ```
 
-*Test-time compute as `rlcore.ttc` models it: `ttc.allocate()` divides one budget per question between a longer think and more samples. A longer think helps a question that is slow to crack. More samples help a question where an attempt can come to a dead end. But only a verifier or a vote turns the samples into accuracy, and a reward model sees correctness through noise.*
+*Test-time compute as `rlcore.ttc` models it: `ttc.allocate()` divides one budget per question between a longer think and more samples. A longer think helps a question that is slow to crack, and more samples help where an attempt can come to a dead end. But only a verifier or a vote turns the samples into accuracy, and a reward model sees correctness through noise.*
 
 **Sequential: diminishing returns.** The accuracy of one sample against thinking length (`ttc.accuracy()`):
 
@@ -801,6 +801,17 @@ Read Little's law backwards: $N = \text{rps} \cdot (\text{TTFT} + \text{out} \cd
 steady batch of $b$ per GPU (`workload.gpus_for_batch()`). $N$ decreases as $b$ grows. Thus the fewest GPUs that
 each cap permits is $N$ at that cap. The model assumes that chunked prefill rides in the memory-bound decode steps.
 Thus it calculates prefill separately, as in `plan()`.
+
+```mermaid
+flowchart LR
+  TP(["the SLO's TPOT:<br/>40 ms"]) -->|"plan()"| LL
+  B(["b: the batch per<br/>GPU at a cap,<br/>HBM or ITL SLO"]) --> ST["step(b) = max(<br/>bytes/bandwidth,<br/>FLOPs/peak)"]
+  ST -->|"plan_steady()"| LL
+  LL["Little's law, per cap:<br/>N = rps × (TTFT +<br/>out × step) / b"] --> G["GPUs needed<br/>(binding)"]
+  PF["prefill,<br/>calculated separately"] --> G
+```
+
+*Read the two edges into Little's law: `plan()` gives every output token the SLO's TPOT, and `plan_steady()` uses `step(b)`, the step the fleet runs at. Both divide by b, the batch per GPU at a cap, and the cap that binds, or prefill, sets the GPUs needed.*
 
 | | No thinking (the primer) | 2,700 thinking + 300 answer | Same, 20 ms ITL SLO |
 |---|---|---|---|
@@ -967,7 +978,7 @@ weight versions old (verify).
 
 ![Three ways to schedule rollouts and training: a synchronous step where each side waits for the other, one-step-off-policy where generation of the next step overlaps training, and fully asynchronous rollouts on separate GPUs with stale samples.](figures/rl-step-timeline.svg)
 
-*Three schedules for the same step, with the §1 numbers for the synchronous one (`workload.rl_step_time()`). In the synchronous step each side waits for the other, and the batch waits for its longest completion. The one-step-off-policy trainer generates step k + 1 while it trains on step k. The fully asynchronous trainer runs rollouts and training on separate GPUs, at the price of staleness.*
+*The synchronous row uses the §1 numbers (`workload.rl_step_time()`): each side waits for the other, and the batch waits for its longest completion. The one-step-off-policy trainer generates step k + 1 while it trains on step k. The fully asynchronous trainer runs rollouts and training on separate GPUs, at the price of staleness.*
 
 The price is staleness. Samples come from an older policy, so the ratio $\rho = \pi/\pi_{\text{old}}$ is no
 longer 1. Then the clip (§4) and the corrections by importance sampling do real work.

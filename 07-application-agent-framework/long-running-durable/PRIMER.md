@@ -49,18 +49,19 @@ If you ask Gemini the same question two times, it is possible that you get diffe
 
 ```mermaid
 stateDiagram-v2
+    accTitle: A run goes from PENDING to RUNNING, waits in WAITING_HUMAN or WAITING_EVENT, and ends in SUCCEEDED or FAILED.
     direction LR
     [*] --> PENDING
-    PENDING --> RUNNING: first wake-up
+    PENDING --> RUNNING: first<br/>wake-up
     RUNNING --> RUNNING: step
     RUNNING --> WAITING_HUMAN: tool requires approval
     RUNNING --> WAITING_EVENT: async tool returned a ticket
     WAITING_HUMAN --> RUNNING: approve / reject
-    WAITING_HUMAN --> FAILED: approval timeout
+    WAITING_HUMAN --> FAILED: approval<br/>timeout
     WAITING_EVENT --> RUNNING: callback or successful poll
-    WAITING_EVENT --> FAILED: poll deadline
+    WAITING_EVENT --> FAILED: poll<br/>deadline
     RUNNING --> SUCCEEDED: final answer
-    RUNNING --> FAILED: budget / unrecoverable error
+    RUNNING --> FAILED: budget /<br/>unrecoverable error
 ```
 
 *This figure shows the states of a run. In `RUNNING`, one step is an LLM call, then a tool call, then a checkpoint. A run in `WAITING_HUMAN` or `WAITING_EVENT` goes back to `RUNNING`, or it goes to `FAILED` after a timeout or a deadline.*
@@ -80,9 +81,9 @@ The execution has a cycle: **wake, do one step, write a checkpoint, wait**. Each
 
 ## 3. The five invariants
 
-![One step of a run from one wake-up to the next, as eight stages in sequence: wake-up, lease, read the run, decide, intent, act, checkpoint and enqueue next; beside each stage, the invariant that protects it and its mechanism in code.](figures/one-step-five-invariants.svg)
+![One step of a run as eight stages, from wake-up to enqueue next, each beside the invariant that protects it and its mechanism in code.](figures/one-step-five-invariants.svg)
 
-*This figure shows one step of a run, from one wake-up to the next wake-up. The left column is the sequence of the handler. The right column names the invariant that protects each stage, and the mechanism that §3.1 to §3.5 give for it.*
+*This figure shows one step of a run, from one wake-up to the next wake-up. The left column is the sequence of the handler, with the two saves in accent boxes and the side effect in the warm box. The right column names the invariant that protects each stage, and the mechanism that §3.1 to §3.5 give for it.*
 
 ### 3.1 Durability — the store is the only memory
 Write a checkpoint after each step. Two saves for each tool step is the real minimum: one save *before* the side effect (the intent) and one save *after* it (the result). After a crash, anything that is not in the store did not occur. This includes the reasoning of the model.
@@ -145,26 +146,28 @@ For each pattern, this section gives the problem, the shape, the mapping to GCP,
 
 ```mermaid
 flowchart LR
-  Q[(Cloud Tasks<br/>task run-step-N)] -->|POST<br/>/internal/tasks/step<br/>OIDC token| H[Cloud Run]
+  accTitle: Cloud Tasks sends the named task to Cloud Run, which takes the lease and then executes a pending STARTED intent or asks Gemini.
+  Q[(Cloud Tasks<br/>run-step-N)] -->|POST<br/>OIDC token| H[Cloud Run]
   H --> L[lease]
   L --> R{pending<br/>STARTED?}
-  R -- yes --> X[execute under<br/>same key]
-  R -- no --> M[Gemini decides]
+  R -- yes --> X[execute<br/>under<br/>same key]
+  R -- no --> M[Gemini<br/>decides]
 ```
 
-*This figure shows the start of one wake-up in P1. Cloud Tasks sends the named task to Cloud Run, and the handler takes the lease. If the journal has a STARTED intent with no result, the handler executes that call under the same key. The next figure continues from this step.*
+*This figure shows the start of one wake-up in P1. Cloud Tasks sends the named task to `/internal/tasks/step` on Cloud Run, and the handler takes the lease. If the journal has a STARTED intent with no result, the handler executes that call under the same key.*
 
 ```mermaid
 flowchart LR
+  accTitle: A tool call goes through save #1, the execution and save #2 to the next enqueue, and a final answer ends in SUCCEEDED.
   P([pending STARTED]) -- yes --> X
-  M[Gemini decides] -- tool --> I[journal intent<br/>save #1]
-  I --> X[execute under<br/>same key]
+  M[Gemini<br/>decides] -- tool --> I[journal intent<br/>save #1]
+  I --> X[execute<br/>under<br/>same key]
   X --> C[save #2]
   C --> N[enqueue<br/>run-step-N+1]
   M -- final --> D[SUCCEEDED]
 ```
 
-*This figure shows the rest of the wake-up. A pending STARTED intent goes directly to the execute step. A new tool call goes to the journal first (save #1). After the call, the handler saves the result (save #2) and enqueues run-step-N+1. A final answer moves the run to `SUCCEEDED`.*
+*This figure shows the rest of the wake-up, from the decision of Gemini to `SUCCEEDED` or to the next task. A new tool call goes to the journal first (save #1), and a pending STARTED intent goes directly to the execute step. After the call, the handler saves the result (save #2) and enqueues run-step-N+1.*
 
 **Failure modes and their mitigations:**
 
@@ -185,9 +188,9 @@ The flow has these steps:
 5. *The write that reaches N* enqueues the named `aggregate` task.
 6. A synthesis LLM combines the results.
 
-![The six steps of P2: a planner LLM, a Pub/Sub topic, N idempotent workers, the counter on the run document, the named aggregate task and a synthesis LLM.](figures/fan-out-fan-in.svg)
+![A planner LLM makes N subtasks, idempotent workers do them, and the write that reaches N on the run document enqueues the named aggregate task.](figures/fan-out-fan-in.svg)
 
-*This figure shows the six steps of P2. Each worker updates the counter in a transaction, and the side effects stay outside the transaction. The write that reaches N enqueues the named `aggregate` task. A late duplicate also sees `all_done` and enqueues the same task, and Cloud Tasks rejects the second enqueue by its name.*
+*This figure shows the six steps of P2, with the run document and its transactional counter in the accent box. The write that reaches N enqueues the named `aggregate` task, and Cloud Tasks rejects the second enqueue of that name from a late duplicate. The warm box is the limit of one document: when N > ~50 writers use it, the writes contend.*
 
 **Fan-in is the hard part**. The side effects must stay outside the transaction. A late duplicate must also see `all_done`. The enqueue of the `aggregate` task is idempotent, thus let the late duplicates enqueue it too.
 
@@ -263,6 +266,7 @@ The numbers are from a check on 5 Sep 2026. Do a new check before you depend on 
 
 ```mermaid
 flowchart LR
+  accTitle: Wake-ups reach the Cloud Run service, which uses Cloud Tasks, Firestore, Gemini and a Cloud Run job, and Cloud Workflows is the managed alternative.
   SCH["Cloud Scheduler:<br/>the clock"] --> PS["Pub/Sub:<br/>fan-out, events"]
   EXT["webhooks,<br/>Eventarc events,<br/>a person behind IAP"] --> CR
   PS --> CR["Cloud Run service:<br/>the trigger,<br/>60-min request timeout"]
@@ -312,7 +316,7 @@ The general rule has two parts. Put durability in the platform (Workflows callba
 
 ## 6. Three reference architectures
 
-![The three reference architectures as three panels, each read from the top: what wakes the run, who owns the orchestration, where the steps run, where the state lives and the main cost; A is a durable loop on Cloud Run, B is Cloud Workflows as the orchestrator, C is ADK 2 on Cloud Run with Cloud SQL sessions.](figures/three-reference-architectures.svg)
+![Three panels compare a durable loop on Cloud Run, Cloud Workflows and ADK 2 on Cloud Run, each from the wake-up to the main cost.](figures/three-reference-architectures.svg)
 
 *This figure shows the three reference architectures as three panels. Each panel reads from the top: the wake-up, the orchestrator (the accent box), the steps, the state and the main cost (the warm box). Option D keeps the agent of C and replaces the runner.*
 

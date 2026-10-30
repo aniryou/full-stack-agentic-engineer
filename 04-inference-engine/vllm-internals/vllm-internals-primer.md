@@ -58,16 +58,16 @@ flowchart TB
   R["API server process<br/>render, tokenize,<br/>EngineCoreRequest"] -->|"ZMQ, msgpack"| CORE
   subgraph CORE["EngineCore process"]
     direction LR
-    S["Scheduler.<br/>schedule()"] --> X["executor<br/>one forward pass"]
+    S["Scheduler.<br/>schedule()"] --> X["executor<br/>forward pass"]
     X --> P["sampler"]
     P --> U["Scheduler.<br/>update_from_output()"]
     U -->|"next step"| S
-    S -.->|"16-token<br/>blocks"| K[("KV cache<br/>the block pool")]
+    S -.-> K[("KV cache:<br/>16-token blocks")]
   end
   CORE -->|"ZMQ, msgpack"| O["API server process<br/>detokenize, send the<br/>streaming response"]
 ```
 
-*The two kinds of processes and one step of the loop. The API server renders, tokenizes and builds an `EngineCoreRequest`. In EngineCore, `Scheduler.schedule()` gives out the token budget, the executor runs one forward pass, the sampler selects the tokens and `Scheduler.update_from_output()` appends them. The two sides communicate over ZMQ with msgpack (§1.3, §2). The request goes into `waiting` in the scheduler, and the tokens go back to the API server after `Scheduler.update_from_output()`.*
+*In the EngineCore box, start at `Scheduler.schedule()`: the executor runs one forward pass, the sampler selects the tokens and `Scheduler.update_from_output()` appends them. The dotted edge is the allocation of 16-token blocks in the KV cache, and the return edge starts the next step. The API server process sends the `EngineCoreRequest` in and gets the tokens back over ZMQ with msgpack (§1.3, §2).*
 
 After this primer, you will be able to do these tasks:
 
@@ -220,7 +220,7 @@ sequenceDiagram
     C->>A: POST /v1/chat/completions (stream=true)
     Note over A: render_chat, tokenize,<br/>EngineCoreRequest
     A->>E: ADD over ZMQ (msgpack)
-    Note over E: input thread: Request,<br/>block hashes.<br/>Scheduler.add_request: waiting
+    Note over E: Request, block hashes.<br/>Scheduler.add_request:<br/>waiting
     loop output_handler task, at the same time as the busy loop
         Note over A: process_outputs:<br/>detokenize, stop strings
         A-->>C: data: {json}
@@ -228,7 +228,7 @@ sequenceDiagram
     A-->>C: data: [DONE]
 ```
 
-*The path of one request in time. The API server tokenizes the request and sends the `EngineCoreRequest` to EngineCore over ZMQ, and the input thread puts it in `waiting`. Then the output handler task of the API server detokenizes each `EngineCoreOutputs` and sends the SSE deltas (§2.2, row 12).*
+*The API server sends the `EngineCoreRequest` to EngineCore over ZMQ. There, the input thread builds the `Request` with its block hashes, and `Scheduler.add_request` puts it in `waiting` (§2.2, rows 5 and 6). The loop is the output handler task of the API server: it detokenizes each `EngineCoreOutputs` and sends the SSE deltas (§2.2, row 12).*
 
 ```mermaid
 sequenceDiagram
@@ -423,7 +423,7 @@ C 375.
 
 ![Three requests through six scheduler steps: in each step the 2,048-token budget goes to the RUNNING requests first and then to a WAITING request, in chunks.](figures/scheduler-six-steps.svg)
 
-*The worked example of this section, one row per step (not to scale). The RUNNING requests take their tokens first, and a WAITING request gets `min(remaining, token_budget)`. A takes two steps, B fits beside the second chunk of A, and C takes three, while A and B make one token per step.*
+*Each row is one step of the worked example (not to scale). The RUNNING requests take their tokens first, and a WAITING request gets `min(remaining, token_budget)`. A takes two steps, B fits beside the second chunk of A, and C takes three, while A and B make one token per step.*
 
 | Step | Running pass (decodes first) | Waiting pass | Tokens | New blocks | Real tokens sampled |
 |---|---|---|---|---|---|
@@ -519,6 +519,10 @@ During this time, the victim stays at the head of `waiting`. The WAITING pass st
 not fit (`break`). Thus **the scheduler admits no request behind the victim either**. All the queued work waits for R1, and the TTFT of
 each queued request increases by the decode time that R1 still needs. The notebook replays this case at small scale
 ([`notebooks/01_block_hashes_and_eviction.ipynb`](notebooks/01_block_hashes_and_eviction.ipynb), exercise 4).
+
+![One step after R2 preempts itself: R2 waits at the head of waiting and blocks every admission behind it, while R1 takes the cached blocks of R2 from the head of the free queue, one block every 16 tokens.](figures/preemption-victim-at-head.svg)
+
+*Start at R2, at the head of `waiting`: it needs 150 blocks against 149 free, so the WAITING pass stops there. Each block that R1 takes from the head of the free queue is a cached block from the tail of the chain of R2. The hit of R2 decreases by one block each time, and the queued work waits until R1 finishes.*
 
 `vllm:num_preemptions` increases under a different pattern. The scheduler admits many requests because their
 *current* length fits (Section 3.6 reserves nothing for `max_tokens`). Then all of them grow. Each time a RUNNING
@@ -874,6 +878,21 @@ RayDistributedExecutor (compiled-graph backend)".
 Every worker executes the same `SchedulerOutput`, but only one worker replies. `_get_output_rank` returns the first
 tensor-parallel rank of the last pipeline stage.
 
+```mermaid
+flowchart LR
+  E["MultiprocExecutor.<br/>collective_rpc"] --> Q[("MessageQueue:<br/>SchedulerOutput")]
+  subgraph WK["WorkerProcs, one per GPU"]
+    L["readers<br/>on the node"]
+    R["remote<br/>readers"]
+  end
+  Q -->|"shared-memory<br/>ring buffer"| L
+  Q -->|"ZMQ XPUB"| R
+  L -.-> O["one reply to<br/>EngineCore:<br/>_get_output_rank"]
+  R -.-> O
+```
+
+*Start at `collective_rpc`: it puts the `SchedulerOutput` of each step in one `MessageQueue`. Readers on the node read it from the shared-memory ring buffer, and remote readers read it from the ZMQ XPUB socket. NCCL carries the tensors between the workers, and only the rank that `_get_output_rank` returns sends the reply.*
+
 **Ray or multiprocessing.** `RayExecutorV2` is a subclass of `MultiprocExecutor`
 (`vllm/v1/executor/ray_executor_v2.py`: "Inherits from MultiprocExecutor to reuse the MQ-based control plane and
 NCCL data plane. Workers are Ray actors."). Thus the path of each step is the same in both: one `MessageQueue`
@@ -986,7 +1005,7 @@ decoding work together without host syncs.
 
 ![Model Runner V2 builds the flat batch of one step from three GPU slots: idx_mapping and query_start_loc come from the host, and Triton kernels write the positions, the sequence lengths and the logits indices.](figures/mrv2-batch-from-slots.svg)
 
-*Step 3 of this section, for the three requests of the example. Not much data comes from the host, other than `idx_mapping` and `query_start_loc`. The Triton kernels of `prepare_inputs` write the positions, `seq_lens` and `logits_indices` from the slot state in `RequestState`.*
+*In step 3 of this section, each slot of `RequestState` maps to its rows of the flat batch. Only `idx_mapping` and `query_start_loc` come from the host, and the Triton kernels of `prepare_inputs` write the positions, `seq_lens` and `logits_indices`. The teal cells, rows 1, 6 and 9, are `logits_indices`: the rows that the engine samples.*
 
 ### 5.4 Model runner V1: the persistent batch (fallback and contrast)
 
@@ -1063,6 +1082,17 @@ dynamic speculation, the $q$ of each tier gets its own list (`_set_cudagraph_siz
 A batch of $n$ tokens replays the next captured size up (a 3-token decode replays size 4). Larger batches run
 without graphs. `--performance-mode interactivity` captures every size 1–32 to decrease the padding.
 
+```mermaid
+flowchart LR
+  B(["a batch of<br/>n tokens"]) --> M{"n ≤<br/>max_capture?"}
+  M -->|"no"| X["runs without<br/>graphs"]
+  M -->|"yes: pad n up to<br/>a captured size"| U{"uniform<br/>decode batch?"}
+  U -->|"yes"| F["FULL graph:<br/>whole forward"]
+  U -->|"no"| P["PIECEWISE graphs,<br/>eager attention<br/>between pieces"]
+```
+
+*Follow one batch from the left, in the default `FULL_AND_PIECEWISE` mode. A batch above `max_capture` runs without graphs, and a smaller batch replays the next captured size up. A uniform decode batch replays a full graph, a mixed batch replays piecewise graphs, and `--enforce-eager` gives `NONE` for every batch.*
+
 The optimization levels (`vllm/config/vllm.py: OptimizationLevel`) are these:
 
 - `-O0`: no compilation and no graphs.
@@ -1130,7 +1160,7 @@ block table of each row.
 
 ![One attention layer in one step: the slot mapping sends the K and V of position 42 to slot 202 in block 12 of the paged KV tensor, and one varlen call reads the whole mixed batch through the block tables.](figures/paged-kv-write-and-read.svg)
 
-*One layer in one step. The slot mapping of §5.3 sends position 42 of request 2 to slot 202 in block 12, where `reshape_and_cache_flash` writes its K and V. Then one `flash_attn_varlen_func` call reads the whole mixed batch through the block table of each row.*
+*Start at the block table: the slot mapping of §5.3 sends position 42 of request 2 to slot 202 in block 12. There, `reshape_and_cache_flash` writes its K and V for this layer. Then one `flash_attn_varlen_func` call reads the whole mixed batch through the block table of each row.*
 
 `num_common_prefix_blocks` lets the backend use **cascade attention**. When every RUNNING request shares a prefix,
 the kernel computes attention over that prefix one time. Then it merges the result with the suffix of each request
@@ -1291,7 +1321,7 @@ Size: a 128,256-token vocabulary needs `ceil(128256 / 32) = 4,008` int32 words =
 
 ![One step with structured output: EngineCore fills the grammar bitmask on the CPU while the GPU runs the forward, the worker applies the bitmask to the logits before sampling, and a row of the bitmask is 4,008 int32 words.](figures/grammar-bitmask-step.svg)
 
-*The four parts of this section in one step. `get_grammar_bitmask` fills the bitmask on the CPU while the GPU runs the forward, and `apply_grammar_bitmask` masks the logits before the sampler draws. One row of the bitmask is 4,008 int32 words, and the 24 MiB shared-memory chunk of §5.1 holds the rows of a 1,024-request batch.*
+*Read the middle band as time in one step: `get_grammar_bitmask` fills the bitmask on the CPU while the GPU runs the forward. Then `apply_grammar_bitmask` masks the logits before the sampler draws. One row of the bitmask is 4,008 int32 words, and the 24 MiB shared-memory chunk of §5.1 holds the rows of a 1,024-request batch.*
 
 ### 7.4 Speculative decoding
 
@@ -1402,7 +1432,7 @@ them as one weight with one scale ("torch._scaled_mm needs per tensor", `process
 
 ![The two kernel families: a weight-only W4A16 kernel reads a quarter of the weight bytes and dequantizes in registers but does the BF16 math, and a W8A8 FP8 kernel also quantizes the activations and runs FP8 MMA at twice the BF16 rate.](figures/quant-kernel-paths.svg)
 
-*The two kernel families of this section. A weight-only W4A16 kernel reads a quarter of the weight bytes and dequantizes them in registers, but it does the BF16 math. A W8A8 FP8 kernel also quantizes the activations and runs FP8 MMA at twice the BF16 rate, so it halves both ceilings.*
+*Compare the two rows, a weight-only W4A16 kernel above and a W8A8 FP8 kernel below. The W4A16 kernel reads a quarter of the weight bytes, but its 16-bit tensor-core MMA does the BF16 math. The FP8 kernel also quantizes the activations and runs FP8 MMA at twice the BF16 rate, so it halves both ceilings.*
 
 Take the roofline time of one GEMM, the `down_proj` of Llama-3.1-8B ($K$ = 14,336, $N$ = 4,096, 58.7 M weights),
 for $M$ tokens in the step. The FLOPs are $2 \cdot M \cdot K \cdot N$. The bytes are
@@ -1599,19 +1629,18 @@ sequenceDiagram
     participant P as prefill engine
     participant S as decode scheduler
     participant W as decode worker<br/>(NixlConnector)
-    R->>P: the request, do_remote_decode, max_tokens = 1 (verify)
-    Note over P: request_finished:<br/>delay_free_blocks = True,<br/>blocks under a lease
+    R->>P: do_remote_decode,<br/>max_tokens = 1 (verify)
+    Note over P: request_finished:<br/>delay_free_blocks = True
     P-->>R: kv_transfer_params
     R->>S: the request with those params
     Note over S: get_num_new_matched_tokens,<br/>WAITING_FOR_REMOTE_KVS
     S->>W: kv_connector_metadata
     W->>P: start_load_kv: RDMA read through NIXL
-    Note over S,W: finished_recving:<br/>_update_waiting_for_remote_kv,<br/>decode starts
-    W-->>P: notification
-    Note over P: frees the blocks,<br/>or the lease frees them
+    Note over S,W: finished_recving: decode starts
+    W-->>P: notification: free the blocks<br/>(or the lease frees them)
 ```
 
-*The five steps in time: the prefill engine keeps the blocks of a finished request under a lease and returns the `kv_transfer_params`. The decode scheduler allocates blocks and marks the request `WAITING_FOR_REMOTE_KVS`. The decode worker reads the remote blocks through NIXL, and a notification frees them on the prefill side.*
+*Read down for the five steps of §10.2. The prefill engine keeps the blocks of a finished request under a lease, and the decode scheduler marks the request `WAITING_FOR_REMOTE_KVS`. The decode worker reads the remote blocks through NIXL, and its notification or the lease frees them on the prefill side.*
 
 Routing, P:D ratios and the conditions in which disaggregation is worth its cost belong to
 [`../../05-orchestrator/`](../../05-orchestrator/).

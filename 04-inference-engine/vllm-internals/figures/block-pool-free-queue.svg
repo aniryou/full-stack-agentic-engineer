@@ -17,7 +17,7 @@
     <text x="170" y="134" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">prev_free_block · next_free_block</text>
     <text x="170" y="151" text-anchor="middle" font-size="11" fill="#97A59F">block 0 is the null block</text>
 
-    <rect x="332" y="78" width="236" height="56" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="328" y="78" width="244" height="56" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
     <text x="450" y="100" text-anchor="middle" font-weight="600">free_blocks(reversed(blocks))</text>
     <text x="450" y="118" text-anchor="middle" font-size="11" fill="#97A59F">each block whose ref_cnt reaches 0</text>
 
@@ -80,9 +80,9 @@
     <text x="598" y="196" text-anchor="end" font-size="11" fill="#97A59F">to the tail, in reverse</text>
 
     <!-- lookup from the map -->
-    <path d="M738 150 L700 204" stroke="#97A59F" stroke-width="1.2" fill="none" stroke-dasharray="4 3" marker-end="url(#arr)"/>
-    <text x="744" y="178" font-size="11" fill="#97A59F">find_longest_cache_hit:</text>
-    <text x="744" y="192" font-size="11" fill="#97A59F">h1 names b1</text>
+    <path d="M722 150 L692 204" stroke="#97A59F" stroke-width="1.2" fill="none" stroke-dasharray="4 3" marker-end="url(#arr)"/>
+    <text x="730" y="178" font-size="11" fill="#97A59F">find_longest_cache_hit:</text>
+    <text x="730" y="192" font-size="11" fill="#97A59F">h1 names b1</text>
 
     <!-- row 3: the two operations -->
     <rect x="44" y="300" width="380" height="84" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>

@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="880" height="420" viewBox="0 0 880 420" role="img" aria-label="Three requests through six scheduler steps: in each step the 2,048-token budget goes to the RUNNING requests first and then to a WAITING request, in chunks." style="color: #E4EAE7">
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="420" viewBox="0 0 900 420" role="img" aria-label="Three requests through six scheduler steps: in each step the 2,048-token budget goes to the RUNNING requests first and then to a WAITING request, in chunks." style="color: #E4EAE7">
   <title>Three requests through six scheduler steps: in each step the 2,048-token budget goes to the RUNNING requests first and then to a WAITING request, in chunks.</title>
-  <rect x="0" y="0" width="880" height="420" rx="8" fill="#161E1C"/>
+  <rect x="0" y="0" width="900" height="420" rx="8" fill="#161E1C"/>
   <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
     <text x="24" y="28" fill="#97A59F">max_num_batched_tokens = 2048 · block_size = 16 · A (3,000-token prompt) and B (500) arrive together, C (6,000) before step 3</text>
 

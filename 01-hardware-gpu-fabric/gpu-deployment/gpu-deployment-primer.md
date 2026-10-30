@@ -119,7 +119,7 @@ Think about a 70B model at FP8 on one 80 GB GPU. The 70 GB of weights leaves 10 
 
 ![On one 80 GB GPU, a 70B model at FP8 takes 70 GB of weights and leaves 10 GB, minus overhead, of KV cache for approximately 20 to 25 concurrent 1K-token requests; the KV cache is the variable cost that grows with the sequence length and the concurrency.](figures/memory-budget-80gb.svg)
 
-*The bar is one 80 GB GPU with a 70B model at FP8 (§3.4). The weights take 70 GB, and the 10 GB that stay, minus overhead, hold the KV cache for approximately 20–25 concurrent 1K-token requests. The strip below is the variable cost. A 70B-class model at FP16 needs 320 KB of KV cache per token, about 1.3 GB for a 4,000-token request, multiplied by your concurrency target.*
+*The bar is one 80 GB GPU with a 70B model at FP8 (§3.4). The weights take 70 GB, and the 10 GB that stay, minus overhead, hold the KV cache for approximately 20–25 concurrent 1K-token requests. The strip below is the variable cost at FP16: 320 KB per token, 1.3 GB per 4,000-token request, multiplied by your concurrency target.*
 
 ---
 
@@ -129,7 +129,7 @@ There are five ways to divide work across GPUs. You can combine them. Actual dep
 
 ![Tensor parallelism does an all-reduce at each layer and expert parallelism does an all-to-all shuffle of the tokens, so both stay inside the NVLink domain; pipeline parallelism passes only the activations and data parallelism needs near-zero communication for inference, so both go across the network.](figures/parallelism-menu.svg)
 
-*Tensor parallelism gives each GPU a slice of each layer, with an all-reduce at each layer. Expert parallelism puts the experts on different GPUs, with an all-to-all shuffle of the tokens. Both stay inside the NVLink domain. Pipeline parallelism passes only the activations at each boundary, and data parallelism gives each replica a full copy, so both go across the network (§4).*
+*Tensor parallelism gives each GPU a slice of each layer, with an all-reduce at each layer. Expert parallelism puts the experts on different GPUs and shuffles the tokens all-to-all, so TP and EP stay inside the NVLink domain. Pipeline parallelism passes only the activations at each boundary, and data parallelism gives each replica a full copy, so both go across the network (§4).*
 
 ### Tensor parallelism (TP)
 Divide the matrices of each individual layer across GPUs. Each GPU holds a slice of each layer.
@@ -185,7 +185,7 @@ If you divide a bidirectional NVLink total by a one-way NIC rate, you get 18×. 
 
 ![Per direction, the NVLink of one GPU carries about 9 times the bandwidth of its NIC: 450 against 50 GB/s for an H100 with a 400 Gb/s NIC, 900 against 100 GB/s for Blackwell with an 800 Gb/s NIC; a division of the bidirectional NVLink total by the one-way NIC rate gives 18 times and counts NVLink two times.](figures/interconnect-cliff.svg)
 
-*Per direction and in one generation, the NVLink of a GPU carries about 9× the bandwidth of its NIC. The figures are 450 against 50 GB/s for an H100 (400 Gb/s NIC) and 900 against 100 GB/s for Blackwell (800 Gb/s NIC). The vendor markets the NVLink figures as the sum of the two directions. A division of that total by the one-way NIC rate gives 18×, and it counts NVLink two times (§5).*
+*Compare the solid NVLink bar, one way, with the NIC bar below it: about 9× in each generation. The figures are 450 against 50 GB/s for an H100 (400 Gb/s NIC) and 900 against 100 GB/s for Blackwell (800 Gb/s NIC). The dashed bar is the other direction: the vendor total adds it, and 18× counts NVLink two times (§5).*
 
 There are two practical consequences:
 

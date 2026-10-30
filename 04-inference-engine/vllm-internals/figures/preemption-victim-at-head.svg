@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="372" viewBox="0 0 900 372" role="img" aria-label="One step after R2 preempts itself: R2 waits at the head of waiting and blocks every admission behind it, while R1 takes the cached blocks of R2 from the head of the free queue, one block every 16 tokens." style="color: #E4EAE7">
+  <title>One step after R2 preempts itself: R2 waits at the head of waiting and blocks every admission behind it, while R1 takes the cached blocks of R2 from the head of the free queue, one block every 16 tokens.</title>
+  <rect x="0" y="0" width="900" height="372" rx="8" fill="#161E1C"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#97A59F"/></marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4CC5B7"/></marker>
+  </defs>
+  <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+    <text x="24" y="28" fill="#97A59F">The worked example of §3.7, one step after R2 preempts itself: 299 usable blocks, FCFS</text>
+
+    <!-- lane 1: waiting -->
+    <rect x="24" y="42" width="852" height="104" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="40" y="60" font-size="11" fill="#97A59F">waiting: the WAITING pass reads it from the head and stops at the first request that does not fit (break)</text>
+    <rect x="40" y="72" width="256" height="60" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="168" y="92" text-anchor="middle" font-weight="600">R2, at the head of waiting</text>
+    <text x="168" y="108" text-anchor="middle" font-size="11" fill="#7ADACF">needs ceil(2385 / 16) = 150 blocks:</text>
+    <text x="168" y="122" text-anchor="middle" font-size="11" fill="#7ADACF">1 new + 149 evictable hits &gt; 149 free</text>
+    <rect x="320" y="72" width="540" height="60" rx="6" fill="#3A2C25" stroke="#E39A62" stroke-width="1.2"/>
+    <text x="590" y="92" text-anchor="middle" font-weight="600">no admission behind R2</text>
+    <text x="590" y="108" text-anchor="middle" font-size="11" fill="#97A59F">All the queued work waits for R1. The TTFT of each queued request</text>
+    <text x="590" y="122" text-anchor="middle" font-size="11" fill="#97A59F">increases by the decode time that R1 still needs.</text>
+
+    <!-- lane 2: the free queue -->
+    <rect x="24" y="168" width="852" height="86" rx="8" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="860" y="186" text-anchor="end" font-size="11" fill="#97A59F">free queue, head to tail: the 149 full, hashed blocks of R2 in reverse order</text>
+    <rect x="40" y="198" width="64" height="40" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="4 3"/>
+    <text x="72" y="222" text-anchor="middle" font-size="11" fill="#97A59F">head</text>
+    <rect x="120" y="198" width="90" height="40" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="165" y="222" text-anchor="middle">block 149</text>
+    <rect x="222" y="198" width="90" height="40" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="267" y="222" text-anchor="middle">block 148</text>
+    <rect x="324" y="198" width="90" height="40" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="369" y="222" text-anchor="middle">block 147</text>
+    <text x="444" y="222" text-anchor="middle" fill="#97A59F">…</text>
+    <rect x="474" y="198" width="90" height="40" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="519" y="222" text-anchor="middle">block 2</text>
+    <rect x="576" y="198" width="90" height="40" rx="6" fill="#16302A" stroke="#4CC5B7" stroke-width="1.4"/>
+    <text x="621" y="222" text-anchor="middle">block 1</text>
+    <rect x="682" y="198" width="64" height="40" rx="6" fill="none" stroke="#97A59F" stroke-width="1" stroke-dasharray="4 3"/>
+    <text x="714" y="222" text-anchor="middle" font-size="11" fill="#97A59F">tail</text>
+
+    <!-- the hit of R2 -->
+    <path d="M276 132 L276 166" stroke="#4CC5B7" stroke-width="1.2" fill="none" stroke-dasharray="4 3" marker-end="url(#arrA)"/>
+    <text x="284" y="160" font-size="11" fill="#7ADACF">hit: 149 blocks</text>
+
+    <!-- lane 3: R1 takes the head -->
+    <path d="M165 238 L165 284" stroke="#97A59F" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+    <text x="174" y="270" font-size="11" fill="#97A59F">get_new_blocks pops the head and evicts its hash</text>
+    <rect x="40" y="286" width="256" height="60" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="168" y="308" text-anchor="middle" font-weight="600">R1, RUNNING: 150 blocks held</text>
+    <text x="168" y="326" text-anchor="middle" font-size="11" fill="#97A59F">16 tokens later, it needs block 151</text>
+    <rect x="320" y="286" width="540" height="60" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="590" y="308" text-anchor="middle" font-weight="600">R1 finishes after j more blocks</text>
+    <text x="590" y="326" text-anchor="middle" font-size="11" fill="#97A59F">R2 is re-admitted. It hits the 149 − j blocks that survive and computes 16j + 1 tokens again.</text>
+  </g>
+</svg>
