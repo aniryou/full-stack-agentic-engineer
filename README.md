@@ -35,6 +35,10 @@ hours, tiers, shorter routes and cross-layer design drills.
 **Compute and cost:** [`COMPUTE.md`](COMPUTE.md) says where each tier runs — laptop, free Colab or Kaggle GPUs,
 rented GPUs, Google Cloud — what it costs, and which lab needs which tier.
 
+**Read offline:** `python3 tools/book/build_book.py` builds the 32 primers as one e-book, *The LLM Serving Stack, from
+GPUs to Agents*, in an Apple Books edition (EPUB 3) and a Kindle edition (EPUB for Send to Kindle, AZW3 with Calibre);
+see [`tools/book/README.md`](tools/book/README.md). The notebooks and labs stay here.
+
 ## The stack
 
 Read bottom-up: each layer is built on the one below it.
