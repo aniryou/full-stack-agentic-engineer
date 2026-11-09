@@ -573,6 +573,29 @@ find . -maxdepth 5 -name '*.ipynb' ! -path '*/.ipynb_checkpoints/*' | wc -l
   the injector as no-ops, `ci.py check`, the Colab index, the link check, `test_figure_links.py`, the site generator,
   the strict site build; the STE linter unchanged over the layers (234 errors and 3,803 warnings before and after; the 152 captions add about 1,000 sentences and no finding)) and merged through its own PR. **Baseline unchanged: 385 notebooks.**
 
+- **2026-11-09 — the primers as a book (`tools/book/`).** For reading offline, the 32 primer-like documents (the twelve
+  `PRIMER.md`s, the FlashAttention deep dive and primer, the kv-cache, paged-attention, vLLM-internals, transformer,
+  capacity-planning, model-landscape, GPU, GPU-deployment, identity, scaling (four documents, the Mistral one as an
+  appendix), vector-database, embeddings and the three durable primers) are built into one e-book, *The LLM Serving
+  Stack, from GPUs to Agents*: nine parts in the order of the stack after the foundations, about 320k words, every
+  figure; notebooks, exercises, labs, READMEs and code stay out. `tools/book/build_book.py` (standard library, with
+  pandoc 3, the figure renderer's node prerequisites, matplotlib for the Kindle formulas, Calibre for the AZW3 and
+  epubcheck to validate) processes each chapter before pandoc sees it: headings move one level down under a part
+  heading and get stable ids from GitHub's anchor of their text, so the primers' cross-links resolve inside the book
+  (291 links; 202 links to notebooks, labs and files become plain text; the one web link stays); Mermaid blocks become
+  PNGs through `render_figures.js` with the caption as alt text (95 diagrams); a token that looks like an HTML tag but
+  is prose (a quoted `</think>`) is escaped; a bare price pair is kept from being read as a formula; `\tfrac` becomes
+  `\frac` (the EPUB schema rejects the MathML texmath writes for it). Two editions: **Apple** (EPUB 3, 13.7 MB: the
+  SVG figures as they are, formulas as MathML) and **Kindle** (an EPUB for Send to Kindle, about 53 MB, and an AZW3
+  from Calibre's `ebook-convert --output-profile kindle_pw3`, about 57 MB: every figure a PNG on a light background
+  for e-ink through a palette swap of the house style, `svg2png.js` rendering them in one browser; formulas as text
+  where the transliteration is faithful, 1,704 of them, as matplotlib mathtext images otherwise, 185, with `\le`,
+  `\underbrace`, `\textstyle`, `\mathrel`, `\big`, `\lVert`, `\texttt`, `\bmod` and `aligned` rows rewritten to what
+  mathtext accepts, none left as TeX). Both EPUBs pass EpubCheck 5.3.0 and the builder's own check (every internal
+  link resolves, every image exists). The book is not committed: `build/` is gitignored and the builder regenerates
+  it; the root README and CONTRIBUTING say so, and a new primer goes into the builder's `BOOK` table.
+  **Baseline unchanged: 385 notebooks.**
+
 ## Housekeeping
 - Deduped 2026-09-26: `07-.../long-running-durable/PRIMER.md` is the only copy of the durable-execution primer, and
   `long-running-durable/lra-gcp/docs/primer.md` the only lra primer (the byte-identical twins were removed).

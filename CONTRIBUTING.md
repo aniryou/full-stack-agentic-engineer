@@ -107,6 +107,12 @@ SPEC below is [`tools/orchestration/SPEC.md`](tools/orchestration/SPEC.md), the 
   out of parentheses into its own sentence, which the linter reports as `word` and `paren-clause`). A change
   there keeps that style; the root documents (this file, `README.md`, `CURRICULUM.md`, `COMPUTE.md`, `COLAB.md`)
   keep the rules above.
+- The book: `tools/book/build_book.py` builds the primer-like documents as an e-book (an Apple Books edition and a
+  Kindle edition; `tools/book/README.md`). A new primer goes into its `BOOK` table. The builder changes nothing in
+  the tree: links to other primers become links inside the book, links to notebooks and code become text, Mermaid
+  blocks and (for Kindle) SVG figures and formulas become images, so a document that renders on the site renders in
+  the book; a stray tag-like token in prose (`<pid>`) or a bare price pair (`$0.70 … $5`) is handled, but keep
+  code and prices in code spans or with `\$` where you can.
 - Figures: a mechanism the prose explains over several paragraphs gets a diagram, by
   [`tools/orchestration/FIGURE-STYLE.md`](tools/orchestration/FIGURE-STYLE.md): a Mermaid block (flows, sequences,
   state machines, architectures; no init directive or `classDef`, so GitHub and the site theme it) or a hand-written
